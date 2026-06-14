@@ -608,6 +608,7 @@ function renderForm(){
 
   // Bind events
   bindFieldEvents();
+  restorePendingRefPreviews();
   document.getElementById('submitBtn').addEventListener('click', submitForm);
 }
 
@@ -667,6 +668,30 @@ function renderField(field){
 // ============================================================
 // EVENT BINDING & ANSWER COLLECTION
 // ============================================================
+function addRefThumb(fieldId, file){
+  const reader = new FileReader();
+  reader.onload = (ev)=>{
+    const grid = document.getElementById(`refgrid-${fieldId}`);
+    if(!grid) return;
+    const div = document.createElement('div');
+    div.className = 'ref-thumb';
+    div.innerHTML = `<img src="${ev.target.result}"><button class="ref-remove" data-pending="1">✕</button>`;
+    div.querySelector('.ref-remove').addEventListener('click', ()=>{
+      const idx = refFiles[fieldId].indexOf(file);
+      if(idx>-1) refFiles[fieldId].splice(idx,1);
+      div.remove();
+    });
+    grid.appendChild(div);
+  };
+  reader.readAsDataURL(file);
+}
+
+function restorePendingRefPreviews(){
+  Object.entries(refFiles).forEach(([fieldId, files])=>{
+    files.forEach(file=>addRefThumb(fieldId, file));
+  });
+}
+
 function bindFieldEvents(){
   // Text inputs / textareas
   document.querySelectorAll('input[data-field], textarea[data-field]').forEach(el=>{
@@ -716,20 +741,7 @@ function bindFieldEvents(){
       if(!refFiles[fieldId]) refFiles[fieldId] = [];
       files.forEach(file=>{
         refFiles[fieldId].push(file);
-        const reader = new FileReader();
-        reader.onload = (ev)=>{
-          const grid = document.getElementById(`refgrid-${fieldId}`);
-          const div = document.createElement('div');
-          div.className = 'ref-thumb';
-          div.innerHTML = `<img src="${ev.target.result}"><button class="ref-remove" data-pending="1">✕</button>`;
-          div.querySelector('.ref-remove').addEventListener('click', ()=>{
-            const idx = refFiles[fieldId].indexOf(file);
-            if(idx>-1) refFiles[fieldId].splice(idx,1);
-            div.remove();
-          });
-          grid.appendChild(div);
-        };
-        reader.readAsDataURL(file);
+        addRefThumb(fieldId, file);
       });
       input.value = '';
     });
