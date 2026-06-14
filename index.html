@@ -556,6 +556,12 @@
 
     <div id="more-admin-sections">
 
+    <div class="section-label"><span class="lbl-text">Договоры</span><span class="section-label-line"></span></div>
+    <div class="card">
+      <div class="note" style="margin-bottom:10px;">Сформировать договор на архитектурное проектирование, дизайн интерьера или строительство — с автоподстановкой данных заказчика из проекта и реквизитов компании.</div>
+      <button class="btn btn-primary" id="openContractsBtn">Сформировать договор</button>
+    </div>
+
     <div class="section-label"><span class="lbl-text">Компания</span><span class="section-label-line"></span></div>
     <div class="card">
       <div class="note" style="margin-bottom:10px;">Реквизиты компании: расчётный счёт и банковская карта для приёма платежей. Используются в КП и договорах.</div>
@@ -795,6 +801,114 @@
 
   </div>
 
+  <!-- ===================== ДОГОВОРЫ ===================== -->
+  <div class="view" id="view-contracts">
+
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+      <button class="icon-btn" id="contractsBack" style="font-size:20px;">←</button>
+      <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:16px;">Сформировать договор</div>
+    </div>
+
+    <div class="section-label"><span class="lbl-text">Тип договора</span><span class="section-label-line"></span></div>
+    <div class="card">
+      <div class="yn-group" id="contract-type" style="flex-wrap:wrap;">
+        <div class="yn-btn selected" data-value="ar" style="flex-basis:31%;">АР</div>
+        <div class="yn-btn" data-value="di" style="flex-basis:31%;">ДИ</div>
+        <div class="yn-btn" data-value="st" style="flex-basis:31%;">Строительство</div>
+      </div>
+    </div>
+
+    <div class="section-label"><span class="lbl-text">Проект (необязательно)</span><span class="section-label-line"></span></div>
+    <div class="card">
+      <div class="field" style="margin-bottom:0;">
+        <label>Подставить данные из проекта</label>
+        <select id="ct-project"><option value="">— не выбран —</option></select>
+        <div class="hint" style="margin-top:6px;">Подставит объект, цену и даты. Данные заказчика всё равно нужно ввести вручную ниже.</div>
+      </div>
+    </div>
+
+    <div class="section-label"><span class="lbl-text">Заказчик</span><span class="section-label-line"></span></div>
+    <div class="card">
+      <div class="field">
+        <label>ФИО заказчика</label>
+        <input type="text" id="ct-client-name" placeholder="Иванов Иван Иванович">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Серия и номер паспорта</label>
+          <input type="text" id="ct-passport" placeholder="0000 000000">
+        </div>
+        <div class="field">
+          <label>Дата рождения</label>
+          <input type="date" id="ct-birthdate">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Кем выдан</label>
+          <input type="text" id="ct-passport-issuer" placeholder="ГУ МВД России по ...">
+        </div>
+        <div class="field">
+          <label>Дата выдачи</label>
+          <input type="date" id="ct-passport-date">
+        </div>
+      </div>
+      <div class="field">
+        <label>Адрес регистрации (прописка)</label>
+        <input type="text" id="ct-address" placeholder="г. ..., ул. ..., д. ...">
+      </div>
+      <div class="field">
+        <label>Телефон</label>
+        <input type="text" id="ct-phone" placeholder="+7 900 000-00-00">
+      </div>
+    </div>
+
+    <div class="section-label"><span class="lbl-text">Условия договора</span><span class="section-label-line"></span></div>
+    <div class="card">
+      <div class="field-row">
+        <div class="field">
+          <label>Номер договора</label>
+          <input type="text" id="ct-number" placeholder="например: 0001">
+        </div>
+        <div class="field">
+          <label>Дата договора</label>
+          <input type="date" id="ct-date">
+        </div>
+      </div>
+      <div class="field">
+        <label>Объект</label>
+        <input type="text" id="ct-object" placeholder="адрес / описание объекта">
+      </div>
+      <div class="field">
+        <label>Состав работ (каждый пункт с новой строки)</label>
+        <textarea id="ct-scope" style="min-height:120px;"></textarea>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Стоимость работ, ₽</label>
+          <input type="number" id="ct-price" placeholder="0">
+        </div>
+        <div class="field">
+          <label>Аванс, %</label>
+          <input type="number" id="ct-advance-pct" value="50">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Начало работ (до)</label>
+          <input type="date" id="ct-start">
+        </div>
+        <div class="field">
+          <label>Завершение работ (до)</label>
+          <input type="date" id="ct-end">
+        </div>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" id="ct-export-pdf">Скачать договор в PDF</button>
+
+  </div>
+
 </main>
 
 <button class="fab" id="addProjectFab" title="Добавить проект">+</button>
@@ -904,6 +1018,8 @@
         </select>
       </div>
     </div>
+
+    <button class="btn btn-secondary" id="pf-add-payment" type="button">💰 Принять платёж</button>
     </div>
 
     <div class="field-row">
@@ -932,6 +1048,47 @@
       <button class="btn btn-danger" id="pf-delete">Удалить проект</button>
       <button class="btn btn-secondary" id="pf-cancel">Отмена</button>
     </div>
+  </div>
+</div>
+
+<!-- ===================== ПРИЁМ ПЛАТЕЖА ===================== -->
+<div class="sheet-overlay" id="paymentSheetOverlay">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">
+      <span>Принять платёж</span>
+      <button class="sheet-close" id="paymentSheetClose">✕</button>
+    </div>
+
+    <div class="field">
+      <label>Тип платежа</label>
+      <div class="yn-group" id="payment-type" style="flex-wrap:wrap;">
+        <div class="yn-btn selected" data-value="advance" style="flex-basis:48%;">Аванс</div>
+        <div class="yn-btn" data-value="final_payment" style="flex-basis:48%;">Оплата остатка</div>
+        <div class="yn-btn" data-value="materials_budget" style="flex-basis:48%;">Бюджет на материалы</div>
+        <div class="yn-btn" data-value="fee_payment" style="flex-basis:48%;">Гонорар ARHITTEK</div>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Сумма, ₽</label>
+        <input type="number" id="payment-amount" placeholder="0">
+      </div>
+      <div class="field">
+        <label>Дата</label>
+        <input type="date" id="payment-date">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Комментарий</label>
+      <input type="text" id="payment-note" placeholder="например: наличными / переводом на карту...">
+    </div>
+
+    <div class="note" id="payment-hint" style="margin-bottom:10px;"></div>
+
+    <button class="btn btn-primary" id="payment-save">Сохранить платёж</button>
   </div>
 </div>
 
@@ -1844,7 +2001,10 @@ const ledgerTypeLabels = {
   expense: {label:'Расход', cls:'var(--red)', sign:'−'},
   income: {label:'Доход', cls:'var(--green)', sign:'+'},
   advance: {label:'Аванс получен', cls:'var(--green)', sign:'+'},
-  payment: {label:'Выплата мастеру', cls:'var(--red)', sign:'−'}
+  payment: {label:'Выплата мастеру', cls:'var(--red)', sign:'−'},
+  final_payment: {label:'Оплата остатка', cls:'var(--green)', sign:'+'},
+  materials_budget: {label:'Бюджет на материалы', cls:'var(--green)', sign:'+'},
+  fee_payment: {label:'Гонорар ARHITTEK', cls:'var(--blue)', sign:'+'},
 };
 
 function renderLedgerProjectSelect(){
@@ -1911,6 +2071,100 @@ async function addLedgerEntry(){
     showToast('Ошибка сохранения');
   }
 }
+
+// ============================================================
+// ПРИЁМ ПЛАТЕЖА (для карточки проекта)
+// ============================================================
+let paymentType = 'advance';
+
+const paymentHints = {
+  advance: 'Увеличит «Получено» и уменьшит «Остаток» по проекту.',
+  final_payment: 'Увеличит «Получено» и уменьшит «Остаток» по проекту — оплата финального остатка.',
+  materials_budget: 'Деньги клиента на закупку материалов — увеличит «Получено» и уменьшит «Остаток» (учитывается в общем приходе по проекту).',
+  fee_payment: 'Увеличит «Выплачено гонорара» — не влияет на приход/остаток по проекту.',
+};
+
+function openPaymentSheet(){
+  if(!editingProjectId) return;
+  paymentType = 'advance';
+  document.querySelectorAll('#payment-type .yn-btn').forEach(b=>b.classList.toggle('selected', b.dataset.value==='advance'));
+  document.getElementById('payment-amount').value = '';
+  document.getElementById('payment-note').value = '';
+  document.getElementById('payment-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('payment-hint').textContent = paymentHints.advance;
+  document.getElementById('paymentSheetOverlay').classList.add('active');
+}
+
+document.querySelectorAll('#payment-type .yn-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('#payment-type .yn-btn').forEach(b=>b.classList.remove('selected'));
+    btn.classList.add('selected');
+    paymentType = btn.dataset.value;
+    document.getElementById('payment-hint').textContent = paymentHints[paymentType] || '';
+  });
+});
+
+async function savePayment(){
+  const projectId = editingProjectId;
+  if(!projectId) return;
+  const amount = parseFloat(document.getElementById('payment-amount').value);
+  const entry_date = document.getElementById('payment-date').value || new Date().toISOString().slice(0,10);
+  const note = document.getElementById('payment-note').value.trim();
+
+  if(!amount || amount <= 0){ showToast('Укажите сумму платежа'); return; }
+
+  const p = state.projects.find(x=>x.id===projectId);
+  if(!p) return;
+
+  const updates = {};
+  if(paymentType === 'fee_payment'){
+    updates.fee_paid = (Number(p.fee_paid)||0) + amount;
+  }else{
+    const newAdvance = (Number(p.advance)||0) + amount;
+    updates.advance = newAdvance;
+    updates.balance = Math.max(0, (Number(p.price)||0) - newAdvance);
+  }
+
+  showToast('Сохранение…');
+  try{
+    const {error: projErr} = await sb.from('projects').update(updates).eq('id', projectId);
+    if(projErr) throw projErr;
+
+    const t = ledgerTypeLabels[paymentType];
+    const description = note || t?.label || 'Платёж';
+    const {data, error} = await sb.from('ledger_entries').insert({
+      type: paymentType, project_id: projectId, description, amount, entry_date
+    }).select().single();
+    if(error) throw error;
+
+    await logAudit('project', projectId, p.name, 'update', {
+      payment: {old:null, new: `${t?.label||paymentType} — ${fmtMoney(amount)}${note?' ('+note+')':''}`}
+    });
+
+    document.getElementById('paymentSheetOverlay').classList.remove('active');
+    showToast('Платёж сохранён');
+    await loadAll();
+
+    // Refresh project sheet fields with updated values
+    if(editingProjectId === projectId){
+      const updated = state.projects.find(x=>x.id===projectId);
+      if(updated){
+        document.getElementById('pf-advance').value = updated.advance ?? '';
+        document.getElementById('pf-balance').value = updated.balance ?? '';
+        document.getElementById('pf-feepaid').value = updated.fee_paid ?? '';
+      }
+    }
+  }catch(e){
+    console.error(e);
+    showToast('Ошибка сохранения платежа');
+  }
+}
+
+document.getElementById('pf-add-payment').addEventListener('click', openPaymentSheet);
+document.getElementById('paymentSheetClose').addEventListener('click', ()=>{
+  document.getElementById('paymentSheetOverlay').classList.remove('active');
+});
+document.getElementById('payment-save').addEventListener('click', savePayment);
 
 async function deleteLedgerEntry(id){
   try{
@@ -3264,6 +3518,261 @@ function updateKpTotals(){
 
   return {subtotal, discountAmount, total, advance, remainder};
 }
+
+// ============================================================
+// ДОГОВОРЫ
+// ============================================================
+const CONTRACT_TYPES = {
+  ar: {
+    label: 'Архитектурное проектирование',
+    workName: 'Архитектурный проект',
+    defaultScope: [
+      'Планы фундамента, стен 1 и 2 этажа с маркировкой',
+      'Генеральный план (схема расположения дома на участке)',
+      'Фасады с 4 сторон',
+      'Разрезы',
+      'Схема кровли',
+      'Ведомость окон и дверей',
+      'Экспликация и площади помещений',
+      'Расстановка мебели',
+      '3D-визуализация экстерьера',
+    ],
+  },
+  di: {
+    label: 'Дизайн интерьера',
+    workName: 'Дизайн-проект интерьера',
+    defaultScope: [
+      'Планировочное решение с расстановкой мебели',
+      'Развёртки стен по каждому помещению',
+      'Ведомость отделочных материалов (пол, стены, потолок)',
+      'План освещения и расстановки электроточек',
+      'Подбор мебели, сантехники и декора (по согласованному уровню)',
+      '3D-визуализация ключевых помещений',
+    ],
+  },
+  st: {
+    label: 'Строительство / ремонт под ключ',
+    workName: 'Строительно-монтажные и отделочные работы',
+    defaultScope: [
+      'Выполнение работ в соответствии с утверждённым проектом и сметой',
+      'Закупка и доставка материалов (по отдельной смете / бюджету заказчика)',
+      'Контроль качества выполняемых работ на всех этапах',
+      'Фотоотчёты о ходе работ',
+      'Передача объекта по акту приёма-передачи выполненных работ',
+    ],
+  },
+};
+
+let contractType = 'ar';
+
+function fillContractDefaults(){
+  const t = CONTRACT_TYPES[contractType];
+  document.getElementById('ct-scope').value = t.defaultScope.map(s=>'— '+s).join('\n');
+}
+
+function openContractsView(){
+  const sel = document.getElementById('ct-project');
+  sel.innerHTML = '<option value="">— не выбран —</option>' +
+    state.projects.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+  sel.value = '';
+
+  document.getElementById('ct-date').value = new Date().toISOString().slice(0,10);
+  if(!document.getElementById('ct-scope').value.trim()) fillContractDefaults();
+
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-contracts').classList.add('active');
+  window.scrollTo(0,0);
+}
+
+document.querySelectorAll('#contract-type .yn-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('#contract-type .yn-btn').forEach(b=>b.classList.remove('selected'));
+    btn.classList.add('selected');
+    contractType = btn.dataset.value;
+    fillContractDefaults();
+  });
+});
+
+document.getElementById('ct-project').addEventListener('change', (e)=>{
+  const p = state.projects.find(x=>x.id===e.target.value);
+  if(!p) return;
+  document.getElementById('ct-object').value = p.address || p.name || '';
+  if(p.price) document.getElementById('ct-price').value = p.price;
+  if(p.start_date) document.getElementById('ct-start').value = p.start_date;
+  if(p.end_date) document.getElementById('ct-end').value = p.end_date;
+  if(p.phone) document.getElementById('ct-phone').value = p.phone;
+});
+
+function numToWordsRub(n){
+  return fmtMoney(n) + ' руб.';
+}
+
+function exportContractToPdf(){
+  const t = CONTRACT_TYPES[contractType];
+  const c = state.companyInfo || {};
+
+  const clientName = document.getElementById('ct-client-name').value.trim() || '_____________________';
+  const passport = document.getElementById('ct-passport').value.trim();
+  const birthdate = document.getElementById('ct-birthdate').value;
+  const passportIssuer = document.getElementById('ct-passport-issuer').value.trim();
+  const passportDate = document.getElementById('ct-passport-date').value;
+  const address = document.getElementById('ct-address').value.trim();
+  const phone = document.getElementById('ct-phone').value.trim();
+
+  const number = document.getElementById('ct-number').value.trim() || '____';
+  const date = document.getElementById('ct-date').value || new Date().toISOString().slice(0,10);
+  const object = document.getElementById('ct-object').value.trim();
+  const scope = document.getElementById('ct-scope').value.trim();
+  const price = parseFloat(document.getElementById('ct-price').value) || 0;
+  const advancePct = parseFloat(document.getElementById('ct-advance-pct').value) || 50;
+  const start = document.getElementById('ct-start').value;
+  const end = document.getElementById('ct-end').value;
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit:'mm', format:'a4'});
+  registerPdfFonts(doc);
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 18;
+  const contentWidth = pageWidth - margin*2;
+  let y = 20;
+
+  function addLine(text, opts={}){
+    const bold = opts.bold || false;
+    const size = opts.size || 10;
+    const gap = opts.gap || 5;
+    const indent = opts.indent || 0;
+    const align = opts.align || 'left';
+    doc.setFont('Roboto', bold?'bold':'normal');
+    doc.setFontSize(size);
+    const lines = doc.splitTextToSize(text, contentWidth - indent);
+    lines.forEach(function(line){
+      if(y > 280){ doc.addPage(); y = 20; }
+      doc.text(line, margin + indent, y, {align: align});
+      y += gap;
+    });
+  }
+  function addSpacer(h){ y += (h || 3); }
+  function checkPage(){ if(y > 280){ doc.addPage(); y = 20; } }
+
+  addLine('ДОГОВОР № ' + number, {bold:true, size:13, align:'center', gap:6});
+  doc.setFont('Roboto','normal'); doc.setFontSize(9); doc.setTextColor(100);
+  doc.text('«' + (fmtDate(date) || 'дата') + '»', pageWidth/2, y, {align:'center'}); y += 8;
+  doc.setTextColor(0);
+
+  const companyShort = c.short_name || c.full_name || 'Исполнитель';
+  const intro = companyShort + ', именуемое в дальнейшем «Исполнитель», в лице ' + (c.director || 'Генерального директора') + ', действующего на основании Устава, с одной стороны, и гражданин(ка) РФ ' + clientName + ', именуемый(ая) в дальнейшем «Заказчик», с другой стороны, далее совместно именуемые «Стороны», заключили настоящий Договор о нижеследующем:';
+  addLine(intro, {gap:5});
+  addSpacer(2);
+
+  addLine('1. Предмет договора', {bold:true, size:11, gap:6});
+  addLine('1.1. Исполнитель обязуется на основании Технического задания (ТЗ), предоставленного Заказчиком, выполнить ' + t.workName.toLowerCase() + ' (далее — «Работа»)' + (object ? ' по объекту: ' + object : '') + ', а Заказчик обязуется принять и оплатить Работу.');
+  addLine('1.2. Работа включает в себя следующие разделы / этапы:');
+  scope.split('\n').forEach(function(line){
+    if(line.trim()) addLine(line.trim(), {indent:4});
+  });
+  addLine('1.3. Техническое задание предоставляется Заказчиком после подписания настоящего Договора.');
+  addLine('1.4. Передача и приём выполненных по настоящему Договору работ производится по Акту приёма-передачи выполненных работ.');
+  addSpacer(2);
+
+  checkPage();
+  addLine('2. Стоимость работ и порядок оплаты', {bold:true, size:11, gap:6});
+  addLine('2.1. Стоимость работ по настоящему Договору составляет ' + numToWordsRub(price) + ', НДС не облагается в связи с применением Исполнителем упрощённой системы налогообложения.');
+  addLine('2.2. Стоимость работ может быть увеличена при внесении изменений в Техническое задание Заказчиком.');
+  addLine('2.3. Заказчик оплачивает Исполнителю аванс в размере ' + advancePct + '% от стоимости работ, указанной в п.2.1 настоящего Договора, перед началом выполнения работ. Оставшаяся сумма оплачивается после завершения работ согласно Акту приёма-передачи.');
+  if(contractType === 'st'){
+    addLine('2.4. Денежные средства, переданные Заказчиком на закупку строительных материалов, учитываются Исполнителем отдельно от стоимости работ по настоящему Договору и расходуются исключительно на нужды объекта Заказчика.');
+  }
+  addLine('2.5. Оплата производится в рублях РФ.');
+  addSpacer(2);
+
+  checkPage();
+  addLine('3. График выполнения работ', {bold:true, size:11, gap:6});
+  addLine('3.1. Исполнитель приступает к выполнению работ' + (start ? ' с ' + fmtDate(start) : ' в течение 5 рабочих дней') + ' при условии оплаты Заказчиком авансового платежа.');
+  addLine('3.2. Работы по Договору должны быть завершены ' + (end ? 'до ' + fmtDate(end) : 'в срок, согласованный Сторонами') + '. Срок может быть продлён при внесении изменений в ТЗ со стороны Заказчика.');
+  addSpacer(2);
+
+  checkPage();
+  addLine('4. Обязанности сторон', {bold:true, size:11, gap:6});
+  addLine('4.1. Исполнитель обязан:', {bold:true, gap:5});
+  addLine('4.1.1. Выполнить работы добросовестно и качественно в соответствии с ТЗ;', {indent:4});
+  addLine('4.1.2. В ходе выполнения работ согласовывать с Заказчиком принимаемые решения и учитывать его мнение;', {indent:4});
+  addLine('4.1.3. Передать Заказчику результаты работы в электронном виде (PDF); по завершении работ направить Заказчику на подпись Акт выполненных работ;', {indent:4});
+  addLine('4.1.4. Оказывать Заказчику консультации по вопросам, касающимся предмета настоящего Договора;', {indent:4});
+  addLine('4.1.5. Не передавать результаты работы по настоящему Договору третьим лицам без согласия Заказчика.', {indent:4});
+  addSpacer(1);
+  addLine('4.2. Заказчик обязан:', {bold:true, gap:5});
+  addLine('4.2.1. Передать Исполнителю Техническое задание и иную документацию, необходимую для выполнения работ;', {indent:4});
+  addLine('4.2.2. Оплатить Исполнителю стоимость работ на условиях настоящего Договора;', {indent:4});
+  addLine('4.2.3. Оказывать Исполнителю содействие, отвечать на запросы Исполнителя в срок не более 2 рабочих дней;', {indent:4});
+  addLine('4.2.4. В течение 3 календарных дней с момента получения Акта подписать и направить его Исполнителю либо направить мотивированные возражения. Если в указанный срок Заказчик не подпишет Акт и не направит возражений, Акт считается принятым в редакции Исполнителя.', {indent:4});
+  addSpacer(2);
+
+  checkPage();
+  addLine('5. Ответственность сторон', {bold:true, size:11, gap:6});
+  addLine('5.1. Стороны несут ответственность по настоящему Договору в пределах, предусмотренных законодательством РФ.');
+  addSpacer(2);
+
+  addLine('6. Обстоятельства непреодолимой силы', {bold:true, size:11, gap:6});
+  addLine('6.1. Стороны освобождаются от ответственности за частичное или полное неисполнение обязательств по настоящему Договору, если оно явилось следствием обстоятельств непреодолимой силы.');
+  addSpacer(2);
+
+  addLine('7. Порядок разрешения споров', {bold:true, size:11, gap:6});
+  addLine('7.1. Все споры и разногласия по настоящему Договору решаются Сторонами путём переговоров. При недостижении согласия споры рассматриваются в порядке, предусмотренном законодательством РФ.');
+  addSpacer(2);
+
+  checkPage();
+  addLine('8. Прочие условия', {bold:true, size:11, gap:6});
+  addLine('8.1. Настоящий Договор вступает в силу с момента подписания и действует до полного исполнения Сторонами своих обязательств.');
+  addLine('8.2. При изменении реквизитов, адресов или контактных данных Сторона обязана в течение 3 дней письменно известить об этом другую Сторону.');
+  addLine('8.3. Все изменения и дополнения к настоящему Договору действительны при условии письменной формы и подписания Сторонами.');
+  addLine('8.4. При досрочном расторжении Договора по инициативе Заказчика, Заказчику возвращаются уплаченные суммы за исключением стоимости фактически выполненных Исполнителем работ.');
+  addLine('8.5. Исполнитель может использовать результаты Работы в рекламных целях по своему усмотрению при условии сохранения конфиденциальности персональных данных Заказчика.');
+  addLine('8.6. Стороны признают переписку по электронной почте, указанной в настоящем Договоре, официальной корреспонденцией, имеющей доказательственную силу.');
+  addSpacer(3);
+
+  checkPage();
+  addLine('9. Адреса и реквизиты Сторон', {bold:true, size:11, gap:6});
+  addSpacer(1);
+
+  addLine('ЗАКАЗЧИК:', {bold:true, gap:5});
+  addLine(clientName);
+  if(passport) addLine('Паспорт: ' + passport + (birthdate ? ', дата рождения ' + fmtDate(birthdate) : ''));
+  if(passportIssuer) addLine('Выдан: ' + passportIssuer + (passportDate ? ', дата выдачи ' + fmtDate(passportDate) : ''));
+  if(address) addLine('Адрес регистрации: ' + address);
+  if(phone) addLine('Телефон: ' + phone);
+  addSpacer(3);
+
+  addLine('ИСПОЛНИТЕЛЬ:', {bold:true, gap:5});
+  if(c.full_name) addLine(c.full_name);
+  if(c.inn) addLine('ИНН ' + c.inn + (c.kpp ? ', КПП ' + c.kpp : '') + (c.ogrn ? ', ОГРН ' + c.ogrn : ''));
+  if(c.legal_address) addLine('Юридический адрес: ' + c.legal_address);
+  if(c.bank_name) addLine('Банк: ' + c.bank_name);
+  if(c.bank_account) addLine('Р/с: ' + c.bank_account + (c.bik ? ', БИК ' + c.bik : ''));
+  if(c.corr_account) addLine('К/с: ' + c.corr_account);
+  if(c.phone) addLine('Телефон: ' + c.phone);
+  if(c.director) addLine('Генеральный директор: ' + c.director);
+  addSpacer(10);
+
+  checkPage();
+  addLine('Заказчик: _____________________          Исполнитель: _____________________', {size:9, gap:6});
+
+  const fileName = 'Dogovor-' + t.label.replace(/[^a-zA-Zа-яА-Я0-9]/g,'_') + '-' + (clientName||'klient').replace(/[^a-zA-Zа-яА-Я0-9]/g,'_').slice(0,30) + '-' + date + '.pdf';
+  doc.save(fileName);
+  showToast('Договор скачивается...');
+}
+
+document.getElementById('openContractsBtn').addEventListener('click', openContractsView);
+document.getElementById('contractsBack').addEventListener('click', function(){
+  document.querySelectorAll('.view').forEach(function(v){ v.classList.remove('active'); });
+  document.querySelectorAll('.nav-btn').forEach(function(b){ b.classList.remove('active'); });
+  document.getElementById('view-more').classList.add('active');
+  document.querySelector('.nav-btn[data-view="view-more"]').classList.add('active');
+  window.scrollTo(0,0);
+});
+document.getElementById('ct-export-pdf').addEventListener('click', exportContractToPdf);
+
 
 // ============================================================
 // КОМПАНИЯ (реквизиты)
