@@ -797,6 +797,10 @@
       <textarea id="pf-notes" placeholder="дополнительная информация..."></textarea>
     </div>
 
+    <div class="section-label" style="margin:18px 0 10px;"><span class="lbl-text">Техническое задание (ТЗ)</span><span class="section-label-line"></span></div>
+    <div id="pf-tz-list" class="card" style="margin-bottom:8px;"></div>
+    <button class="btn btn-secondary" id="pf-tz-create" style="display:none;">Создать ссылку на ТЗ для клиента</button>
+
     <button class="btn btn-primary" id="pf-save">Сохранить</button>
     <div class="btn-row">
       <button class="btn btn-danger" id="pf-delete">Удалить проект</button>
@@ -873,6 +877,18 @@
   </div>
 </div>
 
+<!-- ===================== ПРОСМОТР ОТВЕТОВ ТЗ ===================== -->
+<div class="sheet-overlay" id="tzSheetOverlay">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">
+      <span>Ответы клиента (ТЗ)</span>
+      <button class="sheet-close" id="tzSheetClose">✕</button>
+    </div>
+    <div id="tzAnswersContent"></div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -896,6 +912,8 @@ let state = {
   photos: [],
   history: [],
   invoices: [],
+  tzForms: [],
+  tzReferences: [],
   trash: {projects:[], employees:[], categories:[], ledger:[]},
 };
 
@@ -992,7 +1010,7 @@ function diffChanges(oldObj, newObj, fields){
 async function loadAll(){
   setSyncStatus('loading', 'синхронизация…');
   try{
-    const [proj, emp, cat, st, dept, led, photos, hist, invs, trashProj, trashEmp, trashCat, trashLed] = await Promise.all([
+    const [proj, emp, cat, st, dept, led, photos, hist, invs, tzForms, tzRefs, trashProj, trashEmp, trashCat, trashLed] = await Promise.all([
       sb.from('projects').select('*').is('deleted_at', null).order('created_at', {ascending:true}),
       sb.from('employees').select('*').is('deleted_at', null).order('name'),
       sb.from('categories').select('*').is('deleted_at', null).order('sort_order'),
@@ -1002,13 +1020,15 @@ async function loadAll(){
       sb.from('expense_photos').select('*').order('created_at', {ascending:false}),
       sb.from('audit_log').select('*').order('created_at', {ascending:false}).limit(100),
       sb.from('invoices').select('*').order('invoice_date', {ascending:true}),
+      sb.from('tz_forms').select('*').order('created_at', {ascending:false}),
+      sb.from('tz_references').select('*'),
       sb.from('projects').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
       sb.from('employees').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
       sb.from('categories').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
       sb.from('ledger_entries').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
     ]);
 
-    const errs = [proj,emp,cat,st,dept,led,photos,hist,invs,trashProj,trashEmp,trashCat,trashLed].map(r=>r.error).filter(Boolean);
+    const errs = [proj,emp,cat,st,dept,led,photos,hist,invs,tzForms,tzRefs,trashProj,trashEmp,trashCat,trashLed].map(r=>r.error).filter(Boolean);
     if(errs.length) throw errs[0];
 
     state.projects = proj.data || [];
@@ -1020,6 +1040,8 @@ async function loadAll(){
     state.photos = photos.data || [];
     state.history = hist.data || [];
     state.invoices = invs.data || [];
+    state.tzForms = tzForms.data || [];
+    state.tzReferences = tzRefs.data || [];
     state.trash = {
       projects: trashProj.data || [],
       employees: trashEmp.data || [],
@@ -1334,6 +1356,8 @@ function openProjectSheet(id){
     document.getElementById('pf-start').value = p.start_date || '';
     document.getElementById('pf-end').value = p.end_date || '';
     document.getElementById('pf-notes').value = p.notes || '';
+    renderTzList(id);
+    document.getElementById('pf-tz-create').style.display = '';
   }else{
     title.textContent = 'Новый проект';
     deleteBtn.style.display = 'none';
@@ -1356,6 +1380,8 @@ function openProjectSheet(id){
     document.getElementById('pf-start').value = '';
     document.getElementById('pf-end').value = '';
     document.getElementById('pf-notes').value = '';
+    document.getElementById('pf-tz-list').innerHTML = '<div class="empty-state">Сохраните проект, чтобы создать ТЗ</div>';
+    document.getElementById('pf-tz-create').style.display = 'none';
   }
 
   overlay.classList.add('active');
@@ -2581,8 +2607,146 @@ function exportToXlsx(){
 
 
 // ============================================================
-// КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ (KP)
+// ТЗ ДЛЯ КЛИЕНТОВ
 // ============================================================
+const TZ_FIELD_LABELS = {
+  full_name: 'Имя клиента',
+  phone: 'Телефон',
+  object_address: 'Адрес объекта',
+  service_type: 'Нужная услуга',
+  ar_object_type: 'Тип объекта (АР)',
+  ar_floors: 'Этажность',
+  ar_plot_area: 'Площадь участка, м²',
+  ar_house_area: 'Площадь застройки, м²',
+  ar_rooms: 'Состав помещений',
+  ar_style: 'Стиль фасада',
+  ar_extras: 'Дополнительно (АР)',
+  ar_engineering: 'Инженерные предпочтения',
+  ar_notes: 'Пожелания по АР',
+  di_rooms: 'Помещения для дизайна',
+  di_style: 'Стиль интерьера',
+  di_colors: 'Цветовые предпочтения',
+  di_furniture: 'Мебель и техника',
+  di_existing: 'Что сохранить из существующего',
+  di_budget: 'Бюджет на мебель/декор',
+  di_notes: 'Пожелания по ДИ',
+  deadline_pref: 'Желаемые сроки',
+  other_notes: 'Прочая информация',
+};
+
+function tzFormUrl(token){
+  // Assumes tz.html is hosted alongside the main app
+  const base = window.location.href.replace(/[^\/]*$/, '');
+  return `${base}tz.html?token=${token}`;
+}
+
+function renderTzList(projectId){
+  const container = document.getElementById('pf-tz-list');
+  const forms = state.tzForms.filter(f=>f.project_id===projectId);
+
+  if(!forms.length){
+    container.innerHTML = '<div class="empty-state">ТЗ пока не создано</div>';
+    return;
+  }
+
+  container.innerHTML = forms.map(f=>{
+    const statusColor = f.status === 'Заполнено' ? 'var(--green)' : 'var(--gold)';
+    const url = tzFormUrl(f.token);
+    return `<div class="list-item">
+      <div>
+        <div class="li-name">ТЗ ${f.client_name ? '— '+escapeHtml(f.client_name) : ''}</div>
+        <div class="li-meta" style="color:${statusColor}">${escapeHtml(f.status)} · создано ${fmtDateTime(f.created_at)}${f.submitted_at?' · заполнено '+fmtDateTime(f.submitted_at):''}</div>
+      </div>
+      <div class="li-actions">
+        ${f.status==='Заполнено' ? `<button class="icon-btn" onclick="viewTzAnswers('${f.id}')" title="Посмотреть ответы">👁</button>` : ''}
+        <button class="icon-btn" onclick="copyTzLink('${url}')" title="Скопировать ссылку">🔗</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function createTzForm(){
+  if(!editingProjectId) return;
+  const p = state.projects.find(x=>x.id===editingProjectId);
+  if(!p) return;
+
+  const token = crypto.randomUUID().replace(/-/g,'').slice(0,16);
+
+  try{
+    const {data, error} = await sb.from('tz_forms').insert({
+      project_id: editingProjectId,
+      token,
+      status: 'Отправлено',
+    }).select().single();
+    if(error) throw error;
+
+    await logAudit('project', editingProjectId, p.name, 'update', {tz_created: {old:null, new: token}});
+
+    const url = tzFormUrl(token);
+    await loadAll();
+    renderTzList(editingProjectId);
+
+    copyTzLink(url);
+  }catch(e){
+    console.error(e);
+    showToast('Ошибка создания ТЗ');
+  }
+}
+
+function copyTzLink(url){
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(url).then(()=>{
+      showToast('Ссылка скопирована: можно отправить клиенту');
+    }).catch(()=>{
+      showToast(url);
+    });
+  }else{
+    showToast(url);
+  }
+}
+
+function viewTzAnswers(tzFormId){
+  const f = state.tzForms.find(x=>x.id===tzFormId);
+  if(!f) return;
+
+  const answers = f.answers || {};
+  const refs = state.tzReferences ? state.tzReferences.filter(r=>r.tz_form_id===tzFormId) : [];
+
+  let html = `<div class="card">
+    <div class="li-meta" style="margin-bottom:8px;">Заполнено ${fmtDateTime(f.submitted_at)}</div>
+  `;
+
+  Object.entries(answers).forEach(([key, val])=>{
+    if(key.endsWith('_files')) return; // handled separately as refs
+    if(val === '' || val == null || (Array.isArray(val) && !val.length)) return;
+    const label = TZ_FIELD_LABELS[key] || key;
+    const displayVal = Array.isArray(val) ? val.join(', ') : val;
+    html += `<div class="fee-row" style="display:block; padding:8px 0;">
+      <div class="fl" style="margin-bottom:3px;">${escapeHtml(label)}</div>
+      <div style="font-size:13px; font-weight:600;">${escapeHtml(displayVal)}</div>
+    </div>`;
+  });
+
+  // Reference photos
+  Object.entries(answers).forEach(([key, val])=>{
+    if(!key.endsWith('_files') || !Array.isArray(val) || !val.length) return;
+    const baseKey = key.replace('_files','');
+    const label = TZ_FIELD_LABELS[baseKey] || baseKey;
+    html += `<div style="padding:8px 0;">
+      <div class="fl" style="margin-bottom:6px;">${escapeHtml(label)} — референсы</div>
+      <div class="photo-grid">
+        ${val.map(url=>`<div class="photo-thumb"><img src="${escapeHtml(url)}"></div>`).join('')}
+      </div>
+    </div>`;
+  });
+
+  html += `</div>`;
+
+  document.getElementById('tzAnswersContent').innerHTML = html;
+  document.getElementById('tzSheetOverlay').classList.add('active');
+}
+
+
 let kpServices = [];
 let kpServiceCounter = 0;
 
@@ -3043,6 +3207,13 @@ document.getElementById('pf-delete').addEventListener('click', ()=>{
 });
 document.getElementById('projectSheetOverlay').addEventListener('click', (e)=>{
   if(e.target.id === 'projectSheetOverlay') closeProjectSheet();
+});
+document.getElementById('pf-tz-create').addEventListener('click', createTzForm);
+document.getElementById('tzSheetClose').addEventListener('click', ()=>{
+  document.getElementById('tzSheetOverlay').classList.remove('active');
+});
+document.getElementById('tzSheetOverlay').addEventListener('click', (e)=>{
+  if(e.target.id === 'tzSheetOverlay') document.getElementById('tzSheetOverlay').classList.remove('active');
 });
 
 document.getElementById('addEmployeeBtn').addEventListener('click', ()=>openEmployeeSheet(null));
