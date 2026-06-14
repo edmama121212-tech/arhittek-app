@@ -354,6 +354,15 @@
   .obj-sum-cell .val{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:13px;}
 
   /* ===== KP service rows ===== */
+  /* ===== Yes/No toggle (payment method etc) ===== */
+  .yn-group{display:flex; gap:8px;}
+  .yn-btn{
+    flex:1; padding:11px; border-radius:var(--radius-sm); border:1px solid var(--line-strong);
+    background:rgba(255,255,255,0.03); cursor:pointer; text-align:center; font-size:13px; font-weight:600;
+    transition: all .15s;
+  }
+  .yn-btn.selected{background:var(--blue-soft); border-color:rgba(74,144,226,0.5); color:var(--blue);}
+
   .kp-service{background:var(--card); border-radius:var(--radius); padding:14px; border:1px solid var(--line); margin-bottom:10px;}
   .kp-service-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;}
   .kp-service-title{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:13.5px; color:var(--text-dim);}
@@ -516,6 +525,12 @@
       <button class="btn btn-primary" id="openKpBtn">Создать коммерческое предложение</button>
     </div>
 
+    <div class="section-label"><span class="lbl-text">Компания</span><span class="section-label-line"></span></div>
+    <div class="card">
+      <div class="note" style="margin-bottom:10px;">Реквизиты компании: расчётный счёт и банковская карта для приёма платежей. Используются в КП и договорах.</div>
+      <button class="btn btn-secondary" id="openCompanyBtn">Реквизиты компании</button>
+    </div>
+
     <div class="section-label"><span class="lbl-text">Экспорт данных</span><span class="section-label-line"></span></div>
     <div class="card">
       <div class="note" style="margin-bottom:10px;">Скачать все таблицы (проекты, сотрудники, категории, финансовые записи) в одном Excel-файле.</div>
@@ -600,40 +615,15 @@
       </div>
     </div>
 
-    <div class="section-label"><span class="lbl-text">Реквизиты компании</span><span class="section-label-line"></span></div>
+    <div class="section-label"><span class="lbl-text">Способ оплаты / реквизиты</span><span class="section-label-line"></span></div>
     <div class="card">
-      <div class="note" style="margin-bottom:10px;">Заполняется один раз — данные сохраняются на устройстве для следующих КП.</div>
-      <div class="field">
-        <label>Название компании</label>
-        <input type="text" id="kp-company" placeholder="ООО ARHITTEK / ИП Мансур ...">
-      </div>
-      <div class="field-row">
-        <div class="field">
-          <label>ИНН</label>
-          <input type="text" id="kp-inn" placeholder="0000000000">
+      <div class="field" style="margin-bottom:0;">
+        <label>Как заказчик будет оплачивать</label>
+        <div class="yn-group" id="kp-payment-method">
+          <div class="yn-btn selected" data-value="account">Расчётный счёт</div>
+          <div class="yn-btn" data-value="card">Банковская карта</div>
         </div>
-        <div class="field">
-          <label>ОГРН / ОГРНИП</label>
-          <input type="text" id="kp-ogrn" placeholder="">
-        </div>
-      </div>
-      <div class="field">
-        <label>Юридический адрес</label>
-        <input type="text" id="kp-legal-addr" placeholder="г. Грозный, проспект ...">
-      </div>
-      <div class="field-row">
-        <div class="field">
-          <label>Расчётный счёт</label>
-          <input type="text" id="kp-bank-acc" placeholder="00000000000000000000">
-        </div>
-        <div class="field">
-          <label>Банк / БИК</label>
-          <input type="text" id="kp-bank-name" placeholder="Сбербанк / 000000000">
-        </div>
-      </div>
-      <div class="field">
-        <label>Телефон / email компании</label>
-        <input type="text" id="kp-company-phone" placeholder="7 900 000-00-00 / info@arhittek.ru">
+        <div class="hint" style="margin-top:8px;">Реквизиты подтянутся автоматически из раздела «Компания» и появятся в PDF.</div>
       </div>
     </div>
 
@@ -669,6 +659,106 @@
 
     <button class="btn btn-primary" id="kpExportPdf">Скачать PDF</button>
     <button class="btn btn-secondary" id="kpExportXlsx">Скачать Excel</button>
+
+  </div>
+
+  <!-- ===================== КОМПАНИЯ (реквизиты) ===================== -->
+  <div class="view" id="view-company">
+
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+      <button class="icon-btn" id="companyBack" style="font-size:20px;">←</button>
+      <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:16px;">Реквизиты компании</div>
+    </div>
+
+    <div class="section-label"><span class="lbl-text">Общие данные</span><span class="section-label-line"></span></div>
+    <div class="card">
+      <div class="field">
+        <label>Полное наименование</label>
+        <input type="text" id="co-full-name" placeholder="ООО «...»">
+      </div>
+      <div class="field">
+        <label>Краткое наименование</label>
+        <input type="text" id="co-short-name" placeholder="ООО «...»">
+      </div>
+      <div class="field">
+        <label>Генеральный директор</label>
+        <input type="text" id="co-director" placeholder="Фамилия Имя Отчество">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>ИНН</label>
+          <input type="text" id="co-inn" placeholder="0000000000">
+        </div>
+        <div class="field">
+          <label>КПП</label>
+          <input type="text" id="co-kpp" placeholder="000000000">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>ОГРН</label>
+          <input type="text" id="co-ogrn" placeholder="0000000000000">
+        </div>
+        <div class="field">
+          <label>Система налогообложения</label>
+          <input type="text" id="co-tax-system" placeholder="УСН">
+        </div>
+      </div>
+      <div class="field">
+        <label>Юридический адрес</label>
+        <textarea id="co-legal-addr" placeholder="индекс, регион, город, улица, дом"></textarea>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Телефон</label>
+          <input type="text" id="co-phone" placeholder="8 (900) 000-00-00">
+        </div>
+        <div class="field">
+          <label>Email</label>
+          <input type="text" id="co-email" placeholder="info@company.ru">
+        </div>
+      </div>
+    </div>
+
+    <div class="section-label"><span class="lbl-text">Оплата на расчётный счёт</span><span class="section-label-line"></span></div>
+    <div class="card">
+      <div class="field">
+        <label>Банк</label>
+        <input type="text" id="co-bank-name" placeholder="Филиал «...» Банка ... ПАО г. ...">
+      </div>
+      <div class="field">
+        <label>Номер счёта (р/с)</label>
+        <input type="text" id="co-bank-account" placeholder="00000000000000000000">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>БИК банка</label>
+          <input type="text" id="co-bik" placeholder="000000000">
+        </div>
+        <div class="field">
+          <label>Корр. счёт</label>
+          <input type="text" id="co-corr-account" placeholder="00000000000000000000">
+        </div>
+      </div>
+    </div>
+
+    <div class="section-label"><span class="lbl-text">Оплата на банковскую карту</span><span class="section-label-line"></span></div>
+    <div class="card">
+      <div class="field">
+        <label>Номер карты</label>
+        <input type="text" id="co-card-number" placeholder="0000 0000 0000 0000">
+      </div>
+      <div class="field">
+        <label>Получатель (ФИО)</label>
+        <input type="text" id="co-card-holder" placeholder="Фамилия Имя Отчество">
+      </div>
+      <div class="field">
+        <label>Банк карты</label>
+        <input type="text" id="co-card-bank" placeholder="например: Сбербанк">
+      </div>
+    </div>
+
+    <button class="btn btn-primary" id="companySaveBtn">Сохранить реквизиты</button>
 
   </div>
 
@@ -914,6 +1004,7 @@ let state = {
   invoices: [],
   tzForms: [],
   tzReferences: [],
+  companyInfo: null,
   trash: {projects:[], employees:[], categories:[], ledger:[]},
 };
 
@@ -1010,7 +1101,7 @@ function diffChanges(oldObj, newObj, fields){
 async function loadAll(){
   setSyncStatus('loading', 'синхронизация…');
   try{
-    const [proj, emp, cat, st, dept, led, photos, hist, invs, tzForms, tzRefs, trashProj, trashEmp, trashCat, trashLed] = await Promise.all([
+    const [proj, emp, cat, st, dept, led, photos, hist, invs, tzForms, tzRefs, company, trashProj, trashEmp, trashCat, trashLed] = await Promise.all([
       sb.from('projects').select('*').is('deleted_at', null).order('created_at', {ascending:true}),
       sb.from('employees').select('*').is('deleted_at', null).order('name'),
       sb.from('categories').select('*').is('deleted_at', null).order('sort_order'),
@@ -1022,6 +1113,7 @@ async function loadAll(){
       sb.from('invoices').select('*').order('invoice_date', {ascending:true}),
       sb.from('tz_forms').select('*').order('created_at', {ascending:false}),
       sb.from('tz_references').select('*'),
+      sb.from('company_info').select('*').limit(1).maybeSingle(),
       sb.from('projects').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
       sb.from('employees').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
       sb.from('categories').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
@@ -1042,6 +1134,7 @@ async function loadAll(){
     state.invoices = invs.data || [];
     state.tzForms = tzForms.data || [];
     state.tzReferences = tzRefs.data || [];
+    state.companyInfo = company.data || null;
     state.trash = {
       projects: trashProj.data || [],
       employees: trashEmp.data || [],
@@ -2610,28 +2703,78 @@ function exportToXlsx(){
 // ТЗ ДЛЯ КЛИЕНТОВ
 // ============================================================
 const TZ_FIELD_LABELS = {
-  full_name: 'Имя клиента',
-  phone: 'Телефон',
+  full_name: 'Ваше имя',
+  phone: 'Телефон для связи',
+  email: 'Email (необязательно)',
   object_address: 'Адрес объекта',
-  service_type: 'Нужная услуга',
-  ar_object_type: 'Тип объекта (АР)',
-  ar_floors: 'Этажность',
+  service_type: 'Какая услуга вам нужна?',
+  ar_object_type: 'Тип объекта',
+  ar_cadastre: 'Кадастровый номер участка (если есть)',
+  ar_gosplan: 'Есть градостроительный план участка?',
+  ar_docs: 'Есть правоустанавливающие документы на участок?',
+  ar_topo: 'Есть топографическая съёмка участка?',
+  ar_geo: 'Есть инженерно-геологические изыскания?',
+  ar_power: 'Есть техусловия на подключение электричества (от 15 кВт)?',
+  ar_utilities: 'Есть техусловия на воду/канализацию/отопление?',
+  ar_living_type: 'Вид проживания',
+  ar_residents: 'Сколько человек / семей будет проживать?',
   ar_plot_area: 'Площадь участка, м²',
-  ar_house_area: 'Площадь застройки, м²',
-  ar_rooms: 'Состав помещений',
+  ar_house_area: 'Желаемая площадь застройки, м²',
+  ar_floors: 'Этажность',
+  ar_floor_height: 'Высота каждого этажа, м (если есть предпочтения)',
+  ar_basement: 'Нужен подвал / цокольный этаж?',
+  ar_attic: 'Нужна мансарда?',
+  ar_rooms: 'Состав помещений по этажам',
+  ar_bedrooms: 'Сколько спален всего нужно?',
+  ar_bathrooms: 'Сколько санузлов всего нужно?',
+  ar_garage: 'Гараж',
+  ar_pool: 'Бассейн',
+  ar_terrace: 'Терраса / входная группа',
   ar_style: 'Стиль фасада',
-  ar_extras: 'Дополнительно (АР)',
+  ar_facade_materials: 'Отделочные материалы фасада (если есть пожелания)',
+  ar_windows: 'Тип окон',
+  ar_extras: 'Дополнительно на участке',
   ar_engineering: 'Инженерные предпочтения',
-  ar_notes: 'Пожелания по АР',
-  di_rooms: 'Помещения для дизайна',
-  di_style: 'Стиль интерьера',
-  di_colors: 'Цветовые предпочтения',
+  ar_sections: 'Какие разделы проектной документации нужны?',
+  ar_notes: 'Дополнительные пожелания по АР',
+  ar_refs: 'Референсы по архитектуре',
+  di_rooms: 'Какие помещения нужно оформить?',
+  di_budget: 'Ориентировочный бюджет проекта',
+  di_collab_style: 'Стиль работы с дизайнером',
+  di_beauty_vs_practical: 'Красота или практичность?',
+  di_style: 'Предпочитаемый стиль интерьера',
+  di_style_description: 'Опишите, как вы представляете выбранный стиль',
+  di_colors_like: 'Цвета и оттенки, которые ВАМ НРАВЯТСЯ',
+  di_colors_dislike: 'Цвета и оттенки, которые НЕ НРАВЯТСЯ',
+  di_want: 'Что ВЫ ХОТИТЕ видеть в интерьере',
+  di_dont_want: 'Что вы НЕ хотите видеть в интерьере',
+  di_shapes: 'Предпочтительные формы',
+  di_fireplace: 'Нужен камин?',
+  di_materials: 'Отношение к материалам',
+  di_pets: 'Домашние животные',
+  di_plants: 'Комнатные растения / вертикальное озеленение',
+  di_renovation: 'Нужна перепланировка?',
+  di_renovation_details: 'Какие изменения планировки нужны',
+  di_windows_doors: 'Замена окон/дверей/радиаторов нужна?',
+  di_engineering: 'Инженерные системы в интерьере',
+  di_av: 'Аудио/видео системы',
+  di_floor: 'Тип пола',
+  di_walls: 'Отделка стен',
+  di_ceiling: 'Потолок',
+  di_doors_style: 'Межкомнатные двери',
   di_furniture: 'Мебель и техника',
-  di_existing: 'Что сохранить из существующего',
-  di_budget: 'Бюджет на мебель/декор',
-  di_notes: 'Пожелания по ДИ',
-  deadline_pref: 'Желаемые сроки',
-  other_notes: 'Прочая информация',
+  di_kitchen: 'Кухня — пожелания',
+  di_living_room: 'Гостиная — пожелания',
+  di_bedroom: 'Спальня(и) — пожелания',
+  di_kids_room: 'Детская(ие) — пожелания',
+  di_bathroom: 'Ванные комнаты — пожелания',
+  di_other_rooms: 'Другие помещения (кабинет, прихожая, гардеробная, балкон)',
+  di_existing: 'Что нужно сохранить / учесть из существующего',
+  di_lifestyle: 'Образ жизни',
+  di_notes: 'Другие пожелания по интерьеру',
+  di_refs: 'Референсы по интерьеру',
+  deadline_pref: 'Желаемые сроки начала/завершения проекта (если есть)',
+  other_notes: 'Любая другая важная информация',
 };
 
 function tzFormUrl(token){
@@ -2742,8 +2885,73 @@ function viewTzAnswers(tzFormId){
 
   html += `</div>`;
 
+  html += `<button class="btn btn-secondary" style="margin-top:4px;" onclick="exportTzAnswersToPdf('${tzFormId}')">📄 Скачать ТЗ в PDF</button>`;
+
   document.getElementById('tzAnswersContent').innerHTML = html;
   document.getElementById('tzSheetOverlay').classList.add('active');
+}
+
+function exportTzAnswersToPdf(tzFormId){
+  const f = state.tzForms.find(x=>x.id===tzFormId);
+  if(!f) return;
+  const answers = f.answers || {};
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit:'mm', format:'a4'});
+  registerPdfFonts(doc);
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 15;
+  let y = 20;
+
+  const logoSize = 14;
+  doc.addImage(ARHITTEK_LOGO_B64, 'PNG', margin, 10, logoSize, logoSize * (87/100));
+  const textX = margin + logoSize + 4;
+  doc.setFont('Roboto','bold'); doc.setFontSize(18); doc.setTextColor(0);
+  doc.text('ARHIT', textX, 19);
+  const arhitWidth = doc.getTextWidth('ARHIT');
+  doc.setTextColor(69,134,236);
+  doc.text('TEK', textX + arhitWidth, 19);
+  doc.setTextColor(0);
+  doc.setFont('Roboto','normal'); doc.setFontSize(11);
+  doc.text('Техническое задание', textX, 26);
+  doc.setFontSize(9); doc.setTextColor(120);
+  doc.text(`Дата: ${fmtDate(f.submitted_at || f.created_at)}`, pageWidth - margin, 20, {align:'right'});
+  doc.setTextColor(0);
+
+  y = 38;
+
+  Object.entries(answers).forEach(([key, val])=>{
+    if(key.endsWith('_files')) return;
+    if(val === '' || val == null || (Array.isArray(val) && !val.length)) return;
+    const label = TZ_FIELD_LABELS[key] || key;
+    const valueText = Array.isArray(val) ? val.join(', ') : String(val);
+
+    if(y > 275){ doc.addPage(); y = 20; }
+
+    doc.setFont('Roboto','bold'); doc.setFontSize(9);
+    const labelLines = doc.splitTextToSize(label, pageWidth - margin*2);
+    labelLines.forEach(line=>{ doc.text(line, margin, y); y += 4.5; });
+
+    doc.setFont('Roboto','normal'); doc.setFontSize(9); doc.setTextColor(60);
+    const valueLines = doc.splitTextToSize(valueText, pageWidth - margin*2);
+    valueLines.forEach(line=>{
+      if(y > 280){ doc.addPage(); y = 20; }
+      doc.text(line, margin, y); y += 4.5;
+    });
+    doc.setTextColor(0);
+    y += 2;
+  });
+
+  if(y > 270){ doc.addPage(); y = 20; }
+  y = Math.max(y, 270);
+  doc.setFont('Roboto','normal'); doc.setFontSize(8); doc.setTextColor(140);
+  doc.text('ARHITTEK — архитектурное проектирование, дизайн интерьера, ремонт под ключ', margin, y);
+  doc.text('г. Грозный, проспект Ахмеда Хаджи Кадырова 40, бизнес-парк «Гранд», 3 этаж', margin, y+4);
+
+  const clientName = f.client_name || 'klient';
+  const fileName = `TZ-${clientName.replace(/[^a-zA-Zа-яА-Я0-9]/g,'_')}-${new Date().toISOString().slice(0,10)}.pdf`;
+  doc.save(fileName);
 }
 
 
@@ -2877,39 +3085,81 @@ function updateKpTotals(){
   return {subtotal, discountAmount, total, advance, remainder};
 }
 
-function saveKpRequisites(){
-  const data = {
-    company: document.getElementById('kp-company').value.trim(),
-    inn: document.getElementById('kp-inn').value.trim(),
-    ogrn: document.getElementById('kp-ogrn').value.trim(),
-    legalAddr: document.getElementById('kp-legal-addr').value.trim(),
-    bankAcc: document.getElementById('kp-bank-acc').value.trim(),
-    bankName: document.getElementById('kp-bank-name').value.trim(),
-    companyPhone: document.getElementById('kp-company-phone').value.trim(),
-  };
-  try{ localStorage.setItem('arhittek_kp_requisites', JSON.stringify(data)); }catch(e){}
+// ============================================================
+// КОМПАНИЯ (реквизиты)
+// ============================================================
+function openCompanyView(){
+  const c = state.companyInfo || {};
+  document.getElementById('co-full-name').value = c.full_name || '';
+  document.getElementById('co-short-name').value = c.short_name || '';
+  document.getElementById('co-director').value = c.director || '';
+  document.getElementById('co-inn').value = c.inn || '';
+  document.getElementById('co-kpp').value = c.kpp || '';
+  document.getElementById('co-ogrn').value = c.ogrn || '';
+  document.getElementById('co-tax-system').value = c.tax_system || '';
+  document.getElementById('co-legal-addr').value = c.legal_address || '';
+  document.getElementById('co-phone').value = c.phone || '';
+  document.getElementById('co-email').value = c.email || '';
+  document.getElementById('co-bank-name').value = c.bank_name || '';
+  document.getElementById('co-bank-account').value = c.bank_account || '';
+  document.getElementById('co-bik').value = c.bik || '';
+  document.getElementById('co-corr-account').value = c.corr_account || '';
+  document.getElementById('co-card-number').value = c.card_number || '';
+  document.getElementById('co-card-holder').value = c.card_holder || '';
+  document.getElementById('co-card-bank').value = c.card_bank || '';
+
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-company').classList.add('active');
+  window.scrollTo(0,0);
 }
 
-function loadKpRequisites(){
+async function saveCompanyInfo(){
+  const payload = {
+    full_name: document.getElementById('co-full-name').value.trim(),
+    short_name: document.getElementById('co-short-name').value.trim(),
+    director: document.getElementById('co-director').value.trim(),
+    inn: document.getElementById('co-inn').value.trim(),
+    kpp: document.getElementById('co-kpp').value.trim(),
+    ogrn: document.getElementById('co-ogrn').value.trim(),
+    tax_system: document.getElementById('co-tax-system').value.trim(),
+    legal_address: document.getElementById('co-legal-addr').value.trim(),
+    phone: document.getElementById('co-phone').value.trim(),
+    email: document.getElementById('co-email').value.trim(),
+    bank_name: document.getElementById('co-bank-name').value.trim(),
+    bank_account: document.getElementById('co-bank-account').value.trim(),
+    bik: document.getElementById('co-bik').value.trim(),
+    corr_account: document.getElementById('co-corr-account').value.trim(),
+    card_number: document.getElementById('co-card-number').value.trim(),
+    card_holder: document.getElementById('co-card-holder').value.trim(),
+    card_bank: document.getElementById('co-card-bank').value.trim(),
+    updated_at: new Date().toISOString(),
+  };
+
+  showToast('Сохранение…');
   try{
-    const saved = localStorage.getItem('arhittek_kp_requisites');
-    if(!saved) return;
-    const data = JSON.parse(saved);
-    if(data.company) document.getElementById('kp-company').value = data.company;
-    if(data.inn) document.getElementById('kp-inn').value = data.inn;
-    if(data.ogrn) document.getElementById('kp-ogrn').value = data.ogrn;
-    if(data.legalAddr) document.getElementById('kp-legal-addr').value = data.legalAddr;
-    if(data.bankAcc) document.getElementById('kp-bank-acc').value = data.bankAcc;
-    if(data.bankName) document.getElementById('kp-bank-name').value = data.bankName;
-    if(data.companyPhone) document.getElementById('kp-company-phone').value = data.companyPhone;
-  }catch(e){}
+    if(state.companyInfo && state.companyInfo.id){
+      const {error} = await sb.from('company_info').update(payload).eq('id', state.companyInfo.id);
+      if(error) throw error;
+    }else{
+      const {error} = await sb.from('company_info').insert(payload);
+      if(error) throw error;
+    }
+    showToast('Реквизиты сохранены');
+    await loadAll();
+  }catch(e){
+    console.error(e);
+    showToast('Ошибка сохранения');
+  }
 }
+
+// KP payment method (account / card) — selected in-session
+let kpPaymentMethod = 'account';
 
 function getKpData(){
   const flat = kpFlatCatalog();
   const totals = updateKpTotals();
-  // Save requisites to localStorage each time
-  saveKpRequisites();
+  const c = state.companyInfo || {};
   return {
     clientName: document.getElementById('kp-client-name').value.trim() || 'Клиент',
     clientPhone: document.getElementById('kp-client-phone').value.trim(),
@@ -2917,13 +3167,20 @@ function getKpData(){
     object: document.getElementById('kp-object').value.trim(),
     deadline: document.getElementById('kp-deadline').value.trim(),
     startDate: document.getElementById('kp-start').value.trim(),
-    company: document.getElementById('kp-company').value.trim(),
-    inn: document.getElementById('kp-inn').value.trim(),
-    ogrn: document.getElementById('kp-ogrn').value.trim(),
-    legalAddr: document.getElementById('kp-legal-addr').value.trim(),
-    bankAcc: document.getElementById('kp-bank-acc').value.trim(),
-    bankName: document.getElementById('kp-bank-name').value.trim(),
-    companyPhone: document.getElementById('kp-company-phone').value.trim(),
+    paymentMethod: kpPaymentMethod,
+    company: c.short_name || c.full_name || '',
+    inn: c.inn || '',
+    kpp: c.kpp || '',
+    ogrn: c.ogrn || '',
+    legalAddr: c.legal_address || '',
+    bankAcc: c.bank_account || '',
+    bankName: c.bank_name || '',
+    bik: c.bik || '',
+    corrAccount: c.corr_account || '',
+    companyPhone: c.phone || '',
+    cardNumber: c.card_number || '',
+    cardHolder: c.card_holder || '',
+    cardBank: c.card_bank || '',
     services: kpServices.map(s=>{
       const item = flat[s.catalogIndex] || flat[0];
       const rate = (s.customRate !== null && s.customRate !== undefined) ? s.customRate : item.rate;
@@ -3096,19 +3353,34 @@ function exportKpToPdf(){
 
   // Requisites block
   if(data.company || data.inn){
-    if(finalY > 255){ doc.addPage(); finalY = 20; }
+    if(finalY > 250){ doc.addPage(); finalY = 20; }
     doc.setDrawColor(180); doc.line(margin, finalY, pageWidth-margin, finalY); finalY += 6;
     doc.setFont('Roboto','bold'); doc.setFontSize(9); doc.setTextColor(0);
-    doc.text('Реквизиты исполнителя:', margin, finalY); finalY += 5;
+    doc.text(`Реквизиты исполнителя (оплата на ${data.paymentMethod==='card'?'карту':'расчётный счёт'}):`, margin, finalY); finalY += 5;
     doc.setFont('Roboto','normal'); doc.setFontSize(8); doc.setTextColor(50);
-    const reqRows = [
+
+    let reqRows = [
       data.company && `Компания: ${data.company}`,
-      data.inn && `ИНН: ${data.inn}${data.ogrn?' | ОГРН: '+data.ogrn:''}`,
+      data.inn && `ИНН: ${data.inn}${data.kpp?' | КПП: '+data.kpp:''}${data.ogrn?' | ОГРН: '+data.ogrn:''}`,
       data.legalAddr && `Адрес: ${data.legalAddr}`,
-      data.bankAcc && `Р/с: ${data.bankAcc}`,
-      data.bankName && `Банк / БИК: ${data.bankName}`,
-      data.companyPhone && `Тел.: ${data.companyPhone}`,
-    ].filter(Boolean);
+    ];
+
+    if(data.paymentMethod === 'card'){
+      reqRows.push(
+        data.cardNumber && `Карта для оплаты: ${data.cardNumber}`,
+        data.cardHolder && `Получатель: ${data.cardHolder}`,
+        data.cardBank && `Банк карты: ${data.cardBank}`,
+      );
+    }else{
+      reqRows.push(
+        data.bankAcc && `Р/с: ${data.bankAcc}`,
+        data.bankName && `Банк: ${data.bankName}`,
+        data.bik && `БИК: ${data.bik}${data.corrAccount?' | К/с: '+data.corrAccount:''}`,
+      );
+    }
+    reqRows.push(data.companyPhone && `Тел.: ${data.companyPhone}`);
+    reqRows = reqRows.filter(Boolean);
+
     reqRows.forEach(r=>{ doc.text(r, margin, finalY); finalY += 4.5; });
     finalY += 4;
     doc.setTextColor(140);
@@ -3169,7 +3441,6 @@ function exportKpToXlsx(){
 function openKpView(){
   if(!kpServices.length) addKpService();
   document.getElementById('kp-date').value = new Date().toISOString().slice(0,10);
-  loadKpRequisites();
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-kp').classList.add('active');
@@ -3272,6 +3543,24 @@ document.getElementById('kp-discount-type').addEventListener('change', updateKpT
 document.getElementById('kp-discount-value').addEventListener('input', updateKpTotals);
 document.getElementById('kpExportPdf').addEventListener('click', exportKpToPdf);
 document.getElementById('kpExportXlsx').addEventListener('click', exportKpToXlsx);
+
+document.getElementById('openCompanyBtn').addEventListener('click', openCompanyView);
+document.getElementById('companyBack').addEventListener('click', ()=>{
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('view-more').classList.add('active');
+  document.querySelector('.nav-btn[data-view="view-more"]').classList.add('active');
+  window.scrollTo(0,0);
+});
+document.getElementById('companySaveBtn').addEventListener('click', saveCompanyInfo);
+
+document.querySelectorAll('#kp-payment-method .yn-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('#kp-payment-method .yn-btn').forEach(b=>b.classList.remove('selected'));
+    btn.classList.add('selected');
+    kpPaymentMethod = btn.dataset.value;
+  });
+});
 
 // ============================================================
 // INIT
