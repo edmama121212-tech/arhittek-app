@@ -194,6 +194,8 @@
   }
   .field textarea{resize:vertical; min-height:70px;}
   .field input:focus, .field select:focus, .field textarea:focus{outline:none; border-color:rgba(74,144,226,0.6); background:rgba(74,144,226,0.05);}
+  /* Fix dropdown option contrast in dark theme (browser native option list defaults to white bg) */
+  select, select option{ background-color: var(--bg-soft); color: var(--text); }
   .field-row{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
   .field-row3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;}
 
