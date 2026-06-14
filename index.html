@@ -371,6 +371,32 @@
 </head>
 <body>
 
+<!-- ===================== ЭКРАН ВХОДА ===================== -->
+<div id="loginOverlay" style="display:none; position:fixed; inset:0; z-index:500; background:var(--bg); flex-direction:column; align-items:center; justify-content:center; padding:24px;">
+  <div style="width:100%; max-width:360px;">
+    <div style="text-align:center; margin-bottom:28px;">
+      <div class="logo" style="width:52px; height:52px; font-size:22px; margin:0 auto 12px;">A</div>
+      <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:19px;">ARHITTEK</div>
+      <div class="brand-sub" style="margin-top:4px;">Вход в пульт управления</div>
+    </div>
+
+    <div id="loginStep1">
+      <div class="section-label"><span class="lbl-text">Кто вы?</span><span class="section-label-line"></span></div>
+      <div id="loginEmployeeList"></div>
+    </div>
+
+    <div id="loginStep2" style="display:none;">
+      <div class="section-label"><span class="lbl-text" id="loginSelectedName">Сотрудник</span><span class="section-label-line"></span></div>
+      <div class="field">
+        <label>PIN-код</label>
+        <input type="password" id="loginPin" inputmode="numeric" maxlength="6" pattern="[0-9]*" placeholder="••••••" style="text-align:center; font-size:24px; letter-spacing:0.4em;">
+      </div>
+      <button class="btn btn-primary" id="loginSubmitBtn">Войти</button>
+      <button class="btn btn-secondary" id="loginBackBtn" style="margin-top:8px;">← Назад</button>
+    </div>
+  </div>
+</div>
+
 <header>
   <div class="brand">
     <div class="brand-left">
@@ -380,7 +406,10 @@
         <div class="brand-sub">Пульт управления</div>
       </div>
     </div>
-    <div class="sync-pill"><span class="sync-dot loading" id="syncDot"></span><span id="syncLabel">подключение…</span></div>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <div class="sync-pill" id="userPill" style="display:none; cursor:pointer;" title="Нажмите для выхода"></div>
+      <div class="sync-pill"><span class="sync-dot loading" id="syncDot"></span><span id="syncLabel">подключение…</span></div>
+    </div>
   </div>
 </header>
 
@@ -525,6 +554,8 @@
       <button class="btn btn-primary" id="openKpBtn">Создать коммерческое предложение</button>
     </div>
 
+    <div id="more-admin-sections">
+
     <div class="section-label"><span class="lbl-text">Компания</span><span class="section-label-line"></span></div>
     <div class="card">
       <div class="note" style="margin-bottom:10px;">Реквизиты компании: расчётный счёт и банковская карта для приёма платежей. Используются в КП и договорах.</div>
@@ -571,6 +602,8 @@
     <div class="note" style="margin-bottom:10px;">Удалённые проекты, сотрудники и записи. Можно восстановить или удалить навсегда.</div>
     <div class="card" id="trashCard">
       <div class="loading-state">Загрузка…</div>
+    </div>
+
     </div>
 
   </div>
@@ -799,7 +832,7 @@
       </div>
     </div>
 
-    <div class="field-row">
+    <div class="field-row" id="pf-department-field">
       <div class="field">
         <label>Статус оплаты</label>
         <select id="pf-payment">
@@ -814,7 +847,7 @@
       </div>
     </div>
 
-    <div class="field-row">
+    <div class="field-row" id="pf-employee-field">
       <div class="field">
         <label>Исполнитель</label>
         <select id="pf-employee"><option value="">—</option></select>
@@ -830,6 +863,7 @@
       <input type="text" id="pf-address" placeholder="Грозный, ...">
     </div>
 
+    <div id="pf-financial-section">
     <div class="field-row3">
       <div class="field">
         <label>Цена, ₽</label>
@@ -870,6 +904,7 @@
         </select>
       </div>
     </div>
+    </div>
 
     <div class="field-row">
       <div class="field">
@@ -890,6 +925,7 @@
     <div class="section-label" style="margin:18px 0 10px;"><span class="lbl-text">Техническое задание (ТЗ)</span><span class="section-label-line"></span></div>
     <div id="pf-tz-list" class="card" style="margin-bottom:8px;"></div>
     <button class="btn btn-secondary" id="pf-tz-create" style="display:none;">Создать ссылку на ТЗ для клиента</button>
+    <button class="btn btn-secondary" id="pf-create-kp" style="display:none; margin-top:8px;">Создать КП для этого проекта</button>
 
     <button class="btn btn-primary" id="pf-save">Сохранить</button>
     <div class="btn-row">
@@ -1067,8 +1103,127 @@ function fmtDateTime(iso){
 }
 
 // ============================================================
-// AUDIT LOG HELPER
+// AUTH / SESSION
 // ============================================================
+let session = null; // {employeeId, name, isAdmin}
+let loginSelectedEmployee = null;
+
+function getSession(){
+  try{
+    const raw = localStorage.getItem('arhittek_session');
+    if(!raw) return null;
+    const s = JSON.parse(raw);
+    if(!s || !s.employeeId) return null;
+    return s;
+  }catch(e){ return null; }
+}
+
+function setSession(s){
+  session = s;
+  try{ localStorage.setItem('arhittek_session', JSON.stringify(s)); }catch(e){}
+}
+
+function clearSession(){
+  session = null;
+  try{ localStorage.removeItem('arhittek_session'); }catch(e){}
+  location.reload();
+}
+
+function showLoginScreen(){
+  const overlay = document.getElementById('loginOverlay');
+  overlay.style.display = 'flex';
+  document.getElementById('loginStep1').style.display = '';
+  document.getElementById('loginStep2').style.display = 'none';
+  loginSelectedEmployee = null;
+
+  const list = document.getElementById('loginEmployeeList');
+  const employees = state.employees.filter(e=>e.active!==false);
+  list.innerHTML = employees.map(e=>`
+    <div class="list-item" style="cursor:pointer; padding:13px 0;" onclick="selectLoginEmployee('${e.id}')">
+      <div class="li-name">${escapeHtml(e.name)}</div>
+      <div class="icon-btn" style="font-size:16px;">›</div>
+    </div>
+  `).join('');
+}
+
+function selectLoginEmployee(employeeId){
+  const emp = state.employees.find(e=>e.id===employeeId);
+  if(!emp) return;
+  loginSelectedEmployee = emp;
+  document.getElementById('loginSelectedName').textContent = emp.name;
+  document.getElementById('loginStep1').style.display = 'none';
+  document.getElementById('loginStep2').style.display = '';
+  document.getElementById('loginPin').value = '';
+  document.getElementById('loginPin').focus();
+}
+
+function attemptLogin(){
+  if(!loginSelectedEmployee) return;
+  const pin = document.getElementById('loginPin').value.trim();
+  if(!pin){ showToast('Введите PIN-код'); return; }
+
+  if((loginSelectedEmployee.pin_code || '') !== pin){
+    showToast('Неверный PIN-код');
+    document.getElementById('loginPin').value = '';
+    return;
+  }
+
+  setSession({
+    employeeId: loginSelectedEmployee.id,
+    name: loginSelectedEmployee.name,
+    isAdmin: !!loginSelectedEmployee.is_admin,
+  });
+
+  document.getElementById('loginOverlay').style.display = 'none';
+  applyRole();
+  renderAll();
+}
+
+function applyRole(){
+  const userPill = document.getElementById('userPill');
+  if(!session){ userPill.style.display = 'none'; return; }
+
+  userPill.style.display = 'flex';
+  userPill.innerHTML = `<span style="font-weight:600;">${escapeHtml(session.name)}</span>${session.isAdmin ? '' : ' <span style="opacity:0.6;">· исполнитель</span>'}`;
+
+  const isAdmin = session.isAdmin;
+
+  // Bottom nav: hide Стройка / Финансы for non-admins
+  const navConstr = document.querySelector('.nav-btn[data-view="view-construction"]');
+  const navFinance = document.querySelector('.nav-btn[data-view="view-finance"]');
+  const navOverview = document.querySelector('.nav-btn[data-view="view-overview"]');
+  if(navConstr) navConstr.style.display = isAdmin ? '' : 'none';
+  if(navFinance) navFinance.style.display = isAdmin ? '' : 'none';
+  if(navOverview) navOverview.style.display = isAdmin ? '' : 'none';
+
+  // "Ещё" view: hide admin-only sections for non-admins
+  const moreAdminSections = document.getElementById('more-admin-sections');
+  if(moreAdminSections) moreAdminSections.style.display = isAdmin ? '' : 'none';
+
+  // If a non-admin is currently on a hidden view, redirect to Проектный
+  if(!isAdmin){
+    const activeView = document.querySelector('.view.active');
+    if(activeView && ['view-overview','view-construction','view-finance'].includes(activeView.id)){
+      document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+      document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+      document.getElementById('view-projects').classList.add('active');
+      document.querySelector('.nav-btn[data-view="view-projects"]')?.classList.add('active');
+    }
+  }
+
+  // Project sheet: hide financial section + delete button for non-admins
+  const finSection = document.getElementById('pf-financial-section');
+  const deleteBtn = document.getElementById('pf-delete');
+  const empField = document.getElementById('pf-employee-field');
+  const deptField = document.getElementById('pf-department-field');
+  if(finSection) finSection.style.display = isAdmin ? '' : 'none';
+  if(deleteBtn) deleteBtn.style.display = isAdmin ? '' : 'none';
+  if(empField) empField.style.display = isAdmin ? '' : 'none';
+  if(deptField) deptField.style.display = isAdmin ? '' : 'none';
+  const kpFromProjectBtn = document.getElementById('pf-create-kp');
+  if(kpFromProjectBtn) kpFromProjectBtn.style.display = isAdmin ? 'none' : '';
+}
+
 async function logAudit(entityType, entityId, entityName, action, changes){
   try{
     await sb.from('audit_log').insert({
@@ -1144,6 +1299,23 @@ async function loadAll(){
 
     setSyncStatus('on', 'синхронизировано');
     renderAll();
+
+    // Auth check (after first load, employees list is available)
+    if(!session){
+      session = getSession();
+    }
+    if(session){
+      // Verify the session's employee still exists and is active
+      const emp = state.employees.find(e=>e.id===session.employeeId);
+      if(!emp || emp.active===false){
+        clearSession();
+        return;
+      }
+      document.getElementById('loginOverlay').style.display = 'none';
+      applyRole();
+    }else{
+      showLoginScreen();
+    }
   }catch(e){
     console.error(e);
     setSyncStatus('off', 'нет связи');
@@ -1326,11 +1498,17 @@ function paymentBadgeColor(status){
 }
 
 function renderProjects(){
-  const projDept = state.departments.find(d=>d.name==='Проектный отдел');
-  let list = state.projects.filter(p=>{
-    const cat = findCategory(p.category_id);
-    return !projDept || (cat && cat.department_id === projDept.id);
-  });
+  let list;
+  if(session && !session.isAdmin){
+    // Executor: show only their assigned projects across all departments
+    list = state.projects.filter(p=>p.employee_id === session.employeeId);
+  }else{
+    const projDept = state.departments.find(d=>d.name==='Проектный отдел');
+    list = state.projects.filter(p=>{
+      const cat = findCategory(p.category_id);
+      return !projDept || (cat && cat.department_id === projDept.id);
+    });
+  }
 
   if(activeCategoryFilter !== 'all') list = list.filter(p=>p.category_id === activeCategoryFilter);
   if(activeStatusFilter !== 'all') list = list.filter(p=>p.status_id === activeStatusFilter);
@@ -1377,6 +1555,7 @@ function renderProjects(){
     }
 
     const balance = Number(p.balance) || 0;
+    const showFinance = !session || session.isAdmin;
 
     return `<div class="proj-row" onclick="openProjectSheet('${p.id}')">
       <div>
@@ -1384,10 +1563,10 @@ function renderProjects(){
         <div class="proj-meta">${metaParts.join(' · ')}</div>
         ${statusChips}
       </div>
-      <div class="proj-right">
+      ${showFinance ? `<div class="proj-right">
         <div class="proj-sum">${fmtMoney(p.price)}</div>
         <div class="proj-rest ${balance>0?'has-balance':''}">${balance>0 ? 'остаток '+fmtMoney(balance) : 'оплачен'}</div>
-      </div>
+      </div>` : ''}
     </div>`;
   }).join('');
 }
@@ -1478,6 +1657,7 @@ function openProjectSheet(id){
   }
 
   overlay.classList.add('active');
+  applyRole();
 }
 
 function closeProjectSheet(){
@@ -3447,6 +3627,20 @@ function openKpView(){
   window.scrollTo(0,0);
 }
 
+function openKpViewForProject(projectId){
+  const p = state.projects.find(x=>x.id===projectId);
+  if(!p) return;
+  closeProjectSheet();
+  openKpView();
+  document.getElementById('kp-client-name').value = '';
+  document.getElementById('kp-client-phone').value = p.phone || '';
+  document.getElementById('kp-object').value = p.address || p.name || '';
+}
+
+document.getElementById('pf-create-kp').addEventListener('click', ()=>{
+  if(editingProjectId) openKpViewForProject(editingProjectId);
+});
+
 document.getElementById('objBack').addEventListener('click', ()=>{
   currentObjectId = null;
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
@@ -3565,6 +3759,22 @@ document.querySelectorAll('#kp-payment-method .yn-btn').forEach(btn=>{
 // ============================================================
 // INIT
 // ============================================================
+document.getElementById('loginSubmitBtn').addEventListener('click', attemptLogin);
+document.getElementById('loginPin').addEventListener('input', (e)=>{
+  e.target.value = e.target.value.replace(/\D/g,'').slice(0,6);
+});
+document.getElementById('loginPin').addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter') attemptLogin();
+});
+document.getElementById('loginBackBtn').addEventListener('click', ()=>{
+  loginSelectedEmployee = null;
+  document.getElementById('loginStep1').style.display = '';
+  document.getElementById('loginStep2').style.display = 'none';
+});
+document.getElementById('userPill').addEventListener('click', ()=>{
+  if(confirm('Выйти из аккаунта?')) clearSession();
+});
+
 loadAll();
 // Periodic refresh every 30s to keep multi-device sync visible
 setInterval(loadAll, 30000);
