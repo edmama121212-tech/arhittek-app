@@ -511,6 +511,9 @@
           <option value="expense">Расход</option>
           <option value="income">Доход / оплата</option>
           <option value="advance">Аванс от заказчика</option>
+          <option value="final_payment">Оплата остатка</option>
+          <option value="materials_budget">Бюджет на материалы</option>
+          <option value="fee_payment">Гонорар ARHITTEK</option>
           <option value="payment">Выплата мастеру / гонорар</option>
         </select>
       </div>
@@ -1735,16 +1738,24 @@ function renderProjects(){
 // ============================================================
 function populateProjectFormSelects(){
   const catSel = document.getElementById('pf-category');
+  const prevCat = catSel.value;
   catSel.innerHTML = state.categories.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+  if(prevCat && state.categories.some(c=>c.id===prevCat)) catSel.value = prevCat;
 
   const stSel = document.getElementById('pf-status');
+  const prevSt = stSel.value;
   stSel.innerHTML = state.statuses.map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+  if(prevSt && state.statuses.some(s=>s.id===prevSt)) stSel.value = prevSt;
 
   const empSel = document.getElementById('pf-employee');
+  const prevEmp = empSel.value;
   empSel.innerHTML = '<option value="">—</option>' + state.employees.filter(e=>e.active!==false).map(e=>`<option value="${e.id}">${escapeHtml(e.name)}</option>`).join('');
+  if(prevEmp && state.employees.some(e=>e.id===prevEmp)) empSel.value = prevEmp;
 
   const deptSel = document.getElementById('pf-department');
+  const prevDept = deptSel.value;
   deptSel.innerHTML = state.departments.map(d=>`<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('');
+  if(prevDept && state.departments.some(d=>d.id===prevDept)) deptSel.value = prevDept;
 }
 
 // When category changes, auto-select its department (categories belong to one department)
@@ -2156,6 +2167,12 @@ async function savePayment(){
         document.getElementById('pf-feepaid').value = updated.fee_paid ?? '';
       }
     }
+
+    // Refresh construction object detail view if it's open behind the sheet
+    if(currentObjectId === projectId){
+      const updatedObj = state.projects.find(x=>x.id===projectId);
+      if(updatedObj) renderObjectSummary(updatedObj);
+    }
   }catch(e){
     console.error(e);
     showToast('Ошибка сохранения платежа');
@@ -2521,12 +2538,12 @@ function openObjectView(id){
 
 function renderObjectSummary(p){
   const price = Number(p.price)||0;
-  const expenses = Number(p.expenses)||0;
   const balance = Number(p.balance)||0;
-  const f = calcConstrFee(p);
   const projInvoices = state.invoices.filter(inv=>inv.project_id===p.id);
   const matTotal = projInvoices.filter(i=>['Материал','Инструмент','Расходник','Доставка'].includes(i.item_type)).reduce((s,i)=>s+Number(i.amount),0);
   const workTotal = projInvoices.filter(i=>i.item_type==='Работа').reduce((s,i)=>s+Number(i.amount),0);
+  const expenses = matTotal + workTotal; // real total from накладные, not the (possibly stale) manual field
+  const f = calcConstrFee({...p, expenses});
 
   document.getElementById('objSummary').innerHTML = `
     <div class="fee-card">
@@ -2691,7 +2708,15 @@ async function addInvoice(projectId){
     });
     if(error) throw error;
 
-    await logAudit('project', projectId, '', 'update', {invoice_added: {old:null, new: `${number} — ${description} — ${fmtMoney(amount)}`}});
+    // Keep project.expenses in sync with the real sum of invoices,
+    // so the fee calculation (% от расходов) always reflects накладные
+    const projInvoicesAfter = [...state.invoices.filter(inv=>inv.project_id===projectId), {amount}];
+    const newExpensesTotal = projInvoicesAfter.reduce((s,i)=>s+Number(i.amount||0), 0);
+    const {error: updErr} = await sb.from('projects').update({expenses: newExpensesTotal}).eq('id', projectId);
+    if(updErr) console.error(updErr);
+
+    const projForAudit = state.projects.find(x=>x.id===projectId);
+    await logAudit('project', projectId, projForAudit?.name || '', 'update', {invoice_added: {old:null, new: `${number} — ${description} — ${fmtMoney(amount)}`}});
 
     showToast('Накладная добавлена');
     await loadAll();
@@ -3636,9 +3661,34 @@ function exportContractToPdf(){
   registerPdfFonts(doc);
 
   const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 18;
   const contentWidth = pageWidth - margin*2;
-  let y = 20;
+  const BLUE = [69,134,236];
+  let y = 0;
+
+  // ---- Continuation header (drawn at top of every page after the first) ----
+  function drawContinuationHeader(){
+    const logoSize = 9;
+    doc.addImage(ARHITTEK_LOGO_B64, 'PNG', margin, 10, logoSize, logoSize * (87/100));
+    const textX = margin + logoSize + 3;
+    doc.setFont('Roboto','bold'); doc.setFontSize(12); doc.setTextColor(0);
+    doc.text('ARHIT', textX, 16);
+    const w = doc.getTextWidth('ARHIT');
+    doc.setTextColor(BLUE[0],BLUE[1],BLUE[2]);
+    doc.text('TEK', textX + w, 16);
+    doc.setTextColor(120); doc.setFont('Roboto','normal'); doc.setFontSize(8);
+    doc.text('Договор № ' + number + ' от ' + (fmtDate(date) || 'дата'), pageWidth - margin, 14, {align:'right'});
+    doc.setDrawColor(BLUE[0],BLUE[1],BLUE[2]); doc.setLineWidth(0.6);
+    doc.line(margin, 19, pageWidth - margin, 19);
+    doc.setLineWidth(0.2); doc.setDrawColor(0); doc.setTextColor(0);
+  }
+
+  function newPage(){
+    doc.addPage();
+    drawContinuationHeader();
+    y = 27;
+  }
 
   function addLine(text, opts={}){
     const bold = opts.bold || false;
@@ -3650,120 +3700,223 @@ function exportContractToPdf(){
     doc.setFontSize(size);
     const lines = doc.splitTextToSize(text, contentWidth - indent);
     lines.forEach(function(line){
-      if(y > 280){ doc.addPage(); y = 20; }
+      if(y > 280){ newPage(); }
       doc.text(line, margin + indent, y, {align: align});
       y += gap;
     });
   }
   function addSpacer(h){ y += (h || 3); }
-  function checkPage(){ if(y > 280){ doc.addPage(); y = 20; } }
+  function checkPage(threshold){ if(y > (threshold || 270)){ newPage(); } }
 
-  addLine('ДОГОВОР № ' + number, {bold:true, size:13, align:'center', gap:6});
-  doc.setFont('Roboto','normal'); doc.setFontSize(9); doc.setTextColor(100);
-  doc.text('«' + (fmtDate(date) || 'дата') + '»', pageWidth/2, y, {align:'center'}); y += 8;
+  function sectionHeader(text){
+    checkPage(265);
+    doc.setFillColor(BLUE[0],BLUE[1],BLUE[2]);
+    doc.rect(margin, y-4.5, contentWidth, 7.5, 'F');
+    doc.setFont('Roboto','bold'); doc.setFontSize(11); doc.setTextColor(255);
+    doc.text(text, margin+3, y);
+    doc.setTextColor(0);
+    y += 9;
+  }
+
+  // ============================================================
+  // PAGE 1 — BRANDED HEADER
+  // ============================================================
+  const logoSize = 16;
+  doc.addImage(ARHITTEK_LOGO_B64, 'PNG', margin, 14, logoSize, logoSize * (87/100));
+  const textX = margin + logoSize + 4;
+  doc.setFont('Roboto','bold'); doc.setFontSize(20); doc.setTextColor(0);
+  doc.text('ARHIT', textX, 24);
+  const arhitWidth = doc.getTextWidth('ARHIT');
+  doc.setTextColor(BLUE[0],BLUE[1],BLUE[2]);
+  doc.text('TEK', textX + arhitWidth, 24);
+  doc.setTextColor(120); doc.setFont('Roboto','normal'); doc.setFontSize(9);
+  doc.text('Архитектурное проектирование · Дизайн интерьера · Строительство', textX, 30);
+
+  // Thick blue accent line under header
+  doc.setFillColor(BLUE[0],BLUE[1],BLUE[2]);
+  doc.rect(margin, 36, contentWidth, 1.2, 'F');
+
+  // Title block — bordered box with contract number/date/type
+  y = 46;
+  doc.setDrawColor(220); doc.setFillColor(248,250,253);
+  doc.roundedRect(margin, y, contentWidth, 22, 2, 2, 'FD');
+  doc.setFont('Roboto','bold'); doc.setFontSize(15); doc.setTextColor(0);
+  doc.text('ДОГОВОР № ' + number, margin + contentWidth/2, y + 9, {align:'center'});
+  doc.setFont('Roboto','normal'); doc.setFontSize(10); doc.setTextColor(90);
+  doc.text('от ' + (fmtDate(date) || '____'), margin + contentWidth/2, y + 15, {align:'center'});
+  doc.setFont('Roboto','bold'); doc.setFontSize(9); doc.setTextColor(BLUE[0],BLUE[1],BLUE[2]);
+  doc.text(t.label.toUpperCase(), margin + contentWidth/2, y + 20, {align:'center'});
   doc.setTextColor(0);
+  y += 30;
 
   const companyShort = c.short_name || c.full_name || 'Исполнитель';
   const intro = companyShort + ', именуемое в дальнейшем «Исполнитель», в лице ' + (c.director || 'Генерального директора') + ', действующего на основании Устава, с одной стороны, и гражданин(ка) РФ ' + clientName + ', именуемый(ая) в дальнейшем «Заказчик», с другой стороны, далее совместно именуемые «Стороны», заключили настоящий Договор о нижеследующем:';
-  addLine(intro, {gap:5});
-  addSpacer(2);
+  addLine(intro, {gap:5.5});
+  addSpacer(3);
 
-  addLine('1. Предмет договора', {bold:true, size:11, gap:6});
-  addLine('1.1. Исполнитель обязуется на основании Технического задания (ТЗ), предоставленного Заказчиком, выполнить ' + t.workName.toLowerCase() + ' (далее — «Работа»)' + (object ? ' по объекту: ' + object : '') + ', а Заказчик обязуется принять и оплатить Работу.');
-  addLine('1.2. Работа включает в себя следующие разделы / этапы:');
+  // ============================================================
+  // SECTIONS
+  // ============================================================
+  sectionHeader('1. ПРЕДМЕТ ДОГОВОРА');
+  addLine('1.1. Исполнитель обязуется на основании Технического задания (ТЗ), предоставленного Заказчиком, выполнить ' + t.workName.toLowerCase() + ' (далее — «Работа»)' + (object ? ' по объекту: ' + object : '') + ', а Заказчик обязуется принять и оплатить Работу.', {gap:5.5});
+  addLine('1.2. Работа включает в себя следующие разделы / этапы:', {gap:5.5});
   scope.split('\n').forEach(function(line){
-    if(line.trim()) addLine(line.trim(), {indent:4});
+    if(line.trim()) addLine(line.trim(), {indent:5, gap:5.5});
   });
-  addLine('1.3. Техническое задание предоставляется Заказчиком после подписания настоящего Договора.');
-  addLine('1.4. Передача и приём выполненных по настоящему Договору работ производится по Акту приёма-передачи выполненных работ.');
-  addSpacer(2);
+  addLine('1.3. Техническое задание предоставляется Заказчиком после подписания настоящего Договора.', {gap:5.5});
+  addLine('1.4. Передача и приём выполненных по настоящему Договору работ производится по Акту приёма-передачи выполненных работ.', {gap:5.5});
+  addSpacer(3);
 
-  checkPage();
-  addLine('2. Стоимость работ и порядок оплаты', {bold:true, size:11, gap:6});
-  addLine('2.1. Стоимость работ по настоящему Договору составляет ' + numToWordsRub(price) + ', НДС не облагается в связи с применением Исполнителем упрощённой системы налогообложения.');
-  addLine('2.2. Стоимость работ может быть увеличена при внесении изменений в Техническое задание Заказчиком.');
-  addLine('2.3. Заказчик оплачивает Исполнителю аванс в размере ' + advancePct + '% от стоимости работ, указанной в п.2.1 настоящего Договора, перед началом выполнения работ. Оставшаяся сумма оплачивается после завершения работ согласно Акту приёма-передачи.');
+  sectionHeader('2. СТОИМОСТЬ РАБОТ И ПОРЯДОК ОПЛАТЫ');
+  addLine('2.1. Стоимость работ по настоящему Договору составляет ' + numToWordsRub(price) + ', НДС не облагается в связи с применением Исполнителем упрощённой системы налогообложения.', {gap:5.5});
+  addLine('2.2. Стоимость работ может быть увеличена при внесении изменений в Техническое задание Заказчиком.', {gap:5.5});
+  addLine('2.3. Заказчик оплачивает Исполнителю аванс в размере ' + advancePct + '% от стоимости работ, указанной в п.2.1 настоящего Договора, перед началом выполнения работ. Оставшаяся сумма оплачивается после завершения работ согласно Акту приёма-передачи.', {gap:5.5});
   if(contractType === 'st'){
-    addLine('2.4. Денежные средства, переданные Заказчиком на закупку строительных материалов, учитываются Исполнителем отдельно от стоимости работ по настоящему Договору и расходуются исключительно на нужды объекта Заказчика.');
+    addLine('2.4. Денежные средства, переданные Заказчиком на закупку строительных материалов, учитываются Исполнителем отдельно от стоимости работ по настоящему Договору и расходуются исключительно на нужды объекта Заказчика.', {gap:5.5});
   }
-  addLine('2.5. Оплата производится в рублях РФ.');
-  addSpacer(2);
-
-  checkPage();
-  addLine('3. График выполнения работ', {bold:true, size:11, gap:6});
-  addLine('3.1. Исполнитель приступает к выполнению работ' + (start ? ' с ' + fmtDate(start) : ' в течение 5 рабочих дней') + ' при условии оплаты Заказчиком авансового платежа.');
-  addLine('3.2. Работы по Договору должны быть завершены ' + (end ? 'до ' + fmtDate(end) : 'в срок, согласованный Сторонами') + '. Срок может быть продлён при внесении изменений в ТЗ со стороны Заказчика.');
-  addSpacer(2);
-
-  checkPage();
-  addLine('4. Обязанности сторон', {bold:true, size:11, gap:6});
-  addLine('4.1. Исполнитель обязан:', {bold:true, gap:5});
-  addLine('4.1.1. Выполнить работы добросовестно и качественно в соответствии с ТЗ;', {indent:4});
-  addLine('4.1.2. В ходе выполнения работ согласовывать с Заказчиком принимаемые решения и учитывать его мнение;', {indent:4});
-  addLine('4.1.3. Передать Заказчику результаты работы в электронном виде (PDF); по завершении работ направить Заказчику на подпись Акт выполненных работ;', {indent:4});
-  addLine('4.1.4. Оказывать Заказчику консультации по вопросам, касающимся предмета настоящего Договора;', {indent:4});
-  addLine('4.1.5. Не передавать результаты работы по настоящему Договору третьим лицам без согласия Заказчика.', {indent:4});
-  addSpacer(1);
-  addLine('4.2. Заказчик обязан:', {bold:true, gap:5});
-  addLine('4.2.1. Передать Исполнителю Техническое задание и иную документацию, необходимую для выполнения работ;', {indent:4});
-  addLine('4.2.2. Оплатить Исполнителю стоимость работ на условиях настоящего Договора;', {indent:4});
-  addLine('4.2.3. Оказывать Исполнителю содействие, отвечать на запросы Исполнителя в срок не более 2 рабочих дней;', {indent:4});
-  addLine('4.2.4. В течение 3 календарных дней с момента получения Акта подписать и направить его Исполнителю либо направить мотивированные возражения. Если в указанный срок Заказчик не подпишет Акт и не направит возражений, Акт считается принятым в редакции Исполнителя.', {indent:4});
-  addSpacer(2);
-
-  checkPage();
-  addLine('5. Ответственность сторон', {bold:true, size:11, gap:6});
-  addLine('5.1. Стороны несут ответственность по настоящему Договору в пределах, предусмотренных законодательством РФ.');
-  addSpacer(2);
-
-  addLine('6. Обстоятельства непреодолимой силы', {bold:true, size:11, gap:6});
-  addLine('6.1. Стороны освобождаются от ответственности за частичное или полное неисполнение обязательств по настоящему Договору, если оно явилось следствием обстоятельств непреодолимой силы.');
-  addSpacer(2);
-
-  addLine('7. Порядок разрешения споров', {bold:true, size:11, gap:6});
-  addLine('7.1. Все споры и разногласия по настоящему Договору решаются Сторонами путём переговоров. При недостижении согласия споры рассматриваются в порядке, предусмотренном законодательством РФ.');
-  addSpacer(2);
-
-  checkPage();
-  addLine('8. Прочие условия', {bold:true, size:11, gap:6});
-  addLine('8.1. Настоящий Договор вступает в силу с момента подписания и действует до полного исполнения Сторонами своих обязательств.');
-  addLine('8.2. При изменении реквизитов, адресов или контактных данных Сторона обязана в течение 3 дней письменно известить об этом другую Сторону.');
-  addLine('8.3. Все изменения и дополнения к настоящему Договору действительны при условии письменной формы и подписания Сторонами.');
-  addLine('8.4. При досрочном расторжении Договора по инициативе Заказчика, Заказчику возвращаются уплаченные суммы за исключением стоимости фактически выполненных Исполнителем работ.');
-  addLine('8.5. Исполнитель может использовать результаты Работы в рекламных целях по своему усмотрению при условии сохранения конфиденциальности персональных данных Заказчика.');
-  addLine('8.6. Стороны признают переписку по электронной почте, указанной в настоящем Договоре, официальной корреспонденцией, имеющей доказательственную силу.');
+  addLine('2.5. Оплата производится в рублях РФ.', {gap:5.5});
   addSpacer(3);
 
-  checkPage();
-  addLine('9. Адреса и реквизиты Сторон', {bold:true, size:11, gap:6});
-  addSpacer(1);
-
-  addLine('ЗАКАЗЧИК:', {bold:true, gap:5});
-  addLine(clientName);
-  if(passport) addLine('Паспорт: ' + passport + (birthdate ? ', дата рождения ' + fmtDate(birthdate) : ''));
-  if(passportIssuer) addLine('Выдан: ' + passportIssuer + (passportDate ? ', дата выдачи ' + fmtDate(passportDate) : ''));
-  if(address) addLine('Адрес регистрации: ' + address);
-  if(phone) addLine('Телефон: ' + phone);
+  sectionHeader('3. ГРАФИК ВЫПОЛНЕНИЯ РАБОТ');
+  addLine('3.1. Исполнитель приступает к выполнению работ' + (start ? ' с ' + fmtDate(start) : ' в течение 5 рабочих дней') + ' при условии оплаты Заказчиком авансового платежа.', {gap:5.5});
+  addLine('3.2. Работы по Договору должны быть завершены ' + (end ? 'до ' + fmtDate(end) : 'в срок, согласованный Сторонами') + '. Срок может быть продлён при внесении изменений в ТЗ со стороны Заказчика.', {gap:5.5});
   addSpacer(3);
 
-  addLine('ИСПОЛНИТЕЛЬ:', {bold:true, gap:5});
-  if(c.full_name) addLine(c.full_name);
-  if(c.inn) addLine('ИНН ' + c.inn + (c.kpp ? ', КПП ' + c.kpp : '') + (c.ogrn ? ', ОГРН ' + c.ogrn : ''));
-  if(c.legal_address) addLine('Юридический адрес: ' + c.legal_address);
-  if(c.bank_name) addLine('Банк: ' + c.bank_name);
-  if(c.bank_account) addLine('Р/с: ' + c.bank_account + (c.bik ? ', БИК ' + c.bik : ''));
-  if(c.corr_account) addLine('К/с: ' + c.corr_account);
-  if(c.phone) addLine('Телефон: ' + c.phone);
-  if(c.director) addLine('Генеральный директор: ' + c.director);
-  addSpacer(10);
+  sectionHeader('4. ОБЯЗАННОСТИ СТОРОН');
+  addLine('4.1. Исполнитель обязан:', {bold:true, gap:6});
+  addLine('4.1.1. Выполнить работы добросовестно и качественно в соответствии с ТЗ;', {indent:5, gap:5.5});
+  addLine('4.1.2. В ходе выполнения работ согласовывать с Заказчиком принимаемые решения и учитывать его мнение;', {indent:5, gap:5.5});
+  addLine('4.1.3. Передать Заказчику результаты работы в электронном виде (PDF); по завершении работ направить Заказчику на подпись Акт выполненных работ;', {indent:5, gap:5.5});
+  addLine('4.1.4. Оказывать Заказчику консультации по вопросам, касающимся предмета настоящего Договора;', {indent:5, gap:5.5});
+  addLine('4.1.5. Не передавать результаты работы по настоящему Договору третьим лицам без согласия Заказчика.', {indent:5, gap:5.5});
+  addSpacer(2);
+  addLine('4.2. Заказчик обязан:', {bold:true, gap:6});
+  addLine('4.2.1. Передать Исполнителю Техническое задание и иную документацию, необходимую для выполнения работ;', {indent:5, gap:5.5});
+  addLine('4.2.2. Оплатить Исполнителю стоимость работ на условиях настоящего Договора;', {indent:5, gap:5.5});
+  addLine('4.2.3. Оказывать Исполнителю содействие, отвечать на запросы Исполнителя в срок не более 2 рабочих дней;', {indent:5, gap:5.5});
+  addLine('4.2.4. В течение 3 календарных дней с момента получения Акта подписать и направить его Исполнителю либо направить мотивированные возражения. Если в указанный срок Заказчик не подпишет Акт и не направит возражений, Акт считается принятым в редакции Исполнителя.', {indent:5, gap:5.5});
+  addSpacer(3);
 
-  checkPage();
-  addLine('Заказчик: _____________________          Исполнитель: _____________________', {size:9, gap:6});
+  sectionHeader('5. ОТВЕТСТВЕННОСТЬ СТОРОН');
+  addLine('5.1. Стороны несут ответственность по настоящему Договору в пределах, предусмотренных законодательством РФ.', {gap:5.5});
+  addSpacer(3);
+
+  sectionHeader('6. ОБСТОЯТЕЛЬСТВА НЕПРЕОДОЛИМОЙ СИЛЫ');
+  addLine('6.1. Стороны освобождаются от ответственности за частичное или полное неисполнение обязательств по настоящему Договору, если оно явилось следствием обстоятельств непреодолимой силы.', {gap:5.5});
+  addSpacer(3);
+
+  sectionHeader('7. ПОРЯДОК РАЗРЕШЕНИЯ СПОРОВ');
+  addLine('7.1. Все споры и разногласия по настоящему Договору решаются Сторонами путём переговоров. При недостижении согласия споры рассматриваются в порядке, предусмотренном законодательством РФ.', {gap:5.5});
+  addSpacer(3);
+
+  sectionHeader('8. ПРОЧИЕ УСЛОВИЯ');
+  addLine('8.1. Настоящий Договор вступает в силу с момента подписания и действует до полного исполнения Сторонами своих обязательств.', {gap:5.5});
+  addLine('8.2. При изменении реквизитов, адресов или контактных данных Сторона обязана в течение 3 дней письменно известить об этом другую Сторону.', {gap:5.5});
+  addLine('8.3. Все изменения и дополнения к настоящему Договору действительны при условии письменной формы и подписания Сторонами.', {gap:5.5});
+  addLine('8.4. При досрочном расторжении Договора по инициативе Заказчика, Заказчику возвращаются уплаченные суммы за исключением стоимости фактически выполненных Исполнителем работ.', {gap:5.5});
+  addLine('8.5. Исполнитель может использовать результаты Работы в рекламных целях по своему усмотрению при условии сохранения конфиденциальности персональных данных Заказчика.', {gap:5.5});
+  addLine('8.6. Стороны признают переписку по электронной почте, указанной в настоящем Договоре, официальной корреспонденцией, имеющей доказательственную силу.', {gap:5.5});
+  addSpacer(3);
+
+  // ============================================================
+  // 9. REQUISITES — two-column card layout
+  // ============================================================
+  sectionHeader('9. АДРЕСА И РЕКВИЗИТЫ СТОРОН');
+
+  const colGap = 6;
+  const colWidth = (contentWidth - colGap) / 2;
+  const boxTopY = y;
+  const customerLines = [];
+  customerLines.push(clientName);
+  if(passport) customerLines.push('Паспорт: ' + passport);
+  if(birthdate) customerLines.push('Дата рождения: ' + fmtDate(birthdate));
+  if(passportIssuer) customerLines.push('Выдан: ' + passportIssuer);
+  if(passportDate) customerLines.push('Дата выдачи: ' + fmtDate(passportDate));
+  if(address) customerLines.push('Адрес рег.: ' + address);
+  if(phone) customerLines.push('Телефон: ' + phone);
+
+  const executorLines = [];
+  if(c.full_name) executorLines.push(c.full_name);
+  if(c.inn) executorLines.push('ИНН ' + c.inn + (c.kpp ? ', КПП ' + c.kpp : ''));
+  if(c.ogrn) executorLines.push('ОГРН ' + c.ogrn);
+  if(c.legal_address) executorLines.push('Юр. адрес: ' + c.legal_address);
+  if(c.bank_name) executorLines.push('Банк: ' + c.bank_name);
+  if(c.bank_account) executorLines.push('Р/с: ' + c.bank_account);
+  if(c.bik) executorLines.push('БИК: ' + c.bik + (c.corr_account ? ', К/с: ' + c.corr_account : ''));
+  if(c.phone) executorLines.push('Тел.: ' + c.phone);
+  if(c.director) executorLines.push('Ген. директор: ' + c.director);
+
+  // Measure heights first (without drawing) to size the boxes equally
+  function measureLines(lines, width){
+    let h = 8; // top padding + title
+    doc.setFont('Roboto','normal'); doc.setFontSize(9);
+    lines.forEach(line=>{
+      const wrapped = doc.splitTextToSize(line, width - 6);
+      h += wrapped.length * 4.6;
+    });
+    return h + 4;
+  }
+  const custH = measureLines(customerLines, colWidth);
+  const execH = measureLines(executorLines, colWidth);
+  const boxH = Math.max(custH, execH, 26);
+
+  if(y + boxH > 285){ newPage(); }
+  const finalBoxTopY = y;
+
+  function drawPartyBox(title, lines, x){
+    doc.setDrawColor(225); doc.setFillColor(250,251,253);
+    doc.roundedRect(x, finalBoxTopY, colWidth, boxH, 2, 2, 'FD');
+    let ly = finalBoxTopY + 7;
+    doc.setFont('Roboto','bold'); doc.setFontSize(10); doc.setTextColor(BLUE[0],BLUE[1],BLUE[2]);
+    doc.text(title, x + 4, ly);
+    doc.setTextColor(0);
+    ly += 6;
+    doc.setFont('Roboto','normal'); doc.setFontSize(9);
+    lines.forEach((line, i)=>{
+      const wrapped = doc.splitTextToSize(line, colWidth - 6);
+      wrapped.forEach((wl, wi)=>{
+        if(i===0 && wi===0) doc.setFont('Roboto','bold'); else doc.setFont('Roboto','normal');
+        doc.text(wl, x + 4, ly);
+        ly += 4.6;
+      });
+    });
+  }
+
+  drawPartyBox('ЗАКАЗЧИК', customerLines, margin);
+  drawPartyBox('ИСПОЛНИТЕЛЬ', executorLines, margin + colWidth + colGap);
+
+  y = finalBoxTopY + boxH + 14;
+  checkPage(265);
+
+  // Signatures
+  doc.setDrawColor(0);
+  doc.line(margin, y, margin + 70, y);
+  doc.line(margin + colWidth + colGap, y, margin + colWidth + colGap + 70, y);
+  y += 5;
+  doc.setFont('Roboto','normal'); doc.setFontSize(9);
+  doc.text('Заказчик / ' + (clientName.split(' ')[0] !== '_____________________' ? clientName : '____________'), margin, y);
+  doc.text('Исполнитель / ' + (c.director || '____________'), margin + colWidth + colGap, y);
+
+  // ============================================================
+  // FOOTER on every page
+  // ============================================================
+  const totalPages = doc.internal.getNumberOfPages();
+  for(let i=1; i<=totalPages; i++){
+    doc.setPage(i);
+    doc.setDrawColor(230); doc.setLineWidth(0.2);
+    doc.line(margin, pageHeight - 14, pageWidth - margin, pageHeight - 14);
+    doc.setFont('Roboto','normal'); doc.setFontSize(7.5); doc.setTextColor(140);
+    doc.text('ARHITTEK — архитектурное проектирование, дизайн интерьера, ремонт под ключ', margin, pageHeight - 10);
+    doc.text('г. Грозный, проспект Ахмеда Хаджи Кадырова 40, бизнес-парк «Гранд», 3 этаж', margin, pageHeight - 6);
+    doc.text('Стр. ' + i + ' из ' + totalPages, pageWidth - margin, pageHeight - 6, {align:'right'});
+    doc.setTextColor(0);
+  }
 
   const fileName = 'Dogovor-' + t.label.replace(/[^a-zA-Zа-яА-Я0-9]/g,'_') + '-' + (clientName||'klient').replace(/[^a-zA-Zа-яА-Я0-9]/g,'_').slice(0,30) + '-' + date + '.pdf';
   doc.save(fileName);
   showToast('Договор скачивается...');
 }
+
 
 document.getElementById('openContractsBtn').addEventListener('click', openContractsView);
 document.getElementById('contractsBack').addEventListener('click', function(){
@@ -3846,6 +3999,13 @@ async function saveCompanyInfo(){
 
 // KP payment method (account / card) — selected in-session
 let kpPaymentMethod = 'account';
+
+function kpFileName(data, ext){
+  const parts = ['КП', data.clientName || 'Клиент'];
+  if(data.object) parts.push(data.object);
+  const safe = parts.map(p=>p.replace(/[^a-zA-Zа-яА-Я0-9 ]/g,'').trim().replace(/\s+/g,'_')).filter(Boolean);
+  return safe.join('-') + '.' + ext;
+}
 
 function getKpData(){
   const flat = kpFlatCatalog();
@@ -4083,7 +4243,7 @@ function exportKpToPdf(){
   doc.text('ARHITTEK — архитектурное проектирование, дизайн интерьера, ремонт под ключ', margin, finalY);
   doc.text('г. Грозный, проспект Ахмеда Хаджи Кадырова 40, бизнес-парк «Гранд», 3 этаж', margin, finalY+5);
 
-  const fileName = `KP-${(data.clientName||'klient').replace(/[^a-zA-Zа-яА-Я0-9]/g,'_')}-${data.date}.pdf`;
+  const fileName = kpFileName(data, 'pdf');
   doc.save(fileName);
   showToast('PDF скачивается...');
 }
@@ -4121,10 +4281,36 @@ function exportKpToXlsx(){
     });
   }
 
+  if(data.deadline || data.startDate){
+    rows.push([]);
+    rows.push(['Сроки:']);
+    if(data.startDate) rows.push(['Начало работ', data.startDate]);
+    if(data.deadline) rows.push(['Срок выполнения', data.deadline]);
+  }
+
+  // Requisites — only the selected payment method
+  if(data.company || data.inn){
+    rows.push([]);
+    rows.push([`Реквизиты исполнителя (оплата на ${data.paymentMethod==='card'?'карту':'расчётный счёт'}):`]);
+    if(data.company) rows.push(['Компания', data.company]);
+    if(data.inn) rows.push(['ИНН / КПП / ОГРН', [data.inn, data.kpp, data.ogrn].filter(Boolean).join(' / ')]);
+    if(data.legalAddr) rows.push(['Юридический адрес', data.legalAddr]);
+    if(data.paymentMethod === 'card'){
+      if(data.cardNumber) rows.push(['Карта для оплаты', data.cardNumber]);
+      if(data.cardHolder) rows.push(['Получатель', data.cardHolder]);
+      if(data.cardBank) rows.push(['Банк карты', data.cardBank]);
+    }else{
+      if(data.bankAcc) rows.push(['Р/с', data.bankAcc]);
+      if(data.bankName) rows.push(['Банк', data.bankName]);
+      if(data.bik) rows.push(['БИК / К/с', [data.bik, data.corrAccount].filter(Boolean).join(' / ')]);
+    }
+    if(data.companyPhone) rows.push(['Телефон', data.companyPhone]);
+  }
+
   const ws = XLSX.utils.aoa_to_sheet(rows);
   XLSX.utils.book_append_sheet(wb, ws, 'КП');
 
-  const fileName = `KP-${(data.clientName||'klient').replace(/[^a-zA-Zа-яА-Я0-9]/g,'_')}-${data.date}.xlsx`;
+  const fileName = kpFileName(data, 'xlsx');
   XLSX.writeFile(wb, fileName);
   showToast('Excel скачивается...');
 }
@@ -4142,6 +4328,14 @@ function openKpViewForProject(projectId){
   const p = state.projects.find(x=>x.id===projectId);
   if(!p) return;
   closeProjectSheet();
+
+  // Start with a clean KP — avoid leaking services/discounts from a previous KP
+  kpServices = [];
+  document.getElementById('kp-discount-type').value = 'percent';
+  document.getElementById('kp-discount-value').value = '';
+  document.getElementById('kp-deadline').value = '';
+  document.getElementById('kp-start').value = '';
+
   openKpView();
   document.getElementById('kp-client-name').value = '';
   document.getElementById('kp-client-phone').value = p.phone || '';
