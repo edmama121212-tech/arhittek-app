@@ -1846,8 +1846,14 @@ function escapeHtml(s){
 // ============================================================
 function renderCategoryFilters(){
   const el = document.getElementById('categoryFilters');
-  const projDept = state.departments.find(d=>d.name==='Проектный отдел');
-  const cats = state.categories.filter(c=> !projDept || c.department_id === projDept.id);
+  const constrDept = state.departments.find(d=>d.name==='Строительный отдел');
+  // Only show non-construction categories in the projects filter
+  const cats = state.categories.filter(c=>{
+    if(constrDept && c.department_id === constrDept.id) return false;
+    const nm = (c.name||'').toLowerCase();
+    if(nm.includes('строительств') || nm.includes('ремонт') || nm.includes('монтаж')) return false;
+    return true;
+  });
   let html = `<div class="filter-chip ${activeCategoryFilter==='all'?'active':''}" data-cat="all">Все категории</div>`;
   cats.forEach(c=>{
     html += `<div class="filter-chip ${activeCategoryFilter===c.id?'active':''}" data-cat="${c.id}">${escapeHtml(c.name)}</div>`;
@@ -1914,21 +1920,28 @@ function paymentBadgeColor(status){
 }
 
 function renderProjects(){
-  const projDept = state.departments.find(d=>d.name==='Проектный отдел');
-  const isProjectDeptCategory = (p)=>{
+  const constrDept = state.departments.find(d=>d.name==='Строительный отдел');
+
+  // A project is a CONSTRUCTION OBJECT if its category belongs to Строительный отдел
+  // OR its category name contains "Строительство" / "Ремонт"
+  const isConstrObject = (p)=>{
     const cat = findCategory(p.category_id);
-    return !projDept || (cat && cat.department_id === projDept.id);
+    if(!cat) return false;
+    if(constrDept && cat.department_id === constrDept.id) return true;
+    const nm = (cat.name||'').toLowerCase();
+    return nm.includes('строительств') || nm.includes('ремонт') || nm.includes('монтаж');
   };
+
+  // "Проектный" shows everything that is NOT a construction object
+  const isProjectItem = (p) => !isConstrObject(p);
 
   let list;
   if(session && !session.isAdmin){
-    // Executor: show only their assigned (or co-assigned) projects from the project department.
-    // Construction objects are shown separately in the "Стройка" tab.
     list = state.projects.filter(p=>
-      (p.employee_id === session.employeeId || p.co_employee_id === session.employeeId) && isProjectDeptCategory(p)
+      (p.employee_id === session.employeeId || p.co_employee_id === session.employeeId) && isProjectItem(p)
     );
   }else{
-    list = state.projects.filter(isProjectDeptCategory);
+    list = state.projects.filter(isProjectItem);
   }
 
   if(activeCategoryFilter !== 'all') list = list.filter(p=>p.category_id === activeCategoryFilter);
@@ -5041,13 +5054,27 @@ document.querySelectorAll('.nav-btn').forEach(btn=>{
     btn.classList.add('active');
     document.getElementById(btn.dataset.view).classList.add('active');
     window.scrollTo({top:0, behavior:'smooth'});
+    // Update FAB label depending on active tab
+    const fab = document.getElementById('addProjectFab');
+    if(fab) fab.title = btn.dataset.view === 'view-construction' ? 'Добавить объект' : 'Добавить проект';
   });
 });
 
 // ============================================================
 // EVENT BINDINGS
 // ============================================================
-document.getElementById('addProjectFab').addEventListener('click', ()=>openProjectSheet(null));
+document.getElementById('addProjectFab').addEventListener('click', ()=>{
+  const activeView = document.querySelector('.view.active');
+  openProjectSheet(null);
+  // If opened from Стройка — pre-select construction category
+  if(activeView && activeView.id === 'view-construction'){
+    const constrCat = state.categories.find(c=>{
+      const nm = (c.name||'').toLowerCase();
+      return nm.includes('строительств') || nm.includes('ремонт') || nm.includes('монтаж');
+    });
+    if(constrCat) document.getElementById('pf-category').value = constrCat.id;
+  }
+});
 
 document.getElementById('pf-stage-add').addEventListener('click', ()=>{
   if(editingProjectId) addStage(editingProjectId);
