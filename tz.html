@@ -581,14 +581,9 @@ function renderForm(){
     html += `</div>`;
   });
 
-  const isAlreadySubmitted = tzForm && tzForm.status === 'Заполнено';
-  const submitLabel = isAlreadySubmitted ? '📤 Обновить ТЗ' : 'Отправить техническое задание';
-
   html += `<div class="submit-bar">
-    <button class="btn btn-secondary" id="saveBtn" style="margin-bottom:8px;">💾 Сохранить прогресс</button>
-    <button class="btn btn-primary" id="submitBtn">${submitLabel}</button>
-    <div style="font-size:11px; color:var(--text-dim); text-align:center; margin-top:8px; padding-bottom:4px;" id="saveStatus">
-      Данные сохраняются автоматически — можно вернуться по этой же ссылке в любое время.
+    <div id="saveStatus" style="font-size:12px; color:var(--text-dim); text-align:center;">
+      Изменения сохраняются автоматически
     </div>
   </div>`;
 
@@ -597,8 +592,6 @@ function renderForm(){
   // Bind events
   bindFieldEvents();
   restorePendingRefPreviews();
-  document.getElementById('saveBtn').addEventListener('click', manualSave);
-  document.getElementById('submitBtn').addEventListener('click', submitForm);
 }
 
 function renderField(field){
@@ -687,6 +680,7 @@ function bindFieldEvents(){
     if(el.type === 'file') return;
     el.addEventListener('input', ()=>{
       answers[el.dataset.field] = el.value;
+      scheduleAutoSave();
     });
   });
 
@@ -714,6 +708,8 @@ function bindFieldEvents(){
 
       chip.classList.toggle('checked');
       chip.querySelector('input').checked = chip.classList.contains('checked');
+
+      scheduleAutoSave();
 
       // If the service type selection changed, re-render to show/hide AR/DI sections
       if(fieldId === 'service_type'){
@@ -752,45 +748,16 @@ function bindFieldEvents(){
 // SUBMIT
 // ============================================================
 
-// Submit form — final send
-let submitInFlight = false;
-async function submitForm(){
-  const btn = document.getElementById('submitBtn');
-  const status = document.getElementById('saveStatus');
-  if(submitInFlight) return;
-  submitInFlight = true;
-  if(btn){ btn.disabled = true; btn.textContent = 'Отправка…'; }
-  try{
-    await sb.from('tz_forms').update({
-      answers: answers,
-      client_name: answers.full_name || tzForm?.client_name || '',
-      status: 'Заполнено',
-      submitted_at: new Date().toISOString(),
-    }).eq('id', tzForm.id);
-    // Show success screen
-    document.getElementById('app').innerHTML = `
-      <div class="state-screen">
-        <div class="icon">✅</div>
-        <h2>Техническое задание отправлено!</h2>
-        <p>Мы получили ваши данные и свяжемся с вами в ближайшее время. Спасибо, что доверяете ARHITTEK.</p>
-      </div>`;
-  }catch(e){
-    console.error(e);
-    showToast('Ошибка отправки. Проверьте интернет.');
-    if(btn){ btn.disabled = false; btn.textContent = 'Отправить техническое задание'; }
-  }finally{
-    submitInFlight = false;
-  }
-}
-
-// Manual save — called by "Сохранить" button
+// Autosave — triggers on every field change + every 30s
 let saveInFlight = false;
-async function manualSave(){
-  const btn = document.getElementById('saveBtn');
-  const status = document.getElementById('saveStatus');
+let saveTimer = null;
+
+async function autoSave(){
+  if(!tzForm) return;
   if(saveInFlight) return;
   saveInFlight = true;
-  if(btn){ btn.disabled = true; btn.textContent = 'Сохранение…'; }
+  const status = document.getElementById('saveStatus');
+  if(status) status.textContent = 'Сохранение…';
   try{
     await sb.from('tz_forms').update({
       answers: answers,
@@ -798,36 +765,21 @@ async function manualSave(){
       status: 'Заполняется',
       submitted_at: new Date().toISOString(),
     }).eq('id', tzForm.id);
-    if(btn){ btn.textContent = '✅ Сохранено'; }
     if(status) status.textContent = 'Сохранено · ' + new Date().toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'});
-    setTimeout(()=>{
-      if(btn){ btn.disabled = false; btn.textContent = '💾 Сохранить'; }
-    }, 2000);
   }catch(e){
-    console.error(e);
-    showToast('Ошибка сохранения. Проверьте интернет.');
-    if(btn){ btn.disabled = false; btn.textContent = '💾 Сохранить'; }
+    console.error('autosave error', e);
+    if(status) status.textContent = 'Ошибка сохранения';
   }finally{
     saveInFlight = false;
   }
 }
 
-// Autosave every 30s silently
-let lastAutoSave = 0;
-async function saveProgress(){
-  if(!tzForm) return;
-  const now = Date.now();
-  if(now - lastAutoSave < 25000) return;
-  lastAutoSave = now;
-  try{
-    await sb.from('tz_forms').update({answers: answers}).eq('id', tzForm.id);
-    const status = document.getElementById('saveStatus');
-    if(status) status.textContent = 'Автосохранение · ' + new Date().toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'});
-  }catch(e){
-    console.error('autosave error', e);
-  }
+function scheduleAutoSave(){
+  if(saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(autoSave, 1500);
 }
-setInterval(saveProgress, 30000);
+
+setInterval(autoSave, 30000);
 
 init();
 </script>
