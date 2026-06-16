@@ -531,12 +531,15 @@ async function init(){
     }
     tzForm = data;
 
+    // Load answers regardless of status
+    answers = tzForm.answers || {};
+
     if(tzForm.status === 'Заполнено'){
+      // Show the submitted screen first, but client can click "edit" to go back to form
       renderSubmitted();
       return;
     }
 
-    answers = tzForm.answers || {};
     renderForm();
   }catch(e){
     console.error(e);
@@ -558,12 +561,18 @@ function renderSubmitted(){
     <div class="state-screen">
       <div class="icon">✅</div>
       <h2>Спасибо!</h2>
-      <p>Ваше техническое задание уже отправлено и принято в работу. Архитектор ARHITTEK свяжется с вами для уточнения деталей.</p>
-      <button class="btn btn-secondary" id="downloadTzPdfBtn" style="margin-top:16px;">📄 Скачать ваше ТЗ в PDF</button>
+      <p>Ваше техническое задание отправлено. Архитектор ARHITTEK свяжется с вами для уточнения деталей.</p>
+      <div style="margin-top:16px; display:flex; flex-direction:column; gap:10px;">
+        <button class="btn btn-secondary" id="editTzBtn">✏️ Редактировать / внести правки</button>
+        <button class="btn btn-secondary" id="downloadTzPdfBtn">📄 Скачать ваше ТЗ в PDF</button>
+      </div>
     </div>`;
 
   document.getElementById('downloadTzPdfBtn').addEventListener('click', ()=>{
     exportTzToPdf(answers);
+  });
+  document.getElementById('editTzBtn').addEventListener('click', ()=>{
+    renderForm();
   });
 }
 
@@ -600,8 +609,15 @@ function renderForm(){
     html += `</div>`;
   });
 
+  const isAlreadySubmitted = tzForm && tzForm.status === 'Заполнено';
+  const submitLabel = isAlreadySubmitted ? '📤 Обновить ТЗ' : 'Отправить техническое задание';
+
   html += `<div class="submit-bar">
-    <button class="btn btn-primary" id="submitBtn">Отправить техническое задание</button>
+    <button class="btn btn-secondary" id="saveProgressBtn" style="margin-bottom:8px;">💾 Сохранить и выйти</button>
+    <button class="btn btn-primary" id="submitBtn">${submitLabel}</button>
+    <div style="font-size:11px; color:var(--text-dim); text-align:center; margin-top:8px; padding-bottom:4px;">
+      Данные сохраняются автоматически — можно вернуться по этой же ссылке в любое время.
+    </div>
   </div>`;
 
   app.innerHTML = html;
@@ -610,6 +626,25 @@ function renderForm(){
   bindFieldEvents();
   restorePendingRefPreviews();
   document.getElementById('submitBtn').addEventListener('click', submitForm);
+  document.getElementById('saveProgressBtn').addEventListener('click', async ()=>{
+    const btn = document.getElementById('saveProgressBtn');
+    btn.disabled = true;
+    btn.textContent = 'Сохранение…';
+    try{
+      await sb.from('tz_forms').update({
+        answers: answers,
+        client_name: answers.full_name || tzForm?.client_name || '',
+      }).eq('id', tzForm.id);
+      showToast('Прогресс сохранён! Можно вернуться по этой ссылке.');
+      btn.textContent = '✅ Сохранено';
+      setTimeout(()=>{ btn.disabled = false; btn.textContent = '💾 Сохранить и выйти'; }, 3000);
+    }catch(e){
+      console.error(e);
+      showToast('Ошибка сохранения');
+      btn.disabled = false;
+      btn.textContent = '💾 Сохранить и выйти';
+    }
+  });
 }
 
 function renderField(field){
@@ -810,9 +845,9 @@ async function submitForm(){
   }
 }
 
-// Save progress periodically (every 20s) without marking as submitted
+// Save progress periodically (every 20s)
 async function saveProgress(){
-  if(!tzForm || tzForm.status === 'Заполнено') return;
+  if(!tzForm) return;
   try{
     await sb.from('tz_forms').update({answers: answers}).eq('id', tzForm.id);
   }catch(e){
