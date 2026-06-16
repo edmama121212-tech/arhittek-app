@@ -73,6 +73,19 @@
   .section-title{font-size:16px; font-weight:700;}
   .section-sub{font-size:11px; color:var(--text-dim); margin-top:2px;}
 
+  /* Progress bar */
+  .progress-bar-wrap{
+    padding: 12px 16px 0;
+    margin-bottom: 4px;
+  }
+  .progress-bar-labels{
+    display:flex; justify-content:space-between;
+    font-size:11px; color:var(--text-dim); margin-bottom:6px;
+  }
+  .progress-bar-labels .pbl-current{color:var(--blue); font-weight:600;}
+  .progress-track{height:4px; background:rgba(255,255,255,0.08); border-radius:4px; overflow:hidden;}
+  .progress-fill{height:100%; background:var(--blue); border-radius:4px; transition: width .4s ease;}
+
   .q{margin-bottom:18px;}
   .q-label{font-size:13.5px; font-weight:600; margin-bottom:8px; line-height:1.4;}
   .q-hint{font-size:11px; color:var(--text-dim); margin-top:-4px; margin-bottom:8px; line-height:1.5;}
@@ -554,22 +567,42 @@ function renderError(title, text){
 function renderForm(){
   const app = document.getElementById('app');
 
-  let html = `<div class="intro">
-    Заполните анкету как можно подробнее — это поможет нам быстрее и точнее подготовить проект для вас.
-    Сначала укажите, какая услуга вам нужна — соответствующие разделы появятся ниже.
-    Можно сохранить прогресс и вернуться позже — данные сохраняются автоматически.
-  </div>`;
-
   const selectedServices = Array.isArray(answers.service_type) ? answers.service_type : [];
 
-  SCHEMA.forEach(section=>{
-    if(section.requiresService && !selectedServices.includes(section.requiresService)) return;
+  // Build visible sections list
+  const visibleSections = SCHEMA.filter(s=>
+    !s.requiresService || selectedServices.includes(s.requiresService)
+  );
+  const total = visibleSections.length;
 
+  // Count filled sections
+  const filledCount = visibleSections.filter(s=>{
+    return s.fields.some(f=>{
+      const v = answers[f.id];
+      return v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && v.length===0);
+    });
+  }).length;
+
+  const pct = total > 0 ? Math.round((filledCount / total) * 100) : 0;
+
+  let html = `<div class="progress-bar-wrap">
+    <div class="progress-bar-labels">
+      <span>Заполнено разделов: <span class="pbl-current">${filledCount} из ${total}</span></span>
+      <span>${pct}%</span>
+    </div>
+    <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+  </div>
+  <div class="intro" style="margin-top:10px;">
+    Заполните анкету как можно подробнее — это поможет нам быстрее и точнее подготовить проект для вас.
+    Сначала укажите, какая услуга вам нужна — соответствующие разделы появятся ниже.
+  </div>`;
+
+  visibleSections.forEach((section, idx)=>{
     html += `<div class="section" data-section="${section.id}">
       <div class="section-header">
         <div class="section-icon">${section.icon}</div>
         <div>
-          <div class="section-title">${escapeHtml(section.title)}</div>
+          <div class="section-title">${escapeHtml(section.title)} <span style="font-size:11px; color:var(--text-dim); font-weight:400;">${idx+1}/${total}</span></div>
           <div class="section-sub">${escapeHtml(section.sub)}</div>
         </div>
       </div>`;
@@ -761,6 +794,26 @@ function bindFieldEvents(){
 // SUBMIT
 // ============================================================
 
+// Update progress bar without full re-render
+function updateProgressBar(){
+  const selectedServices = Array.isArray(answers.service_type) ? answers.service_type : [];
+  const visibleSections = SCHEMA.filter(s=> !s.requiresService || selectedServices.includes(s.requiresService));
+  const total = visibleSections.length;
+  const filledCount = visibleSections.filter(s=>{
+    return s.fields.some(f=>{
+      const v = answers[f.id];
+      return v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && v.length===0);
+    });
+  }).length;
+  const pct = total > 0 ? Math.round((filledCount / total) * 100) : 0;
+  const fill = document.querySelector('.progress-fill');
+  const labels = document.querySelector('.progress-bar-labels');
+  if(fill) fill.style.width = pct + '%';
+  if(labels) labels.querySelector('.pbl-current').textContent = filledCount + ' из ' + total;
+  const pctEl = labels ? labels.querySelectorAll('span')[1] : null;
+  if(pctEl) pctEl.textContent = pct + '%';
+}
+
 // Autosave — triggers on every field change + every 30s
 let saveInFlight = false;
 let saveTimer = null;
@@ -779,6 +832,7 @@ async function autoSave(){
       submitted_at: new Date().toISOString(),
     }).eq('id', tzForm.id);
     if(status) status.textContent = 'Сохранено · ' + new Date().toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'});
+    updateProgressBar();
   }catch(e){
     console.error('autosave error', e);
     if(status) status.textContent = 'Ошибка сохранения';
