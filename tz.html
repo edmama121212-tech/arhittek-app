@@ -506,7 +506,7 @@ function exportTzToPdf(formData){
 let token = null;
 let tzForm = null;
 let answers = {};
-let refFiles = {}; // fieldId -> array of {file, previewUrl} or {url} for already uploaded
+// refs are now stored as URLs in answers[fieldId+'_files']
 
 function getToken(){
   const params = new URLSearchParams(window.location.search);
@@ -650,28 +650,54 @@ function renderField(field){
 // ============================================================
 // EVENT BINDING & ANSWER COLLECTION
 // ============================================================
-function addRefThumb(fieldId, file){
-  const reader = new FileReader();
-  reader.onload = (ev)=>{
-    const grid = document.getElementById(`refgrid-${fieldId}`);
-    if(!grid) return;
-    const div = document.createElement('div');
-    div.className = 'ref-thumb';
-    div.innerHTML = `<img src="${ev.target.result}"><button class="ref-remove" data-pending="1">✕</button>`;
-    div.querySelector('.ref-remove').addEventListener('click', ()=>{
-      const idx = refFiles[fieldId].indexOf(file);
-      if(idx>-1) refFiles[fieldId].splice(idx,1);
-      div.remove();
-    });
-    grid.appendChild(div);
-  };
-  reader.readAsDataURL(file);
+function addRefThumbFromUrl(fieldId, url, idx){
+  const grid = document.getElementById(`refgrid-${fieldId}`);
+  if(!grid) return;
+  const div = document.createElement('div');
+  div.className = 'ref-thumb';
+  div.innerHTML = `<img src="${escapeHtml(url)}"><button class="ref-remove" data-field="${escapeHtml(fieldId)}" data-idx="${idx}" data-existing="1">✕</button>`;
+  div.querySelector('.ref-remove').addEventListener('click', ()=>{
+    const key = fieldId+'_files';
+    if(answers[key]) answers[key].splice(idx,1);
+    div.remove();
+    scheduleAutoSave();
+    // Re-index remaining thumbs
+    const remaining = grid.querySelectorAll('.ref-remove[data-existing]');
+    remaining.forEach((btn,i)=>{ btn.dataset.idx = i; });
+  });
+  grid.appendChild(div);
+}
+
+async function uploadRefFile(fieldId, file){
+  const grid = document.getElementById(`refgrid-${fieldId}`);
+  // Show loading placeholder
+  const placeholder = document.createElement('div');
+  placeholder.className = 'ref-thumb';
+  placeholder.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:11px;color:var(--text-dim);">⏳</div>`;
+  if(grid) grid.appendChild(placeholder);
+
+  try{
+    const ext = file.name.split('.').pop() || 'jpg';
+    const path = `tz-refs/${tzForm.id}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+    const { data, error } = await sb.storage.from('tz-references').upload(path, file, { upsert: false });
+    if(error) throw error;
+    const { data: urlData } = sb.storage.from('tz-references').getPublicUrl(path);
+    const url = urlData.publicUrl;
+    const key = fieldId+'_files';
+    if(!answers[key]) answers[key] = [];
+    answers[key].push(url);
+    if(grid) placeholder.remove();
+    addRefThumbFromUrl(fieldId, url, answers[key].length - 1);
+    scheduleAutoSave();
+  }catch(e){
+    console.error('upload error', e);
+    if(grid) placeholder.remove();
+    showToast('Ошибка загрузки фото');
+  }
 }
 
 function restorePendingRefPreviews(){
-  Object.entries(refFiles).forEach(([fieldId, files])=>{
-    files.forEach(file=>addRefThumb(fieldId, file));
-  });
+  // No pending files across sessions — refs are now stored as URLs
 }
 
 function bindFieldEvents(){
@@ -718,30 +744,17 @@ function bindFieldEvents(){
     });
   });
 
-  // Reference file inputs
+  // Reference file inputs — upload to Supabase Storage immediately
   document.querySelectorAll('input[type="file"][data-field]').forEach(input=>{
     input.addEventListener('change', (e)=>{
       const fieldId = input.dataset.field;
       const files = Array.from(e.target.files || []);
-      if(!refFiles[fieldId]) refFiles[fieldId] = [];
-      files.forEach(file=>{
-        refFiles[fieldId].push(file);
-        addRefThumb(fieldId, file);
-      });
+      files.forEach(file=> uploadRefFile(fieldId, file));
       input.value = '';
     });
   });
 
-  // Remove existing refs
-  document.querySelectorAll('.ref-remove[data-existing]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const fieldId = btn.dataset.field;
-      const idx = parseInt(btn.dataset.idx);
-      const key = fieldId+'_files';
-      if(answers[key]) answers[key].splice(idx,1);
-      btn.closest('.ref-thumb').remove();
-    });
-  });
+  // Remove existing refs — handled inside addRefThumbFromUrl
 }
 
 // ============================================================
