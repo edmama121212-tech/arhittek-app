@@ -3748,16 +3748,21 @@ function renderTzList(projectId){
   }
 
   container.innerHTML = forms.map(f=>{
-    const statusColor = f.status === 'Заполнено' ? 'var(--green)' : 'var(--gold)';
+    const answers = f.answers || {};
+    const filledCount = Object.keys(answers).filter(k=>answers[k] && answers[k]!=='').length;
+    const hasData = filledCount > 0;
+    const statusLabel = hasData ? `Заполняется (${filledCount} полей)` : 'Пусто — ссылка отправлена';
+    const statusColor = hasData ? 'var(--green)' : 'var(--gold)';
     const url = tzFormUrl(f.token);
+    const lastSaved = f.submitted_at || f.created_at;
     return `<div class="list-item">
       <div>
-        <div class="li-name">ТЗ ${f.client_name ? '— '+escapeHtml(f.client_name) : ''}</div>
-        <div class="li-meta" style="color:${statusColor}">${escapeHtml(f.status)} · создано ${fmtDateTime(f.created_at)}${f.submitted_at?' · заполнено '+fmtDateTime(f.submitted_at):''}</div>
+        <div class="li-name">ТЗ${f.client_name ? ' — '+escapeHtml(f.client_name) : ''}</div>
+        <div class="li-meta" style="color:${statusColor}">${statusLabel} · ${fmtDateTime(lastSaved)}</div>
       </div>
       <div class="li-actions">
-        ${f.status==='Заполнено' ? `<button class="icon-btn" onclick="viewTzAnswers('${f.id}')" title="Посмотреть / редактировать ответы">👁</button>` : ''}
-        <button class="icon-btn" onclick="copyTzLink('${url}')" title="Скопировать ссылку">🔗</button>
+        <button class="icon-btn" onclick="viewTzAnswers('${f.id}')" title="Посмотреть / редактировать ответы">👁</button>
+        <button class="icon-btn" onclick="copyTzLink('${url}')" title="Скопировать ссылку клиенту">🔗</button>
         <button class="icon-btn danger" onclick="deleteTzForm('${f.id}')" title="Удалить ТЗ">🗑</button>
       </div>
     </div>`;
