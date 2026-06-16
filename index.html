@@ -121,6 +121,7 @@
   .bar-fill{height:100%; border-radius:6px;}
 
   .note{font-size:11px; color:var(--text-dim); line-height:1.6; padding: 4px 2px;}
+  .hint{font-size:11px; color:var(--text-dim); line-height:1.5;}
 
   /* Bottom nav */
   .bottom-nav{
@@ -208,6 +209,7 @@
   }
   .field textarea{resize:vertical; min-height:70px;}
   .field input:focus, .field select:focus, .field textarea:focus{outline:none; border-color:rgba(74,144,226,0.6); background:rgba(74,144,226,0.05);}
+  .field input[readonly]{opacity:0.65; cursor:default; background:rgba(255,255,255,0.02);}
   /* Fix dropdown option contrast in dark theme (browser native option list defaults to white bg) */
   select, select option{ background-color: var(--bg-soft); color: var(--text); }
   .field-row{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
@@ -265,13 +267,20 @@
   .toast.show{opacity:1; transform:translateX(-50%) translateY(-6px);}
 
   /* ===== Search ===== */
-  .search-box{margin-bottom:10px;}
+  .search-box{margin-bottom:10px; position:relative;}
   .search-box input{
     width:100%; background:var(--card); border:1px solid var(--line-strong); border-radius:10px;
-    color:var(--text); font-size:13.5px; padding:11px 14px; font-family:'Inter',sans-serif;
+    color:var(--text); font-size:13.5px; padding:11px 36px 11px 14px; font-family:'Inter',sans-serif;
   }
   .search-box input:focus{outline:none; border-color:rgba(74,144,226,0.6);}
   .search-box input::placeholder{color:var(--text-dim);}
+  .search-clear{
+    position:absolute; right:6px; top:50%; transform:translateY(-50%);
+    width:26px; height:26px; border:none; background:transparent; color:var(--text-dim);
+    font-size:16px; cursor:pointer; display:none; align-items:center; justify-content:center; border-radius:50%;
+  }
+  .search-clear:active{background:rgba(255,255,255,0.08);}
+  .search-box.has-value .search-clear{display:flex;}
 
   /* ===== Construction list cards (clickable) ===== */
   .obj-card{
@@ -445,6 +454,8 @@
       <div class="section-label"><span class="lbl-text">Активные проекты</span><span class="section-label-line"></span></div>
       <div class="card" id="activeProjectsCard"></div>
 
+      <div id="stagesNotifBlock"></div>
+
     </div>
   </div>
 
@@ -453,6 +464,7 @@
 
     <div class="search-box">
       <input type="text" id="projectSearch" placeholder="Поиск по названию, адресу, телефону...">
+      <button class="search-clear" id="projectSearchClear" type="button">✕</button>
     </div>
 
     <div class="filters" id="categoryFilters">
@@ -467,6 +479,7 @@
       <div class="filter-chip" data-pay="Частично оплачен">Частично</div>
       <div class="filter-chip" data-pay="Ждём оплату">Ждём оплату</div>
     </div>
+    <div class="filters" id="employeeFilters"></div>
 
     <div class="card" id="projectsCard">
       <div class="loading-state">Загрузка…</div>
@@ -513,11 +526,7 @@
   <!-- ===================== ФИНАНСЫ / ГОНОРАРЫ ===================== -->
   <div class="view" id="view-finance">
 
-    <div class="section-label"><span class="lbl-text">Гонорары исполнителям</span><span class="section-label-line"></span></div>
-    <div class="note" style="margin-bottom:10px;">Расчёт на основе % от прибыли (цена − расходы) или % от полной цены, заданного в категории или индивидуально для проекта.</div>
-    <div id="feeCalcList"></div>
-
-    <div class="section-label"><span class="lbl-text">Записи (доходы/расходы)</span><span class="section-label-line"></span></div>
+    <div class="section-label"><span class="lbl-text">Новая запись (доход/расход)</span><span class="section-label-line"></span></div>
     <div class="card">
       <div class="field">
         <label>Тип записи</label>
@@ -528,6 +537,7 @@
           <option value="final_payment">Оплата остатка</option>
           <option value="materials_budget">Бюджет на материалы</option>
           <option value="fee_payment">Гонорар ARHITTEK</option>
+          <option value="withdrawal">Вывод средств</option>
           <option value="payment">Выплата мастеру / гонорар</option>
         </select>
       </div>
@@ -557,10 +567,19 @@
     </div>
     <div class="search-box">
       <input type="text" id="ledgerSearch" placeholder="Поиск по записям...">
+      <button class="search-clear" id="ledgerSearchClear" type="button">✕</button>
     </div>
     <div class="card" id="ledgerEntries">
       <div class="empty-state">Записей пока нет</div>
     </div>
+
+    <div class="section-label"><span class="lbl-text">Заработки по исполнителям</span><span class="section-label-line"></span></div>
+    <div class="note" style="margin-bottom:10px;">По каждому сотруднику: сколько проектов выполняет/выполнил, начисленный гонорар ARHITTEK и сколько из него уже выплачено.</div>
+    <div id="employeeFeeSummary"></div>
+
+    <div class="section-label"><span class="lbl-text">Гонорары по проектам</span><span class="section-label-line"></span></div>
+    <div class="note" style="margin-bottom:10px;">Расчёт на основе % от прибыли (цена − расходы) или % от полной цены, заданного в категории или индивидуально для проекта.</div>
+    <div id="feeCalcList"></div>
 
   </div>
 
@@ -596,6 +615,7 @@
     <div class="section-label"><span class="lbl-text">Сотрудники</span><span class="section-label-line"></span></div>
     <div class="search-box">
       <input type="text" id="employeeSearch" placeholder="Поиск сотрудника...">
+      <button class="search-clear" id="employeeSearchClear" type="button">✕</button>
     </div>
     <div class="card" id="employeesCard">
       <div class="loading-state">Загрузка…</div>
@@ -618,13 +638,14 @@
     </div>
     <div class="search-box">
       <input type="text" id="historySearch" placeholder="Поиск в истории...">
+      <button class="search-clear" id="historySearchClear" type="button">✕</button>
     </div>
     <div class="card" id="historyCard">
       <div class="loading-state">Загрузка…</div>
     </div>
 
     <div class="section-label"><span class="lbl-text">Корзина</span><span class="section-label-line"></span></div>
-    <div class="note" style="margin-bottom:10px;">Удалённые проекты, сотрудники и записи. Можно восстановить или удалить навсегда.</div>
+    <div class="note" style="margin-bottom:10px;">Удалённые проекты, сотрудники и записи. Можно восстановить или удалить навсегда. Элементы старше 2 месяцев удаляются автоматически.</div>
     <div class="card" id="trashCard">
       <div class="loading-state">Загрузка…</div>
     </div>
@@ -640,6 +661,10 @@
       <button class="icon-btn" id="kpBack" style="font-size:20px;">←</button>
       <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:16px;">Коммерческое предложение</div>
     </div>
+
+    <div class="section-label"><span class="lbl-text">Сохранённые КП</span><span class="section-label-line"></span></div>
+    <div id="kpSavedList" class="card" style="margin-bottom:8px;"></div>
+    <button class="btn btn-secondary" id="kpNewBtn" style="margin-bottom:10px;">+ Новое КП</button>
 
     <div class="section-label"><span class="lbl-text">Клиент</span><span class="section-label-line"></span></div>
     <div class="card">
@@ -717,6 +742,7 @@
 
     <button class="btn btn-primary" id="kpExportPdf">Скачать PDF</button>
     <button class="btn btn-secondary" id="kpExportXlsx">Скачать Excel</button>
+    <button class="btn btn-secondary" id="kpSaveBtn" style="margin-top:8px;">💾 Сохранить КП</button>
 
   </div>
 
@@ -965,19 +991,14 @@
       </div>
     </div>
 
-    <div class="field-row" id="pf-department-field">
-      <div class="field">
-        <label>Статус оплаты</label>
-        <select id="pf-payment">
-          <option value="Ждём оплату">Ждём оплату</option>
-          <option value="Частично оплачен">Частично оплачен</option>
-          <option value="Оплачен">Оплачен</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>Отдел</label>
-        <select id="pf-department"></select>
-      </div>
+    <div class="field" id="pf-department-field">
+      <label>Статус оплаты</label>
+      <select id="pf-payment">
+        <option value="Ждём оплату">Ждём оплату</option>
+        <option value="Частично оплачен">Частично оплачен</option>
+        <option value="Оплачен">Оплачен</option>
+      </select>
+      <input type="hidden" id="pf-department">
     </div>
 
     <div class="field-row" id="pf-employee-field">
@@ -986,14 +1007,20 @@
         <select id="pf-employee"><option value="">—</option></select>
       </div>
       <div class="field">
-        <label>Телефон</label>
-        <input type="text" id="pf-phone" placeholder="7 900 000-00-00">
+        <label>Соисполнитель</label>
+        <select id="pf-co-employee"><option value="">—</option></select>
       </div>
     </div>
 
-    <div class="field">
-      <label>Адрес / объект</label>
-      <input type="text" id="pf-address" placeholder="Грозный, ...">
+    <div class="field-row" id="pf-phone-field">
+      <div class="field">
+        <label>Телефон</label>
+        <input type="text" id="pf-phone" placeholder="7 900 000-00-00">
+      </div>
+      <div class="field">
+        <label>Адрес / объект</label>
+        <input type="text" id="pf-address" placeholder="Грозный, ...">
+      </div>
     </div>
 
     <div id="pf-financial-section">
@@ -1004,13 +1031,14 @@
       </div>
       <div class="field">
         <label>Получено, ₽</label>
-        <input type="number" id="pf-advance" placeholder="0">
+        <input type="number" id="pf-advance" placeholder="0" readonly title="Изменяется только через «Принять платёж»">
       </div>
       <div class="field">
         <label>Остаток, ₽</label>
-        <input type="number" id="pf-balance" placeholder="0">
+        <input type="number" id="pf-balance" placeholder="0" readonly title="Рассчитывается автоматически: Цена − Получено">
       </div>
     </div>
+    <div class="hint" style="margin:-6px 0 10px;">«Получено» и «Остаток» обновляются автоматически после платежей (кнопка «Принять платёж» ниже).</div>
 
     <div class="field-row">
       <div class="field">
@@ -1038,7 +1066,10 @@
       </div>
     </div>
 
+    <div id="pf-fee-summary" class="fee-card" style="margin-bottom:12px;"></div>
+
     <button class="btn btn-secondary" id="pf-add-payment" type="button">💰 Принять платёж</button>
+    <div id="pf-payment-history" style="margin-top:10px;"></div>
     </div>
 
     <div class="field-row">
@@ -1057,10 +1088,27 @@
       <textarea id="pf-notes" placeholder="дополнительная информация..."></textarea>
     </div>
 
+    <div class="section-label" style="margin:18px 0 10px;"><span class="lbl-text">Этапы проекта</span><span class="section-label-line"></span></div>
+    <div id="pf-stages-list" class="card" style="margin-bottom:8px;"></div>
+    <div class="field-row" id="pf-stage-add-row" style="display:none;">
+      <div class="field" style="margin-bottom:0;">
+        <label>Название этапа</label>
+        <input type="text" id="pf-stage-name" placeholder="например: Эскизный проект">
+      </div>
+      <div class="field" style="margin-bottom:0;">
+        <label>Срок</label>
+        <input type="date" id="pf-stage-date">
+      </div>
+    </div>
+    <button class="btn btn-secondary" id="pf-stage-add" style="display:none; margin-bottom:10px;">+ Добавить этап</button>
+
     <div class="section-label" style="margin:18px 0 10px;"><span class="lbl-text">Техническое задание (ТЗ)</span><span class="section-label-line"></span></div>
     <div id="pf-tz-list" class="card" style="margin-bottom:8px;"></div>
     <button class="btn btn-secondary" id="pf-tz-create" style="display:none;">Создать ссылку на ТЗ для клиента</button>
-    <button class="btn btn-secondary" id="pf-create-kp" style="display:none; margin-top:8px;">Создать КП для этого проекта</button>
+
+    <div class="section-label" style="margin:18px 0 10px;"><span class="lbl-text">Коммерческие предложения</span><span class="section-label-line"></span></div>
+    <div id="pf-kp-list" class="card" style="margin-bottom:8px;"></div>
+    <button class="btn btn-secondary" id="pf-create-kp" style="display:none;">Создать КП для этого проекта</button>
 
     <button class="btn btn-primary" id="pf-save">Сохранить</button>
     <div class="btn-row">
@@ -1086,6 +1134,7 @@
         <div class="yn-btn" data-value="final_payment" style="flex-basis:48%;">Оплата остатка</div>
         <div class="yn-btn" data-value="materials_budget" style="flex-basis:48%;">Бюджет на материалы</div>
         <div class="yn-btn" data-value="fee_payment" style="flex-basis:48%;">Гонорар ARHITTEK</div>
+        <div class="yn-btn" data-value="withdrawal" style="flex-basis:100%;">Вывод средств из бюджета объекта</div>
       </div>
     </div>
 
@@ -1102,7 +1151,7 @@
 
     <div class="field">
       <label>Комментарий</label>
-      <input type="text" id="payment-note" placeholder="например: наличными / переводом на карту...">
+      <input type="text" id="payment-note" placeholder="например: наличными / переводом на карту / причина вывода средств...">
     </div>
 
     <div class="note" id="payment-hint" style="margin-bottom:10px;"></div>
@@ -1133,6 +1182,10 @@
         <option value="true">Активен</option>
         <option value="false">Неактивен (архив)</option>
       </select>
+    </div>
+    <div class="field" id="ef-pin-field" style="display:none;">
+      <label>PIN-код для входа (до 6 цифр)</label>
+      <input type="text" id="ef-pin" inputmode="numeric" maxlength="6" placeholder="например: 123456">
     </div>
     <button class="btn btn-primary" id="ef-save">Сохранить</button>
     <div class="btn-row">
@@ -1217,12 +1270,16 @@ let state = {
   tzForms: [],
   tzReferences: [],
   companyInfo: null,
+  kpForms: [],
+  projectStages: [],
   trash: {projects:[], employees:[], categories:[], ledger:[]},
 };
 
 let activeCategoryFilter = 'all';
 let activeStatusFilter = 'all';
 let activePaymentFilter = 'all';
+let activeEmployeeFilter = 'all';
+let loadAllInFlight = false;
 let projectSearchQuery = '';
 let ledgerSearchQuery = '';
 let employeeSearchQuery = '';
@@ -1368,7 +1425,7 @@ function applyRole(){
   const navConstr = document.querySelector('.nav-btn[data-view="view-construction"]');
   const navFinance = document.querySelector('.nav-btn[data-view="view-finance"]');
   const navOverview = document.querySelector('.nav-btn[data-view="view-overview"]');
-  if(navConstr) navConstr.style.display = isAdmin ? '' : 'none';
+  if(navConstr) navConstr.style.display = '';
   if(navFinance) navFinance.style.display = isAdmin ? '' : 'none';
   if(navOverview) navOverview.style.display = isAdmin ? '' : 'none';
 
@@ -1379,7 +1436,7 @@ function applyRole(){
   // If a non-admin is currently on a hidden view, redirect to Проектный
   if(!isAdmin){
     const activeView = document.querySelector('.view.active');
-    if(activeView && ['view-overview','view-construction','view-finance'].includes(activeView.id)){
+    if(activeView && ['view-overview','view-finance'].includes(activeView.id)){
       document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
       document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
       document.getElementById('view-projects').classList.add('active');
@@ -1396,8 +1453,128 @@ function applyRole(){
   if(deleteBtn) deleteBtn.style.display = isAdmin ? '' : 'none';
   if(empField) empField.style.display = isAdmin ? '' : 'none';
   if(deptField) deptField.style.display = isAdmin ? '' : 'none';
-  const kpFromProjectBtn = document.getElementById('pf-create-kp');
-  if(kpFromProjectBtn) kpFromProjectBtn.style.display = isAdmin ? 'none' : '';
+}
+
+// Permanently delete trash items older than 2 months (60 days)
+const TRASH_RETENTION_DAYS = 60;
+let trashPurgeInFlight = false;
+async function purgeOldTrash(){
+  if(trashPurgeInFlight) return;
+  const cutoff = Date.now() - TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  const tables = {
+    projects: state.trash.projects,
+    employees: state.trash.employees,
+    categories: state.trash.categories,
+    ledger_entries: state.trash.ledger,
+  };
+  const toDelete = [];
+  Object.entries(tables).forEach(([table, items])=>{
+    items.forEach(item=>{
+      if(item.deleted_at && new Date(item.deleted_at).getTime() < cutoff){
+        toDelete.push({table, id: item.id});
+      }
+    });
+  });
+  if(!toDelete.length) return;
+  trashPurgeInFlight = true;
+  try{
+    for(const {table, id} of toDelete){
+      await sb.from(table).delete().eq('id', id);
+    }
+  }catch(e){
+    console.error('purgeOldTrash error', e);
+  }finally{
+    trashPurgeInFlight = false;
+  }
+}
+
+// ============================================================
+// ЭТАПЫ ПРОЕКТА
+// ============================================================
+function renderStagesList(projectId){
+  const container = document.getElementById('pf-stages-list');
+  const addRow = document.getElementById('pf-stage-add-row');
+  const addBtn = document.getElementById('pf-stage-add');
+  if(!container) return;
+
+  const isAdmin = session && session.isAdmin;
+  if(addRow) addRow.style.display = isAdmin ? '' : 'none';
+  if(addBtn) addBtn.style.display = isAdmin ? '' : 'none';
+
+  if(!projectId){
+    container.innerHTML = '<div class="empty-state">Сохраните проект, чтобы добавить этапы</div>';
+    return;
+  }
+
+  const stages = state.projectStages
+    .filter(s=>s.project_id===projectId)
+    .sort((a,b)=>a.sort_order-b.sort_order || new Date(a.created_at)-new Date(b.created_at));
+
+  if(!stages.length){
+    container.innerHTML = '<div class="empty-state">Этапов пока нет</div>';
+    return;
+  }
+
+  container.innerHTML = stages.map(s=>{
+    const overdue = s.due_date && !s.done && daysUntil(s.due_date) < 0;
+    const dueTxt = s.due_date ? fmtDate(s.due_date) : '';
+    const doneTxt = s.done && s.done_at ? ' · выполнен '+fmtDate(s.done_at) : '';
+    return `<div class="list-item">
+      <div style="flex:1;">
+        <div class="li-name" style="${s.done ? 'text-decoration:line-through; opacity:0.55;' : ''}">${escapeHtml(s.name)}</div>
+        <div class="li-meta" style="${overdue ? 'color:var(--red);' : ''}">
+          ${dueTxt ? '📅 '+dueTxt : ''}${doneTxt}${overdue ? ' ⚠ просрочен' : ''}
+        </div>
+      </div>
+      <div class="li-actions">
+        ${!s.done
+          ? `<button class="icon-btn" onclick="markStageDone('${s.id}','${projectId}')" title="Отметить выполненным">✅</button>`
+          : `<button class="icon-btn" style="opacity:0.45;" onclick="markStageUndone('${s.id}','${projectId}')" title="Снять отметку">↩</button>`
+        }
+        ${isAdmin ? `<button class="icon-btn danger" onclick="deleteStage('${s.id}','${projectId}')" title="Удалить этап">🗑</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function addStage(projectId){
+  const name = document.getElementById('pf-stage-name').value.trim();
+  if(!name){ showToast('Введите название этапа'); return; }
+  const due_date = document.getElementById('pf-stage-date').value || null;
+  const sort_order = state.projectStages.filter(s=>s.project_id===projectId).length;
+  try{
+    const {error} = await sb.from('project_stages').insert({project_id:projectId, name, due_date, sort_order});
+    if(error) throw error;
+    document.getElementById('pf-stage-name').value = '';
+    document.getElementById('pf-stage-date').value = '';
+    await loadAll();
+    renderStagesList(projectId);
+  }catch(e){ console.error(e); showToast('Ошибка добавления этапа'); }
+}
+
+async function markStageDone(stageId, projectId){
+  try{
+    await sb.from('project_stages').update({done:true, done_at: new Date().toISOString()}).eq('id', stageId);
+    await loadAll();
+    renderStagesList(projectId);
+  }catch(e){ console.error(e); }
+}
+
+async function markStageUndone(stageId, projectId){
+  try{
+    await sb.from('project_stages').update({done:false, done_at:null}).eq('id', stageId);
+    await loadAll();
+    renderStagesList(projectId);
+  }catch(e){ console.error(e); }
+}
+
+async function deleteStage(stageId, projectId){
+  if(!confirm('Удалить этот этап?')) return;
+  try{
+    await sb.from('project_stages').delete().eq('id', stageId);
+    await loadAll();
+    renderStagesList(projectId);
+  }catch(e){ console.error(e); showToast('Ошибка удаления'); }
 }
 
 async function logAudit(entityType, entityId, entityName, action, changes){
@@ -1430,9 +1607,11 @@ function diffChanges(oldObj, newObj, fields){
 // DATA LOADING
 // ============================================================
 async function loadAll(){
+  if(loadAllInFlight) return;
+  loadAllInFlight = true;
   setSyncStatus('loading', 'синхронизация…');
   try{
-    const [proj, emp, cat, st, dept, led, photos, hist, invs, tzForms, tzRefs, company, trashProj, trashEmp, trashCat, trashLed] = await Promise.all([
+    const [proj, emp, cat, st, dept, led, photos, hist, invs, tzForms, tzRefs, company, kpForms, stages, trashProj, trashEmp, trashCat, trashLed] = await Promise.all([
       sb.from('projects').select('*').is('deleted_at', null).order('created_at', {ascending:true}),
       sb.from('employees').select('*').is('deleted_at', null).order('name'),
       sb.from('categories').select('*').is('deleted_at', null).order('sort_order'),
@@ -1445,14 +1624,19 @@ async function loadAll(){
       sb.from('tz_forms').select('*').order('created_at', {ascending:false}),
       sb.from('tz_references').select('*'),
       sb.from('company_info').select('*').limit(1).maybeSingle(),
+      sb.from('kp_forms').select('*').order('created_at', {ascending:false}),
+      sb.from('project_stages').select('*').order('sort_order', {ascending:true}),
       sb.from('projects').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
       sb.from('employees').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
       sb.from('categories').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
       sb.from('ledger_entries').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
     ]);
 
-    const errs = [proj,emp,cat,st,dept,led,photos,hist,invs,tzForms,tzRefs,trashProj,trashEmp,trashCat,trashLed].map(r=>r.error).filter(Boolean);
+    // kpForms and stages are optional — may not exist until migrations run
+    const errs = [proj,emp,cat,st,dept,led,photos,hist,invs,tzForms,tzRefs,company,trashProj,trashEmp,trashCat,trashLed].map(r=>r.error).filter(Boolean);
     if(errs.length) throw errs[0];
+    state.kpForms = kpForms.error ? [] : (kpForms.data || []);
+    state.projectStages = stages.error ? [] : (stages.data || []);
 
     state.projects = proj.data || [];
     state.employees = emp.data || [];
@@ -1472,6 +1656,8 @@ async function loadAll(){
       categories: trashCat.data || [],
       ledger: trashLed.data || [],
     };
+
+    purgeOldTrash();
 
     setSyncStatus('on', 'синхронизировано');
     renderAll();
@@ -1494,8 +1680,11 @@ async function loadAll(){
     }
   }catch(e){
     console.error(e);
+    const wasOk = document.getElementById('syncDot').classList.contains('off') === false;
     setSyncStatus('off', 'нет связи');
-    showToast('Ошибка подключения к базе');
+    if(wasOk) showToast('Ошибка подключения к базе');
+  }finally{
+    loadAllInFlight = false;
   }
 }
 
@@ -1504,9 +1693,11 @@ function renderAll(){
   renderCategoryFilters();
   renderStatusFilters();
   renderPaymentFilters();
+  renderEmployeeFilters();
   renderProjects();
   renderConstruction();
   renderFeeCalc();
+  renderEmployeeFeeSummary();
   renderLedger();
   renderLedgerProjectSelect();
   renderEmployees();
@@ -1616,6 +1807,32 @@ function renderOverview(){
     });
     activeCard.innerHTML = html;
   }
+
+  // ---- Overdue stages notification block (admin only) ----
+  const stagesNotifEl = document.getElementById('stagesNotifBlock');
+  if(stagesNotifEl){
+    const overdueStages = state.projectStages.filter(s=>
+      !s.done && s.due_date && daysUntil(s.due_date) < 0
+    );
+    if(!overdueStages.length){
+      stagesNotifEl.innerHTML = '';
+    }else{
+      stagesNotifEl.innerHTML = `
+        <div class="section-label"><span class="lbl-text">⚠ Просроченные этапы</span><span class="section-label-line"></span></div>
+        <div class="card">
+          ${overdueStages.map(s=>{
+            const p = state.projects.find(x=>x.id===s.project_id);
+            return `<div class="list-item" onclick="openProjectSheet('${s.project_id}')" style="cursor:pointer;">
+              <div>
+                <div class="li-name">${escapeHtml(s.name)}</div>
+                <div class="li-meta" style="color:var(--red);">${p ? escapeHtml(p.name) : ''} · срок был ${fmtDate(s.due_date)} · ${Math.abs(daysUntil(s.due_date))} дн. назад</div>
+              </div>
+              <div class="status-chip overdue">просрочен</div>
+            </div>`;
+          }).join('')}
+        </div>`;
+    }
+  }
 }
 
 function escapeHtml(s){
@@ -1667,6 +1884,28 @@ function renderPaymentFilters(){
   });
 }
 
+function renderEmployeeFilters(){
+  const el = document.getElementById('employeeFilters');
+  if(session && !session.isAdmin){
+    // Executors only see their own projects — no employee filter needed
+    el.innerHTML = '';
+    return;
+  }
+  let html = `<div class="filter-chip ${activeEmployeeFilter==='all'?'active':''}" data-emp="all">Все исполнители</div>`;
+  html += `<div class="filter-chip ${activeEmployeeFilter==='none'?'active':''}" data-emp="none">Без исполнителя</div>`;
+  state.employees.filter(e=>e.active!==false).forEach(e=>{
+    html += `<div class="filter-chip ${activeEmployeeFilter===e.id?'active':''}" data-emp="${e.id}">${escapeHtml(e.name)}</div>`;
+  });
+  el.innerHTML = html;
+  el.querySelectorAll('.filter-chip').forEach(chip=>{
+    chip.addEventListener('click', ()=>{
+      activeEmployeeFilter = chip.dataset.emp;
+      renderEmployeeFilters();
+      renderProjects();
+    });
+  });
+}
+
 function paymentBadgeColor(status){
   if(status === 'Оплачен') return {bg:'rgba(111,174,140,0.18)', fg:'var(--green)'};
   if(status === 'Частично оплачен') return {bg:'rgba(232,163,61,0.18)', fg:'var(--gold)'};
@@ -1674,21 +1913,28 @@ function paymentBadgeColor(status){
 }
 
 function renderProjects(){
+  const projDept = state.departments.find(d=>d.name==='Проектный отдел');
+  const isProjectDeptCategory = (p)=>{
+    const cat = findCategory(p.category_id);
+    return !projDept || (cat && cat.department_id === projDept.id);
+  };
+
   let list;
   if(session && !session.isAdmin){
-    // Executor: show only their assigned projects across all departments
-    list = state.projects.filter(p=>p.employee_id === session.employeeId);
+    // Executor: show only their assigned (or co-assigned) projects from the project department.
+    // Construction objects are shown separately in the "Стройка" tab.
+    list = state.projects.filter(p=>
+      (p.employee_id === session.employeeId || p.co_employee_id === session.employeeId) && isProjectDeptCategory(p)
+    );
   }else{
-    const projDept = state.departments.find(d=>d.name==='Проектный отдел');
-    list = state.projects.filter(p=>{
-      const cat = findCategory(p.category_id);
-      return !projDept || (cat && cat.department_id === projDept.id);
-    });
+    list = state.projects.filter(isProjectDeptCategory);
   }
 
   if(activeCategoryFilter !== 'all') list = list.filter(p=>p.category_id === activeCategoryFilter);
   if(activeStatusFilter !== 'all') list = list.filter(p=>p.status_id === activeStatusFilter);
   if(activePaymentFilter !== 'all') list = list.filter(p=>(p.payment_status||'Ждём оплату') === activePaymentFilter);
+  if(activeEmployeeFilter === 'none') list = list.filter(p=>!p.employee_id && !p.co_employee_id);
+  else if(activeEmployeeFilter !== 'all') list = list.filter(p=>p.employee_id === activeEmployeeFilter || p.co_employee_id === activeEmployeeFilter);
 
   if(projectSearchQuery.trim()){
     const q = projectSearchQuery.trim().toLowerCase();
@@ -1706,7 +1952,23 @@ function renderProjects(){
     return;
   }
 
-  card.innerHTML = list.map(p=>{
+  // Group projects without an assigned executor into a separate section
+  // (only when not already filtering by a specific employee)
+  if(activeEmployeeFilter === 'all'){
+    const withEmp = list.filter(p=>p.employee_id);
+    const withoutEmp = list.filter(p=>!p.employee_id);
+    let html = withEmp.map(renderProjectRow).join('');
+    if(withoutEmp.length){
+      html += `<div class="section-label" style="margin:14px 0 10px;"><span class="lbl-text">Без исполнителя</span><span class="section-label-line"></span></div>`;
+      html += withoutEmp.map(renderProjectRow).join('');
+    }
+    card.innerHTML = html || '<div class="empty-state">Нет проектов по этому фильтру</div>';
+  }else{
+    card.innerHTML = list.map(renderProjectRow).join('');
+  }
+}
+
+function renderProjectRow(p){
     const cat = findCategory(p.category_id);
     const st = findStatus(p.status_id);
     const emp = findEmployee(p.employee_id);
@@ -1717,6 +1979,8 @@ function renderProjects(){
     let metaParts = [];
     if(cat) metaParts.push(escapeHtml(cat.name));
     if(emp) metaParts.push(escapeHtml(emp.name));
+    const coEmp = findEmployee(p.co_employee_id);
+    if(coEmp) metaParts.push('+ '+escapeHtml(coEmp.name));
     if(p.address) metaParts.push(escapeHtml(p.address));
 
     let statusChips = '';
@@ -1728,6 +1992,11 @@ function renderProjects(){
       statusChips += `<span class="status-chip overdue">просрочен ${Math.abs(d)} дн.</span>`;
     } else if(d !== null && d >= 0 && d <= 7 && (!st || st.name !== 'Завершён')){
       statusChips += `<span class="status-chip" data-status="Ждём оплату">${d} дн. до сдачи</span>`;
+    }
+    // Overdue stages chip
+    const overdueStages = state.projectStages.filter(s=>s.project_id===p.id && !s.done && s.due_date && daysUntil(s.due_date)<0);
+    if(overdueStages.length){
+      statusChips += `<span class="status-chip overdue">⚠ этап просрочен (${overdueStages.length})</span>`;
     }
 
     const balance = Number(p.balance) || 0;
@@ -1744,7 +2013,6 @@ function renderProjects(){
         <div class="proj-rest ${balance>0?'has-balance':''}">${balance>0 ? 'остаток '+fmtMoney(balance) : 'оплачен'}</div>
       </div>` : ''}
     </div>`;
-  }).join('');
 }
 
 // ============================================================
@@ -1763,13 +2031,14 @@ function populateProjectFormSelects(){
 
   const empSel = document.getElementById('pf-employee');
   const prevEmp = empSel.value;
-  empSel.innerHTML = '<option value="">—</option>' + state.employees.filter(e=>e.active!==false).map(e=>`<option value="${e.id}">${escapeHtml(e.name)}</option>`).join('');
+  const empOptions = '<option value="">—</option>' + state.employees.filter(e=>e.active!==false).map(e=>`<option value="${e.id}">${escapeHtml(e.name)}</option>`).join('');
+  empSel.innerHTML = empOptions;
   if(prevEmp && state.employees.some(e=>e.id===prevEmp)) empSel.value = prevEmp;
 
-  const deptSel = document.getElementById('pf-department');
-  const prevDept = deptSel.value;
-  deptSel.innerHTML = state.departments.map(d=>`<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('');
-  if(prevDept && state.departments.some(d=>d.id===prevDept)) deptSel.value = prevDept;
+  const coEmpSel = document.getElementById('pf-co-employee');
+  const prevCoEmp = coEmpSel.value;
+  coEmpSel.innerHTML = empOptions;
+  if(prevCoEmp && state.employees.some(e=>e.id===prevCoEmp)) coEmpSel.value = prevCoEmp;
 }
 
 // When category changes, auto-select its department (categories belong to one department)
@@ -1780,6 +2049,33 @@ document.addEventListener('change', (e)=>{
       document.getElementById('pf-department').value = cat.department_id;
     }
   }
+});
+
+// Recalculate "Остаток" and fee summary live when relevant fields change
+function recalcLiveFeeSummary(){
+  if(!editingProjectId) return;
+  const p = state.projects.find(x=>x.id===editingProjectId);
+  if(!p) return;
+  const live = {
+    ...p,
+    price: parseFloat(document.getElementById('pf-price').value) || 0,
+    expenses: parseFloat(document.getElementById('pf-expenses').value) || 0,
+    fee_percent: document.getElementById('pf-feepercent').value === '' ? null : parseFloat(document.getElementById('pf-feepercent').value),
+    fee_base: document.getElementById('pf-feebase').value || null,
+    fee_paid: parseFloat(document.getElementById('pf-feepaid').value) || 0,
+  };
+  renderFeeSummaryForProject(live);
+}
+
+document.getElementById('pf-price').addEventListener('input', ()=>{
+  const price = parseFloat(document.getElementById('pf-price').value) || 0;
+  const advance = parseFloat(document.getElementById('pf-advance').value) || 0;
+  document.getElementById('pf-balance').value = Math.max(0, price - advance);
+  recalcLiveFeeSummary();
+});
+['pf-expenses','pf-feepercent','pf-feebase','pf-feepaid'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', recalcLiveFeeSummary);
+  document.getElementById(id).addEventListener('change', recalcLiveFeeSummary);
 });
 
 function openProjectSheet(id){
@@ -1800,6 +2096,7 @@ function openProjectSheet(id){
     const cat = findCategory(p.category_id);
     document.getElementById('pf-department').value = cat ? (cat.department_id || '') : '';
     document.getElementById('pf-employee').value = p.employee_id || '';
+    document.getElementById('pf-co-employee').value = p.co_employee_id || '';
     document.getElementById('pf-phone').value = p.phone || '';
     document.getElementById('pf-address').value = p.address || '';
     document.getElementById('pf-price').value = p.price ?? '';
@@ -1814,6 +2111,11 @@ function openProjectSheet(id){
     document.getElementById('pf-notes').value = p.notes || '';
     renderTzList(id);
     document.getElementById('pf-tz-create').style.display = '';
+    renderKpListForProject(id);
+    document.getElementById('pf-create-kp').style.display = '';
+    renderPaymentHistory(id);
+    renderFeeSummaryForProject(p);
+    renderStagesList(id);
   }else{
     title.textContent = 'Новый проект';
     deleteBtn.style.display = 'none';
@@ -1823,7 +2125,8 @@ function openProjectSheet(id){
     document.getElementById('pf-payment').value = 'Ждём оплату';
     const firstCat = state.categories[0];
     document.getElementById('pf-department').value = firstCat ? (firstCat.department_id || '') : '';
-    document.getElementById('pf-employee').value = '';
+    document.getElementById('pf-co-employee').value = '';
+    document.getElementById('pf-employee').value = (session && !session.isAdmin) ? session.employeeId : '';
     document.getElementById('pf-phone').value = '';
     document.getElementById('pf-address').value = '';
     document.getElementById('pf-price').value = '';
@@ -1838,6 +2141,11 @@ function openProjectSheet(id){
     document.getElementById('pf-notes').value = '';
     document.getElementById('pf-tz-list').innerHTML = '<div class="empty-state">Сохраните проект, чтобы создать ТЗ</div>';
     document.getElementById('pf-tz-create').style.display = 'none';
+    document.getElementById('pf-kp-list').innerHTML = '<div class="empty-state">Сохраните проект, чтобы создать КП</div>';
+    document.getElementById('pf-create-kp').style.display = 'none';
+    document.getElementById('pf-payment-history').innerHTML = '';
+    document.getElementById('pf-fee-summary').innerHTML = '';
+    renderStagesList(null);
   }
 
   overlay.classList.add('active');
@@ -1850,17 +2158,20 @@ function closeProjectSheet(){
 }
 
 async function saveProject(){
+  const price = parseFloat(document.getElementById('pf-price').value) || 0;
+  const advance = parseFloat(document.getElementById('pf-advance').value) || 0;
   const payload = {
     name: document.getElementById('pf-name').value.trim(),
     category_id: document.getElementById('pf-category').value || null,
     status_id: document.getElementById('pf-status').value || null,
     payment_status: document.getElementById('pf-payment').value || 'Ждём оплату',
     employee_id: document.getElementById('pf-employee').value || null,
+    co_employee_id: document.getElementById('pf-co-employee').value || null,
     phone: document.getElementById('pf-phone').value.trim(),
     address: document.getElementById('pf-address').value.trim(),
-    price: parseFloat(document.getElementById('pf-price').value) || 0,
-    advance: parseFloat(document.getElementById('pf-advance').value) || 0,
-    balance: parseFloat(document.getElementById('pf-balance').value) || 0,
+    price: price,
+    advance: advance,
+    balance: Math.max(0, price - advance),
     expenses: parseFloat(document.getElementById('pf-expenses').value) || 0,
     fee_paid: parseFloat(document.getElementById('pf-feepaid').value) || 0,
     fee_percent: document.getElementById('pf-feepercent').value === '' ? null : parseFloat(document.getElementById('pf-feepercent').value),
@@ -1994,6 +2305,40 @@ function calcFee(p){
   return {feePercent, feeBase, profit, feeAmount, paid, remaining};
 }
 
+function renderEmployeeFeeSummary(){
+  const container = document.getElementById('employeeFeeSummary');
+  if(!container) return;
+
+  const employees = state.employees.filter(e=>e.active!==false);
+  const rows = employees.map(emp=>{
+    const projects = state.projects.filter(p=>p.employee_id===emp.id || p.co_employee_id===emp.id);
+    let earned = 0, paid = 0;
+    projects.forEach(p=>{
+      const f = calcFee(p);
+      earned += f.feeAmount;
+      paid += f.paid;
+    });
+    return {emp, count: projects.length, earned, paid, remaining: Math.max(0, earned - paid)};
+  }).filter(r=>r.count > 0);
+
+  if(!rows.length){
+    container.innerHTML = '<div class="empty-state">Нет данных по сотрудникам</div>';
+    return;
+  }
+
+  rows.sort((a,b)=>b.earned - a.earned);
+
+  container.innerHTML = rows.map(r=>`
+    <div class="fee-card">
+      <div style="font-weight:700; font-size:13.5px; margin-bottom:8px;">${escapeHtml(r.emp.name)}</div>
+      <div class="fee-row"><div class="fl">Проектов</div><div class="fv">${r.count}</div></div>
+      <div class="fee-row"><div class="fl">Начислено гонорара</div><div class="fv">${fmtMoney(r.earned)}</div></div>
+      <div class="fee-row"><div class="fl">Получено на руки</div><div class="fv">${fmtMoney(r.paid)}</div></div>
+      <div class="fee-row remaining"><div class="fl">Осталось выплатить</div><div class="fv">${fmtMoney(r.remaining)}</div></div>
+    </div>
+  `).join('');
+}
+
 function renderFeeCalc(){
   const list = document.getElementById('feeCalcList');
   // Only show projects with price > 0
@@ -2032,7 +2377,47 @@ const ledgerTypeLabels = {
   final_payment: {label:'Оплата остатка', cls:'var(--green)', sign:'+'},
   materials_budget: {label:'Бюджет на материалы', cls:'var(--green)', sign:'+'},
   fee_payment: {label:'Гонорар ARHITTEK', cls:'var(--blue)', sign:'+'},
+  withdrawal: {label:'Вывод средств', cls:'var(--red)', sign:'−'},
 };
+
+function renderFeeSummaryForProject(p){
+  const el = document.getElementById('pf-fee-summary');
+  if(!el) return;
+  const f = calcFee(p);
+  const baseLabel = f.feeBase === 'price' ? '% от цены' : '% от прибыли';
+  el.innerHTML = `
+    <div style="font-weight:700; font-size:13px; margin-bottom:6px;">Гонорар ARHITTEK (${f.feePercent}% · ${baseLabel})</div>
+    <div class="fee-row"><div class="fl">Начислено</div><div class="fv">${fmtMoney(f.feeAmount)}</div></div>
+    <div class="fee-row"><div class="fl">Выплачено</div><div class="fv">${fmtMoney(f.paid)}</div></div>
+    <div class="fee-row remaining"><div class="fl">Осталось выплатить</div><div class="fv">${fmtMoney(Math.max(0,f.remaining))}</div></div>
+  `;
+}
+
+function renderPaymentHistory(projectId){
+  const container = document.getElementById('pf-payment-history');
+  if(!container) return;
+  const paymentTypes = ['advance','final_payment','materials_budget','fee_payment','withdrawal'];
+  const entries = state.ledger
+    .filter(l=>l.project_id===projectId && paymentTypes.includes(l.type))
+    .sort((a,b)=> new Date(b.entry_date) - new Date(a.entry_date) || new Date(b.created_at) - new Date(a.created_at));
+
+  if(!entries.length){
+    container.innerHTML = '<div class="empty-state">Платежей пока нет</div>';
+    return;
+  }
+
+  container.innerHTML = `<div class="section-label" style="margin:10px 0 8px;"><span class="lbl-text">История платежей</span><span class="section-label-line"></span></div>` +
+    entries.map(e=>{
+      const t = ledgerTypeLabels[e.type] || {label:e.type, cls:'var(--text)', sign:''};
+      const emp = e.received_by ? findEmployee(e.received_by) : null;
+      return `<div class="list-item">
+        <div>
+          <div class="li-name">${t.label} — <span style="color:${t.cls}">${t.sign}${fmtMoney(e.amount)}</span></div>
+          <div class="li-meta">${fmtDate(e.entry_date)}${emp?' · принял: '+escapeHtml(emp.name):''}${e.description && e.description!==t.label?' · '+escapeHtml(e.description):''}</div>
+        </div>
+      </div>`;
+    }).join('');
+}
 
 function renderLedgerProjectSelect(){
   const sel = document.getElementById('ledgerProject');
@@ -2084,7 +2469,7 @@ async function addLedgerEntry(){
   }
 
   try{
-    const {data, error} = await sb.from('ledger_entries').insert({type, project_id, description, amount, entry_date}).select().single();
+    const {data, error} = await sb.from('ledger_entries').insert({type, project_id, description, amount, entry_date, received_by: session ? session.employeeId : null}).select().single();
     if(error) throw error;
     const proj = state.projects.find(p=>p.id===project_id);
     await logAudit('ledger_entry', data.id, (proj?proj.name+' — ':'')+(description||ledgerTypeLabels[type]?.label||''), 'create', {});
@@ -2109,6 +2494,7 @@ const paymentHints = {
   final_payment: 'Увеличит «Получено» и уменьшит «Остаток» по проекту — оплата финального остатка.',
   materials_budget: 'Деньги клиента на закупку материалов — увеличит «Получено» и уменьшит «Остаток» (учитывается в общем приходе по проекту).',
   fee_payment: 'Увеличит «Выплачено гонорара» — не влияет на приход/остаток по проекту.',
+  withdrawal: 'Запись о выводе средств из бюджета объекта (например, наличные на материалы). Не влияет на «Получено»/«Остаток» — только запись в истории с указанием причины. Укажите причину в комментарии.',
 };
 
 function openPaymentSheet(){
@@ -2139,6 +2525,7 @@ async function savePayment(){
   const note = document.getElementById('payment-note').value.trim();
 
   if(!amount || amount <= 0){ showToast('Укажите сумму платежа'); return; }
+  if(paymentType === 'withdrawal' && !note){ showToast('Укажите причину вывода средств'); return; }
 
   const p = state.projects.find(x=>x.id===projectId);
   if(!p) return;
@@ -2146,6 +2533,8 @@ async function savePayment(){
   const updates = {};
   if(paymentType === 'fee_payment'){
     updates.fee_paid = (Number(p.fee_paid)||0) + amount;
+  }else if(paymentType === 'withdrawal'){
+    // No effect on project financial fields — purely a journal record with a reason
   }else{
     const newAdvance = (Number(p.advance)||0) + amount;
     updates.advance = newAdvance;
@@ -2154,13 +2543,16 @@ async function savePayment(){
 
   showToast('Сохранение…');
   try{
-    const {error: projErr} = await sb.from('projects').update(updates).eq('id', projectId);
-    if(projErr) throw projErr;
+    if(Object.keys(updates).length){
+      const {error: projErr} = await sb.from('projects').update(updates).eq('id', projectId);
+      if(projErr) throw projErr;
+    }
 
     const t = ledgerTypeLabels[paymentType];
     const description = note || t?.label || 'Платёж';
     const {data, error} = await sb.from('ledger_entries').insert({
-      type: paymentType, project_id: projectId, description, amount, entry_date
+      type: paymentType, project_id: projectId, description, amount, entry_date,
+      received_by: session ? session.employeeId : null,
     }).select().single();
     if(error) throw error;
 
@@ -2180,6 +2572,8 @@ async function savePayment(){
         document.getElementById('pf-balance').value = updated.balance ?? '';
         document.getElementById('pf-feepaid').value = updated.fee_paid ?? '';
       }
+      renderPaymentHistory(projectId);
+      renderFeeSummaryForProject(updated);
     }
 
     // Refresh construction object detail view if it's open behind the sheet
@@ -2251,6 +2645,7 @@ function openEmployeeSheet(id){
   const overlay = document.getElementById('empSheetOverlay');
   const title = document.getElementById('empSheetTitle');
   const deleteBtn = document.getElementById('ef-delete');
+  const pinField = document.getElementById('ef-pin-field');
 
   if(id){
     const e = state.employees.find(x=>x.id===id);
@@ -2260,12 +2655,16 @@ function openEmployeeSheet(id){
     document.getElementById('ef-name').value = e.name || '';
     document.getElementById('ef-role').value = e.role || '';
     document.getElementById('ef-active').value = e.active===false ? 'false' : 'true';
+    document.getElementById('ef-pin').value = e.pin_code || '';
+    pinField.style.display = (session && session.isAdmin) ? '' : 'none';
   }else{
     title.textContent = 'Новый сотрудник';
     deleteBtn.style.display = 'none';
     document.getElementById('ef-name').value = '';
     document.getElementById('ef-role').value = '';
     document.getElementById('ef-active').value = 'true';
+    document.getElementById('ef-pin').value = '';
+    pinField.style.display = (session && session.isAdmin) ? '' : 'none';
   }
   overlay.classList.add('active');
 }
@@ -2283,6 +2682,9 @@ async function saveEmployee(){
     role: document.getElementById('ef-role').value.trim(),
     active: document.getElementById('ef-active').value === 'true',
   };
+  if(session && session.isAdmin){
+    payload.pin_code = document.getElementById('ef-pin').value.trim();
+  }
   try{
     if(editingEmployeeId){
       const before = state.employees.find(x=>x.id===editingEmployeeId);
@@ -2479,12 +2881,18 @@ function getConstrProjects(){
 // ============================================================
 function renderConstruction(){
   const list = document.getElementById('constructionList');
-  const projects = getConstrProjects();
+  let projects = getConstrProjects();
+
+  if(session && !session.isAdmin){
+    projects = projects.filter(p=>p.employee_id===session.employeeId || p.co_employee_id===session.employeeId);
+  }
 
   if(!projects.length){
     list.innerHTML = '<div class="empty-state">Нет объектов строительства</div>';
     return;
   }
+
+  const showFinance = !session || session.isAdmin;
 
   list.innerHTML = projects.map(p=>{
     const price = Number(p.price)||0;
@@ -2495,6 +2903,23 @@ function renderConstruction(){
     const f = calcConstrFee(p);
     const projInvoices = state.invoices.filter(inv=>inv.project_id===p.id);
     const invCount = projInvoices.length;
+    const st = findStatus(p.status_id);
+
+    if(!showFinance){
+      // Simplified card for executors — no financial figures
+      return `<div class="obj-card" onclick="openObjectView('${p.id}')">
+        <div class="obj-head">
+          <div>
+            <div class="obj-title">${escapeHtml(p.name)}</div>
+            <div class="obj-sub">${escapeHtml(p.address||p.stage_notes||'Нажмите для просмотра')}</div>
+          </div>
+          <div class="obj-chevron">›</div>
+        </div>
+        ${st ? `<div class="status-chip" data-status="${escapeHtml(st.name)}" style="margin-top:8px; display:inline-block;">${escapeHtml(st.name)}</div>` : ''}
+        <div class="obj-bar" style="margin-top:10px;"><i style="width:${pct}%"></i></div>
+        <div class="obj-bar-lbl"><span>Освоено ${pct}%</span><span>${invCount} записей</span></div>
+      </div>`;
+    }
 
     return `<div class="obj-card" onclick="openObjectView('${p.id}')">
       <div class="obj-head">
@@ -2551,6 +2976,15 @@ function openObjectView(id){
 }
 
 function renderObjectSummary(p){
+  const showFinance = !session || session.isAdmin;
+  const el = document.getElementById('objSummary');
+  document.getElementById('objPdfBtn').style.display = showFinance ? '' : 'none';
+  document.getElementById('objEditBtn').style.display = showFinance ? '' : 'none';
+  if(!showFinance){
+    el.innerHTML = '';
+    return;
+  }
+
   const price = Number(p.price)||0;
   const balance = Number(p.balance)||0;
   const projInvoices = state.invoices.filter(inv=>inv.project_id===p.id);
@@ -3258,6 +3692,31 @@ function tzFormUrl(token){
   return `${base}tz.html?token=${token}`;
 }
 
+function renderKpListForProject(projectId){
+  const container = document.getElementById('pf-kp-list');
+  if(!container) return;
+  const forms = state.kpForms.filter(k=>k.project_id===projectId);
+
+  if(!forms.length){
+    container.innerHTML = '<div class="empty-state">КП пока не создано</div>';
+    return;
+  }
+
+  container.innerHTML = forms.map(kp=>{
+    const total = kpRowSummary(kp);
+    return `<div class="list-item">
+      <div style="cursor:pointer; flex:1;" onclick="loadKpFormById('${kp.id}')">
+        <div class="li-name">${escapeHtml(kp.client_name || 'Без имени')}</div>
+        <div class="li-meta">${fmtDate(kp.kp_date)} · ${fmtMoney(total)}${kp.payment_method==='card'?' · карта':' · счёт'}</div>
+      </div>
+      <div class="li-actions">
+        <button class="icon-btn" title="Редактировать" onclick="loadKpFormById('${kp.id}')">✏️</button>
+        <button class="icon-btn danger" title="Удалить" onclick="deleteKpForm('${kp.id}')">🗑</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 function renderTzList(projectId){
   const container = document.getElementById('pf-tz-list');
   const forms = state.tzForms.filter(f=>f.project_id===projectId);
@@ -3276,11 +3735,27 @@ function renderTzList(projectId){
         <div class="li-meta" style="color:${statusColor}">${escapeHtml(f.status)} · создано ${fmtDateTime(f.created_at)}${f.submitted_at?' · заполнено '+fmtDateTime(f.submitted_at):''}</div>
       </div>
       <div class="li-actions">
-        ${f.status==='Заполнено' ? `<button class="icon-btn" onclick="viewTzAnswers('${f.id}')" title="Посмотреть ответы">👁</button>` : ''}
+        ${f.status==='Заполнено' ? `<button class="icon-btn" onclick="viewTzAnswers('${f.id}')" title="Посмотреть / редактировать ответы">👁</button>` : ''}
         <button class="icon-btn" onclick="copyTzLink('${url}')" title="Скопировать ссылку">🔗</button>
+        <button class="icon-btn danger" onclick="deleteTzForm('${f.id}')" title="Удалить ТЗ">🗑</button>
       </div>
     </div>`;
   }).join('');
+}
+
+async function deleteTzForm(tzFormId){
+  if(!confirm('Удалить это ТЗ? Действие необратимо, включая загруженные референсы.')) return;
+  try{
+    await sb.from('tz_references').delete().eq('tz_form_id', tzFormId);
+    const {error} = await sb.from('tz_forms').delete().eq('id', tzFormId);
+    if(error) throw error;
+    showToast('ТЗ удалено');
+    await loadAll();
+    if(editingProjectId) renderTzList(editingProjectId);
+  }catch(e){
+    console.error(e);
+    showToast('Ошибка удаления ТЗ');
+  }
 }
 
 async function createTzForm(){
@@ -3341,7 +3816,8 @@ function viewTzAnswers(tzFormId){
     const displayVal = Array.isArray(val) ? val.join(', ') : val;
     html += `<div class="fee-row" style="display:block; padding:8px 0;">
       <div class="fl" style="margin-bottom:3px;">${escapeHtml(label)}</div>
-      <div style="font-size:13px; font-weight:600;">${escapeHtml(displayVal)}</div>
+      <textarea class="tz-edit-field" data-key="${escapeHtml(key)}" data-is-array="${Array.isArray(val)?'1':'0'}"
+        style="width:100%; background:rgba(255,255,255,0.05); border:1px solid var(--line-strong); border-radius:var(--radius-sm); color:var(--text); font-size:13px; padding:8px 10px; font-family:'Inter',sans-serif; min-height:38px;">${escapeHtml(displayVal)}</textarea>
     </div>`;
   });
 
@@ -3360,10 +3836,40 @@ function viewTzAnswers(tzFormId){
 
   html += `</div>`;
 
-  html += `<button class="btn btn-secondary" style="margin-top:4px;" onclick="exportTzAnswersToPdf('${tzFormId}')">📄 Скачать ТЗ в PDF</button>`;
+  html += `<button class="btn btn-primary" style="margin-top:4px;" onclick="saveTzAnswers('${tzFormId}')">💾 Сохранить изменения</button>`;
+  html += `<button class="btn btn-secondary" style="margin-top:8px;" onclick="exportTzAnswersToPdf('${tzFormId}')">📄 Скачать ТЗ в PDF</button>`;
 
   document.getElementById('tzAnswersContent').innerHTML = html;
   document.getElementById('tzSheetOverlay').classList.add('active');
+}
+
+async function saveTzAnswers(tzFormId){
+  const f = state.tzForms.find(x=>x.id===tzFormId);
+  if(!f) return;
+
+  const updatedAnswers = {...(f.answers || {})};
+  document.querySelectorAll('.tz-edit-field').forEach(el=>{
+    const key = el.dataset.key;
+    const isArray = el.dataset.isArray === '1';
+    const raw = el.value.trim();
+    if(isArray){
+      updatedAnswers[key] = raw ? raw.split(',').map(s=>s.trim()).filter(Boolean) : [];
+    }else{
+      updatedAnswers[key] = raw;
+    }
+  });
+
+  showToast('Сохранение…');
+  try{
+    const {error} = await sb.from('tz_forms').update({answers: updatedAnswers}).eq('id', tzFormId);
+    if(error) throw error;
+    showToast('ТЗ обновлено');
+    document.getElementById('tzSheetOverlay').classList.remove('active');
+    await loadAll();
+  }catch(e){
+    console.error(e);
+    showToast('Ошибка сохранения');
+  }
 }
 
 function exportTzAnswersToPdf(tzFormId){
@@ -4231,12 +4737,18 @@ function exportKpToPdf(){
     ];
 
     if(data.paymentMethod === 'card'){
+      if(!data.cardNumber && !data.cardHolder){
+        reqRows.push('⚠ Реквизиты карты не заполнены — заполните в разделе «Компания»');
+      }
       reqRows.push(
         data.cardNumber && `Карта для оплаты: ${data.cardNumber}`,
         data.cardHolder && `Получатель: ${data.cardHolder}`,
         data.cardBank && `Банк карты: ${data.cardBank}`,
       );
     }else{
+      if(!data.bankAcc){
+        reqRows.push('⚠ Реквизиты счёта не заполнены — заполните в разделе «Компания»');
+      }
       reqRows.push(
         data.bankAcc && `Р/с: ${data.bankAcc}`,
         data.bankName && `Банк: ${data.bankName}`,
@@ -4331,11 +4843,157 @@ function exportKpToXlsx(){
 
 function openKpView(){
   if(!kpServices.length) addKpService();
-  document.getElementById('kp-date').value = new Date().toISOString().slice(0,10);
+  if(!document.getElementById('kp-date').value) document.getElementById('kp-date').value = new Date().toISOString().slice(0,10);
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-kp').classList.add('active');
+  renderKpSavedList();
   window.scrollTo(0,0);
+}
+
+let editingKpId = null;
+let editingKpProjectId = null;
+
+function resetKpForm(){
+  editingKpId = null;
+  editingKpProjectId = null;
+  kpServices = [];
+  document.getElementById('kp-client-name').value = '';
+  document.getElementById('kp-client-phone').value = '';
+  document.getElementById('kp-object').value = '';
+  document.getElementById('kp-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('kp-deadline').value = '';
+  document.getElementById('kp-start').value = '';
+  document.getElementById('kp-discount-type').value = 'percent';
+  document.getElementById('kp-discount-value').value = '';
+  kpPaymentMethod = 'account';
+  document.querySelectorAll('#kp-payment-method .yn-btn').forEach(b=>b.classList.toggle('selected', b.dataset.value==='account'));
+  addKpService();
+}
+
+function loadKpForm(kp){
+  editingKpId = kp.id;
+  editingKpProjectId = kp.project_id || null;
+  document.getElementById('kp-client-name').value = kp.client_name || '';
+  document.getElementById('kp-client-phone').value = kp.client_phone || '';
+  document.getElementById('kp-object').value = kp.object || '';
+  document.getElementById('kp-date').value = kp.kp_date || new Date().toISOString().slice(0,10);
+  document.getElementById('kp-deadline').value = kp.deadline || '';
+  document.getElementById('kp-start').value = kp.start_date || '';
+  document.getElementById('kp-discount-type').value = kp.discount_type || 'percent';
+  document.getElementById('kp-discount-value').value = kp.discount_value || '';
+
+  kpPaymentMethod = kp.payment_method || 'account';
+  document.querySelectorAll('#kp-payment-method .yn-btn').forEach(b=>b.classList.toggle('selected', b.dataset.value===kpPaymentMethod));
+
+  kpServices = (kp.services || []).map(s=>({
+    id: 'kpsvc-' + (++kpServiceCounter),
+    catalogIndex: s.catalogIndex || 0,
+    qty: s.qty || 1,
+    customRate: (s.customRate===undefined ? null : s.customRate),
+  }));
+  if(!kpServices.length) addKpService();
+  renderKpServices();
+}
+
+async function saveKpForm(){
+  const data = getKpData();
+  const payload = {
+    project_id: editingProjectId || editingKpProjectId || null,
+    client_name: document.getElementById('kp-client-name').value.trim(),
+    client_phone: document.getElementById('kp-client-phone').value.trim(),
+    object: document.getElementById('kp-object').value.trim(),
+    kp_date: document.getElementById('kp-date').value || new Date().toISOString().slice(0,10),
+    deadline: document.getElementById('kp-deadline').value.trim(),
+    start_date: document.getElementById('kp-start').value.trim(),
+    payment_method: kpPaymentMethod,
+    discount_type: document.getElementById('kp-discount-type').value,
+    discount_value: parseFloat(document.getElementById('kp-discount-value').value) || 0,
+    services: kpServices.map(s=>({catalogIndex: s.catalogIndex, qty: s.qty, customRate: s.customRate})),
+    updated_at: new Date().toISOString(),
+  };
+
+  showToast('Сохранение…');
+  try{
+    if(editingKpId){
+      const {error} = await sb.from('kp_forms').update(payload).eq('id', editingKpId);
+      if(error) throw error;
+    }else{
+      const {data: inserted, error} = await sb.from('kp_forms').insert(payload).select().single();
+      if(error) throw error;
+      editingKpId = inserted.id;
+    }
+    showToast('КП сохранено');
+    await loadAll();
+    renderKpSavedList();
+    if(editingProjectId) renderKpListForProject(editingProjectId);
+  }catch(e){
+    console.error(e);
+    showToast('Ошибка сохранения КП');
+  }
+}
+
+async function deleteKpForm(id){
+  if(!confirm('Удалить это КП?')) return;
+  showToast('Удаление…');
+  try{
+    const {error} = await sb.from('kp_forms').delete().eq('id', id);
+    if(error) throw error;
+    if(editingKpId === id) resetKpForm();
+    showToast('КП удалено');
+    await loadAll();
+    renderKpSavedList();
+    if(editingProjectId) renderKpListForProject(editingProjectId);
+  }catch(e){
+    console.error(e);
+    showToast('Ошибка удаления');
+  }
+}
+
+function kpRowSummary(kp){
+  const flat = kpFlatCatalog();
+  const services = kp.services || [];
+  let subtotal = 0;
+  services.forEach(s=>{
+    const item = flat[s.catalogIndex] || flat[0];
+    const rate = (s.customRate!==null && s.customRate!==undefined) ? s.customRate : item.rate;
+    subtotal += rate * (Number(s.qty)||0);
+  });
+  let discountAmount = 0;
+  if(kp.discount_type === 'percent') discountAmount = subtotal * (Number(kp.discount_value)||0) / 100;
+  else discountAmount = Number(kp.discount_value)||0;
+  return Math.max(0, subtotal - discountAmount);
+}
+
+function loadKpFormById(id){
+  const kp = state.kpForms.find(k=>k.id===id);
+  if(!kp) return;
+  const sheetOpen = document.getElementById('projectSheetOverlay').classList.contains('active');
+  if(sheetOpen) closeProjectSheet();
+  loadKpForm(kp);
+  openKpView();
+}
+
+function renderKpSavedList(){
+  const container = document.getElementById('kpSavedList');
+  if(!state.kpForms.length){
+    container.innerHTML = '<div class="empty-state">Сохранённых КП пока нет</div>';
+    return;
+  }
+  container.innerHTML = state.kpForms.map(kp=>{
+    const total = kpRowSummary(kp);
+    const proj = kp.project_id ? state.projects.find(p=>p.id===kp.project_id) : null;
+    return `<div class="list-item">
+      <div style="cursor:pointer; flex:1;" onclick="loadKpFormById('${kp.id}')">
+        <div class="li-name">${escapeHtml(kp.client_name || 'Без имени')}</div>
+        <div class="li-meta">${escapeHtml(kp.object||'')}${proj?' · '+escapeHtml(proj.name):''} · ${fmtDate(kp.kp_date)} · ${fmtMoney(total)}</div>
+      </div>
+      <div class="li-actions">
+        <button class="icon-btn" title="Редактировать" onclick="loadKpFormById('${kp.id}')">✏️</button>
+        <button class="icon-btn danger" title="Удалить" onclick="deleteKpForm('${kp.id}')">🗑</button>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function openKpViewForProject(projectId){
@@ -4343,18 +5001,17 @@ function openKpViewForProject(projectId){
   if(!p) return;
   closeProjectSheet();
 
-  // Start with a clean KP — avoid leaking services/discounts from a previous KP
-  kpServices = [];
-  document.getElementById('kp-discount-type').value = 'percent';
-  document.getElementById('kp-discount-value').value = '';
-  document.getElementById('kp-deadline').value = '';
-  document.getElementById('kp-start').value = '';
+  resetKpForm();
+  editingKpProjectId = projectId;
 
   openKpView();
   document.getElementById('kp-client-name').value = '';
   document.getElementById('kp-client-phone').value = p.phone || '';
   document.getElementById('kp-object').value = p.address || p.name || '';
 }
+
+document.getElementById('kpNewBtn').addEventListener('click', resetKpForm);
+document.getElementById('kpSaveBtn').addEventListener('click', saveKpForm);
 
 document.getElementById('pf-create-kp').addEventListener('click', ()=>{
   if(editingProjectId) openKpViewForProject(editingProjectId);
@@ -4383,6 +5040,10 @@ document.querySelectorAll('.nav-btn').forEach(btn=>{
 // EVENT BINDINGS
 // ============================================================
 document.getElementById('addProjectFab').addEventListener('click', ()=>openProjectSheet(null));
+
+document.getElementById('pf-stage-add').addEventListener('click', ()=>{
+  if(editingProjectId) addStage(editingProjectId);
+});
 document.getElementById('projectSheetClose').addEventListener('click', closeProjectSheet);
 document.getElementById('pf-cancel').addEventListener('click', closeProjectSheet);
 document.getElementById('pf-save').addEventListener('click', saveProject);
@@ -4407,6 +5068,10 @@ document.getElementById('ef-save').addEventListener('click', saveEmployee);
 document.getElementById('ef-delete').addEventListener('click', ()=>{
   if(confirm('Удалить этого сотрудника?')) deleteEmployee();
 });
+document.getElementById('ef-pin').addEventListener('input', (e)=>{
+  e.target.value = e.target.value.replace(/\D/g,'').slice(0,6);
+});
+
 document.getElementById('empSheetOverlay').addEventListener('click', (e)=>{
   if(e.target.id === 'empSheetOverlay') closeEmployeeSheet();
 });
@@ -4424,22 +5089,32 @@ document.getElementById('catSheetOverlay').addEventListener('click', (e)=>{
 
 document.getElementById('ledgerAdd').addEventListener('click', addLedgerEntry);
 
-document.getElementById('projectSearch').addEventListener('input', (e)=>{
-  projectSearchQuery = e.target.value;
-  renderProjects();
-});
-document.getElementById('ledgerSearch').addEventListener('input', (e)=>{
-  ledgerSearchQuery = e.target.value;
-  renderLedger();
-});
-document.getElementById('employeeSearch').addEventListener('input', (e)=>{
-  employeeSearchQuery = e.target.value;
-  renderEmployees();
-});
-document.getElementById('historySearch').addEventListener('input', (e)=>{
-  historySearchQuery = e.target.value;
-  renderHistory();
-});
+function setupSearchBox(inputId, setQuery, renderFn){
+  const input = document.getElementById(inputId);
+  const clearBtn = document.getElementById(inputId + 'Clear');
+  const box = input.closest('.search-box');
+  function update(){
+    box.classList.toggle('has-value', input.value.length > 0);
+  }
+  input.addEventListener('input', (e)=>{
+    setQuery(e.target.value);
+    update();
+    renderFn();
+  });
+  clearBtn.addEventListener('click', ()=>{
+    input.value = '';
+    setQuery('');
+    update();
+    renderFn();
+    input.focus();
+  });
+  update();
+}
+
+setupSearchBox('projectSearch', v=>projectSearchQuery=v, renderProjects);
+setupSearchBox('ledgerSearch', v=>ledgerSearchQuery=v, renderLedger);
+setupSearchBox('employeeSearch', v=>employeeSearchQuery=v, renderEmployees);
+setupSearchBox('historySearch', v=>historySearchQuery=v, renderHistory);
 
 document.getElementById('exportXlsxBtn').addEventListener('click', exportToXlsx);
 
@@ -4496,7 +5171,7 @@ document.getElementById('userPill').addEventListener('click', ()=>{
 
 loadAll();
 // Periodic refresh every 30s to keep multi-device sync visible
-setInterval(loadAll, 30000);
+setInterval(loadAll, 3000);
 
 </script>
 </body>
