@@ -1111,6 +1111,7 @@
     <button class="btn btn-secondary" id="pf-create-kp" style="display:none;">Создать КП для этого проекта</button>
 
     <button class="btn btn-primary" id="pf-save">Сохранить</button>
+    <button class="btn btn-secondary" id="pf-open-as-object" style="display:none; margin-top:8px;">📦 Накладные, материалы, фото</button>
     <div class="btn-row">
       <button class="btn btn-danger" id="pf-delete">Удалить проект</button>
       <button class="btn btn-secondary" id="pf-cancel">Отмена</button>
@@ -2116,6 +2117,7 @@ function openProjectSheet(id){
     renderPaymentHistory(id);
     renderFeeSummaryForProject(p);
     renderStagesList(id);
+    document.getElementById('pf-open-as-object').style.display = '';
   }else{
     title.textContent = 'Новый проект';
     deleteBtn.style.display = 'none';
@@ -2146,6 +2148,7 @@ function openProjectSheet(id){
     document.getElementById('pf-payment-history').innerHTML = '';
     document.getElementById('pf-fee-summary').innerHTML = '';
     renderStagesList(null);
+    document.getElementById('pf-open-as-object').style.display = 'none';
   }
 
   overlay.classList.add('active');
@@ -2961,25 +2964,30 @@ function openObjectView(id){
 
   document.getElementById('objTitle').textContent = p.name;
   renderObjectSummary(p);
+
+  // Always show and render tabs regardless of admin/non-admin
+  const tabsEl = document.getElementById('objTabs');
+  if(tabsEl) tabsEl.style.display = '';
   renderObjTabs();
   renderObjTabContent();
-
-  // Bind buttons
-  document.getElementById('objPdfBtn').onclick = ()=>exportConstrPdf(id);
-  document.getElementById('objEditBtn').onclick = ()=>openProjectSheet(id);
 
   // Navigate to object view
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-object').classList.add('active');
+  document.querySelector('.nav-btn[data-view="view-construction"]')?.classList.add('active');
   window.scrollTo(0,0);
 }
 
 function renderObjectSummary(p){
   const showFinance = !session || session.isAdmin;
   const el = document.getElementById('objSummary');
-  document.getElementById('objPdfBtn').style.display = showFinance ? '' : 'none';
-  document.getElementById('objEditBtn').style.display = showFinance ? '' : 'none';
+  const pdfBtn = document.getElementById('objPdfBtn');
+  const editBtn = document.getElementById('objEditBtn');
+
+  if(pdfBtn){ pdfBtn.style.display = showFinance ? '' : 'none'; pdfBtn.onclick = ()=>exportConstrPdf(p.id); }
+  if(editBtn){ editBtn.style.display = ''; editBtn.onclick = ()=>openProjectSheet(p.id); }
+
   if(!showFinance){
     el.innerHTML = '';
     return;
@@ -5043,6 +5051,13 @@ document.getElementById('addProjectFab').addEventListener('click', ()=>openProje
 
 document.getElementById('pf-stage-add').addEventListener('click', ()=>{
   if(editingProjectId) addStage(editingProjectId);
+});
+
+document.getElementById('pf-open-as-object').addEventListener('click', ()=>{
+  if(editingProjectId){
+    closeProjectSheet();
+    openObjectView(editingProjectId);
+  }
 });
 document.getElementById('projectSheetClose').addEventListener('click', closeProjectSheet);
 document.getElementById('pf-cancel').addEventListener('click', closeProjectSheet);
