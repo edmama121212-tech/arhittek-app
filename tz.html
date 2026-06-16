@@ -530,16 +530,7 @@ async function init(){
       return;
     }
     tzForm = data;
-
-    // Load answers regardless of status
     answers = tzForm.answers || {};
-
-    if(tzForm.status === 'Заполнено'){
-      // Show the submitted screen first, but client can click "edit" to go back to form
-      renderSubmitted();
-      return;
-    }
-
     renderForm();
   }catch(e){
     console.error(e);
@@ -556,25 +547,6 @@ function renderError(title, text){
     </div>`;
 }
 
-function renderSubmitted(){
-  document.getElementById('app').innerHTML = `
-    <div class="state-screen">
-      <div class="icon">✅</div>
-      <h2>Спасибо!</h2>
-      <p>Ваше техническое задание отправлено. Архитектор ARHITTEK свяжется с вами для уточнения деталей.</p>
-      <div style="margin-top:16px; display:flex; flex-direction:column; gap:10px;">
-        <button class="btn btn-secondary" id="editTzBtn">✏️ Редактировать / внести правки</button>
-        <button class="btn btn-secondary" id="downloadTzPdfBtn">📄 Скачать ваше ТЗ в PDF</button>
-      </div>
-    </div>`;
-
-  document.getElementById('downloadTzPdfBtn').addEventListener('click', ()=>{
-    exportTzToPdf(answers);
-  });
-  document.getElementById('editTzBtn').addEventListener('click', ()=>{
-    renderForm();
-  });
-}
 
 // ============================================================
 // RENDER FORM
@@ -625,26 +597,7 @@ function renderForm(){
   // Bind events
   bindFieldEvents();
   restorePendingRefPreviews();
-  document.getElementById('submitBtn').addEventListener('click', submitForm);
-  document.getElementById('saveProgressBtn').addEventListener('click', async ()=>{
-    const btn = document.getElementById('saveProgressBtn');
-    btn.disabled = true;
-    btn.textContent = 'Сохранение…';
-    try{
-      await sb.from('tz_forms').update({
-        answers: answers,
-        client_name: answers.full_name || tzForm?.client_name || '',
-      }).eq('id', tzForm.id);
-      showToast('Прогресс сохранён! Можно вернуться по этой ссылке.');
-      btn.textContent = '✅ Сохранено';
-      setTimeout(()=>{ btn.disabled = false; btn.textContent = '💾 Сохранить и выйти'; }, 3000);
-    }catch(e){
-      console.error(e);
-      showToast('Ошибка сохранения');
-      btn.disabled = false;
-      btn.textContent = '💾 Сохранить и выйти';
-    }
-  });
+  document.getElementById('saveBtn').addEventListener('click', manualSave);
 }
 
 function renderField(field){
@@ -797,64 +750,52 @@ function bindFieldEvents(){
 // ============================================================
 // SUBMIT
 // ============================================================
-async function submitForm(){
-  const btn = document.getElementById('submitBtn');
-  btn.disabled = true;
-  btn.textContent = 'Отправка…';
 
+// Manual save — called by "Сохранить" button
+let saveInFlight = false;
+async function manualSave(){
+  const btn = document.getElementById('saveBtn');
+  const status = document.getElementById('saveStatus');
+  if(saveInFlight) return;
+  saveInFlight = true;
+  if(btn){ btn.disabled = true; btn.textContent = 'Сохранение…'; }
   try{
-    // Upload reference files
-    for(const fieldId of Object.keys(refFiles)){
-      const files = refFiles[fieldId];
-      if(!files.length) continue;
-      if(!answers[fieldId+'_files']) answers[fieldId+'_files'] = [];
-
-      for(const file of files){
-        const ext = file.name.split('.').pop();
-        const fileName = `${token}/${fieldId}_${Date.now()}_${Math.random().toString(36).slice(2,8)}.${ext}`;
-        const {error: upErr} = await sb.storage.from('expense-photos').upload(fileName, file);
-        if(!upErr){
-          const {data:urlData} = sb.storage.from('expense-photos').getPublicUrl(fileName);
-          answers[fieldId+'_files'].push(urlData.publicUrl);
-
-          // Also save to tz_references for project-level visibility
-          await sb.from('tz_references').insert({
-            tz_form_id: tzForm.id,
-            section: fieldId,
-            photo_url: urlData.publicUrl,
-          });
-        }
-      }
-    }
-
-    const {error} = await sb.from('tz_forms').update({
+    await sb.from('tz_forms').update({
       answers: answers,
-      status: 'Заполнено',
-      client_name: answers.full_name || tzForm.client_name || '',
+      client_name: answers.full_name || tzForm?.client_name || '',
+      status: 'Заполняется',
       submitted_at: new Date().toISOString(),
     }).eq('id', tzForm.id);
-
-    if(error) throw error;
-
-    renderSubmitted();
+    if(btn){ btn.textContent = '✅ Сохранено'; }
+    if(status) status.textContent = 'Сохранено · ' + new Date().toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'});
+    setTimeout(()=>{
+      if(btn){ btn.disabled = false; btn.textContent = '💾 Сохранить'; }
+    }, 2000);
   }catch(e){
     console.error(e);
-    showToast('Ошибка отправки. Попробуйте снова.');
-    btn.disabled = false;
-    btn.textContent = 'Отправить техническое задание';
+    showToast('Ошибка сохранения. Проверьте интернет.');
+    if(btn){ btn.disabled = false; btn.textContent = '💾 Сохранить'; }
+  }finally{
+    saveInFlight = false;
   }
 }
 
-// Save progress periodically (every 20s)
+// Autosave every 30s silently
+let lastAutoSave = 0;
 async function saveProgress(){
   if(!tzForm) return;
+  const now = Date.now();
+  if(now - lastAutoSave < 25000) return;
+  lastAutoSave = now;
   try{
     await sb.from('tz_forms').update({answers: answers}).eq('id', tzForm.id);
+    const status = document.getElementById('saveStatus');
+    if(status) status.textContent = 'Автосохранение · ' + new Date().toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'});
   }catch(e){
     console.error('autosave error', e);
   }
 }
-setInterval(saveProgress, 20000);
+setInterval(saveProgress, 30000);
 
 init();
 </script>
