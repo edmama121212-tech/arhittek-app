@@ -480,6 +480,7 @@
       <div class="filter-chip" data-pay="Ждём оплату">Ждём оплату</div>
     </div>
     <div class="filters" id="employeeFilters"></div>
+    <div id="filter-active-badge" style="display:none;margin:4px 16px 0;background:var(--blue-soft);color:var(--blue);border:1px solid rgba(74,144,226,0.3);border-radius:20px;padding:3px 12px;font-size:12px;font-weight:600;cursor:pointer;" onclick="resetAllFilters()">✕ Сбросить фильтры: <span id="filter-badge-text"></span></div>
 
     <div class="card" id="projectsCard">
       <div class="loading-state">Загрузка…</div>
@@ -1280,6 +1281,30 @@ let activeCategoryFilter = 'all';
 let activeStatusFilter = 'all';
 let activePaymentFilter = 'all';
 let activeEmployeeFilter = 'all';
+
+function updateFilterBadge(){
+  const badge = document.getElementById('filter-active-badge');
+  if(!badge) return;
+  const active = [activeCategoryFilter, activeStatusFilter, activeEmployeeFilter, activePaymentFilter].filter(v=>v!=='all').length;
+  if(active > 0){
+    const textEl = document.getElementById('filter-badge-text');
+    if(textEl) textEl.textContent = active + (active===1?' активен':' активно');
+    badge.style.display = 'block';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+function resetAllFilters(){
+  activeCategoryFilter = 'all';
+  activeStatusFilter = 'all';
+  activeEmployeeFilter = 'all';
+  activePaymentFilter = 'all';
+  renderCategoryFilters();
+  renderStatusFilters();
+  renderEmployeeFilters();
+  renderProjectList();
+  updateFilterBadge();
+}
 let loadAllInFlight = false;
 let projectSearchQuery = '';
 let ledgerSearchQuery = '';
@@ -1461,6 +1486,7 @@ const TRASH_RETENTION_DAYS = 60;
 let trashPurgeInFlight = false;
 async function purgeOldTrash(){
   if(trashPurgeInFlight) return;
+  if(!session || !session.isAdmin) return; // только admin
   const cutoff = Date.now() - TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000;
   const tables = {
     projects: state.trash.projects,
@@ -1607,6 +1633,52 @@ function diffChanges(oldObj, newObj, fields){
 // ============================================================
 // DATA LOADING
 // ============================================================
+// Task 10: ТЗ badge — уведомление о новых заполненных ТЗ
+const TZ_SEEN_KEY = 'arhittek_tz_seen';
+function updateTzBadge(){
+  if(!session || !session.isAdmin) return;
+  const seenStr = localStorage.getItem(TZ_SEEN_KEY) || '1970-01-01';
+  const seenDate = new Date(seenStr);
+  const newCount = (state.tzForms || []).filter(f=>{
+    return f.status === 'Заполнено' && f.submitted_at && new Date(f.submitted_at) > seenDate;
+  }).length;
+  // Update badge on nav or tz-related buttons
+  let badge = document.getElementById('tz-nav-badge');
+  if(!badge){
+    // Find the "ТЗ" section label or any nav element referencing TZ
+    const tzBtns = document.querySelectorAll('[onclick*="openTz"], [onclick*="tz"], #pf-tz-create');
+    if(tzBtns.length === 0) return;
+  }
+  // Show badge on all tz buttons in project views
+  document.querySelectorAll('.pf-tz-btn, #pf-tz-create, [data-tz-badge]').forEach(el=>{
+    let b = el.querySelector('.tz-badge');
+    if(newCount > 0){
+      if(!b){ b = document.createElement('span'); b.className='tz-badge'; el.style.position='relative'; el.appendChild(b); }
+      b.textContent = newCount;
+      b.style.cssText = 'position:absolute;top:-6px;right:-6px;background:#e74c3c;color:#fff;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;pointer-events:none;';
+    } else {
+      if(b) b.remove();
+    }
+  });
+  // Also update section label
+  const tzLabel = document.querySelector('.section-label .lbl-text');
+  // Use a dedicated badge next to "Технические задания" list header if visible
+  const tzListHeader = document.getElementById('tz-list-header');
+  if(tzListHeader){
+    let b = document.getElementById('tz-header-badge');
+    if(newCount > 0){
+      if(!b){ b = document.createElement('span'); b.id='tz-header-badge'; b.style.cssText='background:#e74c3c;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:8px;'; tzListHeader.appendChild(b); }
+      b.textContent = '+ ' + newCount + ' новых';
+    } else {
+      if(b) b.remove();
+    }
+  }
+}
+function markTzSeen(){
+  localStorage.setItem(TZ_SEEN_KEY, new Date().toISOString());
+  updateTzBadge();
+}
+
 async function loadAll(){
   if(loadAllInFlight) return;
   loadAllInFlight = true;
@@ -1662,6 +1734,7 @@ async function loadAll(){
 
     setSyncStatus('on', 'синхронизировано');
     renderAll();
+    updateTzBadge();
 
     // Auth check (after first load, employees list is available)
     if(!session){
@@ -4175,6 +4248,45 @@ document.getElementById('ct-project').addEventListener('change', (e)=>{
   if(p.start_date) document.getElementById('ct-start').value = p.start_date;
   if(p.end_date) document.getElementById('ct-end').value = p.end_date;
   if(p.phone) document.getElementById('ct-phone').value = p.phone;
+  // Restore saved contract data for this project
+  if(p.contract_client_name) document.getElementById('ct-client-name').value = p.contract_client_name;
+  if(p.contract_passport) document.getElementById('ct-passport').value = p.contract_passport;
+  if(p.contract_birthdate) document.getElementById('ct-birthdate').value = p.contract_birthdate;
+  if(p.contract_passport_issuer) document.getElementById('ct-passport-issuer').value = p.contract_passport_issuer;
+  if(p.contract_passport_date) document.getElementById('ct-passport-date').value = p.contract_passport_date;
+  if(p.contract_address) document.getElementById('ct-address').value = p.contract_address;
+  if(p.contract_scope) document.getElementById('ct-scope').value = p.contract_scope;
+  if(p.contract_advance_pct) document.getElementById('ct-advance-pct').value = p.contract_advance_pct;
+  if(p.contract_number) document.getElementById('ct-number').value = p.contract_number;
+});
+
+// Auto-save contract fields to project when user edits
+let contractSaveTimer = null;
+async function saveContractFields(){
+  const projectId = document.getElementById('ct-project').value;
+  if(!projectId) return;
+  const fields = {
+    contract_client_name: document.getElementById('ct-client-name').value,
+    contract_passport: document.getElementById('ct-passport').value,
+    contract_birthdate: document.getElementById('ct-birthdate').value,
+    contract_passport_issuer: document.getElementById('ct-passport-issuer').value,
+    contract_passport_date: document.getElementById('ct-passport-date').value,
+    contract_address: document.getElementById('ct-address').value,
+    contract_scope: document.getElementById('ct-scope').value,
+    contract_advance_pct: document.getElementById('ct-advance-pct').value,
+    contract_number: document.getElementById('ct-number').value,
+  };
+  await sb.from('projects').update(fields).eq('id', projectId);
+}
+function scheduleContractSave(){
+  if(contractSaveTimer) clearTimeout(contractSaveTimer);
+  contractSaveTimer = setTimeout(saveContractFields, 1500);
+}
+['ct-client-name','ct-passport','ct-birthdate','ct-passport-issuer','ct-passport-date',
+ 'ct-address','ct-scope','ct-advance-pct','ct-number'].forEach(id=>{
+  const el = document.getElementById(id);
+  if(el) el.addEventListener('input', scheduleContractSave);
+  if(el) el.addEventListener('change', scheduleContractSave);
 });
 
 function numToWordsRub(n){
