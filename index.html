@@ -448,6 +448,9 @@
       <div class="section-label"><span class="lbl-text">Главное сейчас</span><span class="section-label-line"></span></div>
       <div class="kpi-grid" id="kpiGrid"></div>
 
+      <div class="section-label"><span class="lbl-text">Финансы компании</span><span class="section-label-line"></span></div>
+      <div id="plBlock"></div>
+
       <div class="section-label"><span class="lbl-text">Долги клиентов</span><span class="section-label-line"></span></div>
       <div class="card" id="debtCard"></div>
 
@@ -1907,11 +1910,168 @@ function renderOverview(){
         </div>`;
     }
   }
+
+  // ---- P&L (Финансы компании) ----
+  renderPL();
 }
 
 function escapeHtml(s){
   if(s==null) return '';
   return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ============================================================
+// P&L — Финансы компании
+// ============================================================
+let plPeriod = 'month';
+
+function renderPL(){
+  const el = document.getElementById('plBlock');
+  if(!el) return;
+  if(!session || !session.isAdmin){ el.innerHTML = ''; return; }
+
+  const now = new Date();
+  let fromDate;
+  if(plPeriod === 'month'){
+    fromDate = new Date(now.getFullYear(), now.getMonth(), 1);
+  } else if(plPeriod === 'quarter'){
+    const q = Math.floor(now.getMonth() / 3);
+    fromDate = new Date(now.getFullYear(), q * 3, 1);
+  } else if(plPeriod === 'year'){
+    fromDate = new Date(now.getFullYear(), 0, 1);
+  } else {
+    fromDate = new Date('2000-01-01');
+  }
+
+  const labels = {month:'Месяц', quarter:'Квартал', year:'Год', all:'Всё время'};
+
+  // Записи журнала за период
+  const periodLedger = state.ledger.filter(e => {
+    if(!e.entry_date) return false;
+    return new Date(e.entry_date) >= fromDate;
+  });
+
+  // ПРОЕКТНЫЙ ОТДЕЛ — приход от клиентов (оплата за дизайн/АР/ДИ)
+  const projectIncome = periodLedger
+    .filter(e => ['advance','final_payment','income','fee_payment'].includes(e.type))
+    .reduce((s,e) => s + (Number(e.amount)||0), 0);
+
+  // Бюджет на материалы — проходные деньги, показываем отдельно
+  const materialsBudget = periodLedger
+    .filter(e => e.type === 'materials_budget')
+    .reduce((s,e) => s + (Number(e.amount)||0), 0);
+
+  // Вывод средств — расход из бюджета
+  const withdrawals = periodLedger
+    .filter(e => e.type === 'withdrawal')
+    .reduce((s,e) => s + (Number(e.amount)||0), 0);
+
+  // Выплаты мастерам — расход
+  const workerPayments = periodLedger
+    .filter(e => e.type === 'payment')
+    .reduce((s,e) => s + (Number(e.amount)||0), 0);
+
+  // Прочие расходы из журнала
+  const otherExpenses = periodLedger
+    .filter(e => e.type === 'expense')
+    .reduce((s,e) => s + (Number(e.amount)||0), 0);
+
+  // СТРОИТЕЛЬНЫЙ ОТДЕЛ — расходы из накладных за период
+  // (invoices не имеют entry_date — считаем все накладные по объектам)
+  const constrDept = state.departments.find(d=>d.name==='Строительный отдел');
+  const constrProjects = state.projects.filter(p=>{
+    const cat = state.categories.find(c=>c.id===p.category_id);
+    if(!cat) return false;
+    if(constrDept && cat.department_id===constrDept.id) return true;
+    return (cat.name||'').toLowerCase().includes('строительств');
+  });
+  const constrIds = new Set(constrProjects.map(p=>p.id));
+
+  // Приход от заказчиков строительства за период
+  const constrIncome = periodLedger
+    .filter(e => constrIds.has(e.project_id) && ['advance','final_payment','income','materials_budget'].includes(e.type))
+    .reduce((s,e) => s + (Number(e.amount)||0), 0);
+
+  // Итоговые расходы (всё кроме проходных материалов)
+  const totalExpenses = workerPayments + otherExpenses + withdrawals;
+
+  // Прибыль проектного отдела
+  const profit = projectIncome - totalExpenses;
+  const profitColor = profit >= 0 ? 'var(--green)' : 'var(--red)';
+  const profitSign = profit >= 0 ? '+' : '';
+
+  // Текущий долг клиентов (все проекты, не за период)
+  const totalDebt = state.projects.reduce((s,p) => s + (Number(p.balance)||0), 0);
+
+  // Остатки бюджетов строек (текущие)
+  const constrBudgetLeft = constrProjects.reduce((s,p) => s + (Number(p.balance)||0), 0);
+
+  el.innerHTML = `
+    <div class="card" style="margin-bottom:10px;">
+
+      <!-- Переключатель периода -->
+      <div style="display:flex; gap:6px; margin-bottom:14px; flex-wrap:nowrap; overflow-x:auto;">
+        ${['month','quarter','year','all'].map(period=>`
+          <div onclick="plPeriod='${period}'; renderPL();" style="
+            flex:1; min-width:56px; text-align:center; padding:7px 4px;
+            border-radius:8px; cursor:pointer; font-size:11px; font-weight:700;
+            font-family:'Space Grotesk',sans-serif; white-space:nowrap;
+            background:${plPeriod===period ? 'var(--blue-soft)' : 'rgba(255,255,255,0.04)'};
+            color:${plPeriod===period ? 'var(--blue)' : 'var(--text-dim)'};
+            border:1px solid ${plPeriod===period ? 'rgba(74,144,226,0.4)' : 'var(--line-strong)'};
+          ">${labels[period]}</div>
+        `).join('')}
+      </div>
+
+      <!-- Проектный отдел -->
+      <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.1em; color:var(--blue); font-weight:700; margin-bottom:8px;">▦ Проектный отдел</div>
+      <div class="fee-row">
+        <div class="fl">Получено от клиентов</div>
+        <div class="fv" style="color:var(--green);">+${fmtMoney(projectIncome)}</div>
+      </div>
+      ${materialsBudget > 0 ? `<div class="fee-row">
+        <div class="fl" style="color:var(--text-dim);">Бюджет на материалы (проходные)</div>
+        <div class="fv" style="color:var(--text-dim);">+${fmtMoney(materialsBudget)}</div>
+      </div>` : ''}
+      ${workerPayments > 0 ? `<div class="fee-row">
+        <div class="fl">Выплаты мастерам</div>
+        <div class="fv" style="color:var(--red);">−${fmtMoney(workerPayments)}</div>
+      </div>` : ''}
+      ${otherExpenses > 0 ? `<div class="fee-row">
+        <div class="fl">Прочие расходы</div>
+        <div class="fv" style="color:var(--red);">−${fmtMoney(otherExpenses)}</div>
+      </div>` : ''}
+      ${withdrawals > 0 ? `<div class="fee-row">
+        <div class="fl">Выводы средств</div>
+        <div class="fv" style="color:var(--text-dim);">−${fmtMoney(withdrawals)}</div>
+      </div>` : ''}
+      <div class="fee-row total" style="border-top:1px solid var(--line-strong); margin-top:4px; padding-top:8px;">
+        <div class="fl">Прибыль · ${labels[plPeriod]}</div>
+        <div class="fv" style="color:${profitColor};">${profitSign}${fmtMoney(profit)}</div>
+      </div>
+
+      <!-- Строительный отдел -->
+      ${constrProjects.length > 0 ? `
+      <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.1em; color:var(--blue); font-weight:700; margin:14px 0 8px;">🏗 Строительный отдел</div>
+      <div class="fee-row">
+        <div class="fl">Получено от заказчиков</div>
+        <div class="fv" style="color:var(--green);">+${fmtMoney(constrIncome)}</div>
+      </div>
+      <div class="fee-row">
+        <div class="fl">Остатки бюджетов (текущие)</div>
+        <div class="fv" style="color:var(--gold);">${fmtMoney(constrBudgetLeft)}</div>
+      </div>` : ''}
+
+      <!-- Долги клиентов -->
+      <div style="border-top:1px solid var(--line); margin-top:10px; padding-top:10px;">
+        <div class="fee-row">
+          <div class="fl" style="color:var(--text-dim);">Долг клиентов (все проекты)</div>
+          <div class="fv" style="color:var(--gold);">${fmtMoney(totalDebt)}</div>
+        </div>
+      </div>
+
+    </div>
+  `;
 }
 
 // ============================================================
@@ -2985,28 +3145,33 @@ function renderConstruction(){
 
   list.innerHTML = projects.map(p=>{
     const price = Number(p.price)||0;
-    const expenses = Number(p.expenses)||0;
-    const balance = Number(p.balance)||0;
-    const margin = price - expenses;
-    const pct = price > 0 ? Math.min(100, Math.round((expenses/price)*100)) : 0;
-    const f = calcConstrFee(p);
-    const projInvoices = state.invoices.filter(inv=>inv.project_id===p.id);
-    const invCount = projInvoices.length;
     const st = findStatus(p.status_id);
 
+    // Расходы из накладных — идентично renderObjectSummary
+    const projInvoices = state.invoices.filter(inv=>inv.project_id===p.id);
+    const matTotal = projInvoices
+      .filter(i=>['Материал','Инструмент','Расходник','Доставка'].includes(i.item_type))
+      .reduce((s,i)=>s+Number(i.amount),0);
+    const workTotal = projInvoices
+      .filter(i=>i.item_type==='Работа')
+      .reduce((s,i)=>s+Number(i.amount),0);
+    const expenses = matTotal + workTotal;
+    const f = calcConstrFee({...p, expenses});
+    const pct = price > 0 ? Math.min(100, Math.round((expenses/price)*100)) : 0;
+    const budgetLeft = Math.max(0, price - expenses);
+
     if(!showFinance){
-      // Simplified card for executors — no financial figures
       return `<div class="obj-card" onclick="openObjectView('${p.id}')">
         <div class="obj-head">
           <div>
             <div class="obj-title">${escapeHtml(p.name)}</div>
-            <div class="obj-sub">${escapeHtml(p.address||p.stage_notes||'Нажмите для просмотра')}</div>
+            <div class="obj-sub">${escapeHtml(p.address||'Нажмите для просмотра')}</div>
           </div>
           <div class="obj-chevron">›</div>
         </div>
         ${st ? `<div class="status-chip" data-status="${escapeHtml(st.name)}" style="margin-top:8px; display:inline-block;">${escapeHtml(st.name)}</div>` : ''}
         <div class="obj-bar" style="margin-top:10px;"><i style="width:${pct}%"></i></div>
-        <div class="obj-bar-lbl"><span>Освоено ${pct}%</span><span>${invCount} записей</span></div>
+        <div class="obj-bar-lbl"><span>Израсходовано ${pct}%</span><span>${projInvoices.length} записей</span></div>
       </div>`;
     }
 
@@ -3014,24 +3179,39 @@ function renderConstruction(){
       <div class="obj-head">
         <div>
           <div class="obj-title">${escapeHtml(p.name)}</div>
-          <div class="obj-sub">${escapeHtml(p.stage_notes||'Нажмите для просмотра')}</div>
+          <div class="obj-sub">${escapeHtml(p.address||'')}</div>
         </div>
         <div style="display:flex; align-items:center; gap:6px;">
-          <div class="obj-margin ${margin>=0?'pos':'neg'}">${margin>=0?'+':''}${fmtMoney(margin)}</div>
+          ${st ? `<span class="status-chip" data-status="${escapeHtml(st.name)}">${escapeHtml(st.name)}</span>` : ''}
           <div class="obj-chevron">›</div>
         </div>
       </div>
 
-      <div class="obj-bar"><i style="width:${pct}%"></i></div>
-      <div class="obj-bar-lbl"><span>Освоено ${pct}%</span><span>${fmtMoney(balance)} на руках</span></div>
+      <div class="obj-bar" style="margin-bottom:4px;"><i style="width:${pct}%; background:${pct>90?'var(--red)':pct>70?'var(--gold)':'var(--blue)'};"></i></div>
+      <div class="obj-bar-lbl"><span>Израсходовано ${pct}% бюджета</span><span>Остаток: ${fmtMoney(budgetLeft)}</span></div>
 
-      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:10px;">
-        <div class="obj-sum-cell"><div class="lbl">Приход</div><div class="val" style="color:var(--green)">${fmtMoney(price)}</div></div>
-        <div class="obj-sum-cell"><div class="lbl">Расход</div><div class="val" style="color:var(--red)">${fmtMoney(expenses)}</div></div>
-        <div class="obj-sum-cell"><div class="lbl">Гонорар</div><div class="val" style="color:var(--blue)">${fmtMoney(f.feeAmount)}</div></div>
+      <div style="margin-top:12px;">
+        <div class="fee-row" style="padding:5px 0;">
+          <div class="fl">💰 Бюджет (приход)</div>
+          <div class="fv" style="color:var(--green);">${fmtMoney(price)}</div>
+        </div>
+        <div class="fee-row" style="padding:5px 0;">
+          <div class="fl">📦 Материалы</div>
+          <div class="fv">${fmtMoney(matTotal)}</div>
+        </div>
+        <div class="fee-row" style="padding:5px 0;">
+          <div class="fl">🔨 Работы</div>
+          <div class="fv">${fmtMoney(workTotal)}</div>
+        </div>
+        <div class="fee-row" style="padding:5px 0; border-top:1px solid var(--line); margin-top:2px;">
+          <div class="fl">Итого расход</div>
+          <div class="fv" style="color:var(--red);">${fmtMoney(expenses)}</div>
+        </div>
+        ${f.feeAmount > 0 ? `<div class="fee-row" style="padding:5px 0;">
+          <div class="fl">Гонорар ARHITTEK (${f.feePercent}%)</div>
+          <div class="fv" style="color:var(--blue);">${fmtMoney(f.feeAmount)}</div>
+        </div>` : ''}
       </div>
-
-      <div class="note" style="margin-top:8px; text-align:right;">${invCount} записей · выплачено ${fmtMoney(f.paid)} / осталось ${fmtMoney(f.remaining)}</div>
     </div>`;
   }).join('');
 }
