@@ -1989,7 +1989,7 @@ function renderPL(){
 
   // Приход от заказчиков строительства за период
   const constrIncome = periodLedger
-    .filter(e => constrIds.has(e.project_id) && ['advance','final_payment','income','materials_budget'].includes(e.type))
+    .filter(e => constrIds.has(e.project_id) && ['advance','final_payment','income','materials_budget','construction_budget'].includes(e.type))
     .reduce((s,e) => s + (Number(e.amount)||0), 0);
 
   // Итоговые расходы (всё кроме проходных материалов)
@@ -2715,6 +2715,18 @@ async function addLedgerEntry(){
   if(!amount || amount <= 0){
     showToast('Укажите сумму');
     return;
+  }
+
+  // Защита от дублей: проверяем похожую запись за ту же дату
+  const dupCheck = state.ledger.filter(e =>
+    e.type === type &&
+    e.project_id === project_id &&
+    Number(e.amount) === amount &&
+    e.entry_date === entry_date &&
+    !e.deleted_at
+  );
+  if(dupCheck.length > 0){
+    if(!confirm('Похожая запись за эту дату уже существует. Добавить ещё раз?')) return;
   }
 
   try{
