@@ -523,7 +523,7 @@
     <div id="objTabContent"></div>
 
     <button class="btn btn-secondary" style="margin-top:12px;" id="objPdfBtn">📄 Скачать отчёт PDF</button>
-    <button class="btn btn-secondary" style="margin-top:6px;" id="objEditBtn">⚙ Редактировать карточку</button>
+    <button class="btn btn-secondary" style="margin-top:6px;" id="objEditBtn">⚙ Редактировать проект</button>
 
   </div>
 
@@ -590,7 +590,7 @@
   <!-- ===================== КАРТОЧКИ ПРОЕКТОВ ===================== -->
   <div class="view" id="view-cards">
     <div class="section-label" style="margin-top:8px;">
-      <span class="lbl-text">Карточки проектов</span>
+      <span class="lbl-text">Готовые проекты</span>
       <span class="section-label-line"></span>
     </div>
 
@@ -604,12 +604,12 @@
 
     <!-- Кнопка создать (только для canEditCards) -->
     <div id="cards-admin-bar" style="display:none;margin-bottom:12px;display:none;">
-      <button class="btn btn-primary" style="width:100%;" onclick="openCardEditor(null)">+ Создать карточку</button>
+      <button class="btn btn-primary" style="width:100%;" onclick="openCardEditor(null)">+ Создать проект</button>
     </div>
 
     <!-- Список карточек -->
     <div id="cards-list">
-      <div class="note" style="text-align:center;padding:40px 0;opacity:0.5;">Загрузка карточек…</div>
+      <div class="note" style="text-align:center;padding:40px 0;opacity:0.5;">Загрузка проектов…</div>
     </div>
 
     <!-- Ссылки для клиентов (только canEditCards) -->
@@ -1005,7 +1005,7 @@
   <div class="sheet" style="max-height:95vh;">
     <div class="sheet-handle"></div>
     <div class="sheet-title">
-      <span id="cardEditorTitle">Новая карточка</span>
+      <span id="cardEditorTitle">Новый проект</span>
       <button class="sheet-close" onclick="closeCardEditor()">×</button>
     </div>
 
@@ -1024,7 +1024,7 @@
       <input class="form-input" id="ce-num" placeholder="13225"/>
     </div>
     <div style="margin-bottom:12px;">
-      <label class="form-label">Название карточки</label>
+      <label class="form-label">Название проекта</label>
       <input class="form-input" id="ce-title" placeholder="Дом в классическом стиле с навесом"/>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
@@ -1110,10 +1110,10 @@
 
     <div style="display:flex;gap:10px;">
       <button class="btn" style="flex:1;padding:14px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:transparent;color:var(--text-dim);cursor:pointer;" onclick="closeCardEditor()">Отмена</button>
-      <button class="btn btn-primary" style="flex:2;" onclick="saveCard()" id="ce-save-btn">Сохранить карточку</button>
+      <button class="btn btn-primary" style="flex:2;" onclick="saveCard()" id="ce-save-btn">Сохранить проект</button>
     </div>
     <div id="ce-delete-row" style="display:none;margin-top:10px;">
-      <button class="btn" style="width:100%;padding:13px;border-radius:10px;border:1px solid rgba(224,82,82,0.3);background:transparent;color:var(--red);cursor:pointer;" onclick="deleteCard()">Удалить карточку</button>
+      <button class="btn" style="width:100%;padding:13px;border-radius:10px;border:1px solid rgba(224,82,82,0.3);background:transparent;color:var(--red);cursor:pointer;" onclick="deleteCard()">Удалить проект</button>
     </div>
   </div>
 </div>
@@ -1157,7 +1157,7 @@
   <div class="nav-btn" data-view="view-projects"><div class="nav-icon">▦</div>Проектный</div>
   <div class="nav-btn" data-view="view-construction"><div class="nav-icon">🏗</div>Стройка</div>
   <div class="nav-btn" data-view="view-finance"><div class="nav-icon">◐</div>Финансы</div>
-  <div class="nav-btn" data-view="view-cards" id="nav-cards"><div class="nav-icon">🏠</div>Карточки</div>
+  <div class="nav-btn" data-view="view-cards" id="nav-cards"><div class="nav-icon">🏠</div>Проекты</div>
   <div class="nav-btn" data-view="view-more"><div class="nav-icon">☰</div>Ещё</div>
 </nav>
 
@@ -5759,7 +5759,7 @@ function applyCardsRole(){
   }
 }
 
-// ── Загрузка карточек из Supabase ──
+// ── Загрузка проектов из Supabase ──
 async function loadCards(){
   try{
     const { data, error } = await sb.from('project_cards')
@@ -5794,7 +5794,7 @@ function renderCardsList(){
 
   if(!filtered.length){
     container.innerHTML = `<div class="note" style="text-align:center;padding:40px 0;opacity:0.5;">
-      ${cardsData.length ? 'Нет карточек для этого фильтра' : 'Карточек ещё нет'}
+      ${cardsData.length ? 'Нет проектов для этого фильтра' : 'Проектов ещё нет'}
     </div>`;
     return;
   }
@@ -5842,7 +5842,7 @@ function openCardEditor(id){
 
   if(id){
     // Edit mode
-    document.getElementById('cardEditorTitle').textContent = 'Редактировать карточку';
+    document.getElementById('cardEditorTitle').textContent = 'Редактировать проект';
     document.getElementById('ce-delete-row').style.display = 'block';
     const card = cardsData.find(c=>c.id===id);
     if(card){
@@ -5872,7 +5872,7 @@ function openCardEditor(id){
       }
     }
   } else {
-    document.getElementById('cardEditorTitle').textContent = 'Новая карточка';
+    document.getElementById('cardEditorTitle').textContent = 'Новый проект';
     document.getElementById('ce-delete-row').style.display = 'none';
   }
 
@@ -5957,7 +5957,7 @@ async function saveCard(){
 
     if(result.error) throw result.error;
 
-    showToast(ceCurrentId ? 'Карточка обновлена' : 'Карточка создана');
+    showToast(ceCurrentId ? 'Проект обновлён' : 'Проект создан');
     closeCardEditor();
     await loadCards();
   } catch(e){
@@ -5966,7 +5966,7 @@ async function saveCard(){
   }
 
   btn.disabled = false;
-  btn.textContent = 'Сохранить карточку';
+  btn.textContent = 'Сохранить проект';
 }
 
 async function deleteCard(){
@@ -5974,7 +5974,7 @@ async function deleteCard(){
   if(!confirm('Удалить эту карточку?')) return;
   try{
     await sb.from('project_cards').update({ deleted_at: new Date().toISOString() }).eq('id', ceCurrentId);
-    showToast('Карточка удалена');
+    showToast('Проект удалён');
     closeCardEditor();
     await loadCards();
   } catch(e){
@@ -6261,13 +6261,13 @@ let si=0;
 <\/script></body></html>`;
 }
 
-// Изначально скрыть кнопку Карточки до логина
+// Изначально скрыть кнопку Готовые проекты до логина
 (function(){
   const navCards = document.getElementById('nav-cards');
   if(navCards) navCards.style.display = 'none';
 })();
 
-// Загрузка карточек при переходе на вкладку
+// Загрузка проектов при переходе на вкладку
 document.querySelector('.nav-btn[data-view="view-cards"]')?.addEventListener('click', ()=>{
   loadCards();
 });
