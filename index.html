@@ -587,6 +587,46 @@
 
   </div>
 
+  <!-- ===================== КАРТОЧКИ ПРОЕКТОВ ===================== -->
+  <div class="view" id="view-cards">
+    <div class="section-label" style="margin-top:8px;">
+      <span class="lbl-text">Карточки проектов</span>
+      <span class="section-label-line"></span>
+    </div>
+
+    <!-- Фильтр по этажности -->
+    <div class="filters" id="cards-filters">
+      <div class="filter-chip active" data-floors="all" onclick="filterCards('all',this)">Все</div>
+      <div class="filter-chip" data-floors="1" onclick="filterCards('1',this)">1-этажные</div>
+      <div class="filter-chip" data-floors="2" onclick="filterCards('2',this)">2-этажные</div>
+      <div class="filter-chip" data-floors="3" onclick="filterCards('3',this)">3+ этажа</div>
+    </div>
+
+    <!-- Кнопка создать (только для canEditCards) -->
+    <div id="cards-admin-bar" style="display:none;margin-bottom:12px;display:none;">
+      <button class="btn btn-primary" style="width:100%;" onclick="openCardEditor(null)">+ Создать карточку</button>
+    </div>
+
+    <!-- Список карточек -->
+    <div id="cards-list">
+      <div class="note" style="text-align:center;padding:40px 0;opacity:0.5;">Загрузка карточек…</div>
+    </div>
+
+    <!-- Ссылки для клиентов (только canEditCards) -->
+    <div id="cards-links-section" style="display:none;">
+      <div class="section-label" style="margin-top:24px;">
+        <span class="lbl-text">Ссылки для клиентов</span>
+        <span class="section-label-line"></span>
+      </div>
+      <div class="card" id="cards-links-list">
+        <div class="note" style="opacity:0.5;">Нет активных ссылок</div>
+      </div>
+      <button class="btn btn-primary" style="width:100%;margin-top:8px;" onclick="createShareLink()">
+        + Создать ссылку для клиента
+      </button>
+    </div>
+  </div>
+
   <!-- ===================== ЕЩЁ (команда, категории, история, корзина, экспорт) ===================== -->
   <div class="view" id="view-more">
 
@@ -960,13 +1000,164 @@
 
 </main>
 
-<button class="fab" id="addProjectFab" title="Добавить проект">+</button>
+<!-- ===== CARD EDITOR SHEET ===== -->
+<div class="sheet-overlay" id="cardEditorOverlay">
+  <div class="sheet" style="max-height:95vh;">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">
+      <span id="cardEditorTitle">Новая карточка</span>
+      <button class="sheet-close" onclick="closeCardEditor()">×</button>
+    </div>
+
+    <!-- Этажность -->
+    <div style="margin-bottom:14px;">
+      <label class="form-label">Этажность</label>
+      <div style="display:flex;gap:8px;margin-top:6px;">
+        <button class="filter-chip active" id="floors-btn-1" onclick="selectFloors(1)">1 этаж</button>
+        <button class="filter-chip" id="floors-btn-2" onclick="selectFloors(2)">2 этажа</button>
+        <button class="filter-chip" id="floors-btn-3" onclick="selectFloors(3)">3+ этажа</button>
+      </div>
+    </div>
+
+    <div style="margin-bottom:12px;">
+      <label class="form-label">Номер проекта</label>
+      <input class="form-input" id="ce-num" placeholder="13225"/>
+    </div>
+    <div style="margin-bottom:12px;">
+      <label class="form-label">Название карточки</label>
+      <input class="form-input" id="ce-title" placeholder="Дом в классическом стиле с навесом"/>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+      <div>
+        <label class="form-label">Общая площадь, м²</label>
+        <input class="form-input" id="ce-area" placeholder="493"/>
+      </div>
+      <div>
+        <label class="form-label">Габарит</label>
+        <input class="form-input" id="ce-footprint" placeholder="20×29"/>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+      <div>
+        <label class="form-label">Спальни</label>
+        <input class="form-input" id="ce-beds" type="number" placeholder="4"/>
+      </div>
+      <div>
+        <label class="form-label">Санузлы</label>
+        <input class="form-input" id="ce-baths" type="number" placeholder="3"/>
+      </div>
+    </div>
+    <div style="margin-bottom:12px;">
+      <label class="form-label">Цена, ₽</label>
+      <input class="form-input" id="ce-price" placeholder="89 000"/>
+    </div>
+    <div style="margin-bottom:12px;">
+      <label class="form-label">Теги (через запятую)</label>
+      <input class="form-input" id="ce-tags" placeholder="🧱 Газоблок, 🏗️ Лент. фундамент"/>
+    </div>
+    <div style="margin-bottom:12px;">
+      <label class="form-label">Площадь 1-го этажа, м²</label>
+      <input class="form-input" id="ce-area1" placeholder="321,50"/>
+    </div>
+    <div id="ce-floor2-fields">
+      <div style="margin-bottom:12px;">
+        <label class="form-label">Площадь 2-го этажа, м²</label>
+        <input class="form-input" id="ce-area2" placeholder="171,64"/>
+      </div>
+    </div>
+
+    <div style="margin-bottom:12px;">
+      <label class="form-label">Фото фасада 1</label>
+      <label style="display:block;background:rgba(255,255,255,0.04);border:1.5px dashed rgba(255,255,255,0.15);border-radius:10px;padding:14px;text-align:center;color:rgba(255,255,255,0.4);cursor:pointer;font-size:13px;position:relative;overflow:hidden;">
+        📷 Загрузить фото
+        <input type="file" accept="image/*" style="position:absolute;inset:0;opacity:0;cursor:pointer;" onchange="ceLoadImg(this,'ce-facade-preview',0)"/>
+      </label>
+      <img id="ce-facade-preview" style="display:none;width:100%;height:100px;object-fit:cover;border-radius:8px;margin-top:6px;"/>
+    </div>
+    <div style="margin-bottom:12px;">
+      <label class="form-label">Фото фасада 2 (дополнительное)</label>
+      <label style="display:block;background:rgba(255,255,255,0.04);border:1.5px dashed rgba(255,255,255,0.15);border-radius:10px;padding:14px;text-align:center;color:rgba(255,255,255,0.4);cursor:pointer;font-size:13px;position:relative;overflow:hidden;">
+        📷 Загрузить фото 2
+        <input type="file" accept="image/*" style="position:absolute;inset:0;opacity:0;cursor:pointer;" onchange="ceLoadImg(this,'ce-facade2-preview',1)"/>
+      </label>
+      <img id="ce-facade2-preview" style="display:none;width:100%;height:100px;object-fit:cover;border-radius:8px;margin-top:6px;"/>
+    </div>
+    <div style="margin-bottom:12px;">
+      <label class="form-label">План 1-го этажа</label>
+      <label style="display:block;background:rgba(255,255,255,0.04);border:1.5px dashed rgba(255,255,255,0.15);border-radius:10px;padding:14px;text-align:center;color:rgba(255,255,255,0.4);cursor:pointer;font-size:13px;position:relative;overflow:hidden;">
+        📐 Загрузить план
+        <input type="file" accept="image/*" style="position:absolute;inset:0;opacity:0;cursor:pointer;" onchange="ceLoadImg(this,'ce-plan1-preview',2)"/>
+      </label>
+      <img id="ce-plan1-preview" style="display:none;width:100%;height:80px;object-fit:contain;border-radius:8px;margin-top:6px;background:rgba(255,255,255,0.05);"/>
+    </div>
+    <div id="ce-plan2-field" style="margin-bottom:12px;">
+      <label class="form-label">План 2-го этажа</label>
+      <label style="display:block;background:rgba(255,255,255,0.04);border:1.5px dashed rgba(255,255,255,0.15);border-radius:10px;padding:14px;text-align:center;color:rgba(255,255,255,0.4);cursor:pointer;font-size:13px;position:relative;overflow:hidden;">
+        📐 Загрузить план 2
+        <input type="file" accept="image/*" style="position:absolute;inset:0;opacity:0;cursor:pointer;" onchange="ceLoadImg(this,'ce-plan2-preview',3)"/>
+      </label>
+      <img id="ce-plan2-preview" style="display:none;width:100%;height:80px;object-fit:contain;border-radius:8px;margin-top:6px;background:rgba(255,255,255,0.05);"/>
+    </div>
+
+    <div style="margin-bottom:12px;">
+      <label class="form-label">Экспликация 1-го этажа (одна строка — «Название: площадь»)</label>
+      <textarea class="form-input" id="ce-expl1" rows="5" placeholder="Прихожая: 20.40&#10;Коридор: 24.79&#10;Зал: 36.90" style="font-size:12px;"></textarea>
+    </div>
+    <div id="ce-expl2-field" style="margin-bottom:16px;">
+      <label class="form-label">Экспликация 2-го этажа</label>
+      <textarea class="form-input" id="ce-expl2" rows="5" placeholder="Спальня: 23.25&#10;Спальня: 22.60&#10;Гардероб: 10.00" style="font-size:12px;"></textarea>
+    </div>
+
+    <div style="display:flex;gap:10px;">
+      <button class="btn" style="flex:1;padding:14px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:transparent;color:var(--text-dim);cursor:pointer;" onclick="closeCardEditor()">Отмена</button>
+      <button class="btn btn-primary" style="flex:2;" onclick="saveCard()" id="ce-save-btn">Сохранить карточку</button>
+    </div>
+    <div id="ce-delete-row" style="display:none;margin-top:10px;">
+      <button class="btn" style="width:100%;padding:13px;border-radius:10px;border:1px solid rgba(224,82,82,0.3);background:transparent;color:var(--red);cursor:pointer;" onclick="deleteCard()">Удалить карточку</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SHARE LINK SHEET ===== -->
+<div class="sheet-overlay" id="shareLinkOverlay">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">
+      <span>Ссылка для клиента</span>
+      <button class="sheet-close" onclick="document.getElementById('shareLinkOverlay').classList.remove('active')">×</button>
+    </div>
+    <div style="margin-bottom:14px;">
+      <label class="form-label">Название ссылки (для себя)</label>
+      <input class="form-input" id="sl-name" placeholder="Клиент Ахмад, июль 2026"/>
+    </div>
+    <div style="margin-bottom:16px;">
+      <label class="form-label">Фильтр карточек</label>
+      <select class="form-input" id="sl-filter">
+        <option value="all">Все карточки</option>
+        <option value="1">Только 1-этажные</option>
+        <option value="2">Только 2-этажные</option>
+        <option value="3">3+ этажа</option>
+      </select>
+    </div>
+    <button class="btn btn-primary" style="width:100%;" onclick="generateShareLink()">Создать ссылку</button>
+    <div id="sl-result" style="display:none;margin-top:14px;">
+      <label class="form-label">Ссылка готова — скопируй и отправь клиенту</label>
+      <div style="display:flex;gap:8px;margin-top:6px;">
+        <input class="form-input" id="sl-url" readonly style="font-size:11px;"/>
+        <button class="btn btn-primary" style="flex-shrink:0;padding:0 14px;" onclick="copyShareUrl()">Копировать</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
 
 <nav class="bottom-nav">
   <div class="nav-btn active" data-view="view-overview"><div class="nav-icon">◈</div>Обзор</div>
   <div class="nav-btn" data-view="view-projects"><div class="nav-icon">▦</div>Проектный</div>
   <div class="nav-btn" data-view="view-construction"><div class="nav-icon">🏗</div>Стройка</div>
   <div class="nav-btn" data-view="view-finance"><div class="nav-icon">◐</div>Финансы</div>
+  <div class="nav-btn" data-view="view-cards" id="nav-cards"><div class="nav-icon">🏠</div>Карточки</div>
   <div class="nav-btn" data-view="view-more"><div class="nav-icon">☰</div>Ещё</div>
 </nav>
 
@@ -5535,10 +5726,568 @@ document.getElementById('userPill').addEventListener('click', ()=>{
   if(confirm('Выйти из аккаунта?')) clearSession();
 });
 
-loadAll();
-// Periodic refresh every 30s to keep multi-device sync visible
-setInterval(loadAll, 30000);
 
+// ============================================================
+// КАРТОЧКИ ПРОЕКТОВ
+// ============================================================
+
+// Имена пользователей с правом редактирования карточек
+const CARD_EDITORS = ['мансур', 'ислам'];
+
+function canEditCards(){
+  if(!session) return false;
+  return CARD_EDITORS.includes((session.name||'').trim().toLowerCase());
+}
+
+// State карточек
+let cardsData = [];
+let currentCardFloorFilter = 'all';
+let ceCurrentId = null;
+let ceImages = [null, null, null, null]; // [facade1, facade2, plan1, plan2]
+let ceFloorsSelected = 2;
+
+// Показ/скрытие adminbar при смене view
+function applyCardsRole(){
+  const bar = document.getElementById('cards-admin-bar');
+  const linksSection = document.getElementById('cards-links-section');
+  if(canEditCards()){
+    if(bar){ bar.style.display = 'block'; }
+    if(linksSection){ linksSection.style.display = 'block'; }
+  } else {
+    if(bar){ bar.style.display = 'none'; }
+    if(linksSection){ linksSection.style.display = 'none'; }
+  }
+}
+
+// ── Загрузка карточек из Supabase ──
+async function loadCards(){
+  try{
+    const { data, error } = await sb.from('project_cards')
+      .select('*')
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false });
+    if(error) throw error;
+    cardsData = data || [];
+    renderCardsList();
+    renderShareLinks();
+  } catch(e){
+    console.error('loadCards error', e);
+  }
+}
+
+// ── Рендер списка карточек ──
+function filterCards(val, el){
+  currentCardFloorFilter = val;
+  document.querySelectorAll('#cards-filters .filter-chip').forEach(c=>c.classList.remove('active'));
+  if(el) el.classList.add('active');
+  renderCardsList();
+}
+
+function renderCardsList(){
+  const container = document.getElementById('cards-list');
+  if(!container) return;
+
+  let filtered = cardsData;
+  if(currentCardFloorFilter !== 'all'){
+    filtered = cardsData.filter(c => String(c.floors) === String(currentCardFloorFilter));
+  }
+
+  if(!filtered.length){
+    container.innerHTML = `<div class="note" style="text-align:center;padding:40px 0;opacity:0.5;">
+      ${cardsData.length ? 'Нет карточек для этого фильтра' : 'Карточек ещё нет'}
+    </div>`;
+    return;
+  }
+
+  container.innerHTML = filtered.map(card => `
+    <div class="card" style="margin-bottom:10px;cursor:${canEditCards()?'pointer':'default'};"
+         onclick="${canEditCards() ? `openCardEditor('${card.id}')` : `viewCard('${card.id}')`}">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:700;line-height:1.35;margin-bottom:3px;">${escapeHtml(card.title||'Без названия')}</div>
+          <div style="font-size:11px;color:var(--text-dim);">
+            ${card.floors} эт. · ${card.total_area||'—'} м² · ${card.footprint||''}
+          </div>
+          <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
+            <span style="font-size:10px;background:rgba(74,144,226,0.15);color:var(--blue);padding:2px 8px;border-radius:20px;font-weight:600;">${card.floors === 1 ? '1 этаж' : card.floors === 2 ? '2 этажа' : card.floors+'+ эт.'}</span>
+            ${card.beds ? `<span style="font-size:10px;background:rgba(255,255,255,0.06);color:var(--text-dim);padding:2px 8px;border-radius:20px;">${card.beds} спал.</span>` : ''}
+          </div>
+        </div>
+        <div style="text-align:right;flex-shrink:0;">
+          ${card.images?.[0] ? `<img src="${card.images[0]}" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid rgba(255,255,255,0.08);" onerror="this.style.display='none'"/>` : `<div style="width:56px;height:56px;border-radius:8px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;font-size:24px;">🏠</div>`}
+          <div style="font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:700;color:var(--blue);margin-top:4px;">${card.price ? card.price+' ₽' : ''}</div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── Открыть редактор карточки ──
+function openCardEditor(id){
+  if(!canEditCards()){ showToast('Нет доступа'); return; }
+  ceCurrentId = id || null;
+  ceImages = [null, null, null, null];
+
+  // Reset form
+  ['ce-num','ce-title','ce-area','ce-footprint','ce-beds','ce-baths','ce-price','ce-tags','ce-area1','ce-area2','ce-expl1','ce-expl2'].forEach(f=>{
+    const el = document.getElementById(f);
+    if(el) el.value = '';
+  });
+  ['ce-facade-preview','ce-facade2-preview','ce-plan1-preview','ce-plan2-preview'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el){ el.src=''; el.style.display='none'; }
+  });
+
+  selectFloors(2);
+
+  if(id){
+    // Edit mode
+    document.getElementById('cardEditorTitle').textContent = 'Редактировать карточку';
+    document.getElementById('ce-delete-row').style.display = 'block';
+    const card = cardsData.find(c=>c.id===id);
+    if(card){
+      setVal('ce-num', card.project_number||'');
+      setVal('ce-title', card.title||'');
+      setVal('ce-area', card.total_area||'');
+      setVal('ce-footprint', card.footprint||'');
+      setVal('ce-beds', card.beds||'');
+      setVal('ce-baths', card.baths||'');
+      setVal('ce-price', card.price||'');
+      setVal('ce-tags', (card.tags||[]).join(', '));
+      setVal('ce-area1', card.floor1_area||'');
+      setVal('ce-area2', card.floor2_area||'');
+      setVal('ce-expl1', (card.expl1||[]).map(r=>`${r.name}: ${r.area}`).join('\n'));
+      setVal('ce-expl2', (card.expl2||[]).map(r=>`${r.name}: ${r.area}`).join('\n'));
+      selectFloors(card.floors||2);
+      // Show stored images as previews
+      if(card.images){
+        const previews = ['ce-facade-preview','ce-facade2-preview','ce-plan1-preview','ce-plan2-preview'];
+        card.images.forEach((src,i)=>{
+          if(src && previews[i]){
+            const el = document.getElementById(previews[i]);
+            if(el){ el.src=src; el.style.display='block'; }
+          }
+        });
+        ceImages = [...card.images, null, null, null, null].slice(0,4);
+      }
+    }
+  } else {
+    document.getElementById('cardEditorTitle').textContent = 'Новая карточка';
+    document.getElementById('ce-delete-row').style.display = 'none';
+  }
+
+  document.getElementById('cardEditorOverlay').classList.add('active');
+}
+
+function closeCardEditor(){
+  document.getElementById('cardEditorOverlay').classList.remove('active');
+}
+
+function setVal(id, val){ const el=document.getElementById(id); if(el) el.value=val; }
+
+function selectFloors(n){
+  ceFloorsSelected = n;
+  [1,2,3].forEach(i=>{
+    const btn = document.getElementById('floors-btn-'+i);
+    if(btn) btn.classList.toggle('active', i===n);
+  });
+  // Show/hide 2nd floor fields
+  const show2 = n >= 2;
+  const f2 = document.getElementById('ce-floor2-fields');
+  const p2 = document.getElementById('ce-plan2-field');
+  const e2 = document.getElementById('ce-expl2-field');
+  if(f2) f2.style.display = show2 ? '' : 'none';
+  if(p2) p2.style.display = show2 ? '' : 'none';
+  if(e2) e2.style.display = show2 ? '' : 'none';
+}
+
+function ceLoadImg(input, previewId, idx){
+  const file = input.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const src = e.target.result;
+    ceImages[idx] = src;
+    const el = document.getElementById(previewId);
+    if(el){ el.src=src; el.style.display='block'; }
+  };
+  reader.readAsDataURL(file);
+}
+
+function parseExpl(text){
+  return (text||'').split('\n').filter(l=>l.trim()).map((l,i)=>{
+    const parts = l.split(':');
+    const area = parts.pop().trim().replace('.',',');
+    const name = parts.join(':').trim();
+    return { name, area };
+  });
+}
+
+async function saveCard(){
+  const btn = document.getElementById('ce-save-btn');
+  btn.disabled = true;
+  btn.textContent = 'Сохранение…';
+
+  try{
+    const payload = {
+      project_number: document.getElementById('ce-num').value.trim(),
+      title: 'Проект №'+(document.getElementById('ce-num').value.trim())+' — '+(document.getElementById('ce-title').value.trim()),
+      floors: ceFloorsSelected,
+      total_area: document.getElementById('ce-area').value.trim(),
+      footprint: document.getElementById('ce-footprint').value.trim(),
+      beds: parseInt(document.getElementById('ce-beds').value)||null,
+      baths: parseInt(document.getElementById('ce-baths').value)||null,
+      price: document.getElementById('ce-price').value.trim(),
+      tags: document.getElementById('ce-tags').value.split(',').map(t=>t.trim()).filter(Boolean),
+      floor1_area: document.getElementById('ce-area1').value.trim(),
+      floor2_area: ceFloorsSelected >= 2 ? document.getElementById('ce-area2').value.trim() : null,
+      expl1: parseExpl(document.getElementById('ce-expl1').value),
+      expl2: ceFloorsSelected >= 2 ? parseExpl(document.getElementById('ce-expl2').value) : [],
+      images: ceImages,
+      updated_at: new Date().toISOString(),
+    };
+
+    let result;
+    if(ceCurrentId){
+      result = await sb.from('project_cards').update(payload).eq('id', ceCurrentId);
+    } else {
+      payload.created_at = new Date().toISOString();
+      result = await sb.from('project_cards').insert(payload);
+    }
+
+    if(result.error) throw result.error;
+
+    showToast(ceCurrentId ? 'Карточка обновлена' : 'Карточка создана');
+    closeCardEditor();
+    await loadCards();
+  } catch(e){
+    console.error('saveCard error', e);
+    showToast('Ошибка сохранения: '+(e.message||e));
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Сохранить карточку';
+}
+
+async function deleteCard(){
+  if(!ceCurrentId) return;
+  if(!confirm('Удалить эту карточку?')) return;
+  try{
+    await sb.from('project_cards').update({ deleted_at: new Date().toISOString() }).eq('id', ceCurrentId);
+    showToast('Карточка удалена');
+    closeCardEditor();
+    await loadCards();
+  } catch(e){
+    showToast('Ошибка удаления');
+  }
+}
+
+// ── Просмотр карточки (для всех) ──
+function viewCard(id){
+  const card = cardsData.find(c=>c.id===id);
+  if(!card) return;
+  // Открываем HTML карточки в новом окне
+  const html = buildCardHTML(card);
+  const w = window.open('','_blank');
+  if(w){ w.document.write(html); w.document.close(); }
+}
+
+// ── Ссылки для клиентов ──
+let shareLinksData = [];
+
+async function renderShareLinks(){
+  if(!canEditCards()) return;
+  try{
+    const { data } = await sb.from('share_links')
+      .select('*')
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false });
+    shareLinksData = data || [];
+  } catch(e){ shareLinksData = []; }
+
+  const container = document.getElementById('cards-links-list');
+  if(!container) return;
+
+  if(!shareLinksData.length){
+    container.innerHTML = '<div class="note" style="opacity:0.5;">Нет активных ссылок</div>';
+    return;
+  }
+
+  const base = location.origin + location.pathname.replace('index.html','');
+  container.innerHTML = shareLinksData.map(link => `
+    <div style="padding:10px 0;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:600;">${escapeHtml(link.label||'Ссылка')}</div>
+        <div style="font-size:11px;color:var(--text-dim);margin-top:2px;">
+          ${link.floors_filter==='all' ? 'Все карточки' : link.floors_filter+'-этажные'}
+          · ${new Date(link.created_at).toLocaleDateString('ru')}
+        </div>
+        <div style="font-size:10px;color:var(--blue);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+          ${base}catalog.html?t=${link.token}
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0;">
+        <button style="background:rgba(74,144,226,0.15);color:var(--blue);border:none;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit;"
+          onclick="navigator.clipboard.writeText('${base}catalog.html?t=${link.token}').then(()=>showToast('Скопировано!'))">
+          Копировать
+        </button>
+        <button style="background:rgba(224,82,82,0.12);color:var(--red);border:none;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;"
+          onclick="deactivateLink('${link.id}')">✕</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function createShareLink(){
+  document.getElementById('sl-name').value = '';
+  document.getElementById('sl-result').style.display = 'none';
+  document.getElementById('shareLinkOverlay').classList.add('active');
+}
+
+async function generateShareLink(){
+  const label = document.getElementById('sl-name').value.trim() || 'Ссылка';
+  const filter = document.getElementById('sl-filter').value;
+  const token = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+
+  try{
+    const { error } = await sb.from('share_links').insert({
+      label, floors_filter: filter, token,
+      created_at: new Date().toISOString(),
+    });
+    if(error) throw error;
+
+    const base = location.origin + location.pathname.replace('index.html','');
+    const url = base + 'catalog.html?t=' + token;
+    document.getElementById('sl-url').value = url;
+    document.getElementById('sl-result').style.display = 'block';
+    await renderShareLinks();
+  } catch(e){
+    showToast('Ошибка создания ссылки: '+(e.message||e));
+  }
+}
+
+function copyShareUrl(){
+  const url = document.getElementById('sl-url').value;
+  navigator.clipboard.writeText(url).then(()=>showToast('Ссылка скопирована!'));
+}
+
+async function deactivateLink(id){
+  if(!confirm('Деактивировать эту ссылку? Клиент больше не сможет открыть каталог по ней.')) return;
+  try{
+    await sb.from('share_links').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+    showToast('Ссылка деактивирована');
+    await renderShareLinks();
+  } catch(e){ showToast('Ошибка'); }
+}
+
+// ── Построить HTML карточки ──
+function buildCardHTML(card){
+  const images = card.images || [];
+  const facade1 = images[0] || '';
+  const facade2 = images[1] || '';
+  const plan1   = images[2] || '';
+  const plan2   = images[3] || '';
+  const tags = (card.tags||[]).map(t=>`<div class="tag">${escapeHtml(t)}</div>`).join('');
+  const expl1rows = (card.expl1||[]).map((r,i)=>`
+    <div class="expl-row">
+      <div class="expl-num">${i+1}</div>
+      <div class="expl-name">${escapeHtml(r.name)}</div>
+      <div class="expl-area">${escapeHtml(r.area)} <sup>м²</sup></div>
+    </div>`).join('');
+  const expl2rows = (card.expl2||[]).map((r,i)=>`
+    <div class="expl-row">
+      <div class="expl-num">${i+1}</div>
+      <div class="expl-name">${escapeHtml(r.name)}</div>
+      <div class="expl-area">${escapeHtml(r.area)} <sup>м²</sup></div>
+    </div>`).join('');
+
+  const has2ndFloor = (card.floors||1) >= 2;
+  const tab2 = has2ndFloor ? `<div class="tab" onclick="showTab('floor2',this)">2-й этаж</div>` : '';
+  const panel2 = has2ndFloor ? `
+    <div class="panel" id="floor2">
+      <div class="plan-wrap">
+        <div class="plan-label">Планировочное решение · 2-й этаж <span>${escapeHtml(card.floor2_area||'')} м²</span></div>
+        <div class="plan-img-container">${plan2?`<img class="plan-img" src="${plan2}" style="width:100%;height:auto;border-radius:4px;"/>`:''}</div>
+      </div>
+      <div class="explication">
+        <div class="expl-header"><span class="expl-header-title">Экспликация</span><span class="expl-header-total">${escapeHtml(card.floor2_area||'')} м²</span></div>
+        ${expl2rows}
+      </div>
+      <div style="height:14px;"></div>
+    </div>` : '';
+
+  return `<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Проект №${escapeHtml(card.project_number||'')} — ARHITTEK</title>
+<style>
+:root{--blue:#3D8FE0;--blue-dark:#2A72C0;--blue-light:#E8F3FC;--black:#0A0A0A;--border:#D0D0D0;--border-soft:#DCDCDC;--text-primary:#1A1A1A;--text-sub:#888;--text-label:#BBB;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#C8C8C8;min-height:100vh;display:flex;justify-content:center;align-items:flex-start;padding:24px 16px;}
+.card{background:#F2F2F2;border-radius:20px;width:390px;box-shadow:0 12px 60px rgba(0,0,0,.18);overflow:hidden;}
+.card-header{background:var(--black);padding:13px 16px 11px;display:flex;align-items:center;justify-content:space-between;}
+.header-badge{font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.4);}
+.tabs{display:flex;background:#F2F2F2;border-bottom:2px solid var(--border);}
+.tab{flex:1;padding:12px 8px;text-align:center;font-size:13px;font-weight:500;color:var(--text-sub);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .2s;user-select:none;}
+.tab.active{color:var(--blue);border-bottom-color:var(--blue);font-weight:600;}
+.panel{display:none;}.panel.active{display:block;}
+.swiper-wrap{position:relative;overflow:hidden;background:#000;height:240px;cursor:grab;}
+.swiper-track{display:flex;height:100%;transition:transform .35s cubic-bezier(.4,0,.2,1);}
+.swiper-slide{min-width:100%;height:100%;position:relative;flex-shrink:0;}
+.swiper-slide img{width:100%;height:100%;object-fit:cover;object-position:center 20%;display:block;opacity:.93;}
+.swiper-overlay{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.38) 0%,transparent 55%);pointer-events:none;}
+.swiper-caption{position:absolute;bottom:12px;left:14px;font-size:11px;font-weight:600;letter-spacing:.04em;color:rgba(255,255,255,.9);text-shadow:0 1px 4px rgba(0,0,0,.4);pointer-events:none;}
+.swiper-num{position:absolute;top:12px;right:14px;background:var(--blue);color:#fff;font-size:11px;font-weight:700;letter-spacing:.06em;padding:4px 10px;border-radius:20px;pointer-events:none;}
+.swiper-dots{position:absolute;bottom:12px;right:14px;display:flex;gap:5px;pointer-events:none;}
+.swiper-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.4);transition:all .2s;}
+.swiper-dot.active{background:#fff;width:16px;border-radius:3px;}
+.plan-wrap{padding:14px 14px 10px;background:#E8E8E8;}
+.plan-label{font-size:10px;font-weight:700;color:var(--text-label);letter-spacing:.12em;text-transform:uppercase;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;}
+.plan-label span{background:var(--blue-light);color:var(--blue);font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;}
+.plan-img-container{background:#E8EDF4;border:1px solid var(--border);border-radius:12px;padding:12px;}
+.plan-img{width:100%;height:auto;display:block;border-radius:4px;}
+.explication{margin:10px 14px 0;border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+.expl-header{background:var(--blue);padding:9px 14px;display:flex;justify-content:space-between;align-items:center;}
+.expl-header-title{font-size:10px;font-weight:700;color:rgba(255,255,255,.8);letter-spacing:.08em;text-transform:uppercase;}
+.expl-header-total{font-size:13px;font-weight:700;color:#fff;}
+.expl-row{display:flex;align-items:center;padding:7px 14px;border-top:1px solid var(--border-soft);}
+.expl-row:nth-child(even){background:#EBEBEB;}
+.expl-num{width:20px;height:20px;background:var(--blue-light);color:var(--blue);border-radius:50%;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-right:10px;}
+.expl-name{flex:1;font-size:13px;color:var(--text-primary);}
+.expl-area{font-size:13px;font-weight:600;color:var(--text-primary);}
+.expl-area sup{font-size:9px;font-weight:400;color:var(--text-sub);}
+.info-block{padding:16px 14px 0;}
+.project-title{font-size:17px;font-weight:700;color:var(--text-primary);margin-bottom:12px;line-height:1.3;}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:14px;}
+.stat{background:#E2E2E2;border-radius:10px;padding:10px 6px;text-align:center;border:1px solid var(--border);}
+.stat-val{font-size:16px;font-weight:700;color:var(--text-primary);line-height:1;}
+.stat-sub{font-size:9px;color:var(--text-label);margin-top:3px;}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;}
+.tag{background:var(--blue-light);border:1px solid #C8DFF5;border-radius:20px;padding:5px 12px;font-size:12px;color:var(--blue-dark);font-weight:500;}
+.divider{height:1px;background:var(--border);margin:0 0 14px;}
+.section-label-sm{font-size:10px;font-weight:700;color:var(--text-label);letter-spacing:.12em;text-transform:uppercase;margin-bottom:10px;}
+.includes-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;}
+.include-cell{background:#E2E2E2;border:1px solid var(--border);border-radius:12px;padding:10px;display:flex;align-items:flex-start;gap:8px;}
+.include-icon{font-size:16px;flex-shrink:0;margin-top:1px;}
+.include-text{font-size:12px;color:var(--text-primary);line-height:1.35;}
+.price-block{margin:0 14px;padding:14px 0;border-top:1px solid var(--border);}
+.price-label{font-size:11px;color:var(--text-label);margin-bottom:3px;}
+.price{font-size:28px;font-weight:700;color:var(--text-primary);line-height:1;margin-bottom:12px;}
+.btn-row{display:flex;gap:8px;}
+.btn-primary{flex:1;background:var(--blue);color:#fff;border:none;border-radius:12px;padding:14px 8px;font-size:14px;font-weight:700;cursor:pointer;white-space:nowrap;}
+.btn-secondary{flex:1;background:#F2F2F2;color:var(--text-primary);border:1.5px solid var(--border);border-radius:12px;padding:13px 8px;font-size:14px;font-weight:500;cursor:pointer;white-space:nowrap;}
+.card-footer{background:var(--black);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;margin-top:16px;}
+.footer-text{font-size:10px;color:rgba(255,255,255,.35);letter-spacing:.06em;}
+</style></head><body>
+<div class="card">
+<div class="card-header">
+  <div style="font-weight:700;color:#fff;font-size:15px;letter-spacing:.05em;">ARHI<span style="color:#3D8FE0;">TTEK</span></div>
+  <span class="header-badge">Проектный отдел</span>
+</div>
+<div class="tabs">
+  <div class="tab active" onclick="showTab('facade',this)">Фасад</div>
+  <div class="tab" onclick="showTab('floor1',this)">1-й этаж</div>
+  ${tab2}
+</div>
+<div class="panel active" id="facade">
+  <div class="swiper-wrap" id="swiperWrap">
+    <div class="swiper-track" id="swiperTrack">
+      <div class="swiper-slide">${facade1?`<img src="${facade1}"/>`:'<div style="width:100%;height:100%;background:#222;"></div>'}<div class="swiper-overlay"></div></div>
+      ${facade2?`<div class="swiper-slide"><img src="${facade2}"/><div class="swiper-overlay"></div></div>`:''}
+    </div>
+    <div class="swiper-caption">${escapeHtml(card.title||'')}</div>
+    <div class="swiper-num">№ ${escapeHtml(card.project_number||'')}</div>
+    ${facade2?`<div class="swiper-dots"><div class="swiper-dot active" id="dot-0"></div><div class="swiper-dot" id="dot-1"></div></div>`:''}
+  </div>
+</div>
+<div class="panel" id="floor1">
+  <div class="plan-wrap">
+    <div class="plan-label">Планировочное решение · 1-й этаж <span>${escapeHtml(card.floor1_area||'')} м²</span></div>
+    <div class="plan-img-container">${plan1?`<img class="plan-img" src="${plan1}" style="width:100%;height:auto;border-radius:4px;"/>`:''}</div>
+  </div>
+  <div class="explication">
+    <div class="expl-header"><span class="expl-header-title">Экспликация</span><span class="expl-header-total">${escapeHtml(card.floor1_area||'')} м²</span></div>
+    ${expl1rows}
+  </div>
+  <div style="height:14px;"></div>
+</div>
+${panel2}
+<div class="info-block">
+  <div class="project-title">${escapeHtml(card.title||'')}</div>
+  <div class="stats">
+    <div class="stat"><div class="stat-val">${escapeHtml(String(card.total_area||'—'))}</div><div class="stat-sub">м² общая</div></div>
+    <div class="stat"><div class="stat-val">${escapeHtml(String(card.beds||'—'))}</div><div class="stat-sub">спальни</div></div>
+    <div class="stat"><div class="stat-val">${escapeHtml(String(card.floors||'—'))}</div><div class="stat-sub">этажа</div></div>
+    <div class="stat"><div class="stat-val" style="font-size:12px">${escapeHtml(card.footprint||'—')}</div><div class="stat-sub">габарит</div></div>
+  </div>
+  <div class="tags">${tags}</div>
+  <div class="divider"></div>
+  <div class="section-label-sm">Что входит и гарантии</div>
+  <div class="includes-grid">
+    <div class="include-cell"><div class="include-icon">📐</div><div class="include-text">Архитектурные решения (АР)</div></div>
+    <div class="include-cell"><div class="include-icon">🎨</div><div class="include-text">3D-визуализация всех фасадов</div></div>
+    <div class="include-cell"><div class="include-icon">✅</div><div class="include-text">Адаптация под ваш участок</div></div>
+    <div class="include-cell"><div class="include-icon">✏️</div><div class="include-text">До 3 правок — включены</div></div>
+  </div>
+</div>
+<div class="price-block">
+  <div class="price-label">Стоимость проекта</div>
+  <div class="price">${escapeHtml(card.price||'')} ₽</div>
+  <div class="btn-row">
+    <button class="btn-primary" onclick="window.open('https://wa.me/79289689999','_blank')">Получить проект</button>
+    <button class="btn-secondary" onclick="window.open('https://wa.me/79289689999','_blank')">Консультация</button>
+  </div>
+</div>
+<div class="card-footer">
+  <div style="font-weight:700;color:#fff;font-size:13px;letter-spacing:.05em;">ARHI<span style="color:#3D8FE0;">TTEK</span></div>
+  <span class="footer-text">arhittek.ru · Грозный</span>
+</div>
+</div>
+<script>
+function showTab(id,el){document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));document.getElementById(id).classList.add('active');el.classList.add('active');}
+let si=0;
+(function(){
+  const wrap=document.getElementById('swiperWrap');
+  const track=document.getElementById('swiperTrack');
+  if(!wrap||!track) return;
+  const slides=track.querySelectorAll('.swiper-slide');
+  if(slides.length<2) return;
+  function goTo(i){si=Math.max(0,Math.min(slides.length-1,i));track.style.transform='translateX('+(-si*100)+'%)';[0,1].forEach(j=>{const d=document.getElementById('dot-'+j);if(d)d.className='swiper-dot'+(j===si?' active':'');});}
+  let sx=0;
+  wrap.addEventListener('mousedown',e=>{sx=e.clientX;});
+  wrap.addEventListener('mouseup',e=>{if(Math.abs(sx-e.clientX)>40)goTo(sx>e.clientX?si+1:si-1);});
+  wrap.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;},{passive:true});
+  wrap.addEventListener('touchend',e=>{if(Math.abs(sx-e.changedTouches[0].clientX)>40)goTo(sx>e.changedTouches[0].clientX?si+1:si-1);});
+})();
+</script></body></html>`;
+}
+
+// ── Подключение loadCards к общему loadAll ──
+const _origLoadAll = typeof loadAll === 'function' ? loadAll : null;
+document.addEventListener('DOMContentLoaded', ()=>{
+  // Nav кнопка Карточки — управляем через applyRole patch
+});
+
+// Патч applyRole чтобы скрывать кнопку Карточки для неавторизованных
+const _origApplyRole = window.applyRole;
+window.applyRole = function(){
+  if(_origApplyRole) _origApplyRole.call(this);
+  applyCardsRole();
+  // Карточки видны всем авторизованным, редактирование — только canEditCards
+  const navCards = document.getElementById('nav-cards');
+  if(navCards) navCards.style.display = session ? '' : 'none';
+};
+
+// Загрузка карточек при переключении на вкладку
+document.querySelector('.nav-btn[data-view="view-cards"]')?.addEventListener('click', ()=>{
+  loadCards();
+});
+
+// Изначально скрыть кнопку Карточки до логина
+(function(){
+  const navCards = document.getElementById('nav-cards');
+  if(navCards) navCards.style.display = 'none';
+})();
+
+loadAll;
 </script>
-</body>
-</html>
+
