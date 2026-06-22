@@ -6261,33 +6261,18 @@ let si=0;
 </script></body></html>`;
 }
 
-// ── Подключение loadCards к общему loadAll ──
-const _origLoadAll = typeof loadAll === 'function' ? loadAll : null;
-document.addEventListener('DOMContentLoaded', ()=>{
-  // Nav кнопка Карточки — управляем через applyRole patch
-});
-
-// Патч applyRole чтобы скрывать кнопку Карточки для неавторизованных
-const _origApplyRole = window.applyRole;
-window.applyRole = function(){
-  if(_origApplyRole) _origApplyRole.call(this);
-  applyCardsRole();
-  // Карточки видны всем авторизованным, редактирование — только canEditCards
-  const navCards = document.getElementById('nav-cards');
-  if(navCards) navCards.style.display = session ? '' : 'none';
-};
-
-// Загрузка карточек при переключении на вкладку
-document.querySelector('.nav-btn[data-view="view-cards"]')?.addEventListener('click', ()=>{
-  loadCards();
-});
-
 // Изначально скрыть кнопку Карточки до логина
 (function(){
   const navCards = document.getElementById('nav-cards');
   if(navCards) navCards.style.display = 'none';
 })();
 
-loadAll;
+// Загрузка карточек при переходе на вкладку
+document.querySelector('.nav-btn[data-view="view-cards"]')?.addEventListener('click', ()=>{
+  loadCards();
+});
+
+loadAll();
+setInterval(loadAll, 30000);
 </script>
 
