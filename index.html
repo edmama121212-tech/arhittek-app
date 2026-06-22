@@ -523,7 +523,7 @@
     <div id="objTabContent"></div>
 
     <button class="btn btn-secondary" style="margin-top:12px;" id="objPdfBtn">📄 Скачать отчёт PDF</button>
-    <button class="btn btn-secondary" style="margin-top:6px;" id="objEditBtn">⚙ Редактировать проект</button>
+    <button class="btn btn-secondary" style="margin-top:6px;" id="objEditBtn">⚙ Редактировать карточку</button>
 
   </div>
 
@@ -1024,7 +1024,7 @@
       <input class="form-input" id="ce-num" placeholder="13225"/>
     </div>
     <div style="margin-bottom:12px;">
-      <label class="form-label">Название проекта</label>
+      <label class="form-label">Название карточки</label>
       <input class="form-input" id="ce-title" placeholder="Дом в классическом стиле с навесом"/>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
@@ -5759,7 +5759,7 @@ function applyCardsRole(){
   }
 }
 
-// ── Загрузка проектов из Supabase ──
+// ── Загрузка карточек из Supabase ──
 async function loadCards(){
   try{
     const { data, error } = await sb.from('project_cards')
@@ -6261,13 +6261,13 @@ let si=0;
 <\/script></body></html>`;
 }
 
-// Изначально скрыть кнопку Готовые проекты до логина
+// Изначально скрыть кнопку Карточки до логина
 (function(){
   const navCards = document.getElementById('nav-cards');
   if(navCards) navCards.style.display = 'none';
 })();
 
-// Загрузка проектов при переходе на вкладку
+// Загрузка карточек при переходе на вкладку
 document.querySelector('.nav-btn[data-view="view-cards"]')?.addEventListener('click', ()=>{
   loadCards();
 });
