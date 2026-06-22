@@ -1649,6 +1649,10 @@ function applyRole(){
   if(navFinance) navFinance.style.display = isAdmin ? '' : 'none';
   if(navOverview) navOverview.style.display = isAdmin ? '' : 'none';
 
+  // Кнопка Готовые проекты — показываем всем авторизованным
+  const navCards = document.getElementById('nav-cards');
+  if(navCards) navCards.style.display = '';
+
   // "Ещё" view: hide admin-only sections for non-admins
   const moreAdminSections = document.getElementById('more-admin-sections');
   if(moreAdminSections) moreAdminSections.style.display = isAdmin ? '' : 'none';
@@ -6260,12 +6264,6 @@ let si=0;
 })();
 <\/script></body></html>`;
 }
-
-// Изначально скрыть кнопку Карточки до логина
-(function(){
-  const navCards = document.getElementById('nav-cards');
-  if(navCards) navCards.style.display = 'none';
-})();
 
 // Загрузка карточек при переходе на вкладку
 document.querySelector('.nav-btn[data-view="view-cards"]')?.addEventListener('click', ()=>{
