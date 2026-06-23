@@ -1653,6 +1653,9 @@ function applyRole(){
   const navCards = document.getElementById('nav-cards');
   if(navCards) navCards.style.display = '';
 
+  // Показать/скрыть кнопку добавления карточки
+  applyCardsRole();
+
   // "Ещё" view: hide admin-only sections for non-admins
   const moreAdminSections = document.getElementById('more-admin-sections');
   if(moreAdminSections) moreAdminSections.style.display = isAdmin ? '' : 'none';
@@ -5780,6 +5783,7 @@ async function loadCards(){
       .order('created_at', { ascending: false });
     if(error) throw error;
     cardsData = data || [];
+    applyCardsRole();
     renderCardsList();
     renderShareLinks();
   } catch(e){
