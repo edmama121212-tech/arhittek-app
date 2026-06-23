@@ -5929,7 +5929,15 @@ function openCardEditor(id){
     const card = cardsData.find(c=>c.id===id);
     if(card){
       setVal('ce-num', card.project_number||'');
-      setVal('ce-title', card.title||'');
+      // Убрать префикс "Проект №XXXX — " из title при загрузке в редактор
+      let titleForEdit = card.title || '';
+      const titlePrefix = 'Проект №' + (card.project_number||'') + ' — ';
+      if(titleForEdit.startsWith(titlePrefix)){
+        titleForEdit = titleForEdit.slice(titlePrefix.length);
+      } else if(titleForEdit.startsWith('Проект №')){
+        titleForEdit = titleForEdit.replace(/^Проект №[\d\w]+ — /, '');
+      }
+      setVal('ce-title', titleForEdit);
       setVal('ce-area', card.total_area||'');
       setVal('ce-footprint', card.footprint||'');
       setVal('ce-beds', card.beds||'');
