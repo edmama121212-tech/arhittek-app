@@ -6063,20 +6063,22 @@ async function saveCard(){
     };
 
     let result;
+    let savedId = ceCurrentId;
     if(ceCurrentId){
       result = await sb.from('project_cards').update(payload).eq('id', ceCurrentId);
     } else {
       payload.created_at = new Date().toISOString();
-      result = await sb.from('project_cards').insert(payload);
+      result = await sb.from('project_cards').insert(payload).select('id').single();
+      if(result.data) savedId = result.data.id;
     }
 
     if(result.error) throw result.error;
 
     // Синхронизация с WordPress
     try {
-      await syncCardToWordPress(payload, ceCurrentId);
+      await syncCardToWordPress(payload, savedId);
     } catch(wpErr) {
-      console.warn('WordPress sync error (не критично):', wpErr);
+      console.warn('WordPress sync error:', wpErr.message);
     }
 
     showToast(ceCurrentId ? 'Проект обновлён' : 'Проект создан');
