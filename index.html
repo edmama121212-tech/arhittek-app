@@ -603,8 +603,8 @@
     </div>
 
     <!-- Кнопка создать (только для canEditCards) -->
-    <div id="cards-admin-bar" style="display:none;margin-bottom:12px;display:none;">
-      <button class="btn btn-primary" style="width:100%;" onclick="openCardEditor(null)">+ Создать проект</button>
+    <div id="cards-admin-bar" style="display:none;margin-bottom:12px;">
+      <button class="btn btn-primary" style="width:100%;" onclick="openCardEditor(null)">+ Добавить проект</button>
     </div>
 
     <!-- Список карточек -->
@@ -5573,9 +5573,15 @@ document.querySelectorAll('.nav-btn').forEach(btn=>{
     btn.classList.add('active');
     document.getElementById(btn.dataset.view).classList.add('active');
     window.scrollTo({top:0, behavior:'smooth'});
-    // Update FAB label depending on active tab
+    // Показываем FAB только в Проектный и Стройка
     const fab = document.getElementById('addProjectFab');
-    if(fab) fab.title = btn.dataset.view === 'view-construction' ? 'Добавить объект' : 'Добавить проект';
+    const showFab = ['view-projects','view-construction'].includes(btn.dataset.view);
+    if(fab){
+      fab.style.display = showFab ? '' : 'none';
+      fab.title = btn.dataset.view === 'view-construction' ? 'Добавить объект' : 'Добавить проект';
+    }
+    // В Готовые проекты — загружаем карточки
+    if(btn.dataset.view === 'view-cards') loadCards();
   });
 });
 
@@ -5584,6 +5590,8 @@ document.querySelectorAll('.nav-btn').forEach(btn=>{
 // ============================================================
 document.getElementById('addProjectFab').addEventListener('click', ()=>{
   const activeView = document.querySelector('.view.active');
+  // FAB работает только для Проектный и Стройка
+  if(activeView && activeView.id === 'view-cards') return;
   openProjectSheet(null);
   // If opened from Стройка — pre-select construction category
   if(activeView && activeView.id === 'view-construction'){
