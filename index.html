@@ -588,7 +588,16 @@
   </div>
 
   <!-- ===================== КАРТОЧКИ ПРОЕКТОВ ===================== -->
-  <div class="view" id="view-cards">
+  <div class="view" id="view-cards" style="padding-top:0;">
+
+    <!-- Закреплённые кнопки сверху (только canEditCards) -->
+    <div id="cards-admin-bar" style="display:none;position:sticky;top:0;z-index:10;background:var(--bg);padding:10px 0 8px;border-bottom:1px solid var(--line);margin-bottom:4px;">
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary" style="flex:1;" onclick="openCardEditor(null)">+ Добавить проект</button>
+        <button class="btn btn-secondary" style="flex:1;" onclick="createShareLink()">+ Ссылка клиенту</button>
+      </div>
+    </div>
+
     <div class="section-label" style="margin-top:8px;">
       <span class="lbl-text">Готовые проекты</span>
       <span class="section-label-line"></span>
@@ -600,11 +609,6 @@
       <div class="filter-chip" data-floors="1" onclick="filterCards('1',this)">1-этажные</div>
       <div class="filter-chip" data-floors="2" onclick="filterCards('2',this)">2-этажные</div>
       <div class="filter-chip" data-floors="3" onclick="filterCards('3',this)">3+ этажа</div>
-    </div>
-
-    <!-- Кнопка создать (только для canEditCards) -->
-    <div id="cards-admin-bar" style="display:none;margin-bottom:12px;">
-      <button class="btn btn-primary" style="width:100%;" onclick="openCardEditor(null)">+ Добавить проект</button>
     </div>
 
     <!-- Список карточек -->
@@ -621,40 +625,21 @@
       <div class="card" id="cards-links-list">
         <div class="note" style="opacity:0.5;">Нет активных ссылок</div>
       </div>
-      <button class="btn btn-primary" style="width:100%;margin-top:8px;" onclick="createShareLink()">
-        + Создать ссылку для клиента
-      </button>
     </div>
   </div>
 
   <!-- ===================== ЕЩЁ (команда, категории, история, корзина, экспорт) ===================== -->
   <div class="view" id="view-more">
 
-    <div class="section-label"><span class="lbl-text">Коммерческое предложение</span><span class="section-label-line"></span></div>
-    <div class="card">
-      <div class="note" style="margin-bottom:10px;">Собрать КП из одной или нескольких услуг с расчётом по площади и скидкой, отправить клиенту как PDF или Excel.</div>
-      <button class="btn btn-primary" id="openKpBtn">Создать коммерческое предложение</button>
+    <!-- Сетка 2×2 из 4 кнопок -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+      <button class="btn btn-primary" id="openKpBtn" style="padding:18px 8px;font-size:13px;line-height:1.3;height:auto;">📋<br>КП</button>
+      <button class="btn btn-primary" id="openContractsBtn" style="padding:18px 8px;font-size:13px;line-height:1.3;height:auto;">📄<br>Договор</button>
+      <button class="btn btn-secondary" id="openCompanyBtn" style="padding:18px 8px;font-size:13px;line-height:1.3;height:auto;">🏢<br>Реквизиты</button>
+      <button class="btn btn-primary" id="exportXlsxBtn" style="padding:18px 8px;font-size:13px;line-height:1.3;height:auto;">📊<br>Excel</button>
     </div>
 
     <div id="more-admin-sections">
-
-    <div class="section-label"><span class="lbl-text">Договоры</span><span class="section-label-line"></span></div>
-    <div class="card">
-      <div class="note" style="margin-bottom:10px;">Сформировать договор на архитектурное проектирование, дизайн интерьера или строительство — с автоподстановкой данных заказчика из проекта и реквизитов компании.</div>
-      <button class="btn btn-primary" id="openContractsBtn">Сформировать договор</button>
-    </div>
-
-    <div class="section-label"><span class="lbl-text">Компания</span><span class="section-label-line"></span></div>
-    <div class="card">
-      <div class="note" style="margin-bottom:10px;">Реквизиты компании: расчётный счёт и банковская карта для приёма платежей. Используются в КП и договорах.</div>
-      <button class="btn btn-secondary" id="openCompanyBtn">Реквизиты компании</button>
-    </div>
-
-    <div class="section-label"><span class="lbl-text">Экспорт данных</span><span class="section-label-line"></span></div>
-    <div class="card">
-      <div class="note" style="margin-bottom:10px;">Скачать все таблицы (проекты, сотрудники, категории, финансовые записи) в одном Excel-файле.</div>
-      <button class="btn btn-primary" id="exportXlsxBtn">Экспортировать в Excel (.xlsx)</button>
-    </div>
 
     <div class="section-label"><span class="lbl-text">Сотрудники</span><span class="section-label-line"></span></div>
     <div class="search-box">
