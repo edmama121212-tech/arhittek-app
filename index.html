@@ -6072,6 +6072,13 @@ async function saveCard(){
 
     if(result.error) throw result.error;
 
+    // Синхронизация с WordPress
+    try {
+      await syncCardToWordPress(payload, ceCurrentId);
+    } catch(wpErr) {
+      console.warn('WordPress sync error (не критично):', wpErr);
+    }
+
     showToast(ceCurrentId ? 'Проект обновлён' : 'Проект создан');
     closeCardEditor();
     await loadCards();
@@ -6082,6 +6089,87 @@ async function saveCard(){
 
   btn.disabled = false;
   btn.textContent = 'Сохранить проект';
+}
+
+// Синхронизация карточки с WordPress
+async function syncCardToWordPress(card, supabaseId){
+  const WP_URL  = 'https://arhittek.ru/wp-json/wp/v2';
+  const WP_AUTH = 'Basic ' + btoa('Мансур Эдбиев:n3rs sHz4 5kl8 HJxl Gdtw PjoI');
+
+  // Текстовый контент для SEO
+  const content = [
+    card.title,
+    'Этажей: ' + card.floors,
+    'Общая площадь: ' + (card.total_area||'') + ' м²',
+    'Спальни: ' + (card.beds||''),
+    'Санузлы: ' + (card.baths||''),
+    'Габарит: ' + (card.footprint||''),
+    'Площадь 1-го этажа: ' + (card.floor1_area||'') + ' м²',
+    card.floor2_area ? 'Площадь 2-го этажа: ' + card.floor2_area + ' м²' : '',
+    (card.tags||[]).join(', '),
+    (card.expl1||[]).map(r=>r.name+' — '+r.area+' м²').join(', '),
+    (card.expl2||[]).map(r=>r.name+' — '+r.area+' м²').join(', '),
+    'Стоимость: ' + (card.price||'') + ' ₽',
+    'Архитектурное бюро ARHITTEK. Грозный.',
+  ].filter(Boolean).map(s=>`<p>${s}</p>`).join('');
+
+  const slug = 'proekt-' + (card.project_number || supabaseId || Date.now());
+
+  const wpPayload = {
+    title:   card.title,
+    content: content,
+    status:  'publish',
+    slug:    slug,
+    meta: {
+      ah_supabase_id:     supabaseId || '',
+      ah_project_number:  card.project_number || '',
+      ah_floors:          String(card.floors || ''),
+      ah_total_area:      card.total_area || '',
+      ah_footprint:       card.footprint || '',
+      ah_beds:            String(card.beds || ''),
+      ah_baths:           String(card.baths || ''),
+      ah_price:           card.price || '',
+      ah_tags:            JSON.stringify(card.tags || []),
+      ah_images:          JSON.stringify(card.images || []),
+      ah_image:           (card.images||[])[0] || '',
+      ah_floor1_area:     card.floor1_area || '',
+      ah_floor2_area:     card.floor2_area || '',
+      ah_expl1:           JSON.stringify(card.expl1 || []),
+      ah_expl2:           JSON.stringify(card.expl2 || []),
+    }
+  };
+
+  // Поиск существующего поста по supabase_id
+  let existingId = null;
+  if(supabaseId){
+    const search = await fetch(
+      `${WP_URL}/ah_project?meta_key=ah_supabase_id&meta_value=${encodeURIComponent(supabaseId)}&per_page=1`,
+      { headers: { 'Authorization': WP_AUTH } }
+    );
+    if(search.ok){
+      const posts = await search.json();
+      if(posts.length) existingId = posts[0].id;
+    }
+  }
+
+  // Создать или обновить
+  const url    = existingId ? `${WP_URL}/ah_project/${existingId}` : `${WP_URL}/ah_project`;
+  const method = existingId ? 'PUT' : 'POST';
+
+  const resp = await fetch(url, {
+    method,
+    headers: {
+      'Authorization': WP_AUTH,
+      'Content-Type':  'application/json',
+    },
+    body: JSON.stringify(wpPayload),
+  });
+
+  if(!resp.ok){
+    const err = await resp.text();
+    throw new Error('WP API: ' + resp.status + ' ' + err.slice(0,200));
+  }
+  return await resp.json();
 }
 
 async function deleteCard(){
