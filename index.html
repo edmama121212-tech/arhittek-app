@@ -3628,8 +3628,8 @@ function buildInvoiceGroupsHtml(invoices){
     .map(([catName, items])=>{
       const catTotal = items.reduce((s,i)=>s+Number(i.amount),0);
       const sortedItems = [...items].sort((a,b)=>(b.invoice_date||'').localeCompare(a.invoice_date||''));
-      const uid = 'g' + Math.random().toString(36).slice(2,8);
-      const makeRow = inv => `<div class="inv-row">
+      const rowsHtml = sortedItems.map(inv=>`
+        <div class="inv-row">
           <div>
             <div class="inv-num">${escapeHtml(inv.number||inv.description||'—')}</div>
             ${inv.description && inv.number && inv.description!==inv.number ? `<div class="inv-desc">${escapeHtml(inv.description)}</div>` : ''}
@@ -3640,42 +3640,10 @@ function buildInvoiceGroupsHtml(invoices){
             ${inv.invoice_date ? `<div class="inv-date">${fmtDate(inv.invoice_date)}</div>` : ''}
             ${inv.photo_url ? `<a href="${escapeHtml(inv.photo_url)}" target="_blank" style="color:var(--accent);font-size:11px">📎</a>` : ''}
           </div>
-        </div>`;
-      // 5 items per column in preview, rest hidden until expanded
-      const preview1 = sortedItems.slice(0,5).map(makeRow).join('');
-      const preview2 = sortedItems.slice(5,10).map(makeRow).join('');
-      const more1 = sortedItems.slice(10).filter((_,i)=>i%2===0).map(makeRow).join('');
-      const more2 = sortedItems.slice(10).filter((_,i)=>i%2===1).map(makeRow).join('');
-      const hasMore = sortedItems.length > 10;
-      const totalRows = sortedItems.length;
-      const countLabel = totalRows > 10 ? ` (+${totalRows-10})` : '';
+        </div>`).join('');
       return `<div class="inv-cat-group">
-        <div class="inv-cat-head" style="cursor:pointer;" onclick="(function(el){
-          const extra=document.getElementById('${uid}_x');
-          const tog=el.querySelector('.cat-toggle');
-          const lbl=el.querySelector('.cat-count');
-          if(!extra){return;}
-          const collapsed=extra.style.display==='none';
-          extra.style.display=collapsed?'grid':'none';
-          tog.textContent=collapsed?'▼':'▶';
-          if(lbl)lbl.textContent=collapsed?'':'(свернуть)';
-        })(this)"><div class="inv-cat-name">${escapeHtml(catName)}</div><div style="display:flex;align-items:center;gap:6px"><div class="inv-cat-total">${fmtMoney(catTotal)}</div>${hasMore?`<span class="cat-count" style="font-size:10px;color:var(--text-muted)">${countLabel}</span>`:''}<span class="cat-toggle" style="font-size:10px;color:var(--text-muted)">▼</span></div></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 8px;border-top:1px solid var(--line);">
-          <div>${preview1}</div>
-          <div>${preview2}</div>
-        </div>
-        ${hasMore ? `<div id="${uid}_x" style="display:none;grid-template-columns:1fr 1fr;gap:0 8px;">
-          <div>${more1}</div>
-          <div>${more2}</div>
-        </div>
-        <div onclick="(function(el){
-          const extra=document.getElementById('${uid}_x');
-          const tog=el.parentElement.querySelector('.cat-toggle');
-          const collapsed=extra.style.display==='none';
-          extra.style.display=collapsed?'grid':'none';
-          tog.textContent=collapsed?'▼':'▶';
-          el.textContent=collapsed?'▲ Свернуть':'▼ Показать ещё ${totalRows-10}';
-        })(this)" style="text-align:center;padding:6px;color:var(--text-muted);font-size:11px;cursor:pointer;border-top:1px solid var(--line)">▼ Показать ещё ${totalRows-10}</div>` : ''}
+        <div class="inv-cat-head" style="cursor:pointer;" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none';this.querySelector('.cat-toggle').textContent=this.nextElementSibling.style.display==='none'?'▶':'▼'"><div class="inv-cat-name">${escapeHtml(catName)}</div><div style="display:flex;align-items:center;gap:6px"><div class="inv-cat-total">${fmtMoney(catTotal)}</div><span class="cat-toggle" style="font-size:10px;color:var(--text-muted)">▼</span></div></div>
+        <div class="inv-cat-body">${rowsHtml}</div>
       </div>`;
     }).join('');
 }
