@@ -479,7 +479,6 @@
     <div class="filters" id="paymentFilters">
       <div class="filter-chip active" data-pay="all">Любая оплата</div>
       <div class="filter-chip" data-pay="Оплачен">Оплачен</div>
-      <div class="filter-chip" data-pay="Частично оплачен">Частично</div>
       <div class="filter-chip" data-pay="Ждём оплату">Ждём оплату</div>
     </div>
     <div class="filters" id="employeeFilters"></div>
@@ -2969,6 +2968,9 @@ function renderPaymentHistory(projectId){
           <div class="li-name">${t.label} — <span style="color:${t.cls}">${t.sign}${fmtMoney(e.amount)}</span></div>
           <div class="li-meta">${fmtDate(e.entry_date)}${emp?' · принял: '+escapeHtml(emp.name):''}${e.description && e.description!==t.label?' · '+escapeHtml(e.description):''}</div>
         </div>
+        <div class="li-actions">
+          <button class="icon-btn danger" title="Отменить платёж" onclick="cancelPayment('${e.id}')">↩</button>
+        </div>
       </div>`;
     }).join('');
 }
@@ -3171,6 +3173,57 @@ async function deleteLedgerEntry(id){
   }catch(e){
     console.error(e);
     showToast('Ошибка удаления');
+  }
+}
+
+// ============================================================
+// CANCEL PAYMENT
+// ============================================================
+async function cancelPayment(entryId){
+  if(!confirm('Отменить этот платёж? Сумма будет возвращена в расчёты проекта.')) return;
+  try{
+    const e = state.ledger.find(x => x.id === entryId);
+    if(!e){ showToast('Запись не найдена'); return; }
+    const p = state.projects.find(x => x.id === e.project_id);
+
+    // Soft-delete the ledger entry
+    const {error} = await sb.from('ledger_entries').update({deleted_at: new Date().toISOString()}).eq('id', entryId);
+    if(error) throw error;
+
+    // Reverse the project financial fields
+    const updates = {};
+    if(e.type === 'fee_payment'){
+      updates.fee_paid = Math.max(0, (Number(p?.fee_paid)||0) - (Number(e.amount)||0));
+    } else if(e.type !== 'withdrawal'){
+      const newAdvance = Math.max(0, (Number(p?.advance)||0) - (Number(e.amount)||0));
+      updates.advance = newAdvance;
+      updates.balance = Math.max(0, (Number(p?.price)||0) - newAdvance);
+    }
+
+    if(p && Object.keys(updates).length){
+      const {error: projErr} = await sb.from('projects').update(updates).eq('id', p.id);
+      if(projErr) throw projErr;
+    }
+
+    if(p) await logAudit('project', p.id, p.name, 'update', {
+      payment_cancelled: {old: null, new: 'отмена: ' + (e.description||entryId)}
+    });
+
+    showToast('Платёж отменён');
+    await loadAll();
+
+    if(editingProjectId === e.project_id){
+      const updated = state.projects.find(x => x.id === e.project_id);
+      if(updated){
+        document.getElementById('pf-advance').value = updated.advance||0;
+        document.getElementById('pf-balance').value = updated.balance||0;
+      }
+      renderPaymentHistory(e.project_id);
+      if(updated) renderFeeSummaryForProject(updated);
+    }
+  }catch(err){
+    console.error(err);
+    showToast('Ошибка отмены платежа');
   }
 }
 
@@ -3696,8 +3749,12 @@ function renderObjTabContent(){
         <label>Дата</label>
         <input type="date" id="inv-date-obj" value="${new Date().toISOString().slice(0,10)}">
         <label>Категория</label>
-        <input type="text" id="inv-cat-obj" placeholder="Электрика / Отопление / Материалы..." list="inv-cats-obj">
-        <datalist id="inv-cats-obj">${categories.map(c=>`<option value="${escapeHtml(c)}">`).join('')}</datalist>
+        <select id="inv-cat-obj" onchange="(function(s){var c=document.getElementById('inv-cat-obj-custom');c.style.display=s.value==='__other__'?'block':'none';})(this)">
+          <option value="">— выберите —</option>
+          ${categories.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')}
+          <option value="__other__">Другое…</option>
+        </select>
+        <input type="text" id="inv-cat-obj-custom" placeholder="Введите категорию вручную" style="display:none;margin-top:6px">
         <label>Описание</label>
         <input type="text" id="inv-desc-obj" placeholder="что куплено / какая работа">
         <label>Тип записи</label>
@@ -3745,7 +3802,8 @@ async function addInvoice(projectId){
   const suffix = document.getElementById(`inv-num-obj`) ? 'obj' : projectId;
   const number = document.getElementById(`inv-num-${suffix}`).value.trim();
   const invoice_date = document.getElementById(`inv-date-${suffix}`).value || null;
-  const category = document.getElementById(`inv-cat-${suffix}`).value.trim();
+  const _catRaw = document.getElementById(`inv-cat-${suffix}`).value.trim();
+  const category = (_catRaw === '__other__') ? (document.getElementById(`inv-cat-${suffix}-custom`) ? document.getElementById(`inv-cat-${suffix}-custom`).value.trim() : '') : _catRaw;
   const description = document.getElementById(`inv-desc-${suffix}`).value.trim();
   const item_type = document.getElementById(`inv-type-${suffix}`).value;
   const amount = parseFloat(document.getElementById(`inv-amount-${suffix}`).value);
