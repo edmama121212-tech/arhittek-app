@@ -1354,7 +1354,10 @@
 
     <div id="pf-fee-summary" class="fee-card" style="margin-bottom:12px;"></div>
 
-    <button class="btn btn-secondary" id="pf-add-payment" type="button">💰 Принять платёж</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-secondary" id="pf-add-payment" type="button">💰 Принять платёж</button>
+      <button class="btn btn-secondary" type="button" onclick="(function(){var el=document.getElementById('pf-payment-history');if(el){el.scrollIntoView({behavior:'smooth',block:'start'});}})()">📋 История платежей</button>
+    </div>
     <div id="pf-payment-history" style="margin-top:10px;"></div>
     </div>
 
