@@ -604,18 +604,19 @@
     </div>
 
     <!-- Фильтр по этажности -->
-    <div class="filters" id="cards-filters" style="flex-wrap:wrap;gap:6px 6px;">
+    <div class="filters" id="cards-filters" style="flex-wrap:wrap;gap:6px;">
       <div class="filter-chip active" data-floors="all" onclick="filterCards('all',this)">Все</div>
       <div class="filter-chip" data-floors="1" onclick="filterCards('1',this)">1 этаж</div>
       <div class="filter-chip" data-floors="2" onclick="filterCards('2',this)">2 этажа</div>
       <div class="filter-chip" data-floors="3" onclick="filterCards('3',this)">3+ этажей</div>
-      <div class="filter-chip" data-floors="1b" onclick="filterCards('1b',this)">1 эт. + цоколь</div>
-      <div class="filter-chip" data-floors="2b" onclick="filterCards('2b',this)">2 эт. + цоколь</div>
-      <div class="filter-chip" data-floors="1m" onclick="filterCards('1m',this)">1 эт. + мансарда</div>
-      <div class="filter-chip" data-floors="2m" onclick="filterCards('2m',this)">2 эт. + мансарда</div>
-      <div class="filter-chip" data-floors="flat" onclick="filterCards('flat',this)">Плоская кровля</div>
     </div>
-    <div class="filters" id="style-filters" style="flex-wrap:wrap;gap:6px 6px;margin-top:6px;">
+    <div class="filters" id="feature-filters" style="flex-wrap:wrap;gap:6px;margin-top:6px;">
+      <div class="filter-chip active" data-feature="all" onclick="filterFeature('all',this)">Без доп.</div>
+      <div class="filter-chip" data-feature="basement" onclick="filterFeature('basement',this)">Цокольный этаж</div>
+      <div class="filter-chip" data-feature="mansard" onclick="filterFeature('mansard',this)">Мансарда</div>
+      <div class="filter-chip" data-feature="flat" onclick="filterFeature('flat',this)">Плоская кровля</div>
+    </div>
+    <div class="filters" id="style-filters" style="flex-wrap:wrap;gap:6px;margin-top:6px;">
       <div class="filter-chip active" data-style="all" onclick="filterStyle('all',this)">Все стили</div>
       <div class="filter-chip" data-style="classic" onclick="filterStyle('classic',this)">Классический</div>
       <div class="filter-chip" data-style="modern" onclick="filterStyle('modern',this)">Современный</div>
@@ -1011,22 +1012,24 @@
       <div style="flex:1;overflow-y:auto;padding:14px;">
 
         <div style="margin-bottom:14px;">
-          <div style="font-size:10px;color:#6b7280;letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:8px;">Этажность</div>
-          <div style="display:flex;flex-wrap:wrap;gap:6px;">
-              <button id="floors-btn-1" onclick="selectFloors('1')" style="padding:8px 6px;border-radius:9px;border:1px solid #374151;background:transparent;color:#6b7280;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;flex:1;min-width:calc(33% - 4px);">1 этаж</button>
-              <button id="floors-btn-2" onclick="selectFloors('2')" style="padding:8px 6px;border-radius:9px;border:1px solid #374151;background:transparent;color:#6b7280;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;flex:1;min-width:calc(33% - 4px);">2 этажа</button>
-              <button id="floors-btn-3" onclick="selectFloors('3')" style="padding:8px 6px;border-radius:9px;border:1px solid #374151;background:transparent;color:#6b7280;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;flex:1;min-width:calc(33% - 4px);">3+ этажей</button>
-              <button id="floors-btn-4" onclick="selectFloors('1b')" style="padding:8px 6px;border-radius:9px;border:1px solid #374151;background:transparent;color:#6b7280;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;flex:1;min-width:calc(33% - 4px);">1 эт.+цоколь</button>
-              <button id="floors-btn-5" onclick="selectFloors('2b')" style="padding:8px 6px;border-radius:9px;border:1px solid #374151;background:transparent;color:#6b7280;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;flex:1;min-width:calc(33% - 4px);">2 эт.+цоколь</button>
-              <button id="floors-btn-6" onclick="selectFloors('1m')" style="padding:8px 6px;border-radius:9px;border:1px solid #374151;background:transparent;color:#6b7280;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;flex:1;min-width:calc(33% - 4px);">1 эт.+мансарда</button>
-              <button id="floors-btn-7" onclick="selectFloors('2m')" style="padding:8px 6px;border-radius:9px;border:1px solid #374151;background:transparent;color:#6b7280;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;flex:1;min-width:calc(33% - 4px);">2 эт.+мансарда</button>
-              <button id="floors-btn-8" onclick="selectFloors('flat')" style="padding:8px 6px;border-radius:9px;border:1px solid #374151;background:transparent;color:#6b7280;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;flex:1;min-width:calc(33% - 4px);">Плоская кровля</button>
-            </div>
+          <div style="font-size:10px;color:#6b7280;letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:8px;">ЭТАЖНОСТЬ</div>
+          <div style="display:flex;gap:6px;">
+            <button id="floors-btn-1" onclick="selectFloors(1)" style="flex:1;padding:9px;border-radius:9px;border:1px solid #374151;background:transparent;color:#6b7280;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">1 этаж</button>
+            <button id="floors-btn-2" onclick="selectFloors(2)" style="flex:1;padding:9px;border-radius:9px;border:1px solid #374151;background:transparent;color:#6b7280;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">2 этажа</button>
+            <button id="floors-btn-3" onclick="selectFloors(3)" style="flex:1;padding:9px;border-radius:9px;border:1px solid #374151;background:transparent;color:#6b7280;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">3+ этажей</button>
+          </div>
         </div>
-
-        <div style="margin-bottom:12px;">
-          <div style="font-size:10px;color:#6b7280;letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:8px;">Стиль</div>
-          <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        <div style="margin-bottom:14px;">
+          <div style="font-size:10px;color:#6b7280;letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:8px;">ОСОБЕННОСТИ</div>
+          <div style="display:flex;gap:6px;">
+            <button id="feature-btn-basement" onclick="toggleFeature('basement',this)" style="flex:1;padding:9px;border-radius:9px;border:1px solid #374151;background:transparent;color:#6b7280;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Цокольный эт.</button>
+            <button id="feature-btn-mansard" onclick="toggleFeature('mansard',this)" style="flex:1;padding:9px;border-radius:9px;border:1px solid #374151;background:transparent;color:#6b7280;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Мансарда</button>
+            <button id="feature-btn-flat" onclick="toggleFeature('flat',this)" style="flex:1;padding:9px;border-radius:9px;border:1px solid #374151;background:transparent;color:#6b7280;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Плоск. кровля</button>
+          </div>
+        </div>
+        <div style="margin-bottom:14px;">
+          <div style="font-size:10px;color:#6b7280;letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:8px;">СТИЛЬ</div>
+          <div style="display:flex;gap:6px;">
             <button id="style-btn-classic" onclick="selectStyle('classic')" style="flex:1;padding:9px;border-radius:9px;border:1px solid #374151;background:transparent;color:#6b7280;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Классический</button>
             <button id="style-btn-modern" onclick="selectStyle('modern')" style="flex:1;padding:9px;border-radius:9px;border:1px solid #374151;background:transparent;color:#6b7280;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Современный</button>
           </div>
@@ -5847,7 +5850,9 @@ function canEditCards(){
 let cardsData = [];
 let currentCardFloorFilter = 'all';
 let currentCardStyleFilter = 'all';
+let currentFeatureFilter = 'all';
 let ceStyleSelected = '';
+let ceFeatureSelected = [];
 let ceCurrentId = null;
 let ceImages = [null, null, null, null]; // [facade1, facade2, plan1, plan2]
 let ceFloorsSelected = 2;
@@ -5897,6 +5902,13 @@ function filterStyle(val, el){
   renderCardsList();
 }
 
+function filterFeature(val, el){
+  currentFeatureFilter = val;
+  document.querySelectorAll('#feature-filters .filter-chip').forEach(c=>c.classList.remove('active'));
+  if(el) el.classList.add('active');
+  renderCardsList();
+}
+
 function renderCardsList(){
   const container = document.getElementById('cards-list');
   if(!container) return;
@@ -5904,6 +5916,16 @@ function renderCardsList(){
   let filtered = cardsData;
   if(currentCardFloorFilter !== 'all'){
     filtered = filtered.filter(c => String(c.floors) === String(currentCardFloorFilter));
+  }
+  if(currentFeatureFilter !== 'all'){
+    const featureTagMap = {basement:'Цокольный этаж',mansard:'Мансарда',flat:'Плоская кровля'};
+    const featureTag = featureTagMap[currentFeatureFilter];
+    if(featureTag){
+      filtered = filtered.filter(c => {
+        const tags = Array.isArray(c.tags) ? c.tags : (c.tags||'').split(',').map(t=>t.trim());
+        return tags.includes(featureTag);
+      });
+    }
   }
   if(currentCardStyleFilter !== 'all'){
     const styleKey = currentCardStyleFilter === 'classic' ? 'Классический' : 'Современный';
@@ -5959,8 +5981,9 @@ function openCardEditor(id){
     if(el){ el.src=''; el.style.display='none'; }
   });
 
-  selectFloors('2');
+  selectFloors(2);
   ceStyleSelected = '';
+  ceFeatureSelected = [];
 
   if(id){
     // Edit mode
@@ -5988,12 +6011,17 @@ function openCardEditor(id){
       setVal('ce-area2', card.floor2_area||'');
       setVal('ce-expl1', (card.expl1||[]).map(r=>`${r.name}: ${r.area}`).join('\n'));
       setVal('ce-expl2', (card.expl2||[]).map(r=>`${r.name}: ${r.area}`).join('\n'));
-      selectFloors(card.floors||'2');
-      // Load style from tags
+      selectFloors(card.floors||2);
+      // Load style and features from tags
       const cardTags = Array.isArray(card.tags) ? card.tags : (card.tags||'').split(',').map(t=>t.trim());
       if(cardTags.includes('Классический')) selectStyle('classic');
       else if(cardTags.includes('Современный')) selectStyle('modern');
-      else { ceStyleSelected = ''; ['classic','modern'].forEach(id=>{ const btn=document.getElementById('style-btn-'+id); if(btn){btn.style.borderColor='#374151';btn.style.background='transparent';btn.style.color='#6b7280';} }); }
+      else { ceStyleSelected=''; ['classic','modern'].forEach(id=>{const btn=document.getElementById('style-btn-'+id);if(btn){btn.style.borderColor='#374151';btn.style.background='transparent';btn.style.color='#6b7280';}}); }
+      ceFeatureSelected=[];
+      ['basement','mansard','flat'].forEach(id=>{const btn=document.getElementById('feature-btn-'+id);if(btn){btn.style.borderColor='#374151';btn.style.background='transparent';btn.style.color='#6b7280';}});
+      if(cardTags.includes('Цокольный этаж')){ceFeatureSelected.push('basement');const b=document.getElementById('feature-btn-basement');if(b){b.style.borderColor='#3b82f6';b.style.background='rgba(59,130,246,0.15)';b.style.color='#3b82f6';}}
+      if(cardTags.includes('Мансарда')){ceFeatureSelected.push('mansard');const b=document.getElementById('feature-btn-mansard');if(b){b.style.borderColor='#3b82f6';b.style.background='rgba(59,130,246,0.15)';b.style.color='#3b82f6';}}
+      if(cardTags.includes('Плоская кровля')){ceFeatureSelected.push('flat');const b=document.getElementById('feature-btn-flat');if(b){b.style.borderColor='#3b82f6';b.style.background='rgba(59,130,246,0.15)';b.style.color='#3b82f6';}}
       // Show stored images as previews
       if(card.images){
         const previews = ['ce-facade-preview','ce-facade2-preview','ce-plan1-preview','ce-plan2-preview'];
@@ -6021,41 +6049,45 @@ function closeCardEditor(){
 function setVal(id, val){ const el=document.getElementById(id); if(el) el.value=val; }
 
 function selectFloors(n){
-  n = String(n);
+  n = parseInt(n) || n;
   ceFloorsSelected = n;
-  const floorBtnMap = {'1':'floors-btn-1','2':'floors-btn-2','3':'floors-btn-3','1b':'floors-btn-4','2b':'floors-btn-5','1m':'floors-btn-6','2m':'floors-btn-7','flat':'floors-btn-8'};
-  Object.values(floorBtnMap).forEach(id=>{
-    const btn = document.getElementById(id);
+  [1,2,3].forEach(i=>{
+    const btn = document.getElementById('floors-btn-'+i);
     if(!btn) return;
-    if(floorBtnMap[n] === id){
-      btn.style.borderColor='#3b82f6';
-      btn.style.background='rgba(59,130,246,0.15)';
-      btn.style.color='#3b82f6';
+    if(i===n){
+      btn.style.borderColor='#3b82f6';btn.style.background='rgba(59,130,246,0.15)';btn.style.color='#3b82f6';
     } else {
-      btn.style.borderColor='#374151';
-      btn.style.background='transparent';
-      btn.style.color='#6b7280';
+      btn.style.borderColor='#374151';btn.style.background='transparent';btn.style.color='#6b7280';
     }
   });
-  const floorNumMap = {'1':1,'2':2,'3':3,'1b':1,'2b':2,'1m':1,'2m':2,'flat':1};
-  const displayNum = floorNumMap[n] || 1;
-  const fs = document.getElementById('prev-floors-stat'); if(fs) fs.textContent=displayNum;
+  const fs = document.getElementById('prev-floors-stat'); if(fs) fs.textContent=n;
   cePreview();
 }
 
 function selectStyle(s){
-  ceStyleSelected = s;
+  ceStyleSelected = s || '';
   ['classic','modern'].forEach(id=>{
-    const btn = document.getElementById('style-btn-'+id);
+    const btn=document.getElementById('style-btn-'+id);
     if(!btn) return;
-    if(s === id){
-      btn.style.borderColor='#3b82f6';
-      btn.style.background='rgba(59,130,246,0.15)';
-      btn.style.color='#3b82f6';
+    if(s===id){
+      btn.style.borderColor='#3b82f6';btn.style.background='rgba(59,130,246,0.15)';btn.style.color='#3b82f6';
     } else {
-      btn.style.borderColor='#374151';
-      btn.style.background='transparent';
-      btn.style.color='#6b7280';
+      btn.style.borderColor='#374151';btn.style.background='transparent';btn.style.color='#6b7280';
+    }
+  });
+}
+
+function toggleFeature(f, el){
+  const idx = ceFeatureSelected.indexOf(f);
+  if(idx === -1){ ceFeatureSelected.push(f); }
+  else { ceFeatureSelected.splice(idx,1); }
+  ['basement','mansard','flat'].forEach(id=>{
+    const btn=document.getElementById('feature-btn-'+id);
+    if(!btn) return;
+    if(ceFeatureSelected.includes(id)){
+      btn.style.borderColor='#3b82f6';btn.style.background='rgba(59,130,246,0.15)';btn.style.color='#3b82f6';
+    } else {
+      btn.style.borderColor='#374151';btn.style.background='transparent';btn.style.color='#6b7280';
     }
   });
 }
@@ -6131,9 +6163,13 @@ async function saveCard(){
       baths: parseInt(document.getElementById('ce-baths').value)||null,
       price: document.getElementById('ce-price').value.trim(),
       tags: (()=>{
-        const userTags = document.getElementById('ce-tags').value.split(',').map(t=>t.trim()).filter(Boolean).filter(t=>t!=='Классический'&&t!=='Современный');
+        const systemTags = ['Классический','Современный','Цокольный этаж','Мансарда','Плоская кровля'];
+        const userTags = document.getElementById('ce-tags').value.split(',').map(t=>t.trim()).filter(Boolean).filter(t=>!systemTags.includes(t));
         if(ceStyleSelected==='classic') userTags.push('Классический');
         if(ceStyleSelected==='modern') userTags.push('Современный');
+        if(ceFeatureSelected.includes('basement')) userTags.push('Цокольный этаж');
+        if(ceFeatureSelected.includes('mansard')) userTags.push('Мансарда');
+        if(ceFeatureSelected.includes('flat')) userTags.push('Плоская кровля');
         return userTags;
       })(),
       floor1_area: document.getElementById('ce-area1').value.trim(),
