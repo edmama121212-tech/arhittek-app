@@ -148,6 +148,7 @@
     flex-shrink:0; font-size:11px; padding:6px 14px; border-radius:20px;
     border:1px solid var(--line-strong); color:var(--text-dim); font-weight:600;
     cursor:pointer; white-space:nowrap; transition: all .15s; letter-spacing:0.02em;
+    min-width:80px; text-align:center; box-sizing:border-box;
   }
   .filter-chip.active{background:var(--blue-soft); color:var(--blue); border-color:rgba(74,144,226,0.4);}
 
@@ -483,11 +484,7 @@
     <div class="filters" id="statusFilters">
       <div class="filter-chip active" data-st="all">Любой статус</div>
     </div>
-    <div class="filters" id="paymentFilters">
-      <div class="filter-chip active" data-pay="all">Любая оплата</div>
-      <div class="filter-chip" data-pay="Оплачен">Оплачен</div>
-      <div class="filter-chip" data-pay="Ждём оплату">Ждём оплату</div>
-    </div>
+    <div class="filters" id="paymentFilters" style="display:none;"></div>
     <div class="filters" id="employeeFilters"></div>
     <div id="filter-active-badge" style="display:none;margin:4px 16px 0;background:var(--blue-soft);color:var(--blue);border:1px solid rgba(74,144,226,0.3);border-radius:20px;padding:3px 12px;font-size:12px;font-weight:600;cursor:pointer;" onclick="resetAllFilters()">✕ Сбросить фильтры: <span id="filter-badge-text"></span></div>
 
@@ -2344,10 +2341,10 @@ function renderOverview(){
   const activeProjects = state.projects.filter(p=>!doneStatus || p.status_id !== doneStatus.id);
   const doneProjects = state.projects.filter(p=>doneStatus && p.status_id === doneStatus.id);
 
-  // Реальный долг — только проекты где статус не «Оплачен»
+  // Реальный долг — все проекты с ненулевым остатком (включая расхождения)
   const totalDebt = state.projects
-    .filter(p => p.payment_status !== 'Оплачен')
-    .reduce((s,p)=>s + Math.max(0, Number(p.balance)||0), 0);
+    .filter(p => Number(p.balance) > 0)
+    .reduce((s,p)=>s + (Number(p.balance)||0), 0);
 
   // overdue: end_date in the past and status not done
   const overdue = state.projects.filter(p=>{
@@ -2401,8 +2398,7 @@ function renderOverview(){
           <div class="li-meta">${cat ? escapeHtml(cat.name) : '—'}${p.client_name ? ' · 👤 '+escapeHtml(p.client_name) : ''}</div>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
-          <span class="balance-edit" data-id="${p.id}" data-balance="${p.balance}" onclick="editBalance('${p.id}', this)" style="color:var(--gold); font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:14px; cursor:pointer; border-bottom:1px dashed var(--gold); padding-bottom:1px;">${fmtMoney(p.balance)}</span>
-          <button class="icon-btn" title="Отметить оплаченным" onclick="markPaid('${p.id}')" style="font-size:18px; color:var(--green);">✓</button>
+          <span style="color:var(--gold); font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:14px;">${fmtMoney(p.balance)}</span>
         </div>
       </div>`;
     }).join('');
@@ -2419,8 +2415,7 @@ function renderOverview(){
               <div class="li-meta" style="color:var(--gold);">Статус: Оплачен, но остаток ${fmtMoney(p.balance)}</div>
             </div>
             <div style="display:flex; align-items:center; gap:8px;">
-              <span class="balance-edit" data-id="${p.id}" data-balance="${p.balance}" onclick="editBalance('${p.id}', this)" style="color:var(--gold); font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:14px; cursor:pointer; border-bottom:1px dashed var(--gold); padding-bottom:1px;">${fmtMoney(p.balance)}</span>
-              <button class="icon-btn" title="Обнулить остаток" onclick="markPaid('${p.id}')" style="font-size:18px; color:var(--green);">✓</button>
+              <span style="color:var(--gold); font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:14px;">${fmtMoney(p.balance)}</span>
             </div>
           </div>`;
         }).join('')}
@@ -2690,15 +2685,15 @@ function renderAnalytics(){
     <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
       <div style="background:rgba(82,183,136,0.08); border-radius:10px; padding:10px 8px; text-align:center; border:1px solid rgba(82,183,136,0.15);">
         <div style="font-size:11px; color:var(--text-dim); margin-bottom:4px;">Приход 12 мес.</div>
-        <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:13px; color:var(--green);">${fmtMoney(totalIncome)}</div>
+        <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:11px; color:var(--green);">${fmtK(totalIncome)} ₽</div>
       </div>
       <div style="background:rgba(224,82,82,0.08); border-radius:10px; padding:10px 8px; text-align:center; border:1px solid rgba(224,82,82,0.15);">
         <div style="font-size:11px; color:var(--text-dim); margin-bottom:4px;">Расход 12 мес.</div>
-        <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:13px; color:var(--red);">${fmtMoney(totalExpense)}</div>
+        <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:11px; color:var(--red);">${fmtK(totalExpense)} ₽</div>
       </div>
       <div style="background:${totalProfit>=0 ? 'rgba(82,183,136,0.08)' : 'rgba(224,82,82,0.08)'}; border-radius:10px; padding:10px 8px; text-align:center; border:1px solid ${totalProfit>=0 ? 'rgba(82,183,136,0.15)' : 'rgba(224,82,82,0.15)'};">
         <div style="font-size:11px; color:var(--text-dim); margin-bottom:4px;">Прибыль 12 мес.</div>
-        <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:13px; color:${profitColor};">${totalProfit>=0?'+':''}${fmtMoney(totalProfit)}</div>
+        <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:11px; color:${profitColor};">${totalProfit>=0?'+':''}${fmtK(totalProfit)} ₽</div>
       </div>
     </div>
 
@@ -2812,8 +2807,8 @@ function renderPL(){
     const totalProfitSign = totalProfit >= 0 ? '+' : '';
 
     const totalDebt = state.projects
-      .filter(p => p.payment_status !== 'Оплачен')
-      .reduce((s,p) => s + Math.max(0, Number(p.balance)||0), 0);
+      .filter(p => Number(p.balance) > 0)
+      .reduce((s,p) => s + (Number(p.balance)||0), 0);
 
     const constrBudgetLeft = constrProjects.reduce((s,p) => s + (Number(p.balance)||0), 0);
 
@@ -3117,7 +3112,8 @@ function populateProjectFormSelects(){
 
   const stSel = document.getElementById('pf-status');
   const prevSt = stSel.value;
-  stSel.innerHTML = state.statuses.map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+  const allowedStatuses = ['Запись', 'В процессе', 'Завершён'];
+  stSel.innerHTML = state.statuses.filter(s=>allowedStatuses.includes(s.name)).map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
   if(prevSt && state.statuses.some(s=>s.id===prevSt)) stSel.value = prevSt;
 
   const empSel = document.getElementById('pf-employee');
