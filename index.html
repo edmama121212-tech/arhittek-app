@@ -82,6 +82,8 @@
   .sync-dot{width:6px;height:6px; border-radius:50%; background:var(--green); flex-shrink:0;}
   .sync-dot.off{background:var(--red);}
   .sync-dot.loading{background:var(--blue); animation:pulse 1s infinite;}
+  .sync-dot.live{background:var(--green); animation:livepulse 2s infinite;}
+  @keyframes livepulse{0%,100%{opacity:1; box-shadow:0 0 0 0 rgba(82,183,136,0.5);} 50%{opacity:0.8; box-shadow:0 0 0 4px rgba(82,183,136,0);}}
   @keyframes pulse{0%,100%{opacity:1;} 50%{opacity:0.3;}}
 
   main{padding: 14px 16px 0;}
@@ -1648,7 +1650,15 @@ function showToast(msg){
 function setSyncStatus(status, label){
   const dot = document.getElementById('syncDot');
   const lbl = document.getElementById('syncLabel');
-  dot.className = 'sync-dot' + (status === 'loading' ? ' loading' : status === 'off' ? ' off' : '');
+  if(status === 'loading'){
+    dot.className = 'sync-dot loading';
+  } else if(status === 'off'){
+    dot.className = 'sync-dot off';
+  } else if(status === 'live'){
+    dot.className = 'sync-dot live';
+  } else {
+    dot.className = 'sync-dot';
+  }
   lbl.textContent = label;
 }
 
@@ -2059,7 +2069,9 @@ async function loadAll(){
 
     purgeOldTrash();
 
-    setSyncStatus('on', 'синхронизировано');
+    // Показываем live-статус если realtime канал активен
+    const isLive = realtimeChannel && realtimeChannel.state === 'joined';
+    setSyncStatus(isLive ? 'live' : 'on', isLive ? 'live · обновляется' : 'синхронизировано');
     renderAll();
     updateTzBadge();
 
@@ -2122,7 +2134,10 @@ function renderOverview(){
   const activeProjects = state.projects.filter(p=>!doneStatus || p.status_id !== doneStatus.id);
   const doneProjects = state.projects.filter(p=>doneStatus && p.status_id === doneStatus.id);
 
-  const totalDebt = state.projects.reduce((s,p)=>s + (Number(p.balance)||0), 0);
+  // Реальный долг — только проекты где статус не «Оплачен»
+  const totalDebt = state.projects
+    .filter(p => p.payment_status !== 'Оплачен')
+    .reduce((s,p)=>s + Math.max(0, Number(p.balance)||0), 0);
 
   // overdue: end_date in the past and status not done
   const overdue = state.projects.filter(p=>{
@@ -2132,15 +2147,18 @@ function renderOverview(){
     return d !== null && d < 0;
   });
 
+  // Расхождение: статус «Оплачен» но balance > 0
+  const mismatchCount = state.projects.filter(p=>Number(p.balance) > 0 && p.payment_status === 'Оплачен').length;
+
   const kpiGrid = document.getElementById('kpiGrid');
   kpiGrid.innerHTML = `
-    <div class="kpi accent-red">
+    <div class="kpi accent-red" style="cursor:pointer;" onclick="document.getElementById('debtCard').scrollIntoView({behavior:'smooth'})">
       <div class="big">${overdue.length}</div>
       <div class="lbl">Просрочки</div>
     </div>
-    <div class="kpi accent-gold">
+    <div class="kpi accent-gold" style="cursor:pointer;" onclick="document.getElementById('debtCard').scrollIntoView({behavior:'smooth'})">
       <div class="big">${fmt(totalDebt)} ₽</div>
-      <div class="lbl">Должны клиенты</div>
+      <div class="lbl">Должны клиенты${mismatchCount > 0 ? ` <span style="color:var(--red);">⚠${mismatchCount}</span>` : ''}</div>
     </div>
     <div class="kpi">
       <div class="big">${activeProjects.length}</div>
@@ -2152,25 +2170,57 @@ function renderOverview(){
     </div>
   `;
 
-  // Debt list (top 8 by balance)
-  const debts = state.projects.filter(p=>Number(p.balance) > 0).sort((a,b)=>b.balance-a.balance).slice(0,8);
+  // Debt list — только проекты где balance > 0 И статус не «Оплачен»
+  // Если статус «Оплачен» но balance > 0 — это расхождение, показываем отдельно
+  const paidStatus = state.statuses.find(s=>s.name==='Оплачен');
+  const debts = state.projects
+    .filter(p=>Number(p.balance) > 0 && p.payment_status !== 'Оплачен')
+    .sort((a,b)=>b.balance-a.balance)
+    .slice(0,8);
+  const mismatch = state.projects
+    .filter(p=>Number(p.balance) > 0 && p.payment_status === 'Оплачен');
+
   const debtCard = document.getElementById('debtCard');
-  if(!debts.length){
+  if(!debts.length && !mismatch.length){
     debtCard.innerHTML = '<div class="empty-state">Все проекты оплачены полностью</div>';
   }else{
-    debtCard.innerHTML = debts.map(p=>{
+    let html = debts.map(p=>{
       const cat = findCategory(p.category_id);
       return `<div class="list-item">
         <div>
           <div class="li-name">${escapeHtml(p.name)}</div>
-          <div class="li-meta">${cat ? escapeHtml(cat.name) : '—'}</div>
+          <div class="li-meta">${cat ? escapeHtml(cat.name) : '—'}${p.client_name ? ' · 👤 '+escapeHtml(p.client_name) : ''}</div>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
           <span class="balance-edit" data-id="${p.id}" data-balance="${p.balance}" onclick="editBalance('${p.id}', this)" style="color:var(--gold); font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:14px; cursor:pointer; border-bottom:1px dashed var(--gold); padding-bottom:1px;">${fmtMoney(p.balance)}</span>
           <button class="icon-btn" title="Отметить оплаченным" onclick="markPaid('${p.id}')" style="font-size:18px; color:var(--green);">✓</button>
         </div>
       </div>`;
-    }).join('') + `<div class="note" style="margin-top:6px; padding-top:8px; border-top:1px solid var(--line);">Итого по всем проектам: <b style="color:var(--text)">${fmtMoney(totalDebt)}</b></div>`;
+    }).join('');
+
+    // Расхождение: статус «Оплачен» но balance != 0
+    if(mismatch.length){
+      html += `<div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--line);">
+        <div style="font-size:10px; color:var(--gold); font-weight:700; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:6px;">⚠ Расхождение статуса и остатка</div>
+        ${mismatch.map(p=>{
+          const cat = findCategory(p.category_id);
+          return `<div class="list-item">
+            <div>
+              <div class="li-name">${escapeHtml(p.name)}</div>
+              <div class="li-meta" style="color:var(--gold);">Статус: Оплачен, но остаток ${fmtMoney(p.balance)}</div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span class="balance-edit" data-id="${p.id}" data-balance="${p.balance}" onclick="editBalance('${p.id}', this)" style="color:var(--gold); font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:14px; cursor:pointer; border-bottom:1px dashed var(--gold); padding-bottom:1px;">${fmtMoney(p.balance)}</span>
+              <button class="icon-btn" title="Обнулить остаток" onclick="markPaid('${p.id}')" style="font-size:18px; color:var(--green);">✓</button>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`;
+    }
+
+    const totalShown = [...debts, ...mismatch].reduce((s,p)=>s+Number(p.balance),0);
+    html += `<div class="note" style="margin-top:6px; padding-top:8px; border-top:1px solid var(--line);">Итого по всем проектам: <b style="color:var(--text)">${fmtMoney(totalDebt)}</b></div>`;
+    debtCard.innerHTML = html;
   }
 
   // Active projects with deadlines, sorted by days left
@@ -2341,7 +2391,9 @@ function renderPL(){
     const totalProfitColor = totalProfit >= 0 ? 'var(--green)' : 'var(--red)';
     const totalProfitSign = totalProfit >= 0 ? '+' : '';
 
-    const totalDebt = state.projects.reduce((s,p) => s + (Number(p.balance)||0), 0);
+    const totalDebt = state.projects
+      .filter(p => p.payment_status !== 'Оплачен')
+      .reduce((s,p) => s + Math.max(0, Number(p.balance)||0), 0);
 
     const constrBudgetLeft = constrProjects.reduce((s,p) => s + (Number(p.balance)||0), 0);
 
@@ -6794,6 +6846,87 @@ document.querySelector('.nav-btn[data-view="view-cards"]')?.addEventListener('cl
 });
 
 loadAll();
-setInterval(loadAll, 30000);
+
+// ============================================================
+// REALTIME — мгновенная синхронизация между пользователями
+// ============================================================
+let realtimeChannel = null;
+let realtimeToastShown = false;
+let pendingReload = false;
+let reloadDebounceTimer = null;
+
+function scheduleReload(source){
+  // Дебаунс: если несколько таблиц изменились одновременно — один loadAll
+  if(reloadDebounceTimer) clearTimeout(reloadDebounceTimer);
+  reloadDebounceTimer = setTimeout(async ()=>{
+    reloadDebounceTimer = null;
+    if(!realtimeToastShown){
+      realtimeToastShown = true;
+      showToast('🔄 Данные обновлены другим пользователем');
+      setTimeout(()=>{ realtimeToastShown = false; }, 4000);
+    }
+    await loadAll();
+    setSyncStatus('on', 'синхронизировано · live');
+  }, 600);
+}
+
+function setupRealtime(){
+  // Убиваем старый канал если есть
+  if(realtimeChannel){
+    sb.removeChannel(realtimeChannel);
+    realtimeChannel = null;
+  }
+
+  realtimeChannel = sb
+    .channel('arhittek-live')
+    .on('postgres_changes', {event:'*', schema:'public', table:'projects'}, ()=>scheduleReload('projects'))
+    .on('postgres_changes', {event:'*', schema:'public', table:'invoices'}, ()=>scheduleReload('invoices'))
+    .on('postgres_changes', {event:'*', schema:'public', table:'ledger_entries'}, ()=>scheduleReload('ledger'))
+    .on('postgres_changes', {event:'*', schema:'public', table:'project_stages'}, ()=>scheduleReload('stages'))
+    .on('postgres_changes', {event:'*', schema:'public', table:'employees'}, ()=>scheduleReload('employees'))
+    .subscribe((status)=>{
+      if(status === 'SUBSCRIBED'){
+        setSyncStatus('on', 'синхронизировано · live');
+        console.log('[Realtime] подключено');
+      } else if(status === 'CHANNEL_ERROR' || status === 'TIMED_OUT'){
+        setSyncStatus('off', 'нет live-связи');
+        console.warn('[Realtime] ошибка:', status);
+        // Fallback на поллинг если realtime недоступен
+        startPollingFallback();
+      }
+    });
+}
+
+// Fallback поллинг если realtime не работает (каждые 20 сек)
+let pollingTimer = null;
+function startPollingFallback(){
+  if(pollingTimer) return; // уже запущен
+  console.log('[Realtime] переключение на поллинг 20с');
+  pollingTimer = setInterval(()=>{
+    if(realtimeChannel && realtimeChannel.state === 'joined'){
+      // Realtime восстановился — отключаем поллинг
+      clearInterval(pollingTimer);
+      pollingTimer = null;
+    } else {
+      loadAll();
+    }
+  }, 20000);
+}
+
+// Запускаем realtime после первой загрузки данных
+// (используем небольшую задержку чтобы сессия уже была установлена)
+setTimeout(setupRealtime, 1500);
+
+// Переподключение при возврате на вкладку браузера
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'visible'){
+    // Страница стала видимой — обновляем данные
+    loadAll();
+    // Если канал потерян — переподключаем
+    if(!realtimeChannel || realtimeChannel.state !== 'joined'){
+      setTimeout(setupRealtime, 500);
+    }
+  }
+});
 </script>
 
