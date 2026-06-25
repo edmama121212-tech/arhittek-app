@@ -2554,7 +2554,7 @@ function renderAnalytics(){
   }
 
   // Размеры SVG
-  const W = 700, H = 220, PAD = {top:20, right:16, bottom:36, left:56};
+  const W = 700, H = 130, PAD = {top:12, right:50, bottom:28, left:48};
   const chartW = W - PAD.left - PAD.right;
   const chartH = H - PAD.top - PAD.bottom;
   const n = months.length;
@@ -2583,7 +2583,7 @@ function renderAnalytics(){
   const barW = Math.max(4, (chartW / n) * 0.35);
 
   // Оси Y — 4 деления
-  const yTicks = [0, 0.33, 0.66, 1].map(t=>({
+  const yTicks = [0, 0.5, 1].map(t=>({
     v: Math.round(maxVal*t),
     y: scaleY(maxVal*t),
   }));
@@ -2677,10 +2677,11 @@ function renderAnalytics(){
 
           <!-- Метки X -->
           ${months.map((m,i)=>{
-            // Показываем каждую 2-ю метку чтобы не толпились
-            if(i % 2 !== 0 && i !== n-1) return '';
-            return `<text x="${scaleX(i).toFixed(1)}" y="${(chartH+14).toFixed(1)}"
-                         text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.4)">${m.label}</text>`;
+            if(i % 3 !== 0 && i !== n-1) return '';
+            const anchor = i === n-1 ? 'end' : 'middle';
+            const xOff = i === n-1 ? scaleX(i)+2 : scaleX(i);
+            return `<text x="${xOff.toFixed(1)}" y="${(chartH+14).toFixed(1)}"
+                         text-anchor="${anchor}" font-size="11" fill="rgba(255,255,255,0.4)">${m.label}</text>`;
           }).join('')}
 
           <!-- Ось X -->
