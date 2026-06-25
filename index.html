@@ -494,6 +494,16 @@
   <div class="view" id="view-construction">
 
     <div class="section-label"><span class="lbl-text">Объекты строительства</span><span class="section-label-line"></span></div>
+
+    <!-- Поиск -->
+    <div class="search-box" style="margin-bottom:8px;">
+      <input type="text" id="constrSearch" placeholder="Поиск по названию или адресу…">
+      <button class="search-clear" id="constrSearchClear" type="button">✕</button>
+    </div>
+
+    <!-- Фильтр по статусу -->
+    <div class="filters" id="constrStatusFilters" style="margin-bottom:10px;"></div>
+
     <div id="constructionList">
       <div class="loading-state">Загрузка…</div>
     </div>
@@ -571,6 +581,17 @@
     <div class="search-box">
       <input type="text" id="ledgerSearch" placeholder="Поиск по записям...">
       <button class="search-clear" id="ledgerSearchClear" type="button">✕</button>
+    </div>
+    <!-- Фильтр по дате -->
+    <div style="display:flex; gap:8px; margin-bottom:8px; align-items:center;">
+      <div class="field" style="margin:0; flex:1;">
+        <input type="date" id="ledgerDateFrom" placeholder="Дата от" title="Дата от" style="font-size:12px;">
+      </div>
+      <div style="font-size:11px; color:var(--text-dim);">—</div>
+      <div class="field" style="margin:0; flex:1;">
+        <input type="date" id="ledgerDateTo" placeholder="Дата до" title="Дата до" style="font-size:12px;">
+      </div>
+      <button class="btn btn-secondary" style="padding:8px 10px; font-size:11px; white-space:nowrap;" onclick="document.getElementById('ledgerDateFrom').value='';document.getElementById('ledgerDateTo').value='';renderLedger();">✕ Сброс</button>
     </div>
     <div class="card" id="ledgerEntries">
       <div class="empty-state">Записей пока нет</div>
@@ -1266,6 +1287,11 @@
       <input type="text" id="pf-name" placeholder="например: Дом Алхазурова — пристройка">
     </div>
 
+    <div class="field">
+      <label>ФИО клиента</label>
+      <input type="text" id="pf-client-name" placeholder="Иванов Иван Иванович">
+    </div>
+
     <div class="field-row">
       <div class="field">
         <label>Категория</label>
@@ -1661,13 +1687,19 @@ function getSession(){
     if(!raw) return null;
     const s = JSON.parse(raw);
     if(!s || !s.employeeId) return null;
+    // Проверяем срок действия — 30 дней
+    const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+    if(s.createdAt && Date.now() - s.createdAt > SESSION_TTL_MS){
+      localStorage.removeItem('arhittek_session');
+      return null;
+    }
     return s;
   }catch(e){ return null; }
 }
 
 function setSession(s){
-  session = s;
-  try{ localStorage.setItem('arhittek_session', JSON.stringify(s)); }catch(e){}
+  session = {...s, createdAt: Date.now()};
+  try{ localStorage.setItem('arhittek_session', JSON.stringify(session)); }catch(e){}
 }
 
 function clearSession(){
@@ -1985,9 +2017,9 @@ async function loadAll(){
       sb.from('categories').select('*').is('deleted_at', null).order('sort_order'),
       sb.from('statuses').select('*').order('sort_order'),
       sb.from('departments').select('*').order('sort_order'),
-      sb.from('ledger_entries').select('*').is('deleted_at', null).order('created_at', {ascending:false}).limit(100),
+      sb.from('ledger_entries').select('*').is('deleted_at', null).order('created_at', {ascending:false}),
       sb.from('expense_photos').select('*').order('created_at', {ascending:false}),
-      sb.from('audit_log').select('*').order('created_at', {ascending:false}).limit(100),
+      sb.from('audit_log').select('*').order('created_at', {ascending:false}).limit(500),
       sb.from('invoices').select('*').order('invoice_date', {ascending:true}),
       sb.from('tz_forms').select('*').order('created_at', {ascending:false}),
       sb.from('tz_references').select('*'),
@@ -2063,6 +2095,7 @@ function renderAll(){
   renderStatusFilters();
   renderPaymentFilters();
   renderEmployeeFilters();
+  renderConstrStatusFilters();
   renderProjects();
   renderConstruction();
   renderFeeCalc();
@@ -2254,7 +2287,7 @@ function renderPL(){
     const isProjectEntry = e => !constrIds.has(e.project_id);
 
     const projectIncome = periodLedger
-      .filter(e => isProjectEntry(e) && ['advance','final_payment','income','fee_payment'].includes(e.type))
+      .filter(e => isProjectEntry(e) && ['advance','final_payment','income'].includes(e.type))
       .reduce((s,e) => s + (Number(e.amount)||0), 0);
 
     const materialsBudget = periodLedger
@@ -2283,9 +2316,22 @@ function renderPL(){
       .filter(e => constrIds.has(e.project_id) && ['advance','final_payment','income','materials_budget','construction_budget'].includes(e.type))
       .reduce((s,e) => s + (Number(e.amount)||0), 0);
 
-    const constrExpenses = state.invoices
+    // Строительный: расходы фильтруем по тому же периоду что и приход (по invoice_date)
+    const constrExpensesPeriod = state.invoices
+      .filter(inv => {
+        if(!constrIds.has(inv.project_id)) return false;
+        if(plPeriod === 'all') return true;
+        if(!inv.invoice_date) return false;
+        return new Date(inv.invoice_date) >= fromDate;
+      })
+      .reduce((s,inv) => s + (Number(inv.amount)||0), 0);
+
+    // Полные расходы по накладным (всё время) — для справки
+    const constrExpensesAll = state.invoices
       .filter(inv => constrIds.has(inv.project_id))
       .reduce((s,inv) => s + (Number(inv.amount)||0), 0);
+
+    const constrExpenses = constrExpensesPeriod;
 
     const constrProfit = constrIncome - constrExpenses;
     const constrProfitColor = constrProfit >= 0 ? 'var(--green)' : 'var(--red)';
@@ -2348,7 +2394,7 @@ function renderPL(){
           <div class="fv" style="color:var(--green);">+${fmtMoney(constrIncome)}</div>
                     </div>
                           <div class="fee-row">
-          <div class="fl">Расход по накладным (всё время)</div>
+          <div class="fl">Расход по накладным${plPeriod!=='all' ? ' · '+labels[plPeriod] : ' · всё время'}</div>
           <div class="fv" style="color:var(--red);">−${fmtMoney(constrExpenses)}</div>
                                           </div>
                                                 <div class="fee-row">
@@ -2359,7 +2405,7 @@ function renderPL(){
                 <div class="fl">Прибыль стройки (приход − расход)</div>
                         <div class="fv" style="color:${constrProfitColor};">${constrProfitSign}${fmtMoney(constrProfit)}</div>
 </div>
-        <div class="note" style="margin-top:4px; font-size:10.5px;">Приход — за выбранный период. Расход и прибыль стройки считаются по накладным за всё время, т.к. накладные не хранят период.</div>
+        ${plPeriod !== 'all' ? `<div class="note" style="margin-top:4px; font-size:10.5px; color:var(--text-dim);">⚠ Накладные без даты не попадают в период — проверьте что даты заполнены. Итого по всем накладным за всё время: ${fmtMoney(constrExpensesAll)}.</div>` : ''}
         ` : ''}
 
         <div style="border-top:2px solid var(--line-strong); margin-top:14px; padding-top:10px;">
@@ -2371,13 +2417,21 @@ function renderPL(){
 
         <div style="border-top:1px solid var(--line); margin-top:10px; padding-top:10px;">
           <div class="fee-row">
-            <div class="fl" style="color:var(--text-dim);">Долг клиентов (все проекты)</div>
-            <div class="fv" style="color:var(--gold);">${fmtMoney(totalDebt)}</div>
-</div>
-                                                  </div>
+            <div class="fl" style="color:var(--text-dim);">Долг клиентов · Проектный</div>
+            <div class="fv" style="color:var(--gold);">${fmtMoney(state.projects.filter(p=>!constrIds.has(p.id)).reduce((s,p)=>s+Math.max(0,Number(p.balance)||0),0))}</div>
+          </div>
+          ${constrProjects.length > 0 ? `<div class="fee-row">
+            <div class="fl" style="color:var(--text-dim);">Долг клиентов · Строительный</div>
+            <div class="fv" style="color:var(--gold);">${fmtMoney(constrProjects.reduce((s,p)=>s+Math.max(0,Number(p.balance)||0),0))}</div>
+          </div>` : ''}
+          <div class="fee-row total" style="border-top:1px solid var(--line); margin-top:4px; padding-top:6px;">
+            <div class="fl" style="color:var(--text-dim); font-weight:700;">Итого долг клиентов</div>
+            <div class="fv" style="color:var(--gold); font-weight:700;">${fmtMoney(totalDebt)}</div>
+          </div>
+        </div>
 
-                                                      </div>
-                                                        `;
+        </div>
+        `;
   }
   
 
@@ -2496,6 +2550,7 @@ function renderProjects(){
       return (p.name||'').toLowerCase().includes(q) ||
              (p.address||'').toLowerCase().includes(q) ||
              (p.phone||'').toLowerCase().includes(q) ||
+             (p.client_name||'').toLowerCase().includes(q) ||
              (p.notes||'').toLowerCase().includes(q);
     });
   }
@@ -2532,6 +2587,7 @@ function renderProjectRow(p){
 
     let metaParts = [];
     if(cat) metaParts.push(escapeHtml(cat.name));
+    if(p.client_name) metaParts.push('👤 '+escapeHtml(p.client_name));
     if(emp) metaParts.push(escapeHtml(emp.name));
     const coEmp = findEmployee(p.co_employee_id);
     if(coEmp) metaParts.push('+ '+escapeHtml(coEmp.name));
@@ -2663,6 +2719,7 @@ function openProjectSheet(id){
     document.getElementById('pf-start').value = p.start_date || '';
     document.getElementById('pf-end').value = p.end_date || '';
     document.getElementById('pf-notes').value = p.notes || '';
+    document.getElementById('pf-client-name').value = p.client_name || '';
     renderTzList(id);
     document.getElementById('pf-tz-create').style.display = '';
     renderKpListForProject(id);
@@ -2694,6 +2751,7 @@ function openProjectSheet(id){
     document.getElementById('pf-start').value = '';
     document.getElementById('pf-end').value = '';
     document.getElementById('pf-notes').value = '';
+    document.getElementById('pf-client-name').value = '';
     document.getElementById('pf-tz-list').innerHTML = '<div class="empty-state">Сохраните проект, чтобы создать ТЗ</div>';
     document.getElementById('pf-tz-create').style.display = 'none';
     document.getElementById('pf-kp-list').innerHTML = '<div class="empty-state">Сохраните проект, чтобы создать КП</div>';
@@ -2735,6 +2793,7 @@ async function saveProject(){
     start_date: document.getElementById('pf-start').value || null,
     end_date: document.getElementById('pf-end').value || null,
     notes: document.getElementById('pf-notes').value.trim(),
+    client_name: document.getElementById('pf-client-name').value.trim() || null,
     updated_at: new Date().toISOString(),
   };
 
@@ -2986,6 +3045,8 @@ function renderLedgerProjectSelect(){
 function renderLedger(){
   const el = document.getElementById('ledgerEntries');
   let list = state.ledger.slice();
+
+  // Текстовый поиск
   if(ledgerSearchQuery.trim()){
     const q = ledgerSearchQuery.trim().toLowerCase();
     list = list.filter(e=>{
@@ -2995,11 +3056,45 @@ function renderLedger(){
              (ledgerTypeLabels[e.type]?.label||'').toLowerCase().includes(q);
     });
   }
+
+  // Фильтр по дате
+  const dateFromEl = document.getElementById('ledgerDateFrom');
+  const dateToEl = document.getElementById('ledgerDateTo');
+  if(dateFromEl && dateFromEl.value){
+    const from = new Date(dateFromEl.value);
+    list = list.filter(e=>e.entry_date && new Date(e.entry_date) >= from);
+  }
+  if(dateToEl && dateToEl.value){
+    const to = new Date(dateToEl.value);
+    to.setHours(23,59,59);
+    list = list.filter(e=>e.entry_date && new Date(e.entry_date) <= to);
+  }
+
+  // Подвязываем события фильтров дат один раз
+  if(dateFromEl && !dateFromEl.dataset.bound){
+    dateFromEl.dataset.bound = '1';
+    dateFromEl.addEventListener('change', renderLedger);
+  }
+  if(dateToEl && !dateToEl.dataset.bound){
+    dateToEl.dataset.bound = '1';
+    dateToEl.addEventListener('change', renderLedger);
+  }
+
   if(!list.length){
     el.innerHTML = '<div class="empty-state">Записей не найдено</div>';
     return;
   }
-  el.innerHTML = list.map(e=>{
+
+  // Итог отфильтрованного периода
+  const totalIn = list.filter(e=>['advance','final_payment','income','materials_budget','construction_budget'].includes(e.type)).reduce((s,e)=>s+Number(e.amount||0),0);
+  const totalOut = list.filter(e=>['expense','payment','withdrawal'].includes(e.type)).reduce((s,e)=>s+Number(e.amount||0),0);
+  const summaryHtml = `<div style="display:flex;gap:10px;margin-bottom:8px;font-size:11px;">
+    <span style="color:var(--green);">↑ Приход: ${fmtMoney(totalIn)}</span>
+    <span style="color:var(--red);">↓ Расход: ${fmtMoney(totalOut)}</span>
+    <span style="color:var(--text-dim);">Записей: ${list.length}</span>
+  </div>`;
+
+  el.innerHTML = summaryHtml + list.map(e=>{
     const t = ledgerTypeLabels[e.type] || ledgerTypeLabels.expense;
     const proj = state.projects.find(p=>p.id===e.project_id);
     return `<div class="list-item">
@@ -3501,6 +3596,26 @@ function getConstrProjects(){
 // ============================================================
 // CONSTRUCTION LIST (simple clickable cards)
 // ============================================================
+let activeConstrStatusFilter = 'all';
+let constrSearchQuery = '';
+
+function renderConstrStatusFilters(){
+  const el = document.getElementById('constrStatusFilters');
+  if(!el) return;
+  let html = `<div class="filter-chip ${activeConstrStatusFilter==='all'?'active':''}" data-cst="all">Все</div>`;
+  state.statuses.forEach(s=>{
+    html += `<div class="filter-chip ${activeConstrStatusFilter===s.id?'active':''}" data-cst="${s.id}">${escapeHtml(s.name)}</div>`;
+  });
+  el.innerHTML = html;
+  el.querySelectorAll('.filter-chip').forEach(chip=>{
+    chip.addEventListener('click', ()=>{
+      activeConstrStatusFilter = chip.dataset.cst;
+      renderConstrStatusFilters();
+      renderConstruction();
+    });
+  });
+}
+
 function renderConstruction(){
   const list = document.getElementById('constructionList');
   let projects = getConstrProjects();
@@ -3509,8 +3624,22 @@ function renderConstruction(){
     projects = projects.filter(p=>p.employee_id===session.employeeId || p.co_employee_id===session.employeeId);
   }
 
+  // Фильтр по статусу
+  if(activeConstrStatusFilter !== 'all'){
+    projects = projects.filter(p=>p.status_id === activeConstrStatusFilter);
+  }
+
+  // Поиск
+  if(constrSearchQuery.trim()){
+    const q = constrSearchQuery.trim().toLowerCase();
+    projects = projects.filter(p=>
+      (p.name||'').toLowerCase().includes(q) ||
+      (p.address||'').toLowerCase().includes(q)
+    );
+  }
+
   if(!projects.length){
-    list.innerHTML = '<div class="empty-state">Нет объектов строительства</div>';
+    list.innerHTML = '<div class="empty-state">Нет объектов по этому фильтру</div>';
     return;
   }
 
@@ -3531,7 +3660,8 @@ function renderConstruction(){
     const expenses = matTotal + workTotal;
     const f = calcConstrFee({...p, expenses});
     const pct = price > 0 ? Math.min(100, Math.round((expenses/price)*100)) : 0;
-    const budgetLeft = Math.max(0, price - expenses);
+    const budgetLeft = price - expenses;
+    const isOverspent = budgetLeft < 0;
 
     if(!showFinance){
       return `<div class="obj-card" onclick="openObjectView('${p.id}')">
@@ -3561,7 +3691,7 @@ function renderConstruction(){
       </div>
 
       <div class="obj-bar" style="margin-bottom:4px;"><i style="width:${pct}%; background:${pct>90?'var(--red)':pct>70?'var(--gold)':'var(--blue)'};"></i></div>
-      <div class="obj-bar-lbl"><span>Израсходовано ${pct}% бюджета</span><span>Остаток: ${fmtMoney(budgetLeft)}</span></div>
+      <div class="obj-bar-lbl"><span>Израсходовано ${pct}% бюджета</span><span style="color:${isOverspent?'var(--red)':''}">${isOverspent ? '⚠ Перерасход: '+fmtMoney(Math.abs(budgetLeft)) : 'Остаток: '+fmtMoney(budgetLeft)}</span></div>
 
       <div style="margin-top:12px;">
         <div class="fee-row" style="padding:5px 0;">
@@ -3636,17 +3766,26 @@ function renderObjectSummary(p){
   const projInvoices = state.invoices.filter(inv=>inv.project_id===p.id);
   const matTotal = projInvoices.filter(i=>['Материал','Инструмент','Расходник','Доставка'].includes(i.item_type)).reduce((s,i)=>s+Number(i.amount),0);
   const workTotal = projInvoices.filter(i=>i.item_type==='Работа').reduce((s,i)=>s+Number(i.amount),0);
-  const expenses = matTotal + workTotal; // real total from накладные, not the (possibly stale) manual field
+  const expenses = matTotal + workTotal;
   const balance = price - expenses;
+  const isOverspent = balance < 0;
   const f = calcConstrFee({...p, expenses});
 
+  const noBudgetWarning = price === 0 && expenses > 0
+    ? `<div style="background:rgba(232,163,61,0.12); border:1px solid rgba(232,163,61,0.3); border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:12px; color:var(--gold);">⚠ Бюджет не задан — укажите сумму прихода в карточке объекта для корректного расчёта остатка.</div>`
+    : '';
+  const overspentWarning = isOverspent
+    ? `<div style="background:rgba(224,82,82,0.12); border:1px solid rgba(224,82,82,0.3); border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:12px; color:var(--red);">🔴 Перерасход бюджета: ${fmtMoney(Math.abs(balance))} — расходы превышают приход от заказчика!</div>`
+    : '';
+
   document.getElementById('objSummary').innerHTML = `
+    ${noBudgetWarning}${overspentWarning}
     <div class="fee-card">
       <div class="fee-row"><div class="fl">Приход от заказчика</div><div class="fv" style="color:var(--green)">${fmtMoney(price)}</div></div>
       <div class="fee-row"><div class="fl">Материалы и чеки</div><div class="fv">${fmtMoney(matTotal)}</div></div>
       <div class="fee-row"><div class="fl">Работы</div><div class="fv">${fmtMoney(workTotal)}</div></div>
       <div class="fee-row"><div class="fl">Итого расход</div><div class="fv" style="color:var(--red)">${fmtMoney(expenses)}</div></div>
-      <div class="fee-row"><div class="fl">Остаток на объекте</div><div class="fv" style="color:var(--gold)">${fmtMoney(balance)}</div></div>
+      <div class="fee-row"><div class="fl">${isOverspent ? '⚠ Перерасход' : 'Остаток на объекте'}</div><div class="fv" style="color:${isOverspent?'var(--red)':'var(--gold)'}">${isOverspent ? '−'+fmtMoney(Math.abs(balance)) : fmtMoney(balance)}</div></div>
       <div class="fee-row total"><div class="fl">Гонорар ARHITTEK ${f.feePercent}% от расходов</div><div class="fv">${fmtMoney(f.feeAmount)}</div></div>
       <div class="fee-row"><div class="fl">Выплачено гонорара</div><div class="fv">${fmtMoney(f.paid)}</div></div>
       <div class="fee-row remaining"><div class="fl">Осталось получить</div><div class="fv">${fmtMoney(f.remaining)}</div></div>
@@ -3815,6 +3954,7 @@ async function addInvoice(projectId){
 
   if(!description && !number){ showToast('Введите описание или номер накладной'); return; }
   if(!amount || amount <= 0){ showToast('Укажите сумму'); return; }
+  if(!invoice_date){ showToast('Укажите дату накладной — нужна для корректного P&L по периоду'); return; }
 
   showToast('Сохранение…');
 
@@ -4137,7 +4277,25 @@ function renderTrash(){
     card.innerHTML = '<div class="empty-state">Корзина пуста</div>';
     return;
   }
+
+  // Предупреждение о скором автоудалении (7 дней)
+  const WARNING_DAYS = 7;
+  const warnCutoff = Date.now() + WARNING_DAYS * 24 * 60 * 60 * 1000;
+  const deleteCutoff = Date.now() - (TRASH_RETENTION_DAYS - WARNING_DAYS) * 24 * 60 * 60 * 1000;
+  const soonDeleted = [
+    ...state.trash.projects,
+    ...state.trash.employees,
+    ...state.trash.categories,
+    ...state.trash.ledger,
+  ].filter(item => item.deleted_at && new Date(item.deleted_at).getTime() < deleteCutoff);
+
   let html = '';
+  if(soonDeleted.length){
+    html += `<div style="background:rgba(224,82,82,0.12); border:1px solid rgba(224,82,82,0.3); border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:12px; color:var(--red);">
+      ⚠ ${soonDeleted.length} эл. будут удалены навсегда в течение ${WARNING_DAYS} дней — восстановите если нужно.
+    </div>`;
+  }
+
   state.trash.projects.forEach(p=>{
     html += `<div class="trash-item">
       <div>
@@ -4220,6 +4378,7 @@ function buildExportRows(){
     const f = calcFee(p);
     return {
       'Название': p.name,
+      'ФИО клиента': p.client_name||'',
       'Отдел': dept?dept.name:'',
       'Категория': cat?cat.name:'',
       'Статус': st?st.name:'',
@@ -4268,6 +4427,20 @@ function buildExportRows(){
       'Проект': proj?proj.name:'',
       'Описание': e.description||'',
       'Сумма': e.amount,
+    };
+  });
+
+  // Строительные накладные отдельным листом
+  sheets['Накладные (Стройка)'] = state.invoices.map(inv=>{
+    const proj = state.projects.find(p=>p.id===inv.project_id);
+    return {
+      'Дата': inv.invoice_date||'',
+      'Объект': proj?proj.name:'',
+      'Номер накладной': inv.number||'',
+      'Тип': inv.item_type||'',
+      'Категория': inv.category||'',
+      'Описание': inv.description||'',
+      'Сумма': inv.amount||0,
     };
   });
 
@@ -5867,6 +6040,7 @@ setupSearchBox('projectSearch', v=>projectSearchQuery=v, renderProjects);
 setupSearchBox('ledgerSearch', v=>ledgerSearchQuery=v, renderLedger);
 setupSearchBox('employeeSearch', v=>employeeSearchQuery=v, renderEmployees);
 setupSearchBox('historySearch', v=>historySearchQuery=v, renderHistory);
+setupSearchBox('constrSearch', v=>{ constrSearchQuery=v; renderConstruction(); });
 
 document.getElementById('exportXlsxBtn').addEventListener('click', exportToXlsx);
 
@@ -5926,12 +6100,17 @@ document.getElementById('userPill').addEventListener('click', ()=>{
 // КАРТОЧКИ ПРОЕКТОВ
 // ============================================================
 
-// Имена пользователей с правом редактирования карточек
-const CARD_EDITORS = ['мансур', 'ислам'];
+// Резервный список редакторов карточек (фоллбэк если поле can_edit_cards не задано в БД)
+const CARD_EDITORS_FALLBACK = ['мансур', 'ислам'];
 
 function canEditCards(){
   if(!session) return false;
-  return CARD_EDITORS.includes((session.name||'').trim().toLowerCase());
+  // Сначала проверяем поле can_edit_cards в записи сотрудника (из БД)
+  const emp = state.employees.find(e=>e.id===session.employeeId);
+  if(emp && emp.can_edit_cards === true) return true;
+  if(emp && emp.can_edit_cards === false) return false;
+  // Фоллбэк на список имён (пока поле не добавлено в БД через миграцию)
+  return CARD_EDITORS_FALLBACK.includes((session.name||'').trim().toLowerCase());
 }
 
 // State карточек
