@@ -1249,13 +1249,23 @@
       <label class="form-label">Название ссылки (для себя)</label>
       <input class="form-input" id="sl-name" placeholder="Клиент Ахмад, июль 2026"/>
     </div>
-    <div style="margin-bottom:16px;">
+    <div style="margin-bottom:14px;">
       <label class="form-label">Фильтр карточек</label>
       <select class="form-input" id="sl-filter">
         <option value="all">Все карточки</option>
         <option value="1">Только 1-этажные</option>
         <option value="2">Только 2-этажные</option>
         <option value="3">3+ этажа</option>
+      </select>
+    </div>
+    <div style="margin-bottom:16px;">
+      <label class="form-label">Срок действия ссылки</label>
+      <select class="form-input" id="sl-expires">
+        <option value="7">7 дней</option>
+        <option value="14" selected>14 дней</option>
+        <option value="30">30 дней</option>
+        <option value="90">3 месяца</option>
+        <option value="0">Бессрочно</option>
       </select>
     </div>
     <button class="btn btn-primary" style="width:100%;" onclick="generateShareLink()">Создать ссылку</button>
@@ -1423,6 +1433,21 @@
       </div>
     </div>
     <button class="btn btn-secondary" id="pf-stage-add" style="display:none; margin-bottom:10px;">+ Добавить этап</button>
+
+    <!-- Задачи -->
+    <div class="section-label" style="margin:18px 0 10px;"><span class="lbl-text">Задачи</span><span class="section-label-line"></span></div>
+    <div id="pf-tasks-list" class="card" style="margin-bottom:8px;"></div>
+    <div id="pf-task-add-row" style="display:none; margin-bottom:10px;">
+      <div style="display:flex; gap:8px; align-items:center;">
+        <input type="text" id="pf-task-name" class="form-input" placeholder="Что нужно сделать…" style="flex:1;">
+        <select id="pf-task-priority" class="form-input" style="width:auto; font-size:12px; padding:10px 8px;">
+          <option value="normal">Обычная</option>
+          <option value="high">Высокий</option>
+          <option value="low">Низкий</option>
+        </select>
+        <button class="btn btn-secondary" style="padding:10px 12px; white-space:nowrap;" id="pf-task-add-btn">+ Добавить</button>
+      </div>
+    </div>
 
     <div class="section-label" style="margin:18px 0 10px;"><span class="lbl-text">Техническое задание (ТЗ)</span><span class="section-label-line"></span></div>
     <div id="pf-tz-list" class="card" style="margin-bottom:8px;"></div>
@@ -2018,6 +2043,111 @@ async function deleteStage(stageId, projectId){
   }catch(e){ console.error(e); showToast('Ошибка удаления'); }
 }
 
+// ============================================================
+// ЗАДАЧИ ПРОЕКТА
+// ============================================================
+const TASK_PRIORITY = { high:'🔴', normal:'🔵', low:'⚪' };
+
+function renderTasksList(projectId){
+  const container = document.getElementById('pf-tasks-list');
+  const addRow = document.getElementById('pf-task-add-row');
+  if(!container) return;
+
+  const isAdmin = session && session.isAdmin;
+  if(addRow) addRow.style.display = isAdmin ? '' : 'none';
+
+  if(!projectId){
+    container.innerHTML = '<div class="empty-state">Сохраните проект, чтобы добавить задачи</div>';
+    return;
+  }
+
+  // Задачи хранятся в localStorage с ключом по projectId
+  // (не требует миграции БД — быстрое решение, потом можно перенести в Supabase)
+  const tasks = getProjectTasks(projectId);
+
+  if(!tasks.length){
+    container.innerHTML = `<div class="empty-state" style="padding:16px;">
+      ${isAdmin ? 'Задач нет — добавьте выше' : 'Задач нет'}
+    </div>`;
+    return;
+  }
+
+  const done = tasks.filter(t=>t.done);
+  const todo = tasks.filter(t=>!t.done);
+
+  const renderTask = t => `
+    <div class="list-item" style="${t.done?'opacity:0.5;':''}">
+      <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">
+        <span style="font-size:14px; flex-shrink:0;">${TASK_PRIORITY[t.priority]||'🔵'}</span>
+        <div style="flex:1; min-width:0;">
+          <div class="li-name" style="${t.done?'text-decoration:line-through;':''}">${escapeHtml(t.name)}</div>
+          <div class="li-meta">${new Date(t.created_at).toLocaleDateString('ru')}</div>
+        </div>
+      </div>
+      <div class="li-actions">
+        ${!t.done
+          ? `<button class="icon-btn" onclick="toggleTask('${projectId}','${t.id}',true)" title="Выполнено">✅</button>`
+          : `<button class="icon-btn" style="opacity:0.5;" onclick="toggleTask('${projectId}','${t.id}',false)" title="Вернуть">↩</button>`
+        }
+        ${isAdmin ? `<button class="icon-btn danger" onclick="deleteTask('${projectId}','${t.id}')">🗑</button>` : ''}
+      </div>
+    </div>`;
+
+  let html = todo.map(renderTask).join('');
+  if(done.length){
+    html += `<div style="font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.08em; padding:8px 0 4px;">
+      Выполнено (${done.length})
+    </div>`;
+    html += done.map(renderTask).join('');
+  }
+  container.innerHTML = html;
+}
+
+function getProjectTasks(projectId){
+  try{
+    const raw = localStorage.getItem('tasks_'+projectId);
+    return raw ? JSON.parse(raw) : [];
+  }catch(e){ return []; }
+}
+
+function saveProjectTasks(projectId, tasks){
+  try{ localStorage.setItem('tasks_'+projectId, JSON.stringify(tasks)); }catch(e){}
+}
+
+function addTask(projectId){
+  const nameEl = document.getElementById('pf-task-name');
+  const priorityEl = document.getElementById('pf-task-priority');
+  const name = nameEl.value.trim();
+  if(!name){ showToast('Введите название задачи'); return; }
+  const tasks = getProjectTasks(projectId);
+  tasks.unshift({
+    id: Date.now().toString(36),
+    name,
+    priority: priorityEl.value,
+    done: false,
+    created_at: new Date().toISOString(),
+  });
+  saveProjectTasks(projectId, tasks);
+  nameEl.value = '';
+  renderTasksList(projectId);
+  showToast('Задача добавлена');
+}
+
+function toggleTask(projectId, taskId, done){
+  const tasks = getProjectTasks(projectId);
+  const t = tasks.find(x=>x.id===taskId);
+  if(t){ t.done = done; t.done_at = done ? new Date().toISOString() : null; }
+  saveProjectTasks(projectId, tasks);
+  renderTasksList(projectId);
+}
+
+function deleteTask(projectId, taskId){
+  if(!confirm('Удалить задачу?')) return;
+  const tasks = getProjectTasks(projectId).filter(t=>t.id!==taskId);
+  saveProjectTasks(projectId, tasks);
+  renderTasksList(projectId);
+}
+
 async function logAudit(entityType, entityId, entityName, action, changes){
   try{
     await sb.from('audit_log').insert({
@@ -2175,6 +2305,8 @@ async function loadAll(){
     if(wasOk) showToast('Ошибка подключения к базе');
   }finally{
     loadAllInFlight = false;
+    // Проверяем просрочки для уведомлений (один раз в день)
+    if(typeof checkOverdueNotifications === 'function') checkOverdueNotifications();
   }
 }
 
@@ -3077,6 +3209,13 @@ function openProjectSheet(id){
     renderPaymentHistory(id);
     renderFeeSummaryForProject(p);
     renderStagesList(id);
+    renderTasksList(id);
+
+    // Кнопка добавления задачи
+    const addTaskBtn = document.getElementById('pf-task-add-btn');
+    if(addTaskBtn){
+      addTaskBtn.onclick = () => addTask(id);
+    }
     document.getElementById('pf-open-as-object').style.display = '';
   }else{
     title.textContent = 'Новый проект';
@@ -3109,6 +3248,7 @@ function openProjectSheet(id){
     document.getElementById('pf-payment-history').innerHTML = '';
     document.getElementById('pf-fee-summary').innerHTML = '';
     renderStagesList(null);
+    renderTasksList(null);
     document.getElementById('pf-open-as-object').style.display = 'none';
   }
 
@@ -6905,28 +7045,38 @@ async function renderShareLinks(){
   }
 
   const base = location.origin + location.pathname.replace('index.html','');
-  container.innerHTML = shareLinksData.map(link => `
-    <div style="padding:10px 0;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;">
+  const now = Date.now();
+
+  container.innerHTML = shareLinksData.map(link => {
+    const isExpired = link.expires_at && new Date(link.expires_at).getTime() < now;
+    const expiresText = link.expires_at
+      ? isExpired
+        ? `<span style="color:var(--red);">⛔ Истекла ${new Date(link.expires_at).toLocaleDateString('ru')}</span>`
+        : `<span style="color:var(--green);">✓ до ${new Date(link.expires_at).toLocaleDateString('ru')}</span>`
+      : `<span style="color:var(--text-dim);">Бессрочная</span>`;
+
+    return `<div style="padding:10px 0;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;${isExpired?'opacity:0.55;':''}">
       <div style="flex:1;min-width:0;">
         <div style="font-size:13px;font-weight:600;">${escapeHtml(link.label||'Ссылка')}</div>
         <div style="font-size:11px;color:var(--text-dim);margin-top:2px;">
           ${link.floors_filter==='all' ? 'Все карточки' : link.floors_filter+'-этажные'}
-          · ${new Date(link.created_at).toLocaleDateString('ru')}
+          · создана ${new Date(link.created_at).toLocaleDateString('ru')}
         </div>
-        <div style="font-size:10px;color:var(--blue);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+        <div style="font-size:11px;margin-top:2px;">${expiresText}</div>
+        ${!isExpired ? `<div style="font-size:10px;color:var(--blue);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
           ${base}catalog.html?t=${link.token}
-        </div>
+        </div>` : ''}
       </div>
       <div style="display:flex;gap:6px;flex-shrink:0;">
-        <button style="background:rgba(74,144,226,0.15);color:var(--blue);border:none;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit;"
+        ${!isExpired ? `<button style="background:rgba(74,144,226,0.15);color:var(--blue);border:none;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit;"
           onclick="navigator.clipboard.writeText('${base}catalog.html?t=${link.token}').then(()=>showToast('Скопировано!'))">
           Копировать
-        </button>
+        </button>` : ''}
         <button style="background:rgba(224,82,82,0.12);color:var(--red);border:none;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;"
           onclick="deactivateLink('${link.id}')">✕</button>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 function createShareLink(){
@@ -6938,12 +7088,17 @@ function createShareLink(){
 async function generateShareLink(){
   const label = document.getElementById('sl-name').value.trim() || 'Ссылка';
   const filter = document.getElementById('sl-filter').value;
+  const expiresDays = parseInt(document.getElementById('sl-expires').value);
   const token = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+  const expires_at = expiresDays > 0
+    ? new Date(Date.now() + expiresDays*24*60*60*1000).toISOString()
+    : null;
 
   try{
     const { error } = await sb.from('share_links').insert({
       label, floors_filter: filter, token,
       created_at: new Date().toISOString(),
+      expires_at,
     });
     if(error) throw error;
 
@@ -7240,5 +7395,101 @@ document.addEventListener('visibilitychange', ()=>{
     }
   }
 });
+
+// ============================================================
+// PWA — Service Worker + Уведомления о просрочках
+// ============================================================
+async function registerSW(){
+  if(!('serviceWorker' in navigator)) return;
+  try{
+    const reg = await navigator.serviceWorker.register('./sw.js');
+    console.log('[SW] зарегистрирован:', reg.scope);
+    window._swReg = reg;
+  }catch(e){
+    console.warn('[SW] ошибка регистрации:', e);
+  }
+}
+
+async function requestNotificationPermission(){
+  if(!('Notification' in window)) return false;
+  if(Notification.permission === 'granted') return true;
+  if(Notification.permission === 'denied') return false;
+  const result = await Notification.requestPermission();
+  return result === 'granted';
+}
+
+function sendLocalNotification(title, body, tag='arhittek'){
+  if(!('Notification' in window) || Notification.permission !== 'granted') return;
+  new Notification(title, {
+    body,
+    icon: './icon-192.png',
+    tag,
+  });
+}
+
+// Проверка просрочек — вызывается после loadAll
+function checkOverdueNotifications(){
+  if(!session) return;
+  if(Notification.permission !== 'granted') return;
+
+  const now = new Date();
+  const today = now.toISOString().slice(0,10);
+
+  // Просроченные этапы
+  const overdueStages = state.projectStages.filter(s=>{
+    if(s.done || !s.due_date) return false;
+    return s.due_date < today;
+  });
+
+  // Просроченные проекты
+  const doneStatus = state.statuses.find(s=>s.name==='Завершён');
+  const overdueProjects = state.projects.filter(p=>{
+    if(doneStatus && p.status_id === doneStatus.id) return false;
+    if(!p.end_date) return false;
+    return p.end_date < today;
+  });
+
+  // Проверяем — уже уведомляли сегодня?
+  const lastNotifKey = 'arhittek_last_notif';
+  const lastNotif = localStorage.getItem(lastNotifKey);
+  if(lastNotif === today) return; // уже отправляли сегодня
+
+  if(overdueStages.length || overdueProjects.length){
+    let body = '';
+    if(overdueProjects.length) body += `Просрочено проектов: ${overdueProjects.length}. `;
+    if(overdueStages.length) body += `Просроченных этапов: ${overdueStages.length}.`;
+    sendLocalNotification('⚠ ARHITTEK — просрочки', body.trim(), 'overdue');
+    localStorage.setItem(lastNotifKey, today);
+  }
+}
+
+// Кнопка запроса разрешения в приложении
+function showNotifPrompt(){
+  if(!('Notification' in window)) return;
+  if(Notification.permission === 'granted') return;
+  // Показываем тост с предложением
+  setTimeout(()=>{
+    if(Notification.permission === 'default'){
+      const toast = document.createElement('div');
+      toast.style.cssText = `position:fixed;bottom:80px;left:16px;right:16px;background:#1a2d45;border:1px solid rgba(61,143,224,0.3);border-radius:14px;padding:14px 16px;z-index:9999;display:flex;align-items:center;gap:12px;box-shadow:0 8px 32px rgba(0,0,0,0.4);`;
+      toast.innerHTML = `
+        <div style="font-size:24px;">🔔</div>
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:600;margin-bottom:2px;">Включить уведомления?</div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.5);">Просрочки и важные события</div>
+        </div>
+        <button onclick="requestNotificationPermission().then(ok=>{ if(ok) showToast('Уведомления включены ✓'); this.closest('[data-notif-toast]').remove(); })" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Включить</button>
+        <button onclick="this.closest('[data-notif-toast]').remove()" style="background:transparent;color:rgba(255,255,255,0.4);border:none;font-size:18px;cursor:pointer;padding:4px;">×</button>
+      `;
+      toast.setAttribute('data-notif-toast','1');
+      document.body.appendChild(toast);
+      setTimeout(()=>toast.remove(), 12000);
+    }
+  }, 3000);
+}
+
+// Запуск
+registerSW();
+showNotifPrompt();
 </script>
 
