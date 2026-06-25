@@ -164,6 +164,13 @@ async function init(){
       feed.innerHTML = '<div class="state-msg"><div class="big">🚫</div>Эта ссылка недействительна.<br>Обратитесь к менеджеру ARHITTEK.</div>';
       return;
     }
+
+    // Проверить срок действия
+    if(linkData.expires_at && new Date(linkData.expires_at).getTime() < Date.now()){
+      feed.innerHTML = '<div class="state-msg"><div class="big">⏰</div>Срок действия этой ссылки истёк.<br>Обратитесь к менеджеру ARHITTEK для получения новой ссылки.</div>';
+      return;
+    }
+
     linkMeta = linkData;
 
     // Скрыть фильтры если ссылка с фиксированным фильтром
