@@ -455,6 +455,9 @@
       <div class="section-label"><span class="lbl-text">Финансы компании</span><span class="section-label-line"></span></div>
       <div id="plBlock"></div>
 
+      <div class="section-label"><span class="lbl-text">Аналитика по месяцам</span><span class="section-label-line"></span></div>
+      <div class="card" id="analyticsBlock" style="padding:14px 10px 10px;"></div>
+
       <div class="section-label"><span class="lbl-text">Долги клиентов</span><span class="section-label-line"></span></div>
       <div class="card" id="debtCard"></div>
 
@@ -2177,6 +2180,7 @@ async function loadAll(){
 
 function renderAll(){
   renderOverview();
+  renderAnalytics();
   renderCategoryFilters();
   renderStatusFilters();
   renderPaymentFilters();
@@ -2362,6 +2366,217 @@ function renderOverview(){
 
   // ---- P&L (Финансы компании) ----
   renderPL();
+  renderAnalytics();
+}
+
+// ============================================================
+// АНАЛИТИКА — График P&L по месяцам (SVG)
+// ============================================================
+let analyticsMode = 'combined'; // 'combined' | 'project' | 'constr'
+
+function renderAnalytics(){
+  const el = document.getElementById('analyticsBlock');
+  if(!el) return;
+
+  // Определяем строительный отдел
+  const constrDept = state.departments.find(d=>d.name==='Строительный отдел');
+  const constrIds = new Set(
+    state.projects
+      .filter(p=> constrDept && p.department_id === constrDept.id)
+      .map(p=>p.id)
+  );
+
+  // Последние 12 месяцев
+  const now = new Date();
+  const months = [];
+  for(let i=11; i>=0; i--){
+    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    months.push({
+      key: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`,
+      label: d.toLocaleDateString('ru-RU',{month:'short', year:'2-digit'}),
+      income: 0,
+      expense: 0,
+    });
+  }
+  const monthMap = {};
+  months.forEach(m=>{ monthMap[m.key] = m; });
+
+  // Доходы из ledger
+  state.ledger.forEach(e=>{
+    if(!e.entry_date) return;
+    const key = e.entry_date.slice(0,7);
+    if(!monthMap[key]) return;
+    const isConstr = constrIds.has(e.project_id);
+    if(analyticsMode === 'project' && isConstr) return;
+    if(analyticsMode === 'constr' && !isConstr) return;
+    if(['advance','final_payment','income'].includes(e.type)){
+      monthMap[key].income += Number(e.amount)||0;
+    }
+    if(['expense','payment','withdrawal'].includes(e.type)){
+      monthMap[key].expense += Number(e.amount)||0;
+    }
+  });
+
+  // Расходы стройки из накладных
+  if(analyticsMode !== 'project'){
+    state.invoices.forEach(inv=>{
+      if(!inv.invoice_date || !constrIds.has(inv.project_id)) return;
+      const key = inv.invoice_date.slice(0,7);
+      if(!monthMap[key]) return;
+      monthMap[key].expense += Number(inv.amount)||0;
+    });
+  }
+
+  // Размеры SVG
+  const W = 340, H = 160, PAD = {top:16, right:12, bottom:32, left:52};
+  const chartW = W - PAD.left - PAD.right;
+  const chartH = H - PAD.top - PAD.bottom;
+  const n = months.length;
+
+  const maxVal = Math.max(...months.map(m=>Math.max(m.income, m.expense)), 1);
+  const scaleY = v => chartH - (v/maxVal)*chartH;
+  const scaleX = i => (i/(n-1))*chartW;
+
+  // Форматирование оси Y
+  const fmtK = v => v >= 1000000 ? (v/1000000).toFixed(1)+'M' : v>=1000 ? Math.round(v/1000)+'K' : v;
+
+  // Точки линий
+  const incomePts = months.map((m,i)=>`${scaleX(i).toFixed(1)},${scaleY(m.income).toFixed(1)}`).join(' ');
+  const expensePts = months.map((m,i)=>`${scaleX(i).toFixed(1)},${scaleY(m.expense).toFixed(1)}`).join(' ');
+
+  // Area под доходом
+  const incomeArea = `M${scaleX(0).toFixed(1)},${chartH} ` +
+    months.map((m,i)=>`L${scaleX(i).toFixed(1)},${scaleY(m.income).toFixed(1)}`).join(' ') +
+    ` L${scaleX(n-1).toFixed(1)},${chartH} Z`;
+
+  // Оси Y — 4 деления
+  const yTicks = [0, 0.33, 0.66, 1].map(t=>({
+    v: Math.round(maxVal*t),
+    y: scaleY(maxVal*t),
+  }));
+
+  // Прибыль по месяцам
+  const profitMonths = months.map(m=>m.income - m.expense);
+  const totalIncome = months.reduce((s,m)=>s+m.income,0);
+  const totalExpense = months.reduce((s,m)=>s+m.expense,0);
+  const totalProfit = totalIncome - totalExpense;
+  const profitColor = totalProfit>=0 ? 'var(--green)' : 'var(--red)';
+
+  // Лучший месяц
+  const bestMonth = months.reduce((best,m)=> m.income > best.income ? m : best, months[0]);
+
+  // Переключатели режима
+  const modes = [
+    {id:'combined', label:'Всё'},
+    {id:'project', label:'Проектный'},
+    {id:'constr', label:'Стройка'},
+  ];
+
+  el.innerHTML = `
+    <!-- Переключатели -->
+    <div style="display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap;">
+      ${modes.map(m=>`
+        <div onclick="analyticsMode='${m.id}'; renderAnalytics();"
+             style="padding:5px 12px; border-radius:16px; font-size:11px; font-weight:600; cursor:pointer;
+                    background:${analyticsMode===m.id ? 'var(--blue-soft)' : 'rgba(255,255,255,0.05)'};
+                    color:${analyticsMode===m.id ? 'var(--blue)' : 'var(--text-dim)'};
+                    border:1px solid ${analyticsMode===m.id ? 'rgba(74,144,226,0.4)' : 'var(--line-strong)'};">
+          ${m.label}
+        </div>`).join('')}
+      <div style="margin-left:auto; font-size:10px; color:var(--text-dim); align-self:center;">последние 12 мес.</div>
+    </div>
+
+    <!-- SVG График -->
+    <div style="overflow-x:auto; -webkit-overflow-scrolling:touch;">
+      <svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block; min-width:280px; max-width:100%;">
+        <g transform="translate(${PAD.left},${PAD.top})">
+
+          <!-- Сетка Y -->
+          ${yTicks.map(t=>`
+            <line x1="0" y1="${t.y.toFixed(1)}" x2="${chartW}" y2="${t.y.toFixed(1)}"
+                  stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+            <text x="-6" y="${(t.y+4).toFixed(1)}" text-anchor="end"
+                  font-size="9" fill="rgba(255,255,255,0.3)">${fmtK(t.v)}</text>
+          `).join('')}
+
+          <!-- Area доход -->
+          <defs>
+            <linearGradient id="incomeGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#52B788" stop-opacity="0.25"/>
+              <stop offset="100%" stop-color="#52B788" stop-opacity="0.02"/>
+            </linearGradient>
+          </defs>
+          <path d="${incomeArea}" fill="url(#incomeGrad)"/>
+
+          <!-- Линия расхода -->
+          <polyline points="${expensePts}" fill="none" stroke="#E05252" stroke-width="1.5"
+                    stroke-dasharray="4,2" stroke-linecap="round" stroke-linejoin="round"/>
+
+          <!-- Линия дохода -->
+          <polyline points="${incomePts}" fill="none" stroke="#52B788" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round"/>
+
+          <!-- Точки на линии дохода + tooltip -->
+          ${months.map((m,i)=>{
+            const cx = scaleX(i).toFixed(1);
+            const cy = scaleY(m.income).toFixed(1);
+            const profit = m.income - m.expense;
+            const pColor = profit>=0 ? '#52B788' : '#E05252';
+            return m.income > 0 || m.expense > 0 ? `
+              <circle cx="${cx}" cy="${cy}" r="3" fill="#52B788" stroke="var(--bg)" stroke-width="1.5"/>
+              <title>${m.label}: доход ${fmtMoney(m.income)}, расход ${fmtMoney(m.expense)}, прибыль ${profit>=0?'+':''}${fmtMoney(profit)}</title>
+            ` : '';
+          }).join('')}
+
+          <!-- Метки X -->
+          ${months.map((m,i)=>{
+            // Показываем каждую 2-ю метку чтобы не толпились
+            if(i % 2 !== 0 && i !== n-1) return '';
+            return `<text x="${scaleX(i).toFixed(1)}" y="${(chartH+14).toFixed(1)}"
+                         text-anchor="middle" font-size="8.5" fill="rgba(255,255,255,0.4)">${m.label}</text>`;
+          }).join('')}
+
+          <!-- Ось X -->
+          <line x1="0" y1="${chartH}" x2="${chartW}" y2="${chartH}"
+                stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+        </g>
+      </svg>
+    </div>
+
+    <!-- Легенда -->
+    <div style="display:flex; gap:14px; margin:8px 0 12px; font-size:11px; flex-wrap:wrap;">
+      <div style="display:flex; align-items:center; gap:5px;">
+        <svg width="16" height="3"><line x1="0" y1="1.5" x2="16" y2="1.5" stroke="#52B788" stroke-width="2"/></svg>
+        <span style="color:var(--text-dim);">Приход</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:5px;">
+        <svg width="16" height="3"><line x1="0" y1="1.5" x2="16" y2="1.5" stroke="#E05252" stroke-width="1.5" stroke-dasharray="4,2"/></svg>
+        <span style="color:var(--text-dim);">Расход</span>
+      </div>
+    </div>
+
+    <!-- Сводка за 12 месяцев -->
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
+      <div style="background:rgba(82,183,136,0.08); border-radius:10px; padding:10px 8px; text-align:center; border:1px solid rgba(82,183,136,0.15);">
+        <div style="font-size:11px; color:var(--text-dim); margin-bottom:4px;">Приход 12 мес.</div>
+        <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:13px; color:var(--green);">${fmtMoney(totalIncome)}</div>
+      </div>
+      <div style="background:rgba(224,82,82,0.08); border-radius:10px; padding:10px 8px; text-align:center; border:1px solid rgba(224,82,82,0.15);">
+        <div style="font-size:11px; color:var(--text-dim); margin-bottom:4px;">Расход 12 мес.</div>
+        <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:13px; color:var(--red);">${fmtMoney(totalExpense)}</div>
+      </div>
+      <div style="background:${totalProfit>=0 ? 'rgba(82,183,136,0.08)' : 'rgba(224,82,82,0.08)'}; border-radius:10px; padding:10px 8px; text-align:center; border:1px solid ${totalProfit>=0 ? 'rgba(82,183,136,0.15)' : 'rgba(224,82,82,0.15)'};">
+        <div style="font-size:11px; color:var(--text-dim); margin-bottom:4px;">Прибыль 12 мес.</div>
+        <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:13px; color:${profitColor};">${totalProfit>=0?'+':''}${fmtMoney(totalProfit)}</div>
+      </div>
+    </div>
+
+    <!-- Лучший месяц -->
+    ${bestMonth.income > 0 ? `
+    <div style="margin-top:8px; font-size:11px; color:var(--text-dim); text-align:center;">
+      🏆 Лучший месяц по приходу — <b style="color:var(--text);">${bestMonth.label}</b>: ${fmtMoney(bestMonth.income)}
+    </div>` : ''}
+  `;
 }
 
 function escapeHtml(s){
