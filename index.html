@@ -2554,7 +2554,7 @@ function renderAnalytics(){
   }
 
   // Размеры SVG
-  const W = 340, H = 160, PAD = {top:16, right:12, bottom:32, left:52};
+  const W = 700, H = 220, PAD = {top:20, right:16, bottom:36, left:56};
   const chartW = W - PAD.left - PAD.right;
   const chartH = H - PAD.top - PAD.bottom;
   const n = months.length;
@@ -2566,7 +2566,11 @@ function renderAnalytics(){
   // Форматирование оси Y
   const fmtK = v => v >= 1000000 ? (v/1000000).toFixed(1)+'M' : v>=1000 ? Math.round(v/1000)+'K' : v;
 
-  // Точки линий
+  // Считаем сколько месяцев с данными
+  const activeMonths = months.filter(m=>m.income>0||m.expense>0).length;
+  const useBars = activeMonths <= 3; // мало точек — рисуем столбцы
+
+  // Точки линий (только для polyline, всегда все 12 точек)
   const incomePts = months.map((m,i)=>`${scaleX(i).toFixed(1)},${scaleY(m.income).toFixed(1)}`).join(' ');
   const expensePts = months.map((m,i)=>`${scaleX(i).toFixed(1)},${scaleY(m.expense).toFixed(1)}`).join(' ');
 
@@ -2574,6 +2578,9 @@ function renderAnalytics(){
   const incomeArea = `M${scaleX(0).toFixed(1)},${chartH} ` +
     months.map((m,i)=>`L${scaleX(i).toFixed(1)},${scaleY(m.income).toFixed(1)}`).join(' ') +
     ` L${scaleX(n-1).toFixed(1)},${chartH} Z`;
+
+  // Ширина столбца для bar-режима
+  const barW = Math.max(4, (chartW / n) * 0.35);
 
   // Оси Y — 4 деления
   const yTicks = [0, 0.33, 0.66, 1].map(t=>({
@@ -2622,7 +2629,7 @@ function renderAnalytics(){
             <line x1="0" y1="${t.y.toFixed(1)}" x2="${chartW}" y2="${t.y.toFixed(1)}"
                   stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
             <text x="-6" y="${(t.y+4).toFixed(1)}" text-anchor="end"
-                  font-size="9" fill="rgba(255,255,255,0.3)">${fmtK(t.v)}</text>
+                  font-size="11" fill="rgba(255,255,255,0.35)">${fmtK(t.v)}</text>
           `).join('')}
 
           <!-- Area доход -->
@@ -2632,34 +2639,48 @@ function renderAnalytics(){
               <stop offset="100%" stop-color="#52B788" stop-opacity="0.02"/>
             </linearGradient>
           </defs>
-          <path d="${incomeArea}" fill="url(#incomeGrad)"/>
 
-          <!-- Линия расхода -->
-          <polyline points="${expensePts}" fill="none" stroke="#E05252" stroke-width="1.5"
-                    stroke-dasharray="4,2" stroke-linecap="round" stroke-linejoin="round"/>
-
-          <!-- Линия дохода -->
-          <polyline points="${incomePts}" fill="none" stroke="#52B788" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round"/>
-
-          <!-- Точки на линии дохода + tooltip -->
-          ${months.map((m,i)=>{
-            const cx = scaleX(i).toFixed(1);
-            const cy = scaleY(m.income).toFixed(1);
-            const profit = m.income - m.expense;
-            const pColor = profit>=0 ? '#52B788' : '#E05252';
-            return m.income > 0 || m.expense > 0 ? `
-              <circle cx="${cx}" cy="${cy}" r="3" fill="#52B788" stroke="var(--bg)" stroke-width="1.5"/>
-              <title>${m.label}: доход ${fmtMoney(m.income)}, расход ${fmtMoney(m.expense)}, прибыль ${profit>=0?'+':''}${fmtMoney(profit)}</title>
-            ` : '';
-          }).join('')}
+          ${useBars ? `
+            <!-- BAR режим: мало данных — рисуем столбцы -->
+            ${months.map((m,i)=>{
+              const cx = scaleX(i);
+              const profit = m.income - m.expense;
+              const tip = m.label+': доход '+fmtMoney(m.income)+', расход '+fmtMoney(m.expense)+', прибыль '+(profit>=0?'+':'')+fmtMoney(profit);
+              const incH = chartH - scaleY(m.income);
+              const expH = chartH - scaleY(m.expense);
+              return (m.income>0||m.expense>0) ? `
+                <rect x="${(cx-barW-1).toFixed(1)}" y="${scaleY(m.income).toFixed(1)}" width="${barW.toFixed(1)}" height="${incH.toFixed(1)}" fill="#52B788" opacity="0.7" rx="2">
+                  <title>${tip}</title>
+                </rect>
+                <rect x="${(cx+1).toFixed(1)}" y="${scaleY(m.expense).toFixed(1)}" width="${barW.toFixed(1)}" height="${expH.toFixed(1)}" fill="#E05252" opacity="0.7" rx="2">
+                  <title>${tip}</title>
+                </rect>
+              ` : '';
+            }).join('')}
+          ` : `
+            <!-- LINE режим: достаточно данных -->
+            <path d="${incomeArea}" fill="url(#incomeGrad)"/>
+            <polyline points="${expensePts}" fill="none" stroke="#E05252" stroke-width="1.5"
+                      stroke-dasharray="4,2" stroke-linecap="round" stroke-linejoin="round"/>
+            <polyline points="${incomePts}" fill="none" stroke="#52B788" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round"/>
+            ${months.map((m,i)=>{
+              const cx = scaleX(i).toFixed(1);
+              const cy = scaleY(m.income).toFixed(1);
+              const profit = m.income - m.expense;
+              return m.income > 0 || m.expense > 0 ? `
+                <circle cx="${cx}" cy="${cy}" r="3" fill="#52B788" stroke="var(--bg)" stroke-width="1.5"/>
+                <title>${m.label}: доход ${fmtMoney(m.income)}, расход ${fmtMoney(m.expense)}, прибыль ${profit>=0?'+':''}${fmtMoney(profit)}</title>
+              ` : '';
+            }).join('')}
+          `}
 
           <!-- Метки X -->
           ${months.map((m,i)=>{
             // Показываем каждую 2-ю метку чтобы не толпились
             if(i % 2 !== 0 && i !== n-1) return '';
             return `<text x="${scaleX(i).toFixed(1)}" y="${(chartH+14).toFixed(1)}"
-                         text-anchor="middle" font-size="8.5" fill="rgba(255,255,255,0.4)">${m.label}</text>`;
+                         text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.4)">${m.label}</text>`;
           }).join('')}
 
           <!-- Ось X -->
