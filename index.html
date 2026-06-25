@@ -258,6 +258,8 @@
 
   .loading-state{text-align:center; padding:40px 20px; color:var(--text-dim); font-size:13px;}
   .empty-state{text-align:center; padding:30px 20px; color:var(--text-dim); font-size:13px;}
+  .stage-item[draggable="true"]:hover{ background:rgba(61,143,224,0.05); }
+  .stage-item.drag-over{ border-top:2px solid var(--blue) !important; }
 
   .toast{
     position:fixed; bottom:90px; left:50%; transform:translateX(-50%);
@@ -1503,7 +1505,19 @@
     </div>
     <div class="field" id="ef-pin-field" style="display:none;">
       <label>PIN-код для входа (до 6 цифр)</label>
-      <input type="text" id="ef-pin" inputmode="numeric" maxlength="6" placeholder="например: 123456">
+      <div style="display:flex; gap:8px; align-items:center;">
+        <input type="text" id="ef-pin" inputmode="numeric" maxlength="6" placeholder="например: 123456" style="flex:1;">
+        <button class="btn btn-secondary" type="button" style="padding:10px 12px; font-size:12px; white-space:nowrap;"
+          onclick="const p=Math.floor(100000+Math.random()*900000).toString(); document.getElementById('ef-pin').value=p; showToast('Новый PIN: '+p+' — запишите!');">
+          🔀 Случайный
+        </button>
+      </div>
+    </div>
+    <div class="field" id="ef-card-edit-field" style="display:none;">
+      <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+        <input type="checkbox" id="ef-can-edit-cards" style="width:18px;height:18px;cursor:pointer;">
+        <span>Может редактировать каталог готовых проектов</span>
+      </label>
     </div>
     <button class="btn btn-primary" id="ef-save">Сохранить</button>
     <div class="btn-row">
@@ -1875,15 +1889,18 @@ function renderStagesList(projectId){
     .sort((a,b)=>a.sort_order-b.sort_order || new Date(a.created_at)-new Date(b.created_at));
 
   if(!stages.length){
-    container.innerHTML = '<div class="empty-state">Этапов пока нет</div>';
+    container.innerHTML = `<div class="empty-state" style="padding:20px;">
+      Этапов пока нет${isAdmin ? ' — добавьте первый выше' : ''}
+    </div>`;
     return;
   }
 
-  container.innerHTML = stages.map(s=>{
+  container.innerHTML = stages.map((s,idx)=>{
     const overdue = s.due_date && !s.done && daysUntil(s.due_date) < 0;
     const dueTxt = s.due_date ? fmtDate(s.due_date) : '';
     const doneTxt = s.done && s.done_at ? ' · выполнен '+fmtDate(s.done_at) : '';
-    return `<div class="list-item">
+    return `<div class="list-item stage-item" draggable="${isAdmin}" data-stage-id="${s.id}" data-project-id="${projectId}" style="cursor:${isAdmin?'grab':'default'};">
+      ${isAdmin ? `<div style="font-size:18px;color:var(--text-dim);padding-right:8px;cursor:grab;touch-action:none;">⠿</div>` : ''}
       <div style="flex:1;">
         <div class="li-name" style="${s.done ? 'text-decoration:line-through; opacity:0.55;' : ''}">${escapeHtml(s.name)}</div>
         <div class="li-meta" style="${overdue ? 'color:var(--red);' : ''}">
@@ -1899,6 +1916,63 @@ function renderStagesList(projectId){
       </div>
     </div>`;
   }).join('');
+
+  // Drag-and-drop только для admin
+  if(isAdmin) initStageDragSort(container, projectId);
+}
+
+function initStageDragSort(container, projectId){
+  let dragEl = null;
+  let dragOverEl = null;
+
+  container.querySelectorAll('.stage-item').forEach(item=>{
+    item.addEventListener('dragstart', e=>{
+      dragEl = item;
+      item.style.opacity = '0.4';
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    item.addEventListener('dragend', ()=>{
+      item.style.opacity = '';
+      container.querySelectorAll('.stage-item').forEach(i=>i.style.borderTop='');
+      dragEl = null;
+    });
+    item.addEventListener('dragover', e=>{
+      e.preventDefault();
+      if(item === dragEl) return;
+      container.querySelectorAll('.stage-item').forEach(i=>i.style.borderTop='');
+      item.style.borderTop = '2px solid var(--blue)';
+      dragOverEl = item;
+    });
+    item.addEventListener('drop', async e=>{
+      e.preventDefault();
+      if(!dragEl || dragEl === item) return;
+      container.querySelectorAll('.stage-item').forEach(i=>i.style.borderTop='');
+
+      // Собираем новый порядок
+      const items = [...container.querySelectorAll('.stage-item')];
+      const fromIdx = items.indexOf(dragEl);
+      const toIdx = items.indexOf(item);
+      items.splice(fromIdx, 1);
+      items.splice(toIdx, 0, dragEl);
+
+      // Сохраняем sort_order в БД
+      const updates = items.map((el,idx)=>({
+        id: el.dataset.stageId,
+        sort_order: idx,
+      }));
+
+      try{
+        await Promise.all(updates.map(u=>
+          sb.from('project_stages').update({sort_order: u.sort_order}).eq('id', u.id)
+        ));
+        await loadAll();
+        renderStagesList(projectId);
+      }catch(err){
+        console.error(err);
+        showToast('Ошибка сохранения порядка');
+      }
+    });
+  });
 }
 
 async function addStage(projectId){
@@ -2609,7 +2683,12 @@ function renderProjects(){
 
   const card = document.getElementById('projectsCard');
   if(!list.length){
-    card.innerHTML = '<div class="empty-state">Нет проектов по этому фильтру</div>';
+    const isFiltered = activeCategoryFilter !== 'all' || activeStatusFilter !== 'all' || activePaymentFilter !== 'all' || projectSearchQuery.trim();
+    card.innerHTML = `<div class="empty-state">
+      ${isFiltered
+        ? 'Нет проектов по этому фильтру'
+        : '<div style="font-size:32px;margin-bottom:10px;">📋</div><div>Проектов пока нет</div><button class="btn btn-primary" style="margin-top:14px;width:auto;padding:10px 24px;" onclick="openProjectSheet(null)">+ Создать первый проект</button>'}
+    </div>`;
     return;
   }
 
@@ -2636,6 +2715,7 @@ function renderProjectRow(p){
     const d = p.end_date ? daysUntil(p.end_date) : null;
     const payStatus = p.payment_status || 'Ждём оплату';
     const payColor = paymentBadgeColor(payStatus);
+    const isDone = st && st.name === 'Завершён';
 
     let metaParts = [];
     if(cat) metaParts.push(escapeHtml(cat.name));
@@ -2650,29 +2730,32 @@ function renderProjectRow(p){
       statusChips += `<span class="status-chip" data-status="${escapeHtml(st.name)}">${escapeHtml(st.name)}</span>`;
     }
     statusChips += `<span class="status-chip" style="background:${payColor.bg}; color:${payColor.fg};">${escapeHtml(payStatus)}</span>`;
-    if(d !== null && d < 0 && (!st || st.name !== 'Завершён')){
+    if(d !== null && d < 0 && !isDone){
       statusChips += `<span class="status-chip overdue">просрочен ${Math.abs(d)} дн.</span>`;
-    } else if(d !== null && d >= 0 && d <= 7 && (!st || st.name !== 'Завершён')){
+    } else if(d !== null && d >= 0 && d <= 7 && !isDone){
       statusChips += `<span class="status-chip" data-status="Ждём оплату">${d} дн. до сдачи</span>`;
     }
-    // Overdue stages chip
     const overdueStages = state.projectStages.filter(s=>s.project_id===p.id && !s.done && s.due_date && daysUntil(s.due_date)<0);
-    if(overdueStages.length){
+    if(overdueStages.length && !isDone){
       statusChips += `<span class="status-chip overdue">⚠ этап просрочен (${overdueStages.length})</span>`;
     }
 
     const balance = Number(p.balance) || 0;
     const showFinance = !session || session.isAdmin;
 
-    return `<div class="proj-row" onclick="openProjectSheet('${p.id}')">
+    // Завершённые — приглушённый вид
+    const rowStyle = isDone ? 'opacity:0.55;' : '';
+    const donePrefix = isDone ? '✓ ' : '';
+
+    return `<div class="proj-row" onclick="openProjectSheet('${p.id}')" style="${rowStyle}">
       <div>
-        <div class="proj-name">${escapeHtml(p.name)}</div>
+        <div class="proj-name">${donePrefix}${escapeHtml(p.name)}</div>
         <div class="proj-meta">${metaParts.join(' · ')}</div>
         ${statusChips}
       </div>
       ${showFinance ? `<div class="proj-right">
         <div class="proj-sum">${fmtMoney(p.price)}</div>
-        <div class="proj-rest ${balance>0?'has-balance':''}">${balance>0 ? 'остаток '+fmtMoney(balance) : 'оплачен'}</div>
+        <div class="proj-rest ${balance>0&&!isDone?'has-balance':''}">${balance>0&&!isDone ? 'остаток '+fmtMoney(balance) : '✓ закрыт'}</div>
       </div>` : ''}
     </div>`;
 }
@@ -3415,6 +3498,8 @@ function openEmployeeSheet(id){
   const title = document.getElementById('empSheetTitle');
   const deleteBtn = document.getElementById('ef-delete');
   const pinField = document.getElementById('ef-pin-field');
+  const cardEditField = document.getElementById('ef-card-edit-field');
+  const isAdmin = session && session.isAdmin;
 
   if(id){
     const e = state.employees.find(x=>x.id===id);
@@ -3425,7 +3510,9 @@ function openEmployeeSheet(id){
     document.getElementById('ef-role').value = e.role || '';
     document.getElementById('ef-active').value = e.active===false ? 'false' : 'true';
     document.getElementById('ef-pin').value = e.pin_code || '';
-    pinField.style.display = (session && session.isAdmin) ? '' : 'none';
+    document.getElementById('ef-can-edit-cards').checked = !!e.can_edit_cards;
+    pinField.style.display = isAdmin ? '' : 'none';
+    if(cardEditField) cardEditField.style.display = isAdmin ? '' : 'none';
   }else{
     title.textContent = 'Новый сотрудник';
     deleteBtn.style.display = 'none';
@@ -3433,7 +3520,9 @@ function openEmployeeSheet(id){
     document.getElementById('ef-role').value = '';
     document.getElementById('ef-active').value = 'true';
     document.getElementById('ef-pin').value = '';
-    pinField.style.display = (session && session.isAdmin) ? '' : 'none';
+    document.getElementById('ef-can-edit-cards').checked = false;
+    pinField.style.display = isAdmin ? '' : 'none';
+    if(cardEditField) cardEditField.style.display = isAdmin ? '' : 'none';
   }
   overlay.classList.add('active');
 }
@@ -3453,6 +3542,7 @@ async function saveEmployee(){
   };
   if(session && session.isAdmin){
     payload.pin_code = document.getElementById('ef-pin').value.trim();
+    payload.can_edit_cards = document.getElementById('ef-can-edit-cards').checked;
   }
   try{
     if(editingEmployeeId){
@@ -3691,7 +3781,12 @@ function renderConstruction(){
   }
 
   if(!projects.length){
-    list.innerHTML = '<div class="empty-state">Нет объектов по этому фильтру</div>';
+    const isFiltered = activeConstrStatusFilter !== 'all' || constrSearchQuery.trim();
+    list.innerHTML = `<div class="empty-state">
+      ${isFiltered
+        ? 'Нет объектов по этому фильтру'
+        : '<div style="font-size:32px;margin-bottom:10px;">🏗</div><div>Объектов строительства пока нет</div><button class="btn btn-primary" style="margin-top:14px;width:auto;padding:10px 24px;" onclick="document.querySelector(\'.fab\').click()">+ Добавить объект</button>'}
+    </div>`;
     return;
   }
 
@@ -6276,7 +6371,9 @@ function renderCardsList(){
           </div>
         </div>
         <div style="text-align:right;flex-shrink:0;">
-          ${card.images?.[0] ? `<img src="${card.images[0]}" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid rgba(255,255,255,0.08);" onerror="this.style.display='none'"/>` : `<div style="width:56px;height:56px;border-radius:8px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;font-size:24px;">🏠</div>`}
+          ${card.images?.[0]
+            ? `<img src="${card.images[0]}" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid rgba(255,255,255,0.08);" onerror="this.parentNode.innerHTML='<div style=\'width:56px;height:56px;border-radius:8px;background:rgba(61,143,224,0.1);display:flex;align-items:center;justify-content:center;font-size:22px;border:1px dashed rgba(61,143,224,0.3);\'>🏠</div>'"/>`
+            : `<div style="width:56px;height:56px;border-radius:8px;background:rgba(61,143,224,0.08);display:flex;align-items:center;justify-content:center;font-size:22px;border:1px dashed rgba(61,143,224,0.25);" title="Фото не загружено">🏠</div>`}
           <div style="font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:700;color:var(--blue);margin-top:4px;">${card.price ? card.price+' ₽' : ''}</div>
         </div>
       </div>
