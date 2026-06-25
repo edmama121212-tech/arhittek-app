@@ -2385,8 +2385,7 @@ function renderOverview(){
   const paidStatus = state.statuses.find(s=>s.name==='Оплачен');
   const debts = state.projects
     .filter(p=>Number(p.balance) > 0 && p.payment_status !== 'Оплачен')
-    .sort((a,b)=>b.balance-a.balance)
-    .slice(0,8);
+    .sort((a,b)=>b.balance-a.balance);
   const mismatch = state.projects
     .filter(p=>Number(p.balance) > 0 && p.payment_status === 'Оплачен');
 
