@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0B1929">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">h
+<meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="ARHITTEK">
 <link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
@@ -465,7 +465,7 @@
       <div class="section-label"><span class="lbl-text">Сводка по стройке</span><span class="section-label-line"></span></div>
       <div class="card" id="constrSummaryBlock" style="padding:0; overflow:hidden;"></div>
 
-      <div class="section-label"><span class="lbl-text">Финансы компании</span><span class="section-label-line"></span></div>
+
       <div id="plBlock"></div>
 
       <div class="section-label"><span class="lbl-text">Аналитика по месяцам</span><span class="section-label-line"></span></div>
@@ -554,75 +554,7 @@
   </div>
 
   <!-- ===================== ФИНАНСЫ / ГОНОРАРЫ ===================== -->
-  <div class="view" id="view-finance">
-
-    <div class="section-label"><span class="lbl-text">Новая запись (доход/расход)</span><span class="section-label-line"></span></div>
-    <div class="card">
-      <div class="field">
-        <label>Тип записи</label>
-        <select id="ledgerType">
-          <option value="expense">Расход</option>
-          <option value="income">Доход / оплата</option>
-          <option value="advance">Аванс от заказчика</option>
-          <option value="final_payment">Оплата остатка</option>
-          <option value="materials_budget">Бюджет на материалы</option>
-          <option value="fee_payment">Гонорар ARHITTEK</option>
-          <option value="withdrawal">Вывод средств</option>
-          <option value="payment">Выплата мастеру / гонорар</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>Проект</label>
-        <select id="ledgerProject"><option value="">Без проекта</option></select>
-      </div>
-      <div class="field">
-        <label>Описание</label>
-        <input type="text" id="ledgerDesc" placeholder="например: закупка кафеля">
-      </div>
-      <div class="field-row">
-        <div class="field" style="margin-bottom:0;">
-          <label>Сумма, ₽</label>
-          <input type="number" id="ledgerAmount" placeholder="0">
-        </div>
-        <div class="field" style="margin-bottom:0;">
-          <label>Дата</label>
-          <input type="date" id="ledgerDate">
-        </div>
-      </div>
-      <button class="btn btn-primary" id="ledgerAdd">Добавить запись</button>
-    </div>
-
-    <div class="section-label">
-      <span class="lbl-text">Последние записи</span><span class="section-label-line"></span>
-    </div>
-    <div class="search-box">
-      <input type="text" id="ledgerSearch" placeholder="Поиск по записям...">
-      <button class="search-clear" id="ledgerSearchClear" type="button">✕</button>
-    </div>
-    <!-- Фильтр по дате -->
-    <div style="display:flex; gap:8px; margin-bottom:8px; align-items:center;">
-      <div class="field" style="margin:0; flex:1;">
-        <input type="date" id="ledgerDateFrom" placeholder="Дата от" title="Дата от" style="font-size:12px;">
-      </div>
-      <div style="font-size:11px; color:var(--text-dim);">—</div>
-      <div class="field" style="margin:0; flex:1;">
-        <input type="date" id="ledgerDateTo" placeholder="Дата до" title="Дата до" style="font-size:12px;">
-      </div>
-      <button class="btn btn-secondary" style="padding:8px 10px; font-size:11px; white-space:nowrap;" onclick="document.getElementById('ledgerDateFrom').value='';document.getElementById('ledgerDateTo').value='';renderLedger();">✕ Сброс</button>
-    </div>
-    <div class="card" id="ledgerEntries">
-      <div class="empty-state">Записей пока нет</div>
-    </div>
-
-    <div class="section-label"><span class="lbl-text">Заработки по исполнителям</span><span class="section-label-line"></span></div>
-    <div class="note" style="margin-bottom:10px;">По каждому сотруднику: сколько проектов выполняет/выполнил, начисленный гонорар ARHITTEK и сколько из него уже выплачено.</div>
-    <div id="employeeFeeSummary"></div>
-
-    <div class="section-label"><span class="lbl-text">Гонорары по проектам</span><span class="section-label-line"></span></div>
-    <div class="note" style="margin-bottom:10px;">Расчёт на основе % от прибыли (цена − расходы) или % от полной цены, заданного в категории или индивидуально для проекта.</div>
-    <div id="feeCalcList"></div>
-
-  </div>
+  <!-- view-finance удалён -->
 
   <!-- ===================== КАРТОЧКИ ПРОЕКТОВ ===================== -->
   <div class="view" id="view-cards" style="padding-top:0;">
@@ -775,15 +707,22 @@
       </div>
     </div>
 
-    <div class="section-label"><span class="lbl-text">Способ оплаты / реквизиты</span><span class="section-label-line"></span></div>
+    <div class="section-label"><span class="lbl-text">Реквизиты в PDF</span><span class="section-label-line"></span></div>
     <div class="card">
       <div class="field" style="margin-bottom:0;">
-        <label>Как заказчик будет оплачивать</label>
-        <div class="yn-group" id="kp-payment-method">
-          <div class="yn-btn selected" data-value="account">Расчётный счёт</div>
-          <div class="yn-btn" data-value="card">Банковская карта</div>
+        <label>Какие блоки показать в PDF</label>
+        <div style="display:flex; flex-direction:column; gap:10px; margin-top:6px;">
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; text-transform:none; letter-spacing:0; color:var(--text); font-weight:normal;">
+            <input type="checkbox" id="kp-show-company" checked style="width:16px;height:16px;accent-color:var(--blue);"> Реквизиты компании (ИНН, ОГРН, адрес)
+          </label>
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; text-transform:none; letter-spacing:0; color:var(--text); font-weight:normal;">
+            <input type="checkbox" id="kp-show-account" style="width:16px;height:16px;accent-color:var(--blue);"> Реквизиты расчётного счёта
+          </label>
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; text-transform:none; letter-spacing:0; color:var(--text); font-weight:normal;">
+            <input type="checkbox" id="kp-show-card" style="width:16px;height:16px;accent-color:var(--blue);"> Банковская карта
+          </label>
         </div>
-        <div class="hint" style="margin-top:8px;">Реквизиты подтянутся автоматически из раздела «Компания» и появятся в PDF.</div>
+        <div class="hint" style="margin-top:8px;">Выберите один или несколько блоков — они появятся в PDF и Excel.</div>
       </div>
     </div>
 
@@ -1295,7 +1234,7 @@
   <div class="nav-btn active" data-view="view-overview"><div class="nav-icon">◈</div>Обзор</div>
   <div class="nav-btn" data-view="view-projects"><div class="nav-icon">▦</div>Проектный</div>
   <div class="nav-btn" data-view="view-construction"><div class="nav-icon">🏗</div>Стройка</div>
-  <div class="nav-btn" data-view="view-finance"><div class="nav-icon">◐</div>Финансы</div>
+
   <div class="nav-btn" data-view="view-cards" id="nav-cards"><div class="nav-icon">🏠</div><span style="font-size:9px;line-height:1.2;">Готовые<br>проекты</span></div>
   <div class="nav-btn" data-view="view-more"><div class="nav-icon">☰</div>Ещё</div>
 </nav>
@@ -1349,6 +1288,13 @@
         <label>Соисполнитель</label>
         <select id="pf-co-employee"><option value="">—</option></select>
       </div>
+    </div>
+    <div class="field" id="pf-members-field" style="margin-top:0;">
+      <label>Дополнительные участники</label>
+      <div id="pf-members-list" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px;"></div>
+      <select id="pf-members-add" style="width:auto; min-width:160px;">
+        <option value="">+ Добавить участника</option>
+      </select>
     </div>
 
     <div class="field-row" id="pf-phone-field">
@@ -1820,42 +1766,88 @@ function attemptLogin(){
   renderAll();
 }
 
+// Хелпер: является ли текущий сотрудник участником проекта (employee_id, co_employee_id или project_members)
+function isProjectMember(projectId){
+  if(!session) return false;
+  if(session.isAdmin) return true;
+  const p = state.projects.find(x=>x.id===projectId);
+  if(p && (p.employee_id===session.employeeId || p.co_employee_id===session.employeeId)) return true;
+  return (state.projectMembers||[]).some(m=>m.project_id===projectId && m.employee_id===session.employeeId);
+}
+
+// Хелпер: роль сотрудника (из поля role в employees)
+function getEmployeeRole(){
+  if(!session) return null;
+  const emp = state.employees.find(e=>e.id===session.employeeId);
+  return emp ? (emp.role||'').toLowerCase() : null;
+}
+
+// Может ли видеть строительный отдел
+function canSeeConstruction(){
+  if(!session) return false;
+  if(session.isAdmin) return true;
+  const role = getEmployeeRole();
+  // Прораб, менеджер — могут видеть стройку
+  if(role && (role.includes('прораб') || role.includes('менеджер') || role.includes('manager'))) return true;
+  return false;
+}
+
+// Может ли видеть проектный отдел
+function canSeeProjects(){
+  if(!session) return false;
+  if(session.isAdmin) return true;
+  const role = getEmployeeRole();
+  // Архитекторы, дизайнеры, менеджеры — могут видеть проектный
+  if(role && (role.includes('архитект') || role.includes('дизайн') || role.includes('менеджер') || role.includes('manager'))) return true;
+  // По умолчанию все не-admin видят проектный
+  return true;
+}
+
 function applyRole(){
   const userPill = document.getElementById('userPill');
   if(!session){ userPill.style.display = 'none'; return; }
 
   userPill.style.display = 'flex';
-  userPill.innerHTML = `<span style="font-weight:600;">${escapeHtml(session.name)}</span>${session.isAdmin ? '' : ' <span style="opacity:0.6;">· исполнитель</span>'}`;
+  const roleLabel = getEmployeeRole() ? ` · ${getEmployeeRole()}` : (session.isAdmin ? '' : ' · исполнитель');
+  userPill.innerHTML = `<span style="font-weight:600;">${escapeHtml(session.name)}</span><span style="opacity:0.6;">${roleLabel}</span>`;
 
   const isAdmin = session.isAdmin;
+  const seeConstr = canSeeConstruction();
+  const seeProj = canSeeProjects();
 
-  // Bottom nav: hide Стройка / Финансы for non-admins
+  // Bottom nav — скрываем по ролям
   const navConstr = document.querySelector('.nav-btn[data-view="view-construction"]');
-  const navFinance = document.querySelector('.nav-btn[data-view="view-finance"]');
+  const navProj = document.querySelector('.nav-btn[data-view="view-projects"]');
+  const navFinance = null; // view-finance удалён
   const navOverview = document.querySelector('.nav-btn[data-view="view-overview"]');
-  if(navConstr) navConstr.style.display = '';
-  if(navFinance) navFinance.style.display = isAdmin ? '' : 'none';
+  if(navConstr) navConstr.style.display = seeConstr ? '' : 'none';
+  if(navProj) navProj.style.display = seeProj ? '' : 'none';
+
   if(navOverview) navOverview.style.display = isAdmin ? '' : 'none';
 
-  // Кнопка Готовые проекты — показываем всем авторизованным
+  // Кнопка Готовые проекты — только если видят проектный
   const navCards = document.getElementById('nav-cards');
-  if(navCards) navCards.style.display = '';
+  if(navCards) navCards.style.display = seeProj ? '' : 'none';
 
-  // Показать/скрыть кнопку добавления карточки
   applyCardsRole();
 
-  // "Ещё" view: hide admin-only sections for non-admins
+  // "Ещё" view: секции администратора
   const moreAdminSections = document.getElementById('more-admin-sections');
   if(moreAdminSections) moreAdminSections.style.display = isAdmin ? '' : 'none';
 
-  // If a non-admin is currently on a hidden view, redirect to Проектный
-  if(!isAdmin){
-    const activeView = document.querySelector('.view.active');
-    if(activeView && ['view-overview','view-finance'].includes(activeView.id)){
+  // Редиректим если текущий раздел недоступен
+  const activeView = document.querySelector('.view.active');
+  if(activeView){
+    const hidden = (activeView.id==='view-overview' && !isAdmin)
+      || (activeView.id==='view-construction' && !seeConstr)
+      || (activeView.id==='view-projects' && !seeProj);
+    if(hidden){
       document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
       document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
-      document.getElementById('view-projects').classList.add('active');
-      document.querySelector('.nav-btn[data-view="view-projects"]')?.classList.add('active');
+      // Открываем первый доступный раздел
+      const fallbackView = seeProj ? 'view-projects' : seeConstr ? 'view-construction' : 'view-more';
+      document.getElementById(fallbackView)?.classList.add('active');
+      document.querySelector(`.nav-btn[data-view="${fallbackView}"]`)?.classList.add('active');
     }
   }
 
@@ -2238,7 +2230,7 @@ async function loadAll(){
   loadAllInFlight = true;
   setSyncStatus('loading', 'синхронизация…');
   try{
-    const [proj, emp, cat, st, dept, led, photos, hist, invs, tzForms, tzRefs, company, kpForms, stages, trashProj, trashEmp, trashCat, trashLed] = await Promise.all([
+    const [proj, emp, cat, st, dept, led, photos, hist, invs, tzForms, tzRefs, company, kpForms, stages, trashProj, trashEmp, trashCat, trashLed, members] = await Promise.all([
       sb.from('projects').select('*').is('deleted_at', null).order('created_at', {ascending:true}),
       sb.from('employees').select('*').is('deleted_at', null).order('name'),
       sb.from('categories').select('*').is('deleted_at', null).order('sort_order'),
@@ -2257,6 +2249,7 @@ async function loadAll(){
       sb.from('employees').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
       sb.from('categories').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
       sb.from('ledger_entries').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
+      sb.from('project_members').select('*'),
     ]);
 
     // kpForms and stages are optional — may not exist until migrations run
@@ -2264,6 +2257,7 @@ async function loadAll(){
     if(errs.length) throw errs[0];
     state.kpForms = kpForms.error ? [] : (kpForms.data || []);
     state.projectStages = stages.error ? [] : (stages.data || []);
+    state.projectMembers = members.error ? [] : (members.data || []);
 
     state.projects = proj.data || [];
     state.employees = emp.data || [];
@@ -2332,8 +2326,7 @@ function renderAll(){
   renderConstruction();
   renderFeeCalc();
   renderEmployeeFeeSummary();
-  renderLedger();
-  renderLedgerProjectSelect();
+  // renderLedger убран — раздел Финансы удалён
   renderEmployees();
   renderCategories();
   renderStatuses();
@@ -2836,7 +2829,7 @@ let plPeriod = 'month';
 function renderPL(){
     const el = document.getElementById('plBlock');
     if(!el) return;
-    if(!session || !session.isAdmin){ el.innerHTML = ''; return; }
+    if(!session || (!session.isAdmin && !canSeeConstruction())){ el.innerHTML = ''; return; }
 
     const now = new Date();
     let fromDate;
@@ -3116,9 +3109,7 @@ function renderProjects(){
 
   let list;
   if(session && !session.isAdmin){
-    list = state.projects.filter(p=>
-      (p.employee_id === session.employeeId || p.co_employee_id === session.employeeId) && isProjectItem(p)
-    );
+    list = state.projects.filter(p=> isProjectItem(p) && isProjectMember(p.id));
   }else{
     list = state.projects.filter(isProjectItem);
   }
@@ -3244,6 +3235,13 @@ function populateProjectFormSelects(){
   const prevCoEmp = coEmpSel.value;
   coEmpSel.innerHTML = empOptions;
   if(prevCoEmp && state.employees.some(e=>e.id===prevCoEmp)) coEmpSel.value = prevCoEmp;
+
+  // Заполняем список для добавления доп. участников
+  const membersAdd = document.getElementById('pf-members-add');
+  if(membersAdd){
+    membersAdd.innerHTML = '<option value="">+ Добавить участника</option>' +
+      state.employees.filter(e=>e.active!==false).map(e=>`<option value="${e.id}">${escapeHtml(e.name)}</option>`).join('');
+  }
 }
 
 // When category changes, auto-select its department (categories belong to one department)
@@ -3283,6 +3281,37 @@ document.getElementById('pf-price').addEventListener('input', ()=>{
   document.getElementById(id).addEventListener('change', recalcLiveFeeSummary);
 });
 
+// Хранилище участников текущего редактируемого проекта
+let currentProjectMembers = []; // [{employee_id}]
+
+function renderProjectMemberChips(){
+  const list = document.getElementById('pf-members-list');
+  if(!list) return;
+  list.innerHTML = currentProjectMembers.map(m=>{
+    const emp = findEmployee(m.employee_id);
+    return `<div style="display:inline-flex;align-items:center;gap:4px;background:rgba(74,144,226,0.15);border:1px solid rgba(74,144,226,0.3);border-radius:20px;padding:3px 10px 3px 8px;font-size:12px;">
+      ${escapeHtml(emp?emp.name:m.employee_id)}
+      <span onclick="removeProjectMember('${m.employee_id}')" style="cursor:pointer;opacity:0.6;font-size:14px;line-height:1;">×</span>
+    </div>`;
+  }).join('');
+}
+
+function removeProjectMember(empId){
+  currentProjectMembers = currentProjectMembers.filter(m=>m.employee_id!==empId);
+  renderProjectMemberChips();
+}
+
+document.addEventListener('change', (e)=>{
+  if(e.target && e.target.id==='pf-members-add' && e.target.value){
+    const empId = e.target.value;
+    if(!currentProjectMembers.some(m=>m.employee_id===empId)){
+      currentProjectMembers.push({employee_id: empId});
+      renderProjectMemberChips();
+    }
+    e.target.value = '';
+  }
+});
+
 function openProjectSheet(id){
   editingProjectId = id;
   const overlay = document.getElementById('projectSheetOverlay');
@@ -3302,6 +3331,9 @@ function openProjectSheet(id){
     document.getElementById('pf-department').value = cat ? (cat.department_id || '') : '';
     document.getElementById('pf-employee').value = p.employee_id || '';
     document.getElementById('pf-co-employee').value = p.co_employee_id || '';
+    // Загружаем доп. участников
+    currentProjectMembers = (state.projectMembers||[]).filter(m=>m.project_id===id).map(m=>({employee_id:m.employee_id}));
+    renderProjectMemberChips();
     document.getElementById('pf-phone').value = p.phone || '';
     document.getElementById('pf-address').value = p.address || '';
     document.getElementById('pf-price').value = p.price ?? '';
@@ -3340,6 +3372,8 @@ function openProjectSheet(id){
     const firstCat = state.categories[0];
     document.getElementById('pf-department').value = firstCat ? (firstCat.department_id || '') : '';
     document.getElementById('pf-co-employee').value = '';
+    currentProjectMembers = [];
+    renderProjectMemberChips();
     document.getElementById('pf-employee').value = (session && !session.isAdmin) ? session.employeeId : '';
     document.getElementById('pf-phone').value = '';
     document.getElementById('pf-address').value = '';
@@ -3406,6 +3440,7 @@ async function saveProject(){
   }
 
   try{
+    let savedProjectId = editingProjectId;
     if(editingProjectId){
       const before = state.projects.find(p=>p.id===editingProjectId);
       const {error} = await sb.from('projects').update(payload).eq('id', editingProjectId);
@@ -3418,8 +3453,18 @@ async function saveProject(){
     }else{
       const {data, error} = await sb.from('projects').insert(payload).select().single();
       if(error) throw error;
+      savedProjectId = data.id;
       await logAudit('project', data.id, payload.name, 'create', {});
       showToast('Проект добавлен');
+    }
+    // Сохраняем дополнительных участников
+    if(savedProjectId){
+      await sb.from('project_members').delete().eq('project_id', savedProjectId);
+      if(currentProjectMembers.length > 0){
+        await sb.from('project_members').insert(
+          currentProjectMembers.map(m=>({project_id: savedProjectId, employee_id: m.employee_id}))
+        );
+      }
     }
     closeProjectSheet();
     await loadAll();
@@ -4231,7 +4276,7 @@ function renderConstruction(){
   let projects = getConstrProjects();
 
   if(session && !session.isAdmin){
-    projects = projects.filter(p=>p.employee_id===session.employeeId || p.co_employee_id===session.employeeId);
+    projects = projects.filter(p=>isProjectMember(p.id));
   }
 
   // Фильтр по статусу
@@ -6049,7 +6094,9 @@ function getKpData(){
     object: document.getElementById('kp-object').value.trim(),
     deadline: document.getElementById('kp-deadline').value.trim(),
     startDate: document.getElementById('kp-start').value.trim(),
-    paymentMethod: kpPaymentMethod,
+    showCompany: document.getElementById('kp-show-company')?.checked !== false,
+    showAccount: document.getElementById('kp-show-account')?.checked === true,
+    showCard: document.getElementById('kp-show-card')?.checked === true,
     company: c.short_name || c.full_name || '',
     inn: c.inn || '',
     kpp: c.kpp || '',
@@ -6234,40 +6281,41 @@ function exportKpToPdf(){
   finalY += 14;
 
   // Requisites block
-  if(data.company || data.inn){
+  const showAnyReq = data.showCompany || data.showAccount || data.showCard;
+  if(showAnyReq){
     if(finalY > 250){ doc.addPage(); finalY = 20; }
     doc.setDrawColor(180); doc.line(margin, finalY, pageWidth-margin, finalY); finalY += 6;
     doc.setFont('Roboto','bold'); doc.setFontSize(9); doc.setTextColor(0);
-    doc.text(`Реквизиты исполнителя (оплата на ${data.paymentMethod==='card'?'карту':'расчётный счёт'}):`, margin, finalY); finalY += 5;
+    const reqTitle = ['Реквизиты исполнителя'];
+    const methods = [];
+    if(data.showAccount) methods.push('расчётный счёт');
+    if(data.showCard) methods.push('банковская карта');
+    if(methods.length) reqTitle.push(`(оплата: ${methods.join(', ')})`);
+    doc.text(reqTitle.join(' '), margin, finalY); finalY += 5;
     doc.setFont('Roboto','normal'); doc.setFontSize(8); doc.setTextColor(50);
 
-    let reqRows = [
-      data.company && `Компания: ${data.company}`,
-      data.inn && `ИНН: ${data.inn}${data.kpp?' | КПП: '+data.kpp:''}${data.ogrn?' | ОГРН: '+data.ogrn:''}`,
-      data.legalAddr && `Адрес: ${data.legalAddr}`,
-    ];
+    let reqRows = [];
 
-    if(data.paymentMethod === 'card'){
-      if(!data.cardNumber && !data.cardHolder){
-        reqRows.push('⚠ Реквизиты карты не заполнены — заполните в разделе «Компания»');
-      }
-      reqRows.push(
-        data.cardNumber && `Карта для оплаты: ${data.cardNumber}`,
-        data.cardHolder && `Получатель: ${data.cardHolder}`,
-        data.cardBank && `Банк карты: ${data.cardBank}`,
-      );
-    }else{
-      if(!data.bankAcc){
-        reqRows.push('⚠ Реквизиты счёта не заполнены — заполните в разделе «Компания»');
-      }
-      reqRows.push(
-        data.bankAcc && `Р/с: ${data.bankAcc}`,
-        data.bankName && `Банк: ${data.bankName}`,
-        data.bik && `БИК: ${data.bik}${data.corrAccount?' | К/с: '+data.corrAccount:''}`,
-      );
+    if(data.showCompany){
+      if(data.company) reqRows.push(`Компания: ${data.company}`);
+      if(data.inn) reqRows.push(`ИНН: ${data.inn}${data.kpp?' | КПП: '+data.kpp:''}${data.ogrn?' | ОГРН: '+data.ogrn:''}`);
+      if(data.legalAddr) reqRows.push(`Адрес: ${data.legalAddr}`);
+      if(data.companyPhone) reqRows.push(`Тел.: ${data.companyPhone}`);
     }
-    reqRows.push(data.companyPhone && `Тел.: ${data.companyPhone}`);
-    reqRows = reqRows.filter(Boolean);
+
+    if(data.showAccount){
+      if(!data.bankAcc) reqRows.push('⚠ Реквизиты счёта не заполнены — заполните в разделе «Компания»');
+      if(data.bankAcc) reqRows.push(`Р/с: ${data.bankAcc}`);
+      if(data.bankName) reqRows.push(`Банк: ${data.bankName}`);
+      if(data.bik) reqRows.push(`БИК: ${data.bik}${data.corrAccount?' | К/с: '+data.corrAccount:''}`);
+    }
+
+    if(data.showCard){
+      if(!data.cardNumber && !data.cardHolder) reqRows.push('⚠ Реквизиты карты не заполнены — заполните в разделе «Компания»');
+      if(data.cardNumber) reqRows.push(`Карта для оплаты: ${data.cardNumber}`);
+      if(data.cardHolder) reqRows.push(`Получатель: ${data.cardHolder}`);
+      if(data.cardBank) reqRows.push(`Банк карты: ${data.cardBank}`);
+    }
 
     reqRows.forEach(r=>{ doc.text(r, margin, finalY); finalY += 4.5; });
     finalY += 4;
@@ -6325,23 +6373,29 @@ function exportKpToXlsx(){
     if(data.deadline) rows.push(['Срок выполнения', data.deadline]);
   }
 
-  // Requisites — only the selected payment method
-  if(data.company || data.inn){
+  // Requisites — выбранные блоки
+  if(data.showCompany || data.showAccount || data.showCard){
     rows.push([]);
-    rows.push([`Реквизиты исполнителя (оплата на ${data.paymentMethod==='card'?'карту':'расчётный счёт'}):`]);
-    if(data.company) rows.push(['Компания', data.company]);
-    if(data.inn) rows.push(['ИНН / КПП / ОГРН', [data.inn, data.kpp, data.ogrn].filter(Boolean).join(' / ')]);
-    if(data.legalAddr) rows.push(['Юридический адрес', data.legalAddr]);
-    if(data.paymentMethod === 'card'){
-      if(data.cardNumber) rows.push(['Карта для оплаты', data.cardNumber]);
-      if(data.cardHolder) rows.push(['Получатель', data.cardHolder]);
-      if(data.cardBank) rows.push(['Банк карты', data.cardBank]);
-    }else{
+    const xlsMethods = [];
+    if(data.showAccount) xlsMethods.push('расчётный счёт');
+    if(data.showCard) xlsMethods.push('банковская карта');
+    rows.push([`Реквизиты исполнителя${xlsMethods.length?' (оплата: '+xlsMethods.join(', ')+')':''}`]);
+    if(data.showCompany){
+      if(data.company) rows.push(['Компания', data.company]);
+      if(data.inn) rows.push(['ИНН / КПП / ОГРН', [data.inn, data.kpp, data.ogrn].filter(Boolean).join(' / ')]);
+      if(data.legalAddr) rows.push(['Юридический адрес', data.legalAddr]);
+      if(data.companyPhone) rows.push(['Телефон', data.companyPhone]);
+    }
+    if(data.showAccount){
       if(data.bankAcc) rows.push(['Р/с', data.bankAcc]);
       if(data.bankName) rows.push(['Банк', data.bankName]);
       if(data.bik) rows.push(['БИК / К/с', [data.bik, data.corrAccount].filter(Boolean).join(' / ')]);
     }
-    if(data.companyPhone) rows.push(['Телефон', data.companyPhone]);
+    if(data.showCard){
+      if(data.cardNumber) rows.push(['Карта для оплаты', data.cardNumber]);
+      if(data.cardHolder) rows.push(['Получатель', data.cardHolder]);
+      if(data.cardBank) rows.push(['Банк карты', data.cardBank]);
+    }
   }
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
@@ -6627,7 +6681,7 @@ document.getElementById('catSheetOverlay').addEventListener('click', (e)=>{
   if(e.target.id === 'catSheetOverlay') closeCategorySheet();
 });
 
-document.getElementById('ledgerAdd').addEventListener('click', addLedgerEntry);
+// ledgerAdd listener removed
 
 function setupSearchBox(inputId, setQuery, renderFn){
   const input = document.getElementById(inputId);
@@ -6652,7 +6706,7 @@ function setupSearchBox(inputId, setQuery, renderFn){
 }
 
 setupSearchBox('projectSearch', v=>projectSearchQuery=v, renderProjects);
-setupSearchBox('ledgerSearch', v=>ledgerSearchQuery=v, renderLedger);
+// ledgerSearch listener removed
 setupSearchBox('employeeSearch', v=>employeeSearchQuery=v, renderEmployees);
 setupSearchBox('historySearch', v=>historySearchQuery=v, renderHistory);
 setupSearchBox('constrSearch', v=>{ constrSearchQuery=v; renderConstruction(); });
@@ -6683,13 +6737,7 @@ document.getElementById('companyBack').addEventListener('click', ()=>{
 });
 document.getElementById('companySaveBtn').addEventListener('click', saveCompanyInfo);
 
-document.querySelectorAll('#kp-payment-method .yn-btn').forEach(btn=>{
-  btn.addEventListener('click', ()=>{
-    document.querySelectorAll('#kp-payment-method .yn-btn').forEach(b=>b.classList.remove('selected'));
-    btn.classList.add('selected');
-    kpPaymentMethod = btn.dataset.value;
-  });
-});
+
 
 // ============================================================
 // INIT
