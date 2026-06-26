@@ -2355,14 +2355,18 @@ function renderConstrSummary(){
 
   // Считаем финансы по каждому объекту (та же логика что в renderConstruction)
   const rows = projects.map(p => {
-    const price   = Number(p.price) || 0;
+    const price   = Number(p.price) || 0;   // приход от заказчика
     const projInv = state.invoices.filter(inv => inv.project_id === p.id);
     const matTotal = projInv.filter(i => ['Материал','Инструмент','Расходник','Доставка'].includes(i.item_type)).reduce((s,i)=>s+Number(i.amount),0);
     const workTotal = projInv.filter(i => i.item_type==='Работа').reduce((s,i)=>s+Number(i.amount),0);
-    const expenses  = matTotal + workTotal;
-    const f         = calcConstrFee({...p, expenses});
-    const budgetLeft= price - expenses;
+    const invExpenses = matTotal + workTotal;
+    // Используем expenses из БД если он заполнен (ненулевой), иначе из накладных
+    const expenses  = Number(p.expenses) > 0 ? Number(p.expenses) : invExpenses;
+    // Остаток: если в БД записан balance явно (может быть отрицательным) — используем его
+    // Определяем: balance задан вручную если p.expenses > 0 (значит мы его писали через SQL)
+    const budgetLeft= Number(p.expenses) > 0 ? Number(p.balance) : (price - invExpenses);
     const isOver    = budgetLeft < 0;
+    const f         = calcConstrFee({...p, expenses});
     const st        = findStatus(p.status_id);
     return { p, price, expenses, budgetLeft, isOver, f, st };
   });
@@ -2407,11 +2411,11 @@ function renderConstrSummary(){
       <tfoot>
         <tr>
           <td style="font-weight:700; color:var(--text);">Итого</td>
-          <td style="font-weight:700; color:${totLeft<0?'var(--red)':'var(--text)'};">${fmtMoney(totLeft)}</td>
-          <td style="font-weight:700; color:var(--red);">${fmtMoney(totExpenses)}</td>
-          <td style="font-weight:700; color:var(--green);">${fmtMoney(totPrice)}</td>
-          <td style="color:var(--blue);">${fmtMoney(totFee)}</td>
-          <td style="color:var(--text-dim);">${totFeePaid > 0 ? fmtMoney(totFeePaid) : '—'}</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td style="color:var(--text-dim); font-weight:700;">${totFeePaid > 0 ? fmtMoney(totFeePaid) : '—'}</td>
         </tr>
       </tfoot>
     </table>
