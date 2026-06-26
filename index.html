@@ -3575,6 +3575,7 @@ function calcFee(p){
 function renderEmployeeFeeSummary(){
   const container = document.getElementById('employeeFeeSummary');
   if(!container) return;
+  if(!container) return;
 
   const employees = state.employees.filter(e=>e.active!==false);
   const rows = employees.map(emp=>{
@@ -3608,6 +3609,7 @@ function renderEmployeeFeeSummary(){
 
 function renderFeeCalc(){
   const list = document.getElementById('feeCalcList');
+  if(!list) return;
   // Only show projects with price > 0
   const projects = state.projects.filter(p=>Number(p.price) > 0);
   if(!projects.length){
