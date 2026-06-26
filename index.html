@@ -309,6 +309,15 @@
   .obj-bar-lbl{display:flex; justify-content:space-between; font-size:10px; color:var(--text-dim); letter-spacing:0.02em;}
   .obj-chevron{color:var(--text-dim); font-size:18px; margin-left:8px; flex-shrink:0;}
 
+  /* Construction summary table (Обзор) */
+  .constr-sum-table{width:100%; border-collapse:collapse; font-size:12px;}
+  .constr-sum-table th{padding:8px 10px; text-align:left; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-dim); border-bottom:1px solid var(--line); white-space:nowrap; background:rgba(255,255,255,0.02);}
+  .constr-sum-table td{padding:9px 10px; border-bottom:1px solid var(--line); white-space:nowrap; font-family:'Space Grotesk',sans-serif; font-weight:500; font-size:12px;}
+  .constr-sum-table tfoot td{border-bottom:none; border-top:2px solid var(--line); font-weight:700; font-size:12px; background:rgba(255,255,255,0.02);}
+  .constr-sum-row:hover{background:rgba(255,255,255,0.03);}
+  .constr-sum-row:active{background:rgba(74,144,226,0.07);}
+  .constr-sum-table th:first-child,.constr-sum-table td:first-child{font-family:'Inter',sans-serif;}
+
   /* Object summary in detail view */
   .obj-summary-grid{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:10px;}
   .obj-sum-cell{background:var(--card); border-radius:var(--radius-sm); padding:12px; border:1px solid var(--line); text-align:center;}
@@ -452,6 +461,9 @@
 
       <div class="section-label"><span class="lbl-text">Главное сейчас</span><span class="section-label-line"></span></div>
       <div class="kpi-grid" id="kpiGrid"></div>
+
+      <div class="section-label"><span class="lbl-text">Сводка по стройке</span><span class="section-label-line"></span></div>
+      <div class="card" id="constrSummaryBlock" style="padding:0; overflow:hidden;"></div>
 
       <div class="section-label"><span class="lbl-text">Финансы компании</span><span class="section-label-line"></span></div>
       <div id="plBlock"></div>
@@ -2333,6 +2345,86 @@ function renderAll(){
 // ============================================================
 // OVERVIEW
 // ============================================================
+// ============================================================
+// СВОДКА ПО СТРОИТЕЛЬНЫМ ОБЪЕКТАМ (Обзор)
+// ============================================================
+function renderConstrSummary(){
+  const el = document.getElementById('constrSummaryBlock');
+  if(!el) return;
+
+  const projects = getConstrProjects();
+
+  if(!projects.length){
+    el.innerHTML = '<div class="empty-state" style="padding:16px;">Нет строительных объектов</div>';
+    return;
+  }
+
+  // Считаем финансы по каждому объекту (та же логика что в renderConstruction)
+  const rows = projects.map(p => {
+    const price   = Number(p.price) || 0;
+    const projInv = state.invoices.filter(inv => inv.project_id === p.id);
+    const matTotal = projInv.filter(i => ['Материал','Инструмент','Расходник','Доставка'].includes(i.item_type)).reduce((s,i)=>s+Number(i.amount),0);
+    const workTotal = projInv.filter(i => i.item_type==='Работа').reduce((s,i)=>s+Number(i.amount),0);
+    const expenses  = matTotal + workTotal;
+    const f         = calcConstrFee({...p, expenses});
+    const budgetLeft= price - expenses;
+    const isOver    = budgetLeft < 0;
+    const st        = findStatus(p.status_id);
+    return { p, price, expenses, budgetLeft, isOver, f, st };
+  });
+
+  // Итоговые суммы
+  const totPrice    = rows.reduce((s,r)=>s+r.price,0);
+  const totExpenses = rows.reduce((s,r)=>s+r.expenses,0);
+  const totLeft     = rows.reduce((s,r)=>s+r.budgetLeft,0);
+  const totFee      = rows.reduce((s,r)=>s+r.f.feeAmount,0);
+  const totFeePaid  = rows.reduce((s,r)=>s+r.f.paid,0);
+
+  const rowsHtml = rows.map(({p, price, expenses, budgetLeft, isOver, f, st}) => `
+    <tr onclick="openObjectView('${p.id}')" style="cursor:pointer;" class="constr-sum-row">
+      <td>
+        <div style="font-weight:600; font-size:13px; color:var(--text);">${escapeHtml(p.name)}</div>
+        ${st ? `<div style="font-size:10px; color:var(--text-dim); margin-top:2px;">${escapeHtml(st.name)}</div>` : ''}
+      </td>
+      <td style="color:${isOver ? 'var(--red)' : 'var(--text)'}; font-weight:${isOver ? '700' : '400'};">${isOver ? '⚠ ' : ''}${fmtMoney(budgetLeft)}</td>
+      <td style="color:var(--red);">${fmtMoney(expenses)}</td>
+      <td style="color:var(--green);">${fmtMoney(price)}</td>
+      <td style="color:var(--blue);">${f.feePercent ? f.feePercent+'%' : '—'}</td>
+      <td style="color:var(--text-dim);">${f.paid > 0 ? fmtMoney(f.paid) : '—'}</td>
+    </tr>
+  `).join('');
+
+  el.innerHTML = `
+    <div style="overflow-x:auto; -webkit-overflow-scrolling:touch;">
+    <table class="constr-sum-table">
+      <thead>
+        <tr>
+          <th>Объект</th>
+          <th>Остаток</th>
+          <th>Расход</th>
+          <th>Приход</th>
+          <th>Гонорар</th>
+          <th>Выплачен</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td style="font-weight:700; color:var(--text);">Итого</td>
+          <td style="font-weight:700; color:${totLeft<0?'var(--red)':'var(--text)'};">${fmtMoney(totLeft)}</td>
+          <td style="font-weight:700; color:var(--red);">${fmtMoney(totExpenses)}</td>
+          <td style="font-weight:700; color:var(--green);">${fmtMoney(totPrice)}</td>
+          <td style="color:var(--blue);">${fmtMoney(totFee)}</td>
+          <td style="color:var(--text-dim);">${totFeePaid > 0 ? fmtMoney(totFeePaid) : '—'}</td>
+        </tr>
+      </tfoot>
+    </table>
+    </div>
+  `;
+}
+
 function renderOverview(){
   document.getElementById('overviewLoading').style.display = 'none';
   document.getElementById('overviewContent').style.display = '';
@@ -2489,6 +2581,9 @@ function renderOverview(){
         </div>`;
     }
   }
+
+  // ---- Сводка по стройке ----
+  renderConstrSummary();
 
   // ---- P&L (Финансы компании) ----
   renderPL();
