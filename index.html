@@ -4245,9 +4245,12 @@ function getConstrProjects(){
   const constrDept = state.departments.find(d=>d.name==='Строительный отдел');
   return state.projects.filter(p=>{
     const cat = findCategory(p.category_id);
-    if(!cat) return false;
-    if(constrDept && cat.department_id === constrDept.id) return true;
-    if(cat.name === 'Строительство') return true;
+    if(cat){
+      if(constrDept && cat.department_id === constrDept.id) return true;
+      if(cat.name === 'Строительство') return true;
+    }
+    // Fallback: если у проекта есть накладные — считаем строительным
+    if((state.invoices||[]).some(inv=>inv.project_id===p.id)) return true;
     return false;
   });
 }
