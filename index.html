@@ -1366,8 +1366,10 @@
         <input type="date" id="pf-start">
       </div>
       <div class="field">
-        <label>Дата сдачи</label>
-        <input type="date" id="pf-end">
+        <label>Срок (дней)</label>
+        <input type="number" id="pf-duration-days" min="0" step="1" placeholder="напр. 30">
+        <div id="pf-end-preview" style="font-size:12px;color:#9fb3c8;margin-top:4px;">Дата окончания: —</div>
+        <input type="date" id="pf-end" style="display:none">
       </div>
     </div>
 
@@ -1390,18 +1392,13 @@
     </div>
     <button class="btn btn-secondary" id="pf-stage-add" style="display:none; margin-bottom:10px;">+ Добавить этап</button>
 
-    <!-- Задачи -->
-    <div class="section-label" style="margin:18px 0 10px;"><span class="lbl-text">Задачи</span><span class="section-label-line"></span></div>
-    <div id="pf-tasks-list" class="card" style="margin-bottom:8px;"></div>
-    <div id="pf-task-add-row" style="display:none; margin-bottom:10px;">
-      <div style="display:flex; gap:8px; align-items:center;">
-        <input type="text" id="pf-task-name" class="form-input" placeholder="Что нужно сделать…" style="flex:1;">
-        <select id="pf-task-priority" class="form-input" style="width:auto; font-size:12px; padding:10px 8px;">
-          <option value="normal">Обычная</option>
-          <option value="high">Высокий</option>
-          <option value="low">Низкий</option>
-        </select>
-        <button class="btn btn-secondary" style="padding:10px 12px; white-space:nowrap;" id="pf-task-add-btn">+ Добавить</button>
+    <!-- Задачи (раздел скрыт) -->
+    <div style="display:none">
+      <div id="pf-tasks-list"></div>
+      <div id="pf-task-add-row">
+        <input id="pf-task-name">
+        <select id="pf-task-priority"></select>
+        <button id="pf-task-add-btn"></button>
       </div>
     </div>
 
@@ -1569,6 +1566,7 @@
 const SUPABASE_URL = 'https://chbkkoxwzpaghanofvqk.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_fOLaPnbXjzQnJwG__wVzzg_D0nMO-n0';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    window.sb = sb;
 
 // ============================================================
 // STATE
@@ -7688,3 +7686,67 @@ registerSW();
 showNotifPrompt();
 </script>
 
+<script>
+/* === ARHITTEK enhancement: сроки в днях, скрытие раздела "Задачи", этапы по умолчанию === */
+(function(){
+  "use strict";
+  var CAT_ARCH   = "f1138228-54da-46a3-86a4-95ba8e1116c2";
+  var CAT_DESIGN = "c16f08eb-72e8-4261-bef6-77a8c29284ef"; /* Дизайн интерьера */
+  var CAT_FURN   = "916ec7c2-98a1-4d93-bdec-c35c99bea22c"; /* Дизайн мебели */
+  var STAGES_ARCH   = ["Составить ТЗ","Планировка","Экстерьер","Чертежи","Распечатка и Отправка"];
+  var STAGES_DESIGN = ["Составить ТЗ","Планировка","Визуализация","Чертежи","Распечатка и Отправка"];
+  function defaultStagesFor(catId){
+    if(catId === CAT_ARCH) return STAGES_ARCH;
+    if(catId === CAT_DESIGN || catId === CAT_FURN) return STAGES_DESIGN;
+    return null;
+  }
+  function pad(n){ return String(n).padStart(2,"0"); }
+  function addDays(dateStr, days){ var d=new Date(dateStr+"T00:00:00"); d.setDate(d.getDate()+Number(days)); return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+  function diffDays(a,b){ return Math.round((new Date(b+"T00:00:00")-new Date(a+"T00:00:00"))/86400000); }
+  function ruDate(s){ return new Date(s+"T00:00:00").toLocaleDateString("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric"}); }
+  function wireDuration(){
+    var start=document.getElementById("pf-start"), end=document.getElementById("pf-end"), days=document.getElementById("pf-duration-days"), prev=document.getElementById("pf-end-preview");
+    if(!start||!end||!days||!prev) return;
+    function recompute(){
+      if(start.value && days.value!=="" && !isNaN(days.value)){ var ev=addDays(start.value,days.value); end.value=ev; prev.textContent="Дата окончания: "+ruDate(ev); prev.style.color="#4ade80"; }
+      else { end.value=""; prev.textContent=start.value?"Введите количество дней":"Сначала укажите дату начала"; prev.style.color="#9fb3c8"; }
+    }
+    if(!days.__wired){ days.addEventListener("input",recompute); start.addEventListener("input",recompute); start.addEventListener("change",recompute); days.__wired=true; }
+    if(start.value && end.value){ var dd=diffDays(start.value,end.value); days.value=(dd>=0?dd:""); prev.textContent="Дата окончания: "+ruDate(end.value); prev.style.color="#4ade80"; }
+    else { days.value=""; prev.textContent=start.value?"Введите количество дней":"Сначала укажите дату начала"; }
+  }
+  if(window.openProjectSheet && !window.openProjectSheet.__enh){
+    var origOpen=window.openProjectSheet;
+    window.openProjectSheet=function(){ var r=origOpen.apply(this,arguments); setTimeout(wireDuration,60); setTimeout(wireDuration,250); return r; };
+    window.openProjectSheet.__enh=true;
+  }
+  async function addDefaultStages(projectId, stages){
+    if(!window.sb || !projectId || !stages) return;
+    var rows=stages.map(function(name,i){ return { project_id:projectId, name:name, due_date:null, sort_order:i }; });
+    try { await window.sb.from("project_stages").insert(rows); } catch(e){ console.error("default stages error", e); }
+  }
+  if(window.saveProject && !window.saveProject.__enh){
+    var origSave=window.saveProject;
+    window.saveProject=async function(){
+      var titleEl=document.getElementById("projectSheetTitle");
+      var isNew=titleEl && titleEl.textContent.trim()==="Новый проект";
+      var catEl=document.getElementById("pf-category"); var catId=catEl?catEl.value:null;
+      var beforeIds=null;
+      if(isNew && window.sb){ try{ var res=await window.sb.from("projects").select("id"); beforeIds=new Set((res.data||[]).map(function(x){return x.id;})); }catch(e){ beforeIds=null; } }
+      var r=await origSave.apply(this,arguments);
+      if(isNew && window.sb){
+        var stages=defaultStagesFor(catId);
+        if(stages){
+          try{
+            var res2=await window.sb.from("projects").select("id, created_at").order("created_at",{ascending:false}).limit(5);
+            var newProj=(res2.data||[]).find(function(p){ return !beforeIds || !beforeIds.has(p.id); });
+            if(newProj){ await addDefaultStages(newProj.id, stages); if(window.loadAll) await window.loadAll(); else if(window.renderAll) window.renderAll(); }
+          }catch(e){ console.error("post-create stages error", e); }
+        }
+      }
+      return r;
+    };
+    window.saveProject.__enh=true;
+  }
+})();
+</script>
