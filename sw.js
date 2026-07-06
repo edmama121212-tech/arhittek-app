@@ -1,4 +1,4 @@
-// ARHITTEK Service Worker v1.2
+// ARHITTEK Service Worker v1.2 (redeploy)
 const CACHE = 'arhittek-v1';
 const ASSETS = ['./index.html', './manifest.json'];
 
