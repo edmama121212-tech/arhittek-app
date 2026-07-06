@@ -218,7 +218,14 @@
   /* align-items:end — чтобы input/select в паре не съезжали, когда лейбл слева в 2 строки, а справа в 1 */
   .field-row{display:grid; grid-template-columns:1fr 1fr; gap:10px; align-items:end;}
   .field-row3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; align-items:end;}
-  .field-row > .field, .field-row3 > .field{margin-bottom:10px;}
+  .field-row > .field, .field-row3 > .field{margin-bottom:10px; min-width:0;}
+  /* min-width:0 обязателен: date/number-инпуты имеют большой min-content и иначе ломают равные колонки грида */
+  .field input, .field select, .field textarea{min-width:0;}
+  .field input[type="date"]{-webkit-appearance:none; appearance:none;}
+  /* Чек-бокс этапа (встроенный чек-лист) */
+  .stage-check{width:22px; height:22px; flex-shrink:0; border:2px solid var(--line-strong); border-radius:6px; cursor:pointer; margin-right:10px; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800; color:#fff; transition:all .12s;}
+  .stage-check:hover{border-color:var(--blue);}
+  .stage-check.done{background:var(--green, #52b788); border-color:var(--green, #52b788);}
 
   .btn{
     width:100%; border:none; border-radius:var(--radius-sm); font-weight:700; font-size:14px; padding:13px;
@@ -1452,7 +1459,7 @@
         <input type="number" id="payment-amount" placeholder="0">
       </div>
       <div class="field">
-        <label>Дата</label>
+        <label>Дата платежа</label>
         <input type="date" id="payment-date">
       </div>
     </div>
@@ -1677,6 +1684,31 @@ function isConstructionCategory(catId){
   return nm.includes('строительств') || nm.includes('ремонт') || nm.includes('монтаж') || cat.name==='Строительство';
 }
 function findStatus(id){ return state.statuses.find(s=>s.id===id); }
+
+// Канонические этапы по типу проекта (встроенный чек-лист).
+const CAT_ID_ARCH   = "f1138228-54da-46a3-86a4-95ba8e1116c2";
+const CAT_ID_DESIGN = "c16f08eb-72e8-4261-bef6-77a8c29284ef";
+const CAT_ID_FURN   = "916ec7c2-98a1-4d93-bdec-c35c99bea22c";
+const STAGE_TEMPLATE_ARCH   = ["Составление ТЗ","Разработка планировки","Экстерьер","Чертежи","Печать и отправка Альбома"];
+const STAGE_TEMPLATE_DESIGN = ["Составление ТЗ","Разработка планировки","Визуализация","Чертежи","Печать и отправка Альбома"];
+// Старые названия → новые (чтобы старые отметки «выполнено» подхватывались шаблоном)
+const STAGE_LEGACY_MAP = {
+  "Составить ТЗ": "Составление ТЗ",
+  "Планировка": "Разработка планировки",
+  "Распечатка и Отправка": "Печать и отправка Альбома",
+  "Распечатка и отправка": "Печать и отправка Альбома",
+};
+function defaultStageNamesForProject(proj){
+  if(!proj) return null;
+  if(proj.category_id === CAT_ID_ARCH) return STAGE_TEMPLATE_ARCH;
+  if(proj.category_id === CAT_ID_DESIGN || proj.category_id === CAT_ID_FURN) return STAGE_TEMPLATE_DESIGN;
+  if(isConstructionCategory(proj.category_id)) return null; // объект — без шаблона
+  const cat = findCategory(proj.category_id);
+  const nm = (cat && cat.name || '').toLowerCase();
+  if(nm.includes('архитект')) return STAGE_TEMPLATE_ARCH;
+  if(nm.includes('дизайн') || nm.includes('интерьер') || nm.includes('мебел')) return STAGE_TEMPLATE_DESIGN;
+  return null;
+}
 // Заморожен ли проект — такие проекты не считаются просроченными и исключаются из активных
 function isFrozen(p){
   if(!p) return false;
@@ -1934,45 +1966,89 @@ function renderStagesList(projectId){
   if(addBtn) addBtn.style.display = isAdmin ? '' : 'none';
 
   if(!projectId){
-    container.innerHTML = '<div class="empty-state">Сохраните проект, чтобы добавить этапы</div>';
+    container.innerHTML = '<div class="empty-state">Сохраните проект, чтобы работать с этапами</div>';
     return;
   }
 
-  const stages = state.projectStages
+  const proj = state.projects.find(p=>p.id===projectId);
+  const template = defaultStageNamesForProject(proj); // массив имён или null
+
+  const dbStages = state.projectStages
     .filter(s=>s.project_id===projectId)
     .sort((a,b)=>a.sort_order-b.sort_order || new Date(a.created_at)-new Date(b.created_at));
 
-  if(!stages.length){
-    container.innerHTML = `<div class="empty-state" style="padding:20px;">
-      Этапов пока нет${isAdmin ? ' — добавьте первый выше' : ''}
-    </div>`;
+  // Находим DB-строку по имени с учётом старых названий
+  function findDbStage(name){
+    return dbStages.find(s=> s.name===name || STAGE_LEGACY_MAP[s.name]===name );
+  }
+
+  // Собираем отображаемый список: сначала канонические (всегда видны), затем кастомные
+  const display = [];
+  const usedIds = new Set();
+  if(template){
+    template.forEach(name=>{
+      const db = findDbStage(name);
+      if(db){ usedIds.add(db.id); display.push({name, id:db.id, done:!!db.done, done_at:db.done_at, due_date:db.due_date, canonical:true}); }
+      else { display.push({name, id:null, done:false, done_at:null, due_date:null, canonical:true}); }
+    });
+  }
+  dbStages.forEach(s=>{
+    if(usedIds.has(s.id)) return;
+    // старое имя, которое уже показано под новым — пропускаем
+    if(template && template.indexOf(STAGE_LEGACY_MAP[s.name]) !== -1 && display.some(d=>d.canonical && d.name===STAGE_LEGACY_MAP[s.name])) return;
+    display.push({name:s.name, id:s.id, done:!!s.done, done_at:s.done_at, due_date:s.due_date, canonical:false});
+  });
+
+  if(!display.length){
+    container.innerHTML = `<div class="empty-state" style="padding:20px;">Этапов пока нет${isAdmin ? ' — добавьте первый выше' : ''}</div>`;
     return;
   }
 
-  container.innerHTML = stages.map((s,idx)=>{
+  container.innerHTML = display.map(s=>{
     const overdue = s.due_date && !s.done && daysUntil(s.due_date) < 0;
     const dueTxt = s.due_date ? fmtDate(s.due_date) : '';
     const doneTxt = s.done && s.done_at ? ' · выполнен '+fmtDate(s.done_at) : '';
-    return `<div class="list-item stage-item" draggable="${isAdmin}" data-stage-id="${s.id}" data-project-id="${projectId}" style="cursor:${isAdmin?'grab':'default'};">
-      ${isAdmin ? `<div style="font-size:18px;color:var(--text-dim);padding-right:8px;cursor:grab;touch-action:none;">⠿</div>` : ''}
-      <div style="flex:1;">
+    const nameEnc = encodeURIComponent(s.name);
+    // клик по чекбоксу: для канонических — по имени (создаёт строку при необходимости), для кастомных — по id
+    const toggleCall = s.canonical
+      ? `toggleStageByName('${projectId}','${nameEnc}',${s.done ? 'false' : 'true'})`
+      : (s.done ? `markStageUndone('${s.id}','${projectId}')` : `markStageDone('${s.id}','${projectId}')`);
+    const box = s.done
+      ? `<div class="stage-check done" onclick="${toggleCall}" title="Снять отметку">✓</div>`
+      : `<div class="stage-check" onclick="${toggleCall}" title="Отметить выполненным"></div>`;
+    const delBtn = (isAdmin && !s.canonical && s.id)
+      ? `<button class="icon-btn danger" onclick="deleteStage('${s.id}','${projectId}')" title="Удалить этап">🗑</button>` : '';
+    return `<div class="list-item stage-item" style="align-items:center;">
+      ${box}
+      <div style="flex:1; min-width:0;">
         <div class="li-name" style="${s.done ? 'text-decoration:line-through; opacity:0.55;' : ''}">${escapeHtml(s.name)}</div>
-        <div class="li-meta" style="${overdue ? 'color:var(--red);' : ''}">
-          ${dueTxt ? '📅 '+dueTxt : ''}${doneTxt}${overdue ? ' ⚠ просрочен' : ''}
-        </div>
+        ${(dueTxt||doneTxt||overdue) ? `<div class="li-meta" style="${overdue ? 'color:var(--red);' : ''}">${dueTxt ? '📅 '+dueTxt : ''}${doneTxt}${overdue ? ' ⚠ просрочен' : ''}</div>` : ''}
       </div>
-      <div class="li-actions">
-        ${!s.done
-          ? `<button class="icon-btn" onclick="markStageDone('${s.id}','${projectId}')" title="Отметить выполненным">✅</button>`
-          : `<button class="icon-btn" style="opacity:0.45;" onclick="markStageUndone('${s.id}','${projectId}')" title="Снять отметку">↩</button>`
-        }
-        ${isAdmin ? `<button class="icon-btn danger" onclick="deleteStage('${s.id}','${projectId}')" title="Удалить этап">🗑</button>` : ''}
-      </div>
+      <div class="li-actions">${delBtn}</div>
     </div>`;
   }).join('');
+}
 
-  // Drag-and-drop только для admin
-  if(isAdmin) initStageDragSort(container, projectId);
+// Переключение канонического этапа по имени: создаёт строку в БД при первой отметке
+async function toggleStageByName(projectId, nameEnc, makeDone){
+  const name = decodeURIComponent(nameEnc);
+  try{
+    // ищем существующую строку (в т.ч. со старым именем)
+    let existing = state.projectStages.find(s=>s.project_id===projectId && (s.name===name || STAGE_LEGACY_MAP[s.name]===name));
+    if(existing){
+      const upd = {done: !!makeDone, done_at: makeDone ? new Date().toISOString() : null};
+      // заодно мигрируем старое имя на новое
+      if(existing.name !== name) upd.name = name;
+      await sb.from('project_stages').update(upd).eq('id', existing.id);
+    } else if(makeDone){
+      const sort_order = state.projectStages.filter(s=>s.project_id===projectId).length;
+      await sb.from('project_stages').insert({project_id:projectId, name, done:true, done_at:new Date().toISOString(), sort_order});
+    } else {
+      return; // нечего снимать
+    }
+    await loadAll();
+    renderStagesList(projectId);
+  }catch(e){ console.error(e); showToast('Ошибка обновления этапа'); }
 }
 
 function initStageDragSort(container, projectId){
@@ -8038,15 +8114,10 @@ showNotifPrompt();
   /* Запускаем бэкфилл один раз после загрузки данных (флаг версии в localStorage) */
   var BACKFILL_FLAG = "arhittek_stages_backfill_v3";
   async function runBackfillOnce(){
-    try{
-      if(localStorage.getItem(BACKFILL_FLAG)) return;
-      // Только админ — у него гарантированно есть права записи в project_stages
-      if(!(window.session && window.session.isAdmin)) return;
-      if(!window.state || !(window.state.projects||[]).length) return;
-      var changed = await backfillStages();
-      localStorage.setItem(BACKFILL_FLAG, new Date().toISOString());
-      if(changed && window.loadAll){ await window.loadAll(); }
-    }catch(e){ console.warn("runBackfillOnce error", e); }
+    // Отключено: этапы теперь показываются как встроенный чек-лист (шаблон),
+    // строки в БД создаются только при реальной отметке «выполнено».
+    // Старые названия подхватываются через сопоставление, поэтому массовый бэкфилл не нужен.
+    return;
   }
 
   if(window.loadAll && !window.loadAll.__enhStages){
