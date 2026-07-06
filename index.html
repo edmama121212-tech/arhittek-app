@@ -141,14 +141,15 @@
   .nav-btn.active{color:var(--blue);}
   .nav-icon{font-size:17px;}
 
-  /* Filter chips */
-  .filters{display:flex; gap:6px; overflow-x:auto; margin-bottom:8px; -ms-overflow-style:none; scrollbar-width:none; flex-wrap:wrap;}
-  .filters::-webkit-scrollbar{display:none;}
+  /* Filter chips — равномерная сетка одинаковых кнопок */
+  .filters{display:grid; grid-template-columns:repeat(auto-fit, minmax(92px, 1fr)); gap:6px; margin-bottom:8px;}
   .filter-chip{
-    flex-shrink:0; font-size:11px; padding:6px 14px; border-radius:20px;
+    font-size:11px; padding:8px 8px; border-radius:12px;
     border:1px solid var(--line-strong); color:var(--text-dim); font-weight:600;
-    cursor:pointer; white-space:nowrap; transition: all .15s; letter-spacing:0.02em;
-    min-width:80px; text-align:center; box-sizing:border-box;
+    cursor:pointer; transition: all .15s; letter-spacing:0.02em;
+    width:100%; min-width:0; text-align:center; box-sizing:border-box;
+    white-space:normal; word-break:break-word; line-height:1.2;
+    display:flex; align-items:center; justify-content:center; min-height:34px;
   }
   .filter-chip.active{background:var(--blue-soft); color:var(--blue); border-color:rgba(74,144,226,0.4);}
 
@@ -226,6 +227,13 @@
   .stage-check{width:22px; height:22px; flex-shrink:0; border:2px solid var(--line-strong); border-radius:6px; cursor:pointer; margin-right:10px; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800; color:#fff; transition:all .12s;}
   .stage-check:hover{border-color:var(--blue);}
   .stage-check.done{background:var(--green, #52b788); border-color:var(--green, #52b788);}
+  /* Блок «Активные проекты · Дизайн и Архитектура» */
+  .dept-split{display:flex; gap:16px;}
+  .dept-col{flex:1; min-width:0;}
+  @media(max-width:640px){
+    .dept-split{flex-direction:column; gap:6px;}
+    .dept-col + .dept-col{border-top:1px solid var(--line-strong); padding-top:12px; margin-top:6px;}
+  }
 
   .btn{
     width:100%; border:none; border-radius:var(--radius-sm); font-weight:700; font-size:14px; padding:13px;
@@ -476,7 +484,7 @@
       <div class="card" id="constrSummaryBlock" style="padding:0; overflow:hidden;"></div>
 
 
-      <div class="section-label"><span class="lbl-text">Активные проекты · Дизайн и Архитектура</span><span class="section-label-line"></span></div>
+      <div class="section-label"><span class="lbl-text">Активные проекты · по направлениям</span><span class="section-label-line"></span></div>
       <div id="plBlock"></div>
 
       <div class="section-label"><span class="lbl-text">Аналитика по месяцам</span><span class="section-label-line"></span></div>
@@ -1337,12 +1345,32 @@
 
     <div class="field-row">
       <div class="field">
-        <label>Расходы по проекту, ₽</label>
-        <input type="number" id="pf-expenses" placeholder="0">
+        <label>Расходы по проекту, ₽ (сумма)</label>
+        <input type="number" id="pf-expenses" placeholder="0" readonly title="Складывается из списка расходов ниже">
       </div>
       <div class="field">
         <label>Выплачено гонорара, ₽</label>
         <input type="number" id="pf-feepaid" placeholder="0">
+      </div>
+    </div>
+
+    <!-- Список расходов проекта -->
+    <div id="pf-expenses-block" style="margin:-2px 0 12px;">
+      <div id="pf-expenses-list"></div>
+      <div id="pf-expense-add-row" style="display:flex; gap:6px; align-items:end; flex-wrap:wrap; margin-top:6px;">
+        <div class="field" style="margin-bottom:0; flex:2; min-width:120px;">
+          <label>На что расход</label>
+          <input type="text" id="pf-expense-desc" placeholder="например: печать альбома">
+        </div>
+        <div class="field" style="margin-bottom:0; flex:1; min-width:80px;">
+          <label>Сумма, ₽</label>
+          <input type="number" id="pf-expense-amount" placeholder="0">
+        </div>
+        <div class="field" style="margin-bottom:0; flex:1; min-width:120px;">
+          <label>Дата</label>
+          <input type="date" id="pf-expense-date">
+        </div>
+        <button class="btn btn-secondary" type="button" id="pf-expense-add-btn" style="width:auto; white-space:nowrap; margin-bottom:0; padding:11px 16px;">+ Расход</button>
       </div>
     </div>
 
@@ -1363,25 +1391,25 @@
 
     <div id="pf-fee-summary" class="fee-card" style="margin-bottom:12px;"></div>
 
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button class="btn btn-secondary" id="pf-add-payment" type="button">💰 Принять платёж</button>
-      <button class="btn btn-secondary" type="button" onclick="(function(){var el=document.getElementById('pf-payment-history');if(el){el.scrollIntoView({behavior:'smooth',block:'start'});}})()">📋 История платежей</button>
+    <div style="display:flex;gap:8px;flex-wrap:nowrap;">
+      <button class="btn btn-secondary" id="pf-add-payment" type="button" style="flex:1;min-width:0;">💰 Принять платёж</button>
+      <button class="btn btn-secondary" type="button" style="flex:1;min-width:0;" onclick="(function(){var el=document.getElementById('pf-payment-history');if(el){el.scrollIntoView({behavior:'smooth',block:'start'});}})()">📋 История</button>
     </div>
     <div id="pf-payment-history" style="margin-top:10px;"></div>
     </div>
 
-    <div class="field-row">
-      <div class="field">
+    <div class="field-row" style="align-items:start;">
+      <div class="field" style="margin-bottom:4px;">
         <label>Дата начала</label>
         <input type="date" id="pf-start">
       </div>
-      <div class="field">
+      <div class="field" style="margin-bottom:4px;">
         <label>Срок (дней)</label>
         <input type="number" id="pf-duration-days" min="0" step="1" placeholder="напр. 30">
-        <div id="pf-end-preview" style="font-size:12px;color:#9fb3c8;margin-top:4px;">Дата окончания: —</div>
         <input type="date" id="pf-end" style="display:none">
       </div>
     </div>
+    <div id="pf-end-preview" style="font-size:12px;color:#9fb3c8;margin:-2px 0 10px;">Дата окончания: —</div>
 
     <div class="field">
       <label>Заметки</label>
@@ -1390,17 +1418,14 @@
 
     <div class="section-label" style="margin:18px 0 10px;"><span class="lbl-text">Этапы проекта</span><span class="section-label-line"></span></div>
     <div id="pf-stages-list" class="card" style="margin-bottom:8px;"></div>
-    <div class="field-row" id="pf-stage-add-row" style="display:none;">
-      <div class="field" style="margin-bottom:0;">
+    <div id="pf-stage-add-row" style="display:none; gap:8px; align-items:end;">
+      <div class="field" style="margin-bottom:0; flex:1; min-width:0;">
         <label>Название этапа</label>
         <input type="text" id="pf-stage-name" placeholder="например: Эскизный проект">
       </div>
-      <div class="field" style="margin-bottom:0;">
-        <label>Срок</label>
-        <input type="date" id="pf-stage-date">
-      </div>
+      <button class="btn btn-secondary" id="pf-stage-add" type="button" style="display:none; width:auto; white-space:nowrap; margin-bottom:0; padding:11px 16px;">+ Добавить</button>
+      <input type="date" id="pf-stage-date" style="display:none">
     </div>
-    <button class="btn btn-secondary" id="pf-stage-add" style="display:none; margin-bottom:10px;">+ Добавить этап</button>
 
     <!-- Задачи (раздел скрыт) -->
     <div style="display:none">
@@ -1430,6 +1455,20 @@
       <button class="btn btn-danger" id="pf-delete">Удалить проект</button>
       <button class="btn btn-secondary" id="pf-cancel">Отмена</button>
     </div>
+  </div>
+</div>
+
+<!-- ===================== ПРОСМОТР КАРТОЧКИ КАТАЛОГА ===================== -->
+<div id="cardViewerOverlay" style="display:none;position:fixed;inset:0;z-index:6000;background:rgba(6,12,22,0.96);flex-direction:column;">
+  <div style="flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;gap:10px;">
+    <button onclick="closeCardViewer()" title="Закрыть" style="background:rgba(255,255,255,0.1);color:#fff;border:none;border-radius:10px;width:40px;height:40px;font-size:20px;cursor:pointer;flex-shrink:0;">✕</button>
+    <div id="cardViewerCounter" style="color:rgba(255,255,255,0.6);font-size:13px;font-weight:600;"></div>
+    <button id="cardViewerEditBtn" onclick="editCurrentCard()" title="Редактировать" style="display:none;background:var(--blue);color:#fff;border:none;border-radius:10px;padding:0 16px;height:40px;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">✎ Редактировать</button>
+  </div>
+  <div style="flex:1;position:relative;min-height:0;display:flex;align-items:stretch;">
+    <button id="cardViewerPrev" onclick="cardViewerNav(-1)" title="Предыдущий" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);z-index:2;background:rgba(255,255,255,0.14);color:#fff;border:none;border-radius:50%;width:44px;height:44px;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;">‹</button>
+    <iframe id="cardViewerFrame" style="flex:1;border:none;width:100%;height:100%;background:#C8C8C8;"></iframe>
+    <button id="cardViewerNext" onclick="cardViewerNav(1)" title="Следующий" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);z-index:2;background:rgba(255,255,255,0.14);color:#fff;border:none;border-radius:50%;width:44px;height:44px;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;">›</button>
   </div>
 </div>
 
@@ -1962,8 +2001,8 @@ function renderStagesList(projectId){
   if(!container) return;
 
   const isAdmin = session && session.isAdmin;
-  if(addRow) addRow.style.display = isAdmin ? '' : 'none';
-  if(addBtn) addBtn.style.display = isAdmin ? '' : 'none';
+  if(addRow) addRow.style.display = isAdmin ? 'flex' : 'none';
+  if(addBtn) addBtn.style.display = isAdmin ? 'inline-block' : 'none';
 
   if(!projectId){
     container.innerHTML = '<div class="empty-state">Сохраните проект, чтобы работать с этапами</div>';
@@ -2381,6 +2420,25 @@ async function loadAll(){
       }catch(frErr){ console.warn('Не удалось создать статус «Заморожен» автоматически — возможно, нужно добавить вручную', frErr); }
     }
     state.departments = dept.data || [];
+    // Автосоздание категории «Ландшафтный дизайн» в проектном отделе (self-install, одна попытка за сессию)
+    if(!state.categories.some(c=>(c.name||'').toLowerCase().includes('ландшафт')) && !sessionStorage.getItem('arhittek_landscape_tried')){
+      sessionStorage.setItem('arhittek_landscape_tried','1');
+      try{
+        // Берём отдел не строительный (проектный) — как у Архитектуры/Дизайна
+        const constrDeptX = state.departments.find(d=>d.name==='Строительный отдел');
+        const sampleCat = state.categories.find(c=>{
+          if(constrDeptX && c.department_id === constrDeptX.id) return false;
+          const nm = (c.name||'').toLowerCase();
+          return !(nm.includes('строительств')||nm.includes('ремонт')||nm.includes('монтаж'));
+        });
+        const deptId = sampleCat ? sampleCat.department_id : (state.departments.find(d=>d.name!=='Строительный отдел')||{}).id;
+        const payloadCat = {name:'Ландшафтный дизайн'};
+        if(deptId) payloadCat.department_id = deptId;
+        const {data: lcData, error: lcErr} = await sb.from('categories').insert(payloadCat).select('*').single();
+        if(lcErr) throw lcErr;
+        if(lcData) state.categories.push(lcData);
+      }catch(lcErr){ console.warn('Не удалось создать категорию «Ландшафтный дизайн» автоматически — возможно, нужно добавить вручную', lcErr); }
+    }
     state.ledger = led.data || [];
     state.photos = photos.data || [];
     state.history = hist.data || [];
@@ -2733,9 +2791,14 @@ function renderActiveDeptSplit(){
     var cat = findCategory(p.category_id);
     return !!(cat && (cat.name||'').toLowerCase().indexOf('архитект') !== -1);
   }
+  function isLandscape(p){
+    var cat = findCategory(p.category_id);
+    return !!(cat && (cat.name||'').toLowerCase().indexOf('ландшафт') !== -1);
+  }
 
-  var archProjects = nonConstrActive.filter(isArch);
-  var designProjects = nonConstrActive.filter(function(p){ return !isArch(p); });
+  var landscapeProjects = nonConstrActive.filter(isLandscape);
+  var archProjects = nonConstrActive.filter(function(p){ return isArch(p) && !isLandscape(p); });
+  var designProjects = nonConstrActive.filter(function(p){ return !isArch(p) && !isLandscape(p); });
 
   function sortByDeadline(arr){
     return arr.map(function(p){ return {p:p, d: p.end_date ? daysUntil(p.end_date) : null}; })
@@ -2749,7 +2812,7 @@ function renderActiveDeptSplit(){
 
   function renderColumn(title, icon, items){
     if(!items.length){
-      return '<div style="flex:1; min-width:0;">' +
+      return '<div class="dept-col">' +
         '<div style="font-size:10px; text-transform:uppercase; letter-spacing:0.1em; color:var(--blue); font-weight:700; margin-bottom:8px;">' + icon + ' ' + title + '</div>' +
         '<div class="empty-state" style="padding:14px 0; font-size:12px;">Нет активных проектов</div>' +
         '</div>';
@@ -2774,15 +2837,16 @@ function renderActiveDeptSplit(){
         '</div>' +
       '</div>';
     }).join('');
-    return '<div style="flex:1; min-width:0;">' +
+    return '<div class="dept-col">' +
       '<div style="font-size:10px; text-transform:uppercase; letter-spacing:0.1em; color:var(--blue); font-weight:700; margin-bottom:8px;">' + icon + ' ' + title + '</div>' +
       rows +
       '</div>';
   }
 
-  el.innerHTML = '<div class="card" style="margin-bottom:10px; display:flex; gap:16px; flex-wrap:wrap;">' +
+  el.innerHTML = '<div class="card dept-split" style="margin-bottom:10px;">' +
     renderColumn('Дизайн', '🎨', designProjects) +
     renderColumn('Архитектура', '📐', archProjects) +
+    renderColumn('Ландшафт', '🌿', landscapeProjects) +
     '</div>';
 }
 
@@ -3559,6 +3623,8 @@ function openProjectSheet(id){
     renderKpListForProject(id);
     document.getElementById('pf-create-kp').style.display = '';
     renderPaymentHistory(id);
+    renderProjectExpenses(id);
+    const expAddRow = document.getElementById('pf-expense-add-row'); if(expAddRow) expAddRow.style.display = 'flex';
     renderFeeSummaryForProject(p);
     renderStagesList(id);
     renderTasksList(id);
@@ -3617,6 +3683,8 @@ function openProjectSheet(id){
     document.getElementById('pf-kp-list').innerHTML = '<div class="empty-state">Сохраните проект, чтобы создать КП</div>';
     document.getElementById('pf-create-kp').style.display = 'none';
     document.getElementById('pf-payment-history').innerHTML = '';
+    document.getElementById('pf-expenses-list').innerHTML = '';
+    { const r = document.getElementById('pf-expense-add-row'); if(r) r.style.display = 'none'; }
     document.getElementById('pf-fee-summary').innerHTML = '';
     renderStagesList(null);
     renderTasksList(null);
@@ -3869,6 +3937,7 @@ const ledgerTypeLabels = {
   materials_budget: {label:'Бюджет на материалы', cls:'var(--green)', sign:'+'},
   fee_payment: {label:'Гонорар ARHITTEK', cls:'var(--blue)', sign:'+'},
   withdrawal: {label:'Вывод средств', cls:'var(--red)', sign:'−'},
+  project_expense: {label:'Расход по проекту', cls:'var(--red)', sign:'−'},
 };
 
 function renderFeeSummaryForProject(p){
@@ -3911,6 +3980,93 @@ function renderPaymentHistory(projectId){
         </div>
       </div>`;
     }).join('');
+}
+
+// ---- Расходы проекта (несколько записей: на что + сумма + дата) ----
+function renderProjectExpenses(projectId){
+  const el = document.getElementById('pf-expenses-list');
+  if(!el) return;
+  if(!projectId){ el.innerHTML = ''; return; }
+  const items = state.ledger
+    .filter(l=>l.project_id===projectId && l.type==='project_expense')
+    .sort((a,b)=> new Date(b.entry_date) - new Date(a.entry_date) || new Date(b.created_at) - new Date(a.created_at));
+  if(!items.length){ el.innerHTML = '<div class="empty-state" style="padding:10px;">Расходов пока нет</div>'; return; }
+  const total = items.reduce((s,e)=>s+Number(e.amount||0),0);
+  el.innerHTML = `<div class="card" style="margin-bottom:0;">` + items.map(e=>`
+    <div class="list-item">
+      <div style="min-width:0;">
+        <div class="li-name">${escapeHtml(e.description||'Расход')} — <span style="color:var(--red)">−${fmtMoney(e.amount)}</span></div>
+        <div class="li-meta">${fmtDate(e.entry_date)}</div>
+      </div>
+      <div class="li-actions">
+        <button class="icon-btn danger" title="Удалить расход" onclick="deleteProjectExpense('${e.id}','${projectId}')">🗑</button>
+      </div>
+    </div>`).join('') +
+    `<div class="list-item" style="border-top:1px solid var(--line-strong);">
+      <div class="li-name" style="font-weight:700;">Итого расходов</div>
+      <div class="li-name" style="font-weight:700;color:var(--red);">−${fmtMoney(total)}</div>
+    </div></div>`;
+}
+
+// Пересчёт суммы расходов проекта и синхронизация p.expenses (используется в расчёте гонорара)
+async function syncProjectExpensesTotal(projectId){
+  const {data, error} = await sb.from('ledger_entries').select('amount').eq('project_id', projectId).eq('type','project_expense');
+  if(error) throw error;
+  const total = (data||[]).reduce((s,r)=>s+Number(r.amount||0),0);
+  await sb.from('projects').update({expenses: total}).eq('id', projectId);
+  return total;
+}
+
+async function addProjectExpense(){
+  const projectId = editingProjectId;
+  if(!projectId){ showToast('Сначала сохраните проект'); return; }
+  const desc = document.getElementById('pf-expense-desc').value.trim();
+  const amount = parseFloat(document.getElementById('pf-expense-amount').value);
+  const entry_date = document.getElementById('pf-expense-date').value || new Date().toISOString().slice(0,10);
+  if(!amount || amount <= 0){ showToast('Укажите сумму расхода'); return; }
+  if(!desc){ showToast('Укажите, на что расход'); return; }
+  const p = state.projects.find(x=>x.id===projectId);
+  try{
+    // Миграция: если у проекта уже был ручной расход и нет ни одной записи — сохраняем его первой записью
+    const existing = state.ledger.filter(l=>l.project_id===projectId && l.type==='project_expense');
+    if(!existing.length && p && Number(p.expenses) > 0){
+      await sb.from('ledger_entries').insert({
+        type:'project_expense', project_id:projectId,
+        description:'Ранее внесённые расходы', amount:Number(p.expenses),
+        entry_date: (p.created_at||new Date().toISOString()).slice(0,10),
+        received_by: session ? session.employeeId : null,
+      });
+    }
+    const {error} = await sb.from('ledger_entries').insert({
+      type:'project_expense', project_id:projectId,
+      description:desc, amount, entry_date,
+      received_by: session ? session.employeeId : null,
+    });
+    if(error) throw error;
+    const total = await syncProjectExpensesTotal(projectId);
+    await logAudit('project', projectId, p?p.name:'', 'update', {project_expense_added:{old:null, new:`${desc} — ${fmtMoney(amount)}`}});
+    document.getElementById('pf-expense-desc').value = '';
+    document.getElementById('pf-expense-amount').value = '';
+    document.getElementById('pf-expense-date').value = '';
+    await loadAll();
+    renderProjectExpenses(projectId);
+    const expEl = document.getElementById('pf-expenses'); if(expEl) expEl.value = total;
+    const up = state.projects.find(x=>x.id===projectId); if(up) renderFeeSummaryForProject(up);
+    showToast('Расход добавлен');
+  }catch(e){ console.error(e); showToast('Ошибка добавления расхода'); }
+}
+
+async function deleteProjectExpense(entryId, projectId){
+  if(!confirm('Удалить этот расход?')) return;
+  try{
+    await sb.from('ledger_entries').delete().eq('id', entryId);
+    const total = await syncProjectExpensesTotal(projectId);
+    await loadAll();
+    renderProjectExpenses(projectId);
+    const expEl = document.getElementById('pf-expenses'); if(expEl) expEl.value = total;
+    const up = state.projects.find(x=>x.id===projectId); if(up) renderFeeSummaryForProject(up);
+    showToast('Расход удалён');
+  }catch(e){ console.error(e); showToast('Ошибка удаления'); }
 }
 
 function renderLedgerProjectSelect(){
@@ -4130,6 +4286,7 @@ async function savePayment(){
 }
 
 document.getElementById('pf-add-payment').addEventListener('click', openPaymentSheet);
+document.getElementById('pf-expense-add-btn').addEventListener('click', addProjectExpense);
 document.getElementById('paymentSheetClose').addEventListener('click', ()=>{
   document.getElementById('paymentSheetOverlay').classList.remove('active');
 });
@@ -4684,6 +4841,69 @@ function renderObjectSummary(p){
   `;
 }
 
+// Строка накладной (с категорией) для плоского списка материалов/работ
+function makeInvoiceRow(inv){
+  const typeCls = inv.item_type==='Работа'?'work':inv.item_type==='Доставка'?'del':'mat';
+  return `<div class="inv-row">
+      <div style="min-width:0;">
+        <div class="inv-num">${escapeHtml(inv.number||inv.description||'—')}</div>
+        ${inv.description && inv.number && inv.description!==inv.number ? `<div class="inv-desc">${escapeHtml(inv.description)}</div>` : ''}
+        <span class="inv-type-badge inv-type-${typeCls}">${escapeHtml(inv.item_type)}</span>
+        ${inv.category ? `<span class="inv-type-badge" style="background:rgba(255,255,255,0.06);color:var(--text-dim);">${escapeHtml(inv.category)}</span>` : ''}
+      </div>
+      <div class="inv-right">
+        <div class="inv-amount ${typeCls}">${fmtMoney(inv.amount)}</div>
+        ${inv.invoice_date ? `<div class="inv-date">${fmtDate(inv.invoice_date)}</div>` : ''}
+        ${inv.photo_url ? `<a href="${escapeHtml(inv.photo_url)}" target="_blank" style="color:var(--accent);font-size:11px">📎</a>` : ''}
+      </div>
+    </div>`;
+}
+
+// Поиск по накладной: номер / цена / дата / описание
+function invoiceMatchesQuery(inv, q){
+  if(!q) return true;
+  q = q.trim().toLowerCase();
+  if(!q) return true;
+  const num  = (inv.number||'').toLowerCase();
+  const desc = (inv.description||'').toLowerCase();
+  const amt  = String(inv.amount||'').toLowerCase();
+  const dISO = (inv.invoice_date||'').toLowerCase();
+  const dRu  = inv.invoice_date ? fmtDate(inv.invoice_date).toLowerCase() : '';
+  return num.indexOf(q)!==-1 || desc.indexOf(q)!==-1 || amt.indexOf(q)!==-1 || dISO.indexOf(q)!==-1 || dRu.indexOf(q)!==-1;
+}
+
+let objSearch = {materials:'', works:''};
+
+// Рендер плоского списка накладных с учётом поиска и сортировки по дате (новые сверху)
+function renderObjInvoiceList(kind){
+  const listEl = document.getElementById('objInvList');
+  if(!listEl) return;
+  const projInvoices = state.invoices.filter(inv=>inv.project_id===currentObjectId);
+  let base = kind==='works'
+    ? projInvoices.filter(i=>i.item_type==='Работа')
+    : projInvoices.filter(i=>['Материал','Инструмент','Расходник','Доставка'].includes(i.item_type));
+  const q = objSearch[kind] || '';
+  const filtered = base.filter(inv=>invoiceMatchesQuery(inv, q));
+  // сортировка по дате, самая новая запись сверху
+  filtered.sort((a,b)=>(b.invoice_date||'').localeCompare(a.invoice_date||'') || String(b.created_at||'').localeCompare(String(a.created_at||'')));
+  if(!filtered.length){
+    listEl.innerHTML = `<div class="empty-state">${q ? 'Ничего не найдено' : 'Записей нет'}</div>`;
+    return;
+  }
+  const total = filtered.reduce((s,i)=>s+Number(i.amount||0),0);
+  listEl.innerHTML =
+    `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 2px 8px;font-size:11px;color:var(--text-dim);">
+       <span>${filtered.length} ${q?'найдено':'записей'}</span>
+       <span style="font-weight:700;color:var(--text);">Итого: ${fmtMoney(total)}</span>
+     </div>` +
+    filtered.map(makeInvoiceRow).join('');
+}
+
+function onObjSearchInput(kind, val){
+  objSearch[kind] = val;
+  renderObjInvoiceList(kind);
+}
+
 function renderObjTabs(){
   const el = document.getElementById('objTabs');
   const tabs = [
@@ -4766,12 +4986,22 @@ function renderObjTabContent(){
   const projInvoices = state.invoices.filter(inv=>inv.project_id===currentObjectId);
 
   if(activeObjTab === 'materials'){
-    const mats = projInvoices.filter(i=>['Материал','Инструмент','Расходник','Доставка'].includes(i.item_type));
-    el.innerHTML = `<div class="card" style="margin-top:4px;">${buildInvoiceGroupsHtml(mats)}</div>`;
+    objSearch.materials = '';
+    el.innerHTML = `
+      <div class="field" style="margin:4px 0 8px;">
+        <input type="text" id="objSearchInput" placeholder="🔍 Поиск: номер / цена / дата" oninput="onObjSearchInput('materials', this.value)">
+      </div>
+      <div class="card" style="margin-top:4px;"><div id="objInvList"></div></div>`;
+    renderObjInvoiceList('materials');
   }
   else if(activeObjTab === 'works'){
-    const works = projInvoices.filter(i=>i.item_type==='Работа');
-    el.innerHTML = `<div class="card" style="margin-top:4px;">${buildInvoiceGroupsHtml(works)}</div>`;
+    objSearch.works = '';
+    el.innerHTML = `
+      <div class="field" style="margin:4px 0 8px;">
+        <input type="text" id="objSearchInput" placeholder="🔍 Поиск: запись / цена / дата" oninput="onObjSearchInput('works', this.value)">
+      </div>
+      <div class="card" style="margin-top:4px;"><div id="objInvList"></div></div>`;
+    renderObjInvoiceList('works');
   }
   else if(activeObjTab === 'add'){
     const categories = [...new Set(projInvoices.map(i=>i.category).filter(Boolean))];
@@ -7149,7 +7379,9 @@ function renderCardsList(){
     return;
   }
 
-  const editor = canEditCards();
+  // Сохраняем текущий отфильтрованный список для листания в просмотрщике
+  cardViewerList = filtered;
+
   container.innerHTML = filtered.map(card => `
     <div class="card" style="margin-bottom:10px;cursor:pointer;position:relative;"
          onclick="viewCard('${card.id}')">
@@ -7171,8 +7403,6 @@ function renderCardsList(){
           <div style="font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:700;color:var(--blue);margin-top:4px;">${card.price ? card.price+' ₽' : ''}</div>
         </div>
       </div>
-      ${editor ? `<button onclick="event.stopPropagation();openCardEditor('${card.id}')" title="Редактировать карточку"
-          style="position:absolute;top:8px;right:8px;background:rgba(61,143,224,0.15);color:var(--blue);border:1px solid rgba(61,143,224,0.3);border-radius:8px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">✎ Редактировать</button>` : ''}
     </div>
   `).join('');
 }
@@ -7519,15 +7749,68 @@ async function deleteCard(){
   }
 }
 
-// ── Просмотр карточки (для всех) ──
+// ── Просмотр карточки внутри приложения (для всех) ──
+let cardViewerList = [];   // список карточек для листания (с учётом фильтров)
+let cardViewerIndex = 0;
+
 function viewCard(id){
-  const card = cardsData.find(c=>c.id===id);
-  if(!card) return;
-  // Открываем HTML карточки в новом окне
-  const html = buildCardHTML(card);
-  const w = window.open('','_blank');
-  if(w){ w.document.write(html); w.document.close(); }
+  // Определяем список для листания — текущий отфильтрованный (или все)
+  let list = (cardViewerList && cardViewerList.length) ? cardViewerList : cardsData;
+  let idx = list.findIndex(c=>c.id===id);
+  if(idx < 0){ list = cardsData; idx = list.findIndex(c=>c.id===id); }
+  if(idx < 0) return;
+  cardViewerList = list;
+  openCardViewerAt(idx);
 }
+
+function openCardViewerAt(index){
+  if(!cardViewerList.length) return;
+  cardViewerIndex = Math.max(0, Math.min(cardViewerList.length-1, index));
+  const card = cardViewerList[cardViewerIndex];
+  if(!card) return;
+  const frame = document.getElementById('cardViewerFrame');
+  if(frame) frame.srcdoc = buildCardHTML(card);
+  const counter = document.getElementById('cardViewerCounter');
+  if(counter) counter.textContent = `${cardViewerIndex+1} / ${cardViewerList.length}`;
+  // Кнопки листания — прячем на краях
+  const prev = document.getElementById('cardViewerPrev');
+  const next = document.getElementById('cardViewerNext');
+  if(prev) prev.style.visibility = cardViewerIndex > 0 ? 'visible' : 'hidden';
+  if(next) next.style.visibility = cardViewerIndex < cardViewerList.length-1 ? 'visible' : 'hidden';
+  // Кнопка редактировать — только редакторам
+  const editBtn = document.getElementById('cardViewerEditBtn');
+  if(editBtn) editBtn.style.display = canEditCards() ? '' : 'none';
+  const overlay = document.getElementById('cardViewerOverlay');
+  if(overlay) overlay.style.display = 'flex';
+}
+
+function cardViewerNav(dir){
+  openCardViewerAt(cardViewerIndex + dir);
+}
+
+function closeCardViewer(){
+  const overlay = document.getElementById('cardViewerOverlay');
+  if(overlay) overlay.style.display = 'none';
+  const frame = document.getElementById('cardViewerFrame');
+  if(frame) frame.srcdoc = '';
+}
+
+function editCurrentCard(){
+  const card = cardViewerList[cardViewerIndex];
+  if(!card) return;
+  if(!canEditCards()){ showToast('Нет доступа'); return; }
+  closeCardViewer();
+  openCardEditor(card.id);
+}
+
+// Закрытие по Esc и листание стрелками клавиатуры
+document.addEventListener('keydown', (e)=>{
+  const overlay = document.getElementById('cardViewerOverlay');
+  if(!overlay || overlay.style.display === 'none') return;
+  if(e.key === 'Escape') closeCardViewer();
+  else if(e.key === 'ArrowLeft') cardViewerNav(-1);
+  else if(e.key === 'ArrowRight') cardViewerNav(1);
+});
 
 // ── Ссылки для клиентов ──
 let shareLinksData = [];
@@ -7692,6 +7975,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .swiper-dots{position:absolute;bottom:12px;right:14px;display:flex;gap:5px;pointer-events:none;}
 .swiper-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.4);transition:all .2s;}
 .swiper-dot.active{background:#fff;width:16px;border-radius:3px;}
+.swiper-arrow{position:absolute;top:50%;transform:translateY(-50%);z-index:3;background:rgba(0,0,0,.4);color:#fff;border:none;border-radius:50%;width:36px;height:36px;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s;}
+.swiper-arrow:hover{background:rgba(0,0,0,.65);}
+.swiper-arrow.left{left:10px;}.swiper-arrow.right{right:10px;}
 .plan-wrap{padding:14px 14px 10px;background:#E8E8E8;}
 .plan-label{font-size:10px;font-weight:700;color:var(--text-label);letter-spacing:.12em;text-transform:uppercase;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;}
 .plan-label span{background:var(--blue-light);color:var(--blue);font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;}
@@ -7748,7 +8034,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
     <div class="swiper-caption">${escapeHtml(card.title||'')}</div>
     <div class="swiper-num">№ ${escapeHtml(card.project_number||'')}</div>
-    ${facade2?`<div class="swiper-dots"><div class="swiper-dot active" id="dot-0"></div><div class="swiper-dot" id="dot-1"></div></div>`:''}
+    ${facade2?`<button class="swiper-arrow left" onclick="swGo(si-1)">‹</button><button class="swiper-arrow right" onclick="swGo(si+1)">›</button><div class="swiper-dots"><div class="swiper-dot active" id="dot-0"></div><div class="swiper-dot" id="dot-1"></div></div>`:''}
   </div>
 </div>
 <div class="panel" id="floor1">
@@ -7797,6 +8083,7 @@ ${panel2}
 <script>
 function showTab(id,el){document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));document.getElementById(id).classList.add('active');el.classList.add('active');}
 let si=0;
+let swGo=function(){};
 (function(){
   const wrap=document.getElementById('swiperWrap');
   const track=document.getElementById('swiperTrack');
@@ -7804,6 +8091,7 @@ let si=0;
   const slides=track.querySelectorAll('.swiper-slide');
   if(slides.length<2) return;
   function goTo(i){si=Math.max(0,Math.min(slides.length-1,i));track.style.transform='translateX('+(-si*100)+'%)';[0,1].forEach(j=>{const d=document.getElementById('dot-'+j);if(d)d.className='swiper-dot'+(j===si?' active':'');});}
+  swGo=goTo;
   let sx=0;
   wrap.addEventListener('mousedown',e=>{sx=e.clientX;});
   wrap.addEventListener('mouseup',e=>{if(Math.abs(sx-e.clientX)>40)goTo(sx>e.clientX?si+1:si-1);});
