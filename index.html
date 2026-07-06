@@ -203,20 +203,22 @@
   .sheet-close{background:none; border:none; color:var(--text-dim); font-size:22px; cursor:pointer; padding:0 4px; line-height:1;}
 
   /* ===== Form elements ===== */
-  .field{margin-bottom:12px;}
-  .field label{display:block; font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:6px; font-weight:600;}
+  .field{margin-bottom:10px;}
+  .field label{display:block; font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:5px; font-weight:600; line-height:1.25; min-height:13px;}
   .field input, .field select, .field textarea{
     width:100%; background:rgba(255,255,255,0.05); border:1px solid var(--line-strong); border-radius:var(--radius-sm);
-    color:var(--text); font-size:14px; padding:11px 12px; font-family:'Inter',sans-serif;
+    color:var(--text); font-size:14px; padding:10px 12px; font-family:'Inter',sans-serif;
     transition: border-color .15s;
   }
-  .field textarea{resize:vertical; min-height:70px;}
+  .field textarea{resize:vertical; min-height:60px;}
   .field input:focus, .field select:focus, .field textarea:focus{outline:none; border-color:rgba(74,144,226,0.6); background:rgba(74,144,226,0.05);}
   .field input[readonly]{opacity:0.65; cursor:default; background:rgba(255,255,255,0.02);}
   /* Fix dropdown option contrast in dark theme (browser native option list defaults to white bg) */
   select, select option{ background-color: var(--bg-soft); color: var(--text); }
-  .field-row{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
-  .field-row3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;}
+  /* align-items:end — чтобы input/select в паре не съезжали, когда лейбл слева в 2 строки, а справа в 1 */
+  .field-row{display:grid; grid-template-columns:1fr 1fr; gap:10px; align-items:end;}
+  .field-row3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; align-items:end;}
+  .field-row > .field, .field-row3 > .field{margin-bottom:10px;}
 
   .btn{
     width:100%; border:none; border-radius:var(--radius-sm); font-weight:700; font-size:14px; padding:13px;
@@ -237,6 +239,7 @@
   .status-chip[data-status="В процессе"]{background:var(--blue-soft); color:var(--blue);}
   .status-chip[data-status="Ждём оплату"]{background:rgba(232,163,61,0.15); color:var(--gold);}
   .status-chip[data-status="Завершён"]{background:rgba(82,183,136,0.15); color:var(--green);}
+  .status-chip[data-status="Заморожен"]{background:rgba(120,180,230,0.14); color:#8fc4ea;}
   .status-chip.overdue{background:rgba(224,82,82,0.15); color:var(--red);}
 
   /* ===== List items ===== */
@@ -475,8 +478,7 @@
       <div class="section-label"><span class="lbl-text">Долги клиентов</span><span class="section-label-line"></span></div>
       <div class="card" id="debtCard"></div>
 
-      <div class="section-label"><span class="lbl-text">Активные проекты</span><span class="section-label-line"></span></div>
-      <div class="card" id="activeProjectsCard"></div>
+      <div class="card" id="activeProjectsCard" style="display:none;"></div>
 
       <div id="stagesNotifBlock"></div>
 
@@ -1411,6 +1413,10 @@
     <div id="pf-kp-list" class="card" style="margin-bottom:8px;"></div>
     <button class="btn btn-secondary" id="pf-create-kp" style="display:none;">Создать КП для этого проекта</button>
 
+    <div class="section-label" style="margin:18px 0 10px;"><span class="lbl-text">История изменений</span><span class="section-label-line"></span></div>
+    <button class="btn btn-secondary" id="pf-history-toggle" type="button" style="margin-bottom:8px;">📋 Показать историю изменений</button>
+    <div id="pf-history-list" class="card" style="margin-bottom:8px; display:none;"></div>
+
     <button class="btn btn-primary" id="pf-save">Сохранить</button>
     <button class="btn btn-secondary" id="pf-open-as-object" style="display:none; margin-top:8px;">📦 Накладные, материалы, фото</button>
     <div class="btn-row">
@@ -1589,6 +1595,7 @@ let state = {
   projectStages: [],
   trash: {projects:[], employees:[], categories:[], ledger:[]},
 };
+window.state = state; // экспорт для enhancement-блока (бэкфилл этапов и пр.)
 
 let activeCategoryFilter = 'all';
 let activeStatusFilter = 'all';
@@ -1660,7 +1667,22 @@ function setSyncStatus(status, label){
 }
 
 function findCategory(id){ return state.categories.find(c=>c.id===id); }
+// Является ли категория строительной (для показа накладных/материалов/фото объекта)
+function isConstructionCategory(catId){
+  const cat = findCategory(catId);
+  if(!cat) return false;
+  const constrDept = state.departments.find(d=>d.name==='Строительный отдел');
+  if(constrDept && cat.department_id === constrDept.id) return true;
+  const nm = (cat.name||'').toLowerCase();
+  return nm.includes('строительств') || nm.includes('ремонт') || nm.includes('монтаж') || cat.name==='Строительство';
+}
 function findStatus(id){ return state.statuses.find(s=>s.id===id); }
+// Заморожен ли проект — такие проекты не считаются просроченными и исключаются из активных
+function isFrozen(p){
+  if(!p) return false;
+  const st = findStatus(p.status_id);
+  return !!(st && st.name === 'Заморожен');
+}
 function findEmployee(id){ return state.employees.find(e=>e.id===id); }
 function findDepartment(id){ return state.departments.find(d=>d.id===id); }
 
@@ -1700,12 +1722,14 @@ function getSession(){
       localStorage.removeItem('arhittek_session');
       return null;
     }
+    window.session = s;
     return s;
   }catch(e){ return null; }
 }
 
 function setSession(s){
   session = {...s, createdAt: Date.now()};
+  window.session = session;
   try{ localStorage.setItem('arhittek_session', JSON.stringify(session)); }catch(e){}
 }
 
@@ -1824,9 +1848,9 @@ function applyRole(){
 
   if(navOverview) navOverview.style.display = isAdmin ? '' : 'none';
 
-  // Кнопка Готовые проекты — только если видят проектный
+  // Кнопка Готовые проекты — только редакторам каталога (Мансур/Ислам)
   const navCards = document.getElementById('nav-cards');
-  if(navCards) navCards.style.display = seeProj ? '' : 'none';
+  if(navCards) navCards.style.display = canEditCards() ? '' : 'none';
 
   applyCardsRole();
 
@@ -1839,7 +1863,8 @@ function applyRole(){
   if(activeView){
     const hidden = (activeView.id==='view-overview' && !isAdmin)
       || (activeView.id==='view-construction' && !seeConstr)
-      || (activeView.id==='view-projects' && !seeProj);
+      || (activeView.id==='view-projects' && !seeProj)
+      || (activeView.id==='view-cards' && !canEditCards());
     if(hidden){
       document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
       document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
@@ -2151,12 +2176,20 @@ function deleteTask(projectId, taskId){
 
 async function logAudit(entityType, entityId, entityName, action, changes){
   try{
+    // Автор изменения встраивается в changes как служебный ключ _actor,
+    // чтобы не менять схему таблицы audit_log.
+    const payloadChanges = Object.assign({}, changes || {});
+    try{
+      if(typeof session !== 'undefined' && session && session.name){
+        payloadChanges._actor = session.name;
+      }
+    }catch(e){}
     await sb.from('audit_log').insert({
       entity_type: entityType,
       entity_id: entityId,
       entity_name: entityName,
       action: action,
-      changes: changes || {},
+      changes: payloadChanges,
     });
   }catch(e){
     console.error('audit log error', e);
@@ -2262,6 +2295,15 @@ async function loadAll(){
     state.employees = emp.data || [];
     state.categories = cat.data || [];
     state.statuses = st.data || [];
+    // Автосоздание статуса «Заморожен», если его ещё нет в БД (self-install, одна попытка за сессию)
+    if(!state.statuses.some(s=>s.name==='Заморожен') && !sessionStorage.getItem('arhittek_frozen_tried')){
+      sessionStorage.setItem('arhittek_frozen_tried','1');
+      try{
+        const {data: frozenData, error: frErr} = await sb.from('statuses').insert({name:'Заморожен'}).select('*').single();
+        if(frErr) throw frErr;
+        if(frozenData) state.statuses.push(frozenData);
+      }catch(frErr){ console.warn('Не удалось создать статус «Заморожен» автоматически — возможно, нужно добавить вручную', frErr); }
+    }
     state.departments = dept.data || [];
     state.ledger = led.data || [];
     state.photos = photos.data || [];
@@ -2427,7 +2469,8 @@ function renderOverview(){
   document.getElementById('overviewContent').style.display = '';
 
   const doneStatus = state.statuses.find(s=>s.name==='Завершён');
-  const activeProjects = state.projects.filter(p=>!doneStatus || p.status_id !== doneStatus.id);
+  // Активные — не завершённые и не замороженные
+  const activeProjects = state.projects.filter(p=>(!doneStatus || p.status_id !== doneStatus.id) && !isFrozen(p));
   const doneProjects = state.projects.filter(p=>doneStatus && p.status_id === doneStatus.id);
 
   // Реальный долг — все проекты с ненулевым остатком (включая расхождения)
@@ -2435,9 +2478,10 @@ function renderOverview(){
     .filter(p => Number(p.balance) > 0)
     .reduce((s,p)=>s + (Number(p.balance)||0), 0);
 
-  // overdue: end_date in the past and status not done
+  // overdue: end_date in the past and status not done (замороженные не считаются просроченными)
   const overdue = state.projects.filter(p=>{
     if(!p.end_date) return false;
+    if(isFrozen(p)) return false;
     if(doneStatus && p.status_id === doneStatus.id && Number(p.balance) === 0) return false;
     const d = daysUntil(p.end_date);
     return d !== null && d < 0;
@@ -2556,9 +2600,12 @@ function renderOverview(){
   // ---- Overdue stages notification block (admin only) ----
   const stagesNotifEl = document.getElementById('stagesNotifBlock');
   if(stagesNotifEl){
-    const overdueStages = state.projectStages.filter(s=>
-      !s.done && s.due_date && daysUntil(s.due_date) < 0
-    );
+    const overdueStages = state.projectStages.filter(s=>{
+      if(s.done || !s.due_date || daysUntil(s.due_date) >= 0) return false;
+      const pr = state.projects.find(x=>x.id===s.project_id);
+      if(isFrozen(pr)) return false; // замороженные проекты не порождают просрочки
+      return true;
+    });
     if(!overdueStages.length){
       stagesNotifEl.innerHTML = '';
     }else{
@@ -2599,6 +2646,7 @@ function renderActiveDeptSplit(){
 
   var nonConstrActive = state.projects.filter(function(p){
     if(doneStatus && p.status_id === doneStatus.id) return false;
+    if(isFrozen(p)) return false;
     var cat = findCategory(p.category_id);
     if(constrDept && cat && cat.department_id === constrDept.id) return false;
     if(cat && (cat.name||'').toLowerCase().indexOf('строительств') !== -1) return false;
@@ -3244,6 +3292,7 @@ function renderProjectRow(p){
     const payStatus = p.payment_status || 'Ждём оплату';
     const payColor = paymentBadgeColor(payStatus);
     const isDone = st && st.name === 'Завершён';
+    const frozen = isFrozen(p);
 
     let metaParts = [];
     if(cat) metaParts.push(escapeHtml(cat.name));
@@ -3258,12 +3307,12 @@ function renderProjectRow(p){
       statusChips += `<span class="status-chip" data-status="${escapeHtml(st.name)}">${escapeHtml(st.name)}</span>`;
     }
     statusChips += `<span class="status-chip" style="background:${payColor.bg}; color:${payColor.fg};">${escapeHtml(payStatus)}</span>`;
-    if(d !== null && d < 0 && !isDone){
+    if(!frozen && d !== null && d < 0 && !isDone){
       statusChips += `<span class="status-chip overdue">просрочен ${Math.abs(d)} дн.</span>`;
-    } else if(d !== null && d >= 0 && d <= 7 && !isDone){
+    } else if(!frozen && d !== null && d >= 0 && d <= 7 && !isDone){
       statusChips += `<span class="status-chip" data-status="Ждём оплату">${d} дн. до сдачи</span>`;
     }
-    const overdueStages = state.projectStages.filter(s=>s.project_id===p.id && !s.done && s.due_date && daysUntil(s.due_date)<0);
+    const overdueStages = frozen ? [] : state.projectStages.filter(s=>s.project_id===p.id && !s.done && s.due_date && daysUntil(s.due_date)<0);
     if(overdueStages.length && !isDone){
       statusChips += `<span class="status-chip overdue">⚠ этап просрочен (${overdueStages.length})</span>`;
     }
@@ -3271,9 +3320,9 @@ function renderProjectRow(p){
     const balance = Number(p.balance) || 0;
     const showFinance = !session || session.isAdmin;
 
-    // Завершённые — приглушённый вид
-    const rowStyle = isDone ? 'opacity:0.55;' : '';
-    const donePrefix = isDone ? '✓ ' : '';
+    // Завершённые и замороженные — приглушённый вид
+    const rowStyle = (isDone || frozen) ? 'opacity:0.55;' : '';
+    const donePrefix = isDone ? '✓ ' : (frozen ? '❄ ' : '');
 
     return `<div class="proj-row" onclick="openProjectSheet('${p.id}')" style="${rowStyle}">
       <div>
@@ -3299,8 +3348,12 @@ function populateProjectFormSelects(){
 
   const stSel = document.getElementById('pf-status');
   const prevSt = stSel.value;
-  const allowedStatuses = ['Запись', 'В процессе', 'Завершён'];
-  stSel.innerHTML = state.statuses.filter(s=>allowedStatuses.includes(s.name)).map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+  const allowedStatuses = ['Запись', 'В процессе', 'Завершён', 'Заморожен'];
+  // Порядок отображения фиксированный, чтобы «Заморожен» шёл последним
+  stSel.innerHTML = allowedStatuses
+    .map(nm => state.statuses.find(s=>s.name===nm))
+    .filter(Boolean)
+    .map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
   if(prevSt && state.statuses.some(s=>s.id===prevSt)) stSel.value = prevSt;
 
   const empSel = document.getElementById('pf-employee');
@@ -3439,7 +3492,24 @@ function openProjectSheet(id){
     if(addTaskBtn){
       addTaskBtn.onclick = () => addTask(id);
     }
-    document.getElementById('pf-open-as-object').style.display = '';
+    // Кнопка «Накладные, материалы, фото» — только для строительных объектов.
+    // Для Архитектуры и Дизайна интерьера она не нужна.
+    document.getElementById('pf-open-as-object').style.display = isConstructionCategory(p.category_id) ? '' : 'none';
+
+    // История изменений по проекту
+    renderProjectHistory(id);
+    const histToggle = document.getElementById('pf-history-toggle');
+    const histList = document.getElementById('pf-history-list');
+    if(histToggle && histList){
+      histList.style.display = 'none';
+      histToggle.textContent = '📋 Показать историю изменений';
+      histToggle.onclick = function(){
+        const shown = histList.style.display !== 'none';
+        histList.style.display = shown ? 'none' : '';
+        histToggle.textContent = shown ? '📋 Показать историю изменений' : '📋 Скрыть историю изменений';
+        if(!shown) renderProjectHistory(id);
+      };
+    }
   }else{
     title.textContent = 'Новый проект';
     deleteBtn.style.display = 'none';
@@ -3475,6 +3545,8 @@ function openProjectSheet(id){
     renderStagesList(null);
     renderTasksList(null);
     document.getElementById('pf-open-as-object').style.display = 'none';
+    const histList0 = document.getElementById('pf-history-list');
+    if(histList0){ histList0.style.display = 'none'; histList0.innerHTML = '<div class="empty-state">Сохраните проект, чтобы вести историю</div>'; }
   }
 
   overlay.classList.add('active');
@@ -4965,6 +5037,7 @@ const fieldLabels = {
   fee_base: 'База гонорара', start_date: 'Дата начала', end_date: 'Дата сдачи', notes: 'Заметки',
   role: 'Роль', active: 'Активен', floors_total: 'Этажей всего', floors_done: 'Готово этажей',
   stage_notes: 'Этап', fee_base_label: 'База', department_id: 'Отдел', photo: 'Фото',
+  client_name: 'Клиент', co_employee_id: 'Соисполнитель', invoice_added: 'Добавлена накладная',
 };
 
 function fmtAuditValue(field, val){
@@ -4976,6 +5049,47 @@ function fmtAuditValue(field, val){
   if(['price','advance','balance','expenses','fee_paid'].includes(field)) return fmtMoney(val);
   if(typeof val === 'boolean') return val ? 'да' : 'нет';
   return String(val);
+}
+
+// История изменений по конкретному проекту (внутри карточки)
+function renderProjectHistory(projectId){
+  const el = document.getElementById('pf-history-list');
+  if(!el) return;
+  if(!projectId){ el.innerHTML = '<div class="empty-state">Сохраните проект, чтобы вести историю</div>'; return; }
+  // Берём записи, относящиеся к этому проекту (по entity_id),
+  // а также ledger/накладные, где в имени фигурирует проект.
+  const proj = state.projects.find(p=>p.id===projectId);
+  const projName = proj ? proj.name : '';
+  let list = (state.history||[]).filter(h=>{
+    if(h.entity_type === 'project' && h.entity_id === projectId) return true;
+    // финансовые записи логируются под своей сущностью, но имя начинается с названия проекта
+    if((h.entity_type === 'ledger_entry') && projName && (h.entity_name||'').indexOf(projName) === 0) return true;
+    return false;
+  });
+  if(!list.length){ el.innerHTML = '<div class="empty-state">Изменений пока нет</div>'; return; }
+  el.innerHTML = list.slice(0,80).map(h=>{
+    const action = auditActionLabels[h.action] || h.action;
+    let actor = '';
+    let changesHtml = '';
+    if(h.changes && Object.keys(h.changes).length){
+      changesHtml = Object.entries(h.changes).filter(([field])=>field!=='_actor').map(([field, vals])=>{
+        const lbl = fieldLabels[field] || field;
+        if(vals && typeof vals === 'object' && ('old' in vals || 'new' in vals)){
+          return `${lbl}: ${escapeHtml(fmtAuditValue(field, vals.old))} → ${escapeHtml(fmtAuditValue(field, vals.new))}`;
+        }
+        return `${lbl}: ${escapeHtml(String(vals))}`;
+      }).join('<br>');
+      if(h.changes._actor) actor = h.changes._actor;
+    }
+    return `<div class="history-item">
+      <div class="h-top">
+        <span class="h-action ${h.action}">${action}</span>
+        <span class="h-time">${fmtDateTime(h.created_at)}</span>
+      </div>
+      ${changesHtml ? `<div class="h-changes">${changesHtml}</div>` : ''}
+      <div class="h-actor" style="font-size:11px;color:var(--text-dim);margin-top:4px;">✎ ${escapeHtml(actor || '—')}</div>
+    </div>`;
+  }).join('');
 }
 
 function renderHistory(){
@@ -4992,12 +5106,14 @@ function renderHistory(){
   card.innerHTML = list.slice(0,50).map(h=>{
     const action = auditActionLabels[h.action] || h.action;
     const entity = auditEntityLabels[h.entity_type] || h.entity_type;
+    let actor = '';
     let changesHtml = '';
     if(h.changes && Object.keys(h.changes).length){
-      changesHtml = Object.entries(h.changes).map(([field, vals])=>{
+      changesHtml = Object.entries(h.changes).filter(([field])=>field!=='_actor').map(([field, vals])=>{
         const lbl = fieldLabels[field] || field;
         return `${lbl}: ${escapeHtml(fmtAuditValue(field, vals.old))} → ${escapeHtml(fmtAuditValue(field, vals.new))}`;
       }).join('<br>');
+      if(h.changes._actor) actor = h.changes._actor;
     }
     return `<div class="history-item">
       <div class="h-top">
@@ -5006,6 +5122,7 @@ function renderHistory(){
       </div>
       <div class="h-entity">${entity}: ${escapeHtml(h.entity_name||'')}</div>
       ${changesHtml ? `<div class="h-changes">${changesHtml}</div>` : ''}
+      ${actor ? `<div class="h-actor" style="font-size:11px;color:var(--text-dim);margin-top:4px;">✎ ${escapeHtml(actor)}</div>` : ''}
     </div>`;
   }).join('');
 }
@@ -6851,7 +6968,8 @@ const CARD_EDITORS_FALLBACK = ['мансур', 'ислам'];
 
 function canEditCards(){
   if(!session) return false;
-  // Сначала проверяем поле can_edit_cards в записи сотрудника (из БД)
+  if(session.isAdmin) return true; // админ всегда имеет доступ к каталогу
+  // Затем проверяем поле can_edit_cards в записи сотрудника (из БД)
   const emp = state.employees.find(e=>e.id===session.employeeId);
   if(emp && emp.can_edit_cards === true) return true;
   if(emp && emp.can_edit_cards === false) return false;
@@ -6955,9 +7073,10 @@ function renderCardsList(){
     return;
   }
 
+  const editor = canEditCards();
   container.innerHTML = filtered.map(card => `
-    <div class="card" style="margin-bottom:10px;cursor:${canEditCards()?'pointer':'default'};"
-         onclick="${canEditCards() ? `openCardEditor('${card.id}')` : `viewCard('${card.id}')`}">
+    <div class="card" style="margin-bottom:10px;cursor:pointer;position:relative;"
+         onclick="viewCard('${card.id}')">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:700;line-height:1.35;margin-bottom:3px;">${escapeHtml(card.title||'Без названия')}</div>
@@ -6976,6 +7095,8 @@ function renderCardsList(){
           <div style="font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:700;color:var(--blue);margin-top:4px;">${card.price ? card.price+' ₽' : ''}</div>
         </div>
       </div>
+      ${editor ? `<button onclick="event.stopPropagation();openCardEditor('${card.id}')" title="Редактировать карточку"
+          style="position:absolute;top:8px;right:8px;background:rgba(61,143,224,0.15);color:var(--blue);border:1px solid rgba(61,143,224,0.3);border-radius:8px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">✎ Редактировать</button>` : ''}
     </div>
   `).join('');
 }
@@ -7187,12 +7308,52 @@ function parseExpl(text){
   });
 }
 
+// dataURL → Blob (для выгрузки base64-картинок в Storage)
+function dataURLtoBlob(dataurl){
+  const arr = dataurl.split(',');
+  const mime = (arr[0].match(/:(.*?);/)||[])[1] || 'image/jpeg';
+  const bstr = atob(arr[1]);
+  let n = bstr.length; const u8 = new Uint8Array(n);
+  while(n--) u8[n] = bstr.charCodeAt(n);
+  return new Blob([u8], {type:mime});
+}
+
+// Выгружаем изображения карточки в Storage и возвращаем массив URL.
+// Уже загруженные (http…) остаются как есть; base64 — грузятся; при ошибке фоллбэк на base64.
+async function uploadCardImages(images){
+  const out = [];
+  for(let i=0;i<images.length;i++){
+    const img = images[i];
+    if(!img){ out.push(null); continue; }
+    if(typeof img === 'string' && (img.startsWith('http://') || img.startsWith('https://'))){ out.push(img); continue; }
+    if(typeof img === 'string' && img.startsWith('data:')){
+      try{
+        const blob = dataURLtoBlob(img);
+        const fileName = `cards/${ceCurrentId||'new'}_${Date.now()}_${i}_${Math.random().toString(36).slice(2,7)}.jpg`;
+        const {error: upErr} = await sb.storage.from('expense-photos').upload(fileName, blob, {contentType:'image/jpeg', upsert:true});
+        if(upErr) throw upErr;
+        const {data: urlData} = sb.storage.from('expense-photos').getPublicUrl(fileName);
+        out.push(urlData.publicUrl || img);
+      }catch(e){
+        console.warn('Не удалось выгрузить фото карточки в Storage, оставляю base64', e);
+        out.push(img); // безопасный фоллбэк — карточка не теряет фото
+      }
+    } else {
+      out.push(img);
+    }
+  }
+  return out;
+}
+
 async function saveCard(){
   const btn = document.getElementById('ce-save-btn');
   btn.disabled = true;
   btn.textContent = 'Сохранение…';
 
   try{
+    // Сначала выгружаем фото в Storage (снимает проблему больших base64 в строке БД)
+    const uploadedImages = await uploadCardImages(ceImages);
+    ceImages = uploadedImages.slice(); // чтобы повторное сохранение не грузило заново
     const payload = {
       project_number: document.getElementById('ce-num').value.trim(),
       title: 'Проект №'+(document.getElementById('ce-num').value.trim())+' — '+(document.getElementById('ce-title').value.trim()),
@@ -7216,7 +7377,7 @@ async function saveCard(){
       floor2_area: ceFloorsSelected >= 2 ? document.getElementById('ce-area2').value.trim() : null,
       expl1: parseExpl(document.getElementById('ce-expl1').value),
       expl2: ceFloorsSelected >= 2 ? parseExpl(document.getElementById('ce-expl2').value) : [],
-      images: ceImages,
+      images: uploadedImages,
       updated_at: new Date().toISOString(),
     };
 
@@ -7704,9 +7865,11 @@ function checkOverdueNotifications(){
   const now = new Date();
   const today = now.toISOString().slice(0,10);
 
-  // Просроченные этапы
+  // Просроченные этапы (замороженные проекты игнорируем)
   const overdueStages = state.projectStages.filter(s=>{
     if(s.done || !s.due_date) return false;
+    const pr = state.projects.find(x=>x.id===s.project_id);
+    if(isFrozen(pr)) return false;
     return s.due_date < today;
   });
 
@@ -7714,6 +7877,7 @@ function checkOverdueNotifications(){
   const doneStatus = state.statuses.find(s=>s.name==='Завершён');
   const overdueProjects = state.projects.filter(p=>{
     if(doneStatus && p.status_id === doneStatus.id) return false;
+    if(isFrozen(p)) return false;
     if(!p.end_date) return false;
     return p.end_date < today;
   });
@@ -7769,11 +7933,32 @@ showNotifPrompt();
   var CAT_ARCH   = "f1138228-54da-46a3-86a4-95ba8e1116c2";
   var CAT_DESIGN = "c16f08eb-72e8-4261-bef6-77a8c29284ef"; /* Дизайн интерьера */
   var CAT_FURN   = "916ec7c2-98a1-4d93-bdec-c35c99bea22c"; /* Дизайн мебели */
-  var STAGES_ARCH   = ["Составить ТЗ","Планировка","Экстерьер","Чертежи","Распечатка и Отправка"];
-  var STAGES_DESIGN = ["Составить ТЗ","Планировка","Визуализация","Чертежи","Распечатка и Отправка"];
+  var STAGES_ARCH   = ["Составление ТЗ","Разработка планировки","Экстерьер","Чертежи","Печать и отправка Альбома"];
+  var STAGES_DESIGN = ["Составление ТЗ","Разработка планировки","Визуализация","Чертежи","Печать и отправка Альбома"];
+  /* Переименование старых названий этапов в новые (сохраняя отметку "выполнено") */
+  var LEGACY_RENAME = {
+    "Составить ТЗ": "Составление ТЗ",
+    "Планировка": "Разработка планировки",
+    "Распечатка и Отправка": "Печать и отправка Альбома",
+    "Распечатка и отправка": "Печать и отправка Альбома"
+  };
+  /* Определяем список этапов по категории. Строительный объект не трогаем (возвращаем null). */
   function defaultStagesFor(catId){
     if(catId === CAT_ARCH) return STAGES_ARCH;
     if(catId === CAT_DESIGN || catId === CAT_FURN) return STAGES_DESIGN;
+    /* Фоллбэк по имени категории (на случай других id) */
+    try{
+      var st = (window.state && window.state.categories) || [];
+      var cat = st.find(function(c){ return c.id === catId; });
+      if(cat){
+        var nm = (cat.name||"").toLowerCase();
+        var constrDept = (window.state.departments||[]).find(function(d){ return d.name==="Строительный отдел"; });
+        if(constrDept && cat.department_id === constrDept.id) return null; /* объект — не трогаем */
+        if(nm.indexOf("строительств")!==-1 || nm.indexOf("ремонт")!==-1 || nm.indexOf("монтаж")!==-1) return null;
+        if(nm.indexOf("архитект")!==-1) return STAGES_ARCH;
+        if(nm.indexOf("дизайн")!==-1 || nm.indexOf("интерьер")!==-1 || nm.indexOf("мебел")!==-1) return STAGES_DESIGN;
+      }
+    }catch(e){}
     return null;
   }
   function pad(n){ return String(n).padStart(2,"0"); }
@@ -7801,6 +7986,80 @@ showNotifPrompt();
     var rows=stages.map(function(name,i){ return { project_id:projectId, name:name, due_date:null, sort_order:i }; });
     try { await window.sb.from("project_stages").insert(rows); } catch(e){ console.error("default stages error", e); }
   }
+
+  /* ── Бэкфилл этапов для существующих проектов ──
+     Неразрушающий и идемпотентный: переименовывает старые названия в новые
+     (сохраняя отметку "выполнено"), затем добавляет недостающие канонические этапы.
+     Ничего не удаляет, чужие/кастомные этапы не трогает. */
+  async function backfillStages(){
+    if(!window.sb || !window.state) return;
+    var projects = window.state.projects || [];
+    var allStages = window.state.projectStages || [];
+    var didChange = false;
+    for(var i=0;i<projects.length;i++){
+      var p = projects[i];
+      var canonical = defaultStagesFor(p.category_id);
+      if(!canonical) continue; /* объект/стройка — пропускаем */
+      var mine = allStages.filter(function(s){ return s.project_id === p.id; });
+
+      /* 1) Переименование legacy-названий, если целевого имени ещё нет */
+      for(var j=0;j<mine.length;j++){
+        var s = mine[j];
+        var target = LEGACY_RENAME[s.name];
+        if(target && canonical.indexOf(target) !== -1){
+          var already = mine.some(function(x){ return x.name === target && x.id !== s.id; });
+          if(!already){
+            try{
+              await window.sb.from("project_stages").update({name: target}).eq("id", s.id);
+              s.name = target; didChange = true;
+            }catch(e){ console.warn("stage rename error", e); }
+          }
+        }
+      }
+
+      /* 2) Добавляем недостающие канонические этапы */
+      var presentNames = mine.map(function(x){ return x.name; });
+      var maxSort = mine.reduce(function(m,x){ return Math.max(m, Number(x.sort_order)||0); }, -1);
+      var toAdd = [];
+      for(var k=0;k<canonical.length;k++){
+        if(presentNames.indexOf(canonical[k]) === -1){
+          maxSort += 1;
+          toAdd.push({ project_id:p.id, name:canonical[k], due_date:null, sort_order:maxSort });
+        }
+      }
+      if(toAdd.length){
+        try{ await window.sb.from("project_stages").insert(toAdd); didChange = true; }
+        catch(e){ console.warn("stage backfill insert error", e); }
+      }
+    }
+    return didChange;
+  }
+
+  /* Запускаем бэкфилл один раз после загрузки данных (флаг версии в localStorage) */
+  var BACKFILL_FLAG = "arhittek_stages_backfill_v3";
+  async function runBackfillOnce(){
+    try{
+      if(localStorage.getItem(BACKFILL_FLAG)) return;
+      // Только админ — у него гарантированно есть права записи в project_stages
+      if(!(window.session && window.session.isAdmin)) return;
+      if(!window.state || !(window.state.projects||[]).length) return;
+      var changed = await backfillStages();
+      localStorage.setItem(BACKFILL_FLAG, new Date().toISOString());
+      if(changed && window.loadAll){ await window.loadAll(); }
+    }catch(e){ console.warn("runBackfillOnce error", e); }
+  }
+
+  if(window.loadAll && !window.loadAll.__enhStages){
+    var origLoad = window.loadAll;
+    window.loadAll = async function(){
+      var r = await origLoad.apply(this, arguments);
+      /* после первой полной загрузки — разово догоняем этапы */
+      setTimeout(runBackfillOnce, 800);
+      return r;
+    };
+    window.loadAll.__enhStages = true;
+  }
+
   if(window.saveProject && !window.saveProject.__enh){
     var origSave=window.saveProject;
     window.saveProject=async function(){
@@ -7824,5 +8083,8 @@ showNotifPrompt();
     };
     window.saveProject.__enh=true;
   }
+
+  /* Страховка: если первый loadAll выполнился до установки обёртки — запустим разово сами */
+  setTimeout(runBackfillOnce, 3500);
 })();
 </script>
