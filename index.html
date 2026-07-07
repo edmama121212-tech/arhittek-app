@@ -1754,6 +1754,7 @@ let ledgerSearchQuery = '';
 let employeeSearchQuery = '';
 let historySearchQuery = '';
 let editingProjectId = null;
+let editingProjectLoadedAt = null;
 let editingEmployeeId = null;
 let editingCategoryId = null;
 let openConstructionId = null;
@@ -1957,6 +1958,7 @@ async function attemptLogin(){
     document.getElementById('loginOverlay').style.display = 'none';
     applyRole();
     renderAll();
+    if('Notification' in window && Notification.permission === 'granted') subscribeToPush();
   }catch(e){
     console.error(e);
     showToast('Ошибка входа. Попробуйте ещё раз.');
@@ -3697,6 +3699,7 @@ function openProjectSheet(id){
   if(id){
     const p = state.projects.find(x=>x.id===id);
     if(!p) return;
+    editingProjectLoadedAt = p.updated_at || null;
     title.textContent = 'Редактировать проект';
     deleteBtn.style.display = '';
     document.getElementById('pf-name').value = p.name || '';
@@ -3758,6 +3761,7 @@ function openProjectSheet(id){
       };
     }
   }else{
+    editingProjectLoadedAt = null;
     title.textContent = 'Новый проект';
     deleteBtn.style.display = 'none';
     document.getElementById('pf-name').value = '';
@@ -3805,6 +3809,7 @@ function openProjectSheet(id){
 function closeProjectSheet(){
   document.getElementById('projectSheetOverlay').classList.remove('active');
   editingProjectId = null;
+  editingProjectLoadedAt = null;
 }
 
 async function saveProject(){
@@ -3867,8 +3872,20 @@ async function saveProject(){
     let savedProjectId = editingProjectId;
     if(editingProjectId){
       const before = state.projects.find(p=>p.id===editingProjectId);
-      const {error} = await sb.from('projects').update(payload).eq('id', editingProjectId);
+
+      let updateQuery = sb.from('projects').update(payload).eq('id', editingProjectId);
+      if(editingProjectLoadedAt){
+        // Оптимистичная блокировка: сохраняем, только если запись не менялась
+        // с момента открытия карточки этим пользователем
+        updateQuery = updateQuery.eq('updated_at', editingProjectLoadedAt);
+      }
+      const { data: updatedRows, error } = await updateQuery.select('id');
       if(error) throw error;
+
+      if(editingProjectLoadedAt && (!updatedRows || updatedRows.length === 0)){
+        showToast('Данные обновились, перезагрузите карточку и попробуйте снова');
+        return;
+      }
       const changes = diffChanges(before, payload, Object.keys(payload).filter(k=>k!=='updated_at'));
       if(Object.keys(changes).length){
         await logAudit('project', editingProjectId, payload.name, 'update', changes);
@@ -8620,11 +8637,54 @@ async function registerSW(){
   }
 }
 
+// ФИКС (аудит, находка «фейковые push»): настоящий VAPID public key.
+// Приватный ключ живёт ТОЛЬКО в секретах Supabase Edge Function — сюда его класть нельзя.
+const VAPID_PUBLIC_KEY = 'BFiwEd8fQhKwAknET-k0xi6wGRjJ8mVcRTy-S_iVTcD5SrdKpG5mOQGbwbPQd-gx8X5erf8i110cL0yf6Y5rH3k';
+
+function urlBase64ToUint8Array(base64String){
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for(let i = 0; i < rawData.length; i++){ outputArray[i] = rawData.charCodeAt(i); }
+  return outputArray;
+}
+
+// Подписывает текущее устройство на настоящий серверный push и сохраняет
+// подписку в push_subscriptions, привязанную к текущему сотруднику.
+async function subscribeToPush(){
+  try{
+    if(!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    if(!session) return;
+    const reg = window._swReg || await navigator.serviceWorker.ready;
+    if(!reg) return;
+
+    let sub = await reg.pushManager.getSubscription();
+    if(!sub){
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+    }
+    const json = sub.toJSON();
+    await sb.from('push_subscriptions').upsert({
+      endpoint: json.endpoint,
+      p256dh: json.keys.p256dh,
+      auth: json.keys.auth,
+      employee_id: session.employeeId,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'endpoint' });
+  }catch(e){
+    console.warn('[Push] не удалось подписаться:', e);
+  }
+}
+
 async function requestNotificationPermission(){
   if(!('Notification' in window)) return false;
-  if(Notification.permission === 'granted') return true;
+  if(Notification.permission === 'granted'){ subscribeToPush(); return true; }
   if(Notification.permission === 'denied') return false;
   const result = await Notification.requestPermission();
+  if(result === 'granted') subscribeToPush();
   return result === 'granted';
 }
 
