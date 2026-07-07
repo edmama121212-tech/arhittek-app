@@ -1615,9 +1615,9 @@
       </select>
     </div>
     <div class="field" id="ef-pin-field" style="display:none;">
-      <label>PIN-код для входа (до 6 цифр)</label>
+      <label>Новый PIN-код (до 6 цифр). Оставьте пустым, чтобы не менять текущий</label>
       <div style="display:flex; gap:8px; align-items:center;">
-        <input type="text" id="ef-pin" inputmode="numeric" maxlength="6" placeholder="например: 123456" style="flex:1;">
+        <input type="text" id="ef-pin" inputmode="numeric" maxlength="6" placeholder="оставить как есть" style="flex:1;">
         <button class="btn btn-secondary" type="button" style="padding:10px 12px; font-size:12px; white-space:nowrap;"
           onclick="const p=Math.floor(100000+Math.random()*900000).toString(); document.getElementById('ef-pin').value=p; showToast('Новый PIN: '+p+' — запишите!');">
           🔀 Случайный
@@ -1915,26 +1915,54 @@ function selectLoginEmployee(employeeId){
   document.getElementById('loginPin').focus();
 }
 
-function attemptLogin(){
+async function attemptLogin(){
   if(!loginSelectedEmployee) return;
   const pin = document.getElementById('loginPin').value.trim();
   if(!pin){ showToast('Введите PIN-код'); return; }
 
-  if((loginSelectedEmployee.pin_code || '') !== pin){
-    showToast('Неверный PIN-код');
-    document.getElementById('loginPin').value = '';
-    return;
+  const submitBtn = document.getElementById('loginSubmitBtn');
+  if(submitBtn) submitBtn.disabled = true;
+
+  try{
+    const { data, error } = await sb.rpc('verify_employee_pin', {
+      p_employee_id: loginSelectedEmployee.id,
+      p_pin: pin,
+    });
+
+    if(error){
+      console.error(error);
+      showToast('Ошибка входа. Попробуйте ещё раз.');
+      return;
+    }
+
+    const result = Array.isArray(data) ? data[0] : data;
+
+    if(!result || result.error === 'too_many_attempts'){
+      showToast('Слишком много неверных попыток. Подождите несколько минут.');
+      document.getElementById('loginPin').value = '';
+      return;
+    }
+    if(!result.employee_id){
+      showToast('Неверный PIN-код');
+      document.getElementById('loginPin').value = '';
+      return;
+    }
+
+    setSession({
+      employeeId: result.employee_id,
+      name: result.name,
+      isAdmin: !!result.is_admin,
+    });
+
+    document.getElementById('loginOverlay').style.display = 'none';
+    applyRole();
+    renderAll();
+  }catch(e){
+    console.error(e);
+    showToast('Ошибка входа. Попробуйте ещё раз.');
+  }finally{
+    if(submitBtn) submitBtn.disabled = false;
   }
-
-  setSession({
-    employeeId: loginSelectedEmployee.id,
-    name: loginSelectedEmployee.name,
-    isAdmin: !!loginSelectedEmployee.is_admin,
-  });
-
-  document.getElementById('loginOverlay').style.display = 'none';
-  applyRole();
-  renderAll();
 }
 
 // Хелпер: является ли текущий сотрудник участником проекта (employee_id, co_employee_id или project_members)
@@ -2456,13 +2484,13 @@ async function loadAll(){
   try{
     const [proj, emp, cat, st, dept, led, photos, hist, invs, tzForms, tzRefs, company, kpForms, stages, trashProj, trashEmp, trashCat, trashLed, members] = await Promise.all([
       sb.from('projects').select('*').is('deleted_at', null).order('created_at', {ascending:true}),
-      sb.from('employees').select('*').is('deleted_at', null).order('name'),
+      sb.from('employees').select('id,name,role,is_admin,active,can_edit_cards,deleted_at,created_at').is('deleted_at', null).order('name'),
       sb.from('categories').select('*').is('deleted_at', null).order('sort_order'),
       sb.from('statuses').select('*').order('sort_order'),
       sb.from('departments').select('*').order('sort_order'),
       sb.from('ledger_entries').select('*').is('deleted_at', null).order('created_at', {ascending:false}),
       sb.from('expense_photos').select('*').order('created_at', {ascending:false}),
-      sb.from('audit_log').select('*').order('created_at', {ascending:false}).limit(500),
+      sb.from('audit_log').select('*').order('created_at', {ascending:false}).limit(5000),
       sb.from('invoices').select('*').order('invoice_date', {ascending:true}),
       sb.from('tz_forms').select('*').order('created_at', {ascending:false}),
       sb.from('tz_references').select('*'),
@@ -2470,7 +2498,7 @@ async function loadAll(){
       sb.from('kp_forms').select('*').order('created_at', {ascending:false}),
       sb.from('project_stages').select('*').order('sort_order', {ascending:true}),
       sb.from('projects').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
-      sb.from('employees').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
+      sb.from('employees').select('id,name,role,is_admin,active,can_edit_cards,deleted_at,created_at').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
       sb.from('categories').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
       sb.from('ledger_entries').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
       sb.from('project_members').select('*'),
@@ -2612,11 +2640,11 @@ function renderConstrSummary(){
     const matTotal = projInv.filter(i => ['Материал','Инструмент','Расходник','Доставка'].includes(i.item_type)).reduce((s,i)=>s+Number(i.amount),0);
     const workTotal = projInv.filter(i => i.item_type==='Работа').reduce((s,i)=>s+Number(i.amount),0);
     const invExpenses = matTotal + workTotal;
-    // Используем expenses из БД если он заполнен (ненулевой), иначе из накладных
-    const expenses  = Number(p.expenses) > 0 ? Number(p.expenses) : invExpenses;
-    // Остаток: если в БД записан balance явно (может быть отрицательным) — используем его
-    // Определяем: balance задан вручную если p.expenses > 0 (значит мы его писали через SQL)
-    const budgetLeft= Number(p.expenses) > 0 ? Number(p.balance) : (price - invExpenses);
+    // ФИКС (аудит, находка №1): расходы Стройки считаются ТОЛЬКО из накладных,
+    // без исключений — эталон Митаева 21. Ручное поле p.expenses здесь больше
+    // не используется, чтобы Обзор и вкладка «Стройка» всегда показывали одно и то же число.
+    const expenses  = invExpenses;
+    const budgetLeft= price - invExpenses;
     const isOver    = budgetLeft < 0;
     const f         = calcConstrFee({...p, expenses});
     const st        = findStatus(p.status_id);
@@ -3782,6 +3810,26 @@ function closeProjectSheet(){
 async function saveProject(){
   const price = parseFloat(document.getElementById('pf-price').value) || 0;
   const advance = parseFloat(document.getElementById('pf-advance').value) || 0;
+
+  if(price < 0 || advance < 0){
+    showToast('Сумма не может быть отрицательной');
+    return;
+  }
+
+  const addressInput = document.getElementById('pf-address').value.trim();
+  if(addressInput){
+    const normalize = s => (s||'').trim().toLowerCase().replace(/\s+/g,' ');
+    const dupe = state.projects.find(p =>
+      p.id !== editingProjectId &&
+      !p.deleted_at &&
+      normalize(p.address) === normalize(addressInput)
+    );
+    if(dupe){
+      const proceed = confirm(`Объект с адресом «${addressInput}» уже есть в системе («${dupe.name}»). Всё равно создать ещё один?`);
+      if(!proceed) return;
+    }
+  }
+
   const payload = {
     name: document.getElementById('pf-name').value.trim(),
     category_id: document.getElementById('pf-category').value || null,
@@ -3804,6 +3852,11 @@ async function saveProject(){
     client_name: document.getElementById('pf-client-name').value.trim() || null,
     updated_at: new Date().toISOString(),
   };
+
+  if(payload.expenses < 0 || payload.fee_paid < 0){
+    showToast('Сумма не может быть отрицательной');
+    return;
+  }
 
   if(!payload.name){
     showToast('Введите название проекта');
@@ -4490,7 +4543,7 @@ function openEmployeeSheet(id){
     document.getElementById('ef-name').value = e.name || '';
     document.getElementById('ef-role').value = e.role || '';
     document.getElementById('ef-active').value = e.active===false ? 'false' : 'true';
-    document.getElementById('ef-pin').value = e.pin_code || '';
+    document.getElementById('ef-pin').value = '';
     document.getElementById('ef-can-edit-cards').checked = !!e.can_edit_cards;
     pinField.style.display = isAdmin ? '' : 'none';
     if(cardEditField) cardEditField.style.display = isAdmin ? '' : 'none';
@@ -4521,8 +4574,16 @@ async function saveEmployee(){
     role: document.getElementById('ef-role').value.trim(),
     active: document.getElementById('ef-active').value === 'true',
   };
+  const pinInput = document.getElementById('ef-pin').value.trim();
   if(session && session.isAdmin){
-    payload.pin_code = document.getElementById('ef-pin').value.trim();
+    if(!editingEmployeeId){
+      // Новый сотрудник — PIN обязателен, иначе он не сможет войти
+      if(!pinInput){ showToast('Укажите PIN-код для нового сотрудника'); return; }
+      payload.pin_code = pinInput;
+    }else if(pinInput){
+      // Редактирование — меняем PIN, только если поле не пустое
+      payload.pin_code = pinInput;
+    }
     payload.can_edit_cards = document.getElementById('ef-can-edit-cards').checked;
   }
   try{
@@ -4530,7 +4591,10 @@ async function saveEmployee(){
       const before = state.employees.find(x=>x.id===editingEmployeeId);
       const {error} = await sb.from('employees').update(payload).eq('id', editingEmployeeId);
       if(error) throw error;
-      const changes = diffChanges(before, payload, Object.keys(payload));
+      // PIN никогда не попадает в историю изменений — только факт смены, без значений
+      const auditKeys = Object.keys(payload).filter(k => k !== 'pin_code');
+      const changes = diffChanges(before, payload, auditKeys);
+      if(payload.pin_code) changes.pin_code = { from: '••••••', to: '••••••' };
       if(Object.keys(changes).length) await logAudit('employee', editingEmployeeId, name, 'update', changes);
     }else{
       const {data, error} = await sb.from('employees').insert(payload).select().single();
