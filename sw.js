@@ -1,5 +1,5 @@
-// ARHITTEK Service Worker v1.3 (force-update fix for stale iOS cache)
-const CACHE = 'arhittek-v1.3';
+// ARHITTEK Service Worker v1.4 (bypass HTTP disk cache — fixes stale iOS PWA content)
+const CACHE = 'arhittek-v1.4';
 const ASSETS = ['./index.html', './manifest.json'];
 
 self.addEventListener('install', e=>{
@@ -26,8 +26,13 @@ self.addEventListener('fetch', e=>{
     e.respondWith(fetch(e.request).catch(()=>new Response('', {status:503})));
     return;
   }
+  // Для GET-запросов своего сайта принудительно обходим HTTP-дисковый кэш браузера
+  // (на iOS он может годами отдавать старую версию index.html/catalog.html,
+  // даже когда service worker уже обновился) — иначе deploy может "не доходить" до телефона.
+  const isOwnGet = e.request.method === 'GET' && e.request.url.startsWith(self.location.origin);
+  const networkRequest = isOwnGet ? new Request(e.request.url, {cache:'no-store'}) : e.request;
   e.respondWith(
-    fetch(e.request)
+    fetch(networkRequest)
       .then(res=>{
         if(res.ok){
           const clone = res.clone();
