@@ -1,11 +1,15 @@
-// ARHITTEK Service Worker v1.2 (redeploy)
-const CACHE = 'arhittek-v1';
+// ARHITTEK Service Worker v1.3 (force-update fix for stale iOS cache)
+const CACHE = 'arhittek-v1.3';
 const ASSETS = ['./index.html', './manifest.json'];
 
 self.addEventListener('install', e=>{
   e.waitUntil(
     caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting())
   );
+});
+
+self.addEventListener('message', e=>{
+  if(e.data === 'SKIP_WAITING'){ self.skipWaiting(); }
 });
 
 self.addEventListener('activate', e=>{
