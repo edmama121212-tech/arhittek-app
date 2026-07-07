@@ -7790,36 +7790,54 @@ const IMG_QUALITY  = 0.85;   // JPEG качество
 
 // Возвращает Promise<Blob> — сжатый JPEG.
 // Если файл уже меньше maxSide с обеих сторон и меньше 300КБ — не перекодирует.
-function compressImage(file, maxSide, quality){
-  maxSide  = maxSide  || IMG_MAX_SIDE;
-  quality  = quality  || IMG_QUALITY;
-  return new Promise(function(resolve, reject){
+// Загружает файл-изображение с учётом EXIF-ориентации (иначе фото с телефона
+// может отрисоваться повёрнутым/перекошенным после сжатия через canvas —
+// телефоны хранят кадр как есть + метку поворота, а обычный canvas её игнорирует).
+function loadOrientedImage(file){
+  if(typeof createImageBitmap === 'function'){
+    return createImageBitmap(file, {imageOrientation:'from-image'})
+      .then(bmp => ({source: bmp, width: bmp.width, height: bmp.height}))
+      .catch(() => loadOrientedImageFallback(file));
+  }
+  return loadOrientedImageFallback(file);
+}
+
+function loadOrientedImageFallback(file){
+  return new Promise((resolve, reject)=>{
     const reader = new FileReader();
     reader.onerror = reject;
-    reader.onload = function(e){
+    reader.onload = e=>{
       const img = new Image();
       img.onerror = reject;
-      img.onload = function(){
-        let w = img.width, h = img.height;
-        const needsResize = w > maxSide || h > maxSide;
-        const needsReencode = file.size > 300 * 1024 || needsResize;
-        if(!needsReencode){
-          // Уже маленький — возвращаем как есть (в виде Blob)
-          resolve(file);
-          return;
-        }
-        if(needsResize){
-          if(w >= h){ h = Math.round(h * maxSide / w); w = maxSide; }
-          else       { w = Math.round(w * maxSide / h); h = maxSide; }
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        canvas.toBlob(function(blob){ resolve(blob || file); }, 'image/jpeg', quality);
-      };
+      img.onload = () => resolve({source: img, width: img.naturalWidth||img.width, height: img.naturalHeight||img.height});
       img.src = e.target.result;
     };
     reader.readAsDataURL(file);
+  });
+}
+
+async function compressImage(file, maxSide, quality){
+  maxSide  = maxSide  || IMG_MAX_SIDE;
+  quality  = quality  || IMG_QUALITY;
+  const {source, width, height} = await loadOrientedImage(file);
+  let w = width, h = height;
+  const needsResize = w > maxSide || h > maxSide;
+  const needsReencode = file.size > 300 * 1024 || needsResize;
+  if(!needsReencode){
+    if(source.close) source.close();
+    // Уже маленький — возвращаем как есть (в виде Blob)
+    return file;
+  }
+  if(needsResize){
+    if(w >= h){ h = Math.round(h * maxSide / w); w = maxSide; }
+    else       { w = Math.round(w * maxSide / h); h = maxSide; }
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  canvas.getContext('2d').drawImage(source, 0, 0, w, h);
+  if(source.close) source.close();
+  return await new Promise((resolve)=>{
+    canvas.toBlob(blob => resolve(blob || file), 'image/jpeg', quality);
   });
 }
 
@@ -7836,36 +7854,31 @@ function ceLoadImg(input, previewId, idx, nameId){
   const file = input.files[0];
   if(!file) return;
 
-  const reader = new FileReader();
-  reader.onload = e => {
-    const img = new Image();
-    img.onload = () => {
-      // Масштабируем если нужно
-      let w = img.width, h = img.height;
-      if(w > IMG_MAX_SIDE || h > IMG_MAX_SIDE){
-        if(w >= h){ h = Math.round(h * IMG_MAX_SIDE / w); w = IMG_MAX_SIDE; }
-        else       { w = Math.round(w * IMG_MAX_SIDE / h); h = IMG_MAX_SIDE; }
-      }
-      const canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
-      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      const compressed = canvas.toDataURL('image/jpeg', IMG_QUALITY);
+  loadOrientedImage(file).then(({source, width, height}) => {
+    // Масштабируем если нужно
+    let w = width, h = height;
+    if(w > IMG_MAX_SIDE || h > IMG_MAX_SIDE){
+      if(w >= h){ h = Math.round(h * IMG_MAX_SIDE / w); w = IMG_MAX_SIDE; }
+      else       { w = Math.round(w * IMG_MAX_SIDE / h); h = IMG_MAX_SIDE; }
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    canvas.getContext('2d').drawImage(source, 0, 0, w, h);
+    if(source.close) source.close();
+    const compressed = canvas.toDataURL('image/jpeg', IMG_QUALITY);
 
-      // Показываем размер после сжатия
-      const kb = Math.round(compressed.length * 0.75 / 1024);
-      const nm = document.getElementById(nameId);
-      if(nm) nm.textContent = `${file.name.slice(0,18)}… · ${kb} КБ`;
+    // Показываем размер после сжатия
+    const kb = Math.round(compressed.length * 0.75 / 1024);
+    const nm = document.getElementById(nameId);
+    if(nm) nm.textContent = `${file.name.slice(0,18)}… · ${kb} КБ`;
 
-      ceImages[idx] = compressed;
-      const el = document.getElementById(previewId);
-      if(el){ el.src = compressed; el.style.display = 'block'; }
-      if(idx===0){ const pi=document.getElementById('prev-facade-img'); if(pi){pi.src=compressed;pi.style.display='block';} const ph=document.getElementById('prev-facade-ph'); if(ph)ph.style.display='none'; }
-      if(idx===2){ const pi=document.getElementById('prev-plan1-img');  if(pi){pi.src=compressed;pi.style.display='block';} const ph=document.getElementById('prev-plan1-ph');  if(ph)ph.style.display='none'; }
-      if(idx===3){ const pi=document.getElementById('prev-plan2-img');  if(pi){pi.src=compressed;pi.style.display='block';} const ph=document.getElementById('prev-plan2-ph');  if(ph)ph.style.display='none'; }
-    };
-    img.src = e.target.result;
-  };
-  reader.readAsDataURL(file);
+    ceImages[idx] = compressed;
+    const el = document.getElementById(previewId);
+    if(el){ el.src = compressed; el.style.display = 'block'; }
+    if(idx===0){ const pi=document.getElementById('prev-facade-img'); if(pi){pi.src=compressed;pi.style.display='block';} const ph=document.getElementById('prev-facade-ph'); if(ph)ph.style.display='none'; }
+    if(idx===2){ const pi=document.getElementById('prev-plan1-img');  if(pi){pi.src=compressed;pi.style.display='block';} const ph=document.getElementById('prev-plan1-ph');  if(ph)ph.style.display='none'; }
+    if(idx===3){ const pi=document.getElementById('prev-plan2-img');  if(pi){pi.src=compressed;pi.style.display='block';} const ph=document.getElementById('prev-plan2-ph');  if(ph)ph.style.display='none'; }
+  });
 }
 
 function cePrevTab(panelId,tabEl){
