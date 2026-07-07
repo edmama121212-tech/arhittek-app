@@ -44,6 +44,11 @@
     --radius-sm:8px;
   }
   *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{
+    overflow-x:hidden;
+    max-width:100vw;
+    overscroll-behavior-x:none;
+  }
   body{
     font-family:'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     background: var(--bg);
@@ -51,6 +56,8 @@
     min-height:100vh;
     -webkit-font-smoothing:antialiased;
     padding-bottom: 90px;
+    position:relative;
+    width:100%;
   }
   h1,h2,h3,.display{font-family:'Space Grotesk', 'Inter', sans-serif; letter-spacing:-0.01em;}
 
@@ -86,7 +93,7 @@
   @keyframes livepulse{0%,100%{opacity:1; box-shadow:0 0 0 0 rgba(82,183,136,0.5);} 50%{opacity:0.8; box-shadow:0 0 0 4px rgba(82,183,136,0);}}
   @keyframes pulse{0%,100%{opacity:1;} 50%{opacity:0.3;}}
 
-  main{padding: 14px 16px 0;}
+  main{padding: 14px 16px 0; overflow-x:hidden; max-width:100%;}
   .view{display:none; animation: fade .2s ease;}
   .view.active{display:block;}
   @keyframes fade{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);}}
@@ -587,7 +594,7 @@
     </div>
 
     <div class="section-label" style="margin-top:8px;">
-      <span class="lbl-text">Готовые проекты</span>
+      <span class="lbl-text">КАТАЛОГ ПРОЕКТОВ</span>
       <span class="section-label-line"></span>
     </div>
 
@@ -1254,7 +1261,7 @@
   <div class="nav-btn" data-view="view-projects"><div class="nav-icon">▦</div>Проектный</div>
   <div class="nav-btn" data-view="view-construction"><div class="nav-icon">🏗</div>Стройка</div>
 
-  <div class="nav-btn" data-view="view-cards" id="nav-cards"><div class="nav-icon">🏠</div><span style="font-size:9px;line-height:1.2;">Готовые<br>проекты</span></div>
+  <div class="nav-btn" data-view="view-cards" id="nav-cards"><div class="nav-icon">🏠</div><span style="font-size:9px;line-height:1.2;">КАТАЛОГ<br>ПРОЕКТОВ</span></div>
   <div class="nav-btn" data-view="view-more"><div class="nav-icon">☰</div>Ещё</div>
 </nav>
 
@@ -4256,6 +4263,7 @@ async function addLedgerEntry(){
 // ПРИЁМ ПЛАТЕЖА (для карточки проекта)
 // ============================================================
 let paymentType = 'advance';
+let paymentProjectId = null;
 
 const paymentHints = {
   advance: 'Увеличит «Получено» и уменьшит «Остаток» по проекту.',
@@ -4265,8 +4273,9 @@ const paymentHints = {
   withdrawal: 'Запись о выводе средств из бюджета объекта (например, наличные на материалы). Не влияет на «Получено»/«Остаток» — только запись в истории с указанием причины. Укажите причину в комментарии.',
 };
 
-function openPaymentSheet(){
-  if(!editingProjectId) return;
+function openPaymentSheet(projectId){
+  paymentProjectId = projectId || editingProjectId;
+  if(!paymentProjectId) return;
   paymentType = 'advance';
   document.querySelectorAll('#payment-type .yn-btn').forEach(b=>b.classList.toggle('selected', b.dataset.value==='advance'));
   document.getElementById('payment-amount').value = '';
@@ -4286,7 +4295,7 @@ document.querySelectorAll('#payment-type .yn-btn').forEach(btn=>{
 });
 
 async function savePayment(){
-  const projectId = editingProjectId;
+  const projectId = paymentProjectId || editingProjectId;
   if(!projectId) return;
   const amount = parseFloat(document.getElementById('payment-amount').value);
   const entry_date = document.getElementById('payment-date').value || new Date().toISOString().slice(0,10);
@@ -4355,7 +4364,7 @@ async function savePayment(){
   }
 }
 
-document.getElementById('pf-add-payment').addEventListener('click', openPaymentSheet);
+document.getElementById('pf-add-payment').addEventListener('click', ()=>openPaymentSheet());
 document.getElementById('pf-expense-add-btn').addEventListener('click', addProjectExpense);
 document.getElementById('paymentSheetClose').addEventListener('click', ()=>{
   document.getElementById('paymentSheetOverlay').classList.remove('active');
@@ -4421,6 +4430,10 @@ async function cancelPayment(entryId){
       }
       renderPaymentHistory(e.project_id);
       if(updated) renderFeeSummaryForProject(updated);
+    }
+    if(currentObjectId === e.project_id){
+      const updatedObj = state.projects.find(x => x.id === e.project_id);
+      if(updatedObj) renderObjectSummary(updatedObj);
     }
   }catch(err){
     console.error(err);
@@ -4908,6 +4921,48 @@ function renderObjectSummary(p){
       <div class="fee-row"><div class="fl">Выплачено гонорара</div><div class="fv">${fmtMoney(f.paid)}</div></div>
       <div class="fee-row remaining"><div class="fl">Осталось получить</div><div class="fv">${fmtMoney(f.remaining)}</div></div>
     </div>
+    <div id="objIncomeHistoryBlock"></div>
+  `;
+  renderObjectIncomeHistory(p.id);
+}
+
+// История поступлений от заказчика по объекту стройки — когда и сколько пришло
+function renderObjectIncomeHistory(projectId){
+  const container = document.getElementById('objIncomeHistoryBlock');
+  if(!container) return;
+  const incomeTypes = ['advance','final_payment','materials_budget','construction_budget','income'];
+  const entries = (state.ledger||[])
+    .filter(l=>l.project_id===projectId && incomeTypes.includes(l.type))
+    .sort((a,b)=> new Date(b.entry_date) - new Date(a.entry_date) || new Date(b.created_at) - new Date(a.created_at));
+
+  const received = entries.reduce((s,e)=>s+Number(e.amount||0),0);
+
+  const addBtn = `<button class="btn btn-secondary" style="width:auto;padding:6px 14px;font-size:12px;" onclick="openPaymentSheet('${projectId}')">+ Приход</button>`;
+
+  const rows = entries.length
+    ? entries.map(e=>{
+        const emp = e.received_by ? findEmployee(e.received_by) : null;
+        return `<div class="list-item">
+          <div>
+            <div class="li-name" style="color:var(--green);">+ ${fmtMoney(e.amount)}</div>
+            <div class="li-meta">${fmtDate(e.entry_date)}${emp?' · принял: '+escapeHtml(emp.name):''}${e.description?' · '+escapeHtml(e.description):''}</div>
+          </div>
+          <div class="li-actions">
+            <button class="icon-btn danger" title="Отменить приход" onclick="cancelPayment('${e.id}')">↩</button>
+          </div>
+        </div>`;
+      }).join('')
+    : '<div class="empty-state">Поступлений пока нет</div>';
+
+  container.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;">
+      <div class="section-label" style="margin:0;flex:1;">
+        <span class="lbl-text">История поступлений${entries.length ? ' · получено '+fmtMoney(received) : ''}</span>
+        <span class="section-label-line"></span>
+      </div>
+    </div>
+    <div style="margin-bottom:10px;">${addBtn}</div>
+    ${rows}
   `;
 }
 
@@ -8117,7 +8172,9 @@ async function generateShareLink(){
   const label = document.getElementById('sl-name').value.trim() || 'Ссылка';
   const filter = document.getElementById('sl-filter').value;
   const expiresDays = parseInt(document.getElementById('sl-expires').value);
-  const token = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+  const token = (window.crypto && crypto.randomUUID)
+    ? crypto.randomUUID().replace(/-/g,'')
+    : Math.random().toString(36).slice(2) + Date.now().toString(36) + Math.random().toString(36).slice(2);
   const expires_at = expiresDays > 0
     ? new Date(Date.now() + expiresDays*24*60*60*1000).toISOString()
     : null;
@@ -8136,7 +8193,9 @@ async function generateShareLink(){
     document.getElementById('sl-result').style.display = 'block';
     await renderShareLinks();
   } catch(e){
-    showToast('Ошибка создания ссылки: '+(e.message||e));
+    const details = [e.message, e.code, e.details, e.hint].filter(Boolean).join(' · ');
+    showToast('Ошибка создания ссылки: ' + (details || 'неизвестная ошибка'));
+    console.error('generateShareLink error:', e);
   }
 }
 
@@ -8310,8 +8369,8 @@ ${panel2}
   <div class="price-label">Стоимость проекта</div>
   <div class="price">${escapeHtml(card.price||'')} ₽</div>
   <div class="btn-row">
-    <button class="btn-primary" onclick="window.open('https://wa.me/79289689999','_blank')">Получить проект</button>
-    <button class="btn-secondary" onclick="window.open('https://wa.me/79289689999','_blank')">Консультация</button>
+    <button class="btn-primary" onclick="window.open('https://wa.me/79226593872','_blank')">Получить проект</button>
+    <button class="btn-secondary" onclick="window.open('https://wa.me/79226593872','_blank')">Консультация</button>
   </div>
 </div>
 <div class="card-footer">
@@ -8438,6 +8497,30 @@ async function registerSW(){
     const reg = await navigator.serviceWorker.register('./sw.js');
     console.log('[SW] зарегистрирован:', reg.scope);
     window._swReg = reg;
+
+    // Принудительно проверяем обновления при каждом открытии приложения —
+    // на iOS PWA без этого может надолго зависнуть на старой закэшированной версии
+    reg.update().catch(()=>{});
+
+    // Если найдена новая версия — просим её активироваться немедленно
+    reg.addEventListener('updatefound', ()=>{
+      const newWorker = reg.installing;
+      if(!newWorker) return;
+      newWorker.addEventListener('statechange', ()=>{
+        if(newWorker.state === 'installed' && navigator.serviceWorker.controller){
+          newWorker.postMessage('SKIP_WAITING');
+        }
+      });
+    });
+
+    // Как только новый SW взял на себя контроль — перезагружаем страницу один раз,
+    // чтобы подтянуть свежий index.html и все данные карточек
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+      if(reloaded) return;
+      reloaded = true;
+      window.location.reload();
+    });
   }catch(e){
     console.warn('[SW] ошибка регистрации:', e);
   }
