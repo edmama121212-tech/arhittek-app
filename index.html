@@ -2581,6 +2581,10 @@ async function loadAll(){
       }
       document.getElementById('loginOverlay').style.display = 'none';
       applyRole();
+      if(!window._pushSubscribeAttempted && 'Notification' in window && Notification.permission === 'granted'){
+        window._pushSubscribeAttempted = true;
+        subscribeToPush();
+      }
     }else{
       showLoginScreen();
     }
