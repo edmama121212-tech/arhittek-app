@@ -141,17 +141,18 @@
   .nav-btn.active{color:var(--blue);}
   .nav-icon{font-size:17px;}
 
-  /* Filter chips — равномерная сетка одинаковых кнопок */
-  .filters{display:grid; grid-template-columns:repeat(auto-fit, minmax(92px, 1fr)); gap:6px; margin-bottom:8px;}
+  /* Filter chips — одинаковый фиксированный размер, перенос по строкам (без растягивания) */
+  .filters{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;}
   .filter-chip{
-    font-size:11px; padding:8px 8px; border-radius:12px;
+    flex:0 0 auto; width:150px; font-size:11px; padding:8px 8px; border-radius:12px;
     border:1px solid var(--line-strong); color:var(--text-dim); font-weight:600;
     cursor:pointer; transition: all .15s; letter-spacing:0.02em;
-    width:100%; min-width:0; text-align:center; box-sizing:border-box;
+    box-sizing:border-box; text-align:center;
     white-space:normal; word-break:break-word; line-height:1.2;
     display:flex; align-items:center; justify-content:center; min-height:34px;
   }
   .filter-chip.active{background:var(--blue-soft); color:var(--blue); border-color:rgba(74,144,226,0.4);}
+  @media(max-width:340px){ .filter-chip{width:calc(50% - 3px);} }
 
   /* Project rows */
   .proj-row{
@@ -1469,6 +1470,75 @@
     <button id="cardViewerPrev" onclick="cardViewerNav(-1)" title="Предыдущий" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);z-index:2;background:rgba(255,255,255,0.14);color:#fff;border:none;border-radius:50%;width:44px;height:44px;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;">‹</button>
     <iframe id="cardViewerFrame" style="flex:1;border:none;width:100%;height:100%;background:#C8C8C8;"></iframe>
     <button id="cardViewerNext" onclick="cardViewerNav(1)" title="Следующий" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);z-index:2;background:rgba(255,255,255,0.14);color:#fff;border:none;border-radius:50%;width:44px;height:44px;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;">›</button>
+  </div>
+</div>
+
+<!-- ===================== НАКЛАДНАЯ (просмотр / редактирование / удаление) ===================== -->
+<div id="invoiceSheetOverlay" style="display:none;position:fixed;inset:0;z-index:5500;background:rgba(6,12,22,0.75);align-items:flex-end;justify-content:center;">
+  <div class="sheet" id="invoiceSheet" style="max-height:92vh;overflow-y:auto;width:100%;max-width:600px;padding-bottom:calc(20px + env(safe-area-inset-bottom));">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <h3 style="font-size:16px;font-weight:700;">Накладная</h3>
+      <button onclick="closeInvoiceSheet()" style="background:none;border:none;color:var(--text-dim);font-size:22px;cursor:pointer;">✕</button>
+    </div>
+
+    <!-- Фото накладной -->
+    <div id="invSheet-photo-wrap" style="margin-bottom:14px;display:none;">
+      <img id="invSheet-photo-img" src="" alt="фото накладной"
+           style="width:100%;max-height:260px;object-fit:contain;border-radius:10px;border:1px solid var(--line-strong);cursor:pointer;"
+           onclick="window.open(this.src,'_blank')">
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Номер накладной</label>
+        <input type="text" id="invSheet-number" placeholder="напр. БИ 14.04.26">
+      </div>
+      <div class="field">
+        <label>Дата накладной</label>
+        <input type="date" id="invSheet-date">
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Тип</label>
+        <select id="invSheet-type">
+          <option value="Материал">Материал</option>
+          <option value="Работа">Работа</option>
+          <option value="Инструмент">Инструмент</option>
+          <option value="Расходник">Расходник</option>
+          <option value="Доставка">Доставка</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Сумма, ₽</label>
+        <input type="number" id="invSheet-amount" placeholder="0">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Категория</label>
+      <input type="text" id="invSheet-category" placeholder="например: Кирпич">
+    </div>
+
+    <div class="field">
+      <label>Описание</label>
+      <input type="text" id="invSheet-desc" placeholder="что куплено / какая работа">
+    </div>
+
+    <div class="field">
+      <label>Заменить фото</label>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <label class="photo-upload-label" style="flex:1;margin:0;" for="invSheet-photo-input">📷 Выбрать новое фото</label>
+        <input type="file" id="invSheet-photo-input" accept="image/*" style="display:none;" onchange="onInvSheetPhotoChange(this)">
+        <span id="invSheet-photo-name" style="font-size:11px;color:var(--text-dim);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:6px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="saveInvoiceSheet()">💾 Сохранить</button>
+      <button class="btn" style="flex:0 0 auto;background:rgba(224,82,82,0.15);color:var(--red);border:1px solid rgba(224,82,82,0.35);" onclick="deleteInvoiceSheet()">🗑 Удалить</button>
+    </div>
   </div>
 </div>
 
@@ -4844,7 +4914,7 @@ function renderObjectSummary(p){
 // Строка накладной (с категорией) для плоского списка материалов/работ
 function makeInvoiceRow(inv){
   const typeCls = inv.item_type==='Работа'?'work':inv.item_type==='Доставка'?'del':'mat';
-  return `<div class="inv-row">
+  return `<div class="inv-row" onclick="openInvoiceSheet('${inv.id}')" style="cursor:pointer;" title="Открыть накладную">
       <div style="min-width:0;">
         <div class="inv-num">${escapeHtml(inv.number||inv.description||'—')}</div>
         ${inv.description && inv.number && inv.description!==inv.number ? `<div class="inv-desc">${escapeHtml(inv.description)}</div>` : ''}
@@ -4854,7 +4924,7 @@ function makeInvoiceRow(inv){
       <div class="inv-right">
         <div class="inv-amount ${typeCls}">${fmtMoney(inv.amount)}</div>
         ${inv.invoice_date ? `<div class="inv-date">${fmtDate(inv.invoice_date)}</div>` : ''}
-        ${inv.photo_url ? `<a href="${escapeHtml(inv.photo_url)}" target="_blank" style="color:var(--accent);font-size:11px">📎</a>` : ''}
+        ${inv.photo_url ? `<span style="font-size:14px;" title="Есть фото">📎</span>` : ''}
       </div>
     </div>`;
 }
@@ -4934,7 +5004,7 @@ function buildInvoiceGroupsHtml(invoices){
     .map(([catName, items])=>{
       const catTotal = items.reduce((s,i)=>s+Number(i.amount),0);
       const sorted = [...items].sort((a,b)=>(b.invoice_date||'').localeCompare(a.invoice_date||''));
-      const makeRow = inv => `<div class="inv-row">
+      const makeRow = inv => `<div class="inv-row" onclick="openInvoiceSheet('${inv.id}')" style="cursor:pointer;" title="Открыть накладную">
           <div>
             <div class="inv-num">${escapeHtml(inv.number||inv.description||'—')}</div>
             ${inv.description && inv.number && inv.description!==inv.number ? `<div class="inv-desc">${escapeHtml(inv.description)}</div>` : ''}
@@ -4943,7 +5013,7 @@ function buildInvoiceGroupsHtml(invoices){
           <div class="inv-right">
             <div class="inv-amount ${inv.item_type==='Работа'?'work':inv.item_type==='Доставка'?'del':'mat'}">${fmtMoney(inv.amount)}</div>
             ${inv.invoice_date ? `<div class="inv-date">${fmtDate(inv.invoice_date)}</div>` : ''}
-            ${inv.photo_url ? `<a href="${escapeHtml(inv.photo_url)}" target="_blank" style="color:var(--accent);font-size:11px">📎</a>` : ''}
+            ${inv.photo_url ? `<span style="font-size:14px;" title="Есть фото">📎</span>` : ''}
           </div>
         </div>`;
       const top5Html = sorted.slice(0,5).map(makeRow).join('');
@@ -5082,13 +5152,8 @@ async function addInvoice(projectId){
   try{
     let photo_url = '';
     if(photoFile){
-      const ext = photoFile.name.split('.').pop();
-      const fileName = `${projectId}/${Date.now()}.${ext}`;
-      const {error: upErr} = await sb.storage.from('expense-photos').upload(fileName, photoFile);
-      if(!upErr){
-        const {data:urlData} = sb.storage.from('expense-photos').getPublicUrl(fileName);
-        photo_url = urlData.publicUrl;
-      }
+      const fileName = `${projectId}/${Date.now()}.jpg`;
+      photo_url = await compressAndUpload(photoFile, 'expense-photos', fileName);
     }
 
     const {error} = await sb.from('invoices').insert({
@@ -5120,6 +5185,134 @@ async function addInvoice(projectId){
     showToast('Ошибка сохранения');
   }
 }
+
+// ============================================================
+// ОВЕРЛЕЙ НАКЛАДНОЙ — просмотр / редактирование / удаление
+// ============================================================
+let invSheetCurrentId = null;
+let invSheetNewPhotoBlob = null;
+
+function openInvoiceSheet(invId){
+  const inv = state.invoices.find(i=>i.id===invId);
+  if(!inv){ showToast('Накладная не найдена'); return; }
+  invSheetCurrentId = invId;
+  invSheetNewPhotoBlob = null;
+
+  // Заполняем поля
+  document.getElementById('invSheet-number').value   = inv.number || '';
+  document.getElementById('invSheet-date').value     = inv.invoice_date || '';
+  document.getElementById('invSheet-type').value     = inv.item_type || 'Материал';
+  document.getElementById('invSheet-amount').value   = inv.amount || '';
+  document.getElementById('invSheet-category').value = inv.category || '';
+  document.getElementById('invSheet-desc').value     = inv.description || '';
+  document.getElementById('invSheet-photo-name').textContent = '';
+
+  // Фото
+  const photoWrap = document.getElementById('invSheet-photo-wrap');
+  const photoImg  = document.getElementById('invSheet-photo-img');
+  if(inv.photo_url){
+    photoImg.src = inv.photo_url;
+    photoWrap.style.display = '';
+  } else {
+    photoWrap.style.display = 'none';
+    photoImg.src = '';
+  }
+
+  const overlay = document.getElementById('invoiceSheetOverlay');
+  overlay.style.display = 'flex';
+}
+
+function closeInvoiceSheet(){
+  document.getElementById('invoiceSheetOverlay').style.display = 'none';
+  invSheetCurrentId = null;
+  invSheetNewPhotoBlob = null;
+}
+
+async function onInvSheetPhotoChange(input){
+  const file = input.files[0];
+  if(!file) return;
+  try{
+    invSheetNewPhotoBlob = await compressImage(file);
+    const kb = Math.round(invSheetNewPhotoBlob.size / 1024);
+    document.getElementById('invSheet-photo-name').textContent = `${file.name.slice(0,22)} · ${kb} КБ`;
+    // Показываем превью
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = document.getElementById('invSheet-photo-img');
+      img.src = e.target.result;
+      document.getElementById('invSheet-photo-wrap').style.display = '';
+    };
+    reader.readAsDataURL(invSheetNewPhotoBlob);
+  }catch(e){ showToast('Ошибка обработки фото'); }
+}
+
+async function saveInvoiceSheet(){
+  if(!invSheetCurrentId) return;
+  const inv = state.invoices.find(i=>i.id===invSheetCurrentId);
+  if(!inv) return;
+
+  const number       = document.getElementById('invSheet-number').value.trim();
+  const invoice_date = document.getElementById('invSheet-date').value || null;
+  const item_type    = document.getElementById('invSheet-type').value;
+  const amount       = parseFloat(document.getElementById('invSheet-amount').value);
+  const category     = document.getElementById('invSheet-category').value.trim();
+  const description  = document.getElementById('invSheet-desc').value.trim();
+
+  if(!amount || amount <= 0){ showToast('Укажите сумму'); return; }
+  if(!invoice_date){ showToast('Укажите дату накладной'); return; }
+
+  showToast('Сохранение…');
+  try{
+    let photo_url = inv.photo_url || '';
+    if(invSheetNewPhotoBlob){
+      const fileName = `${inv.project_id}/${Date.now()}_edit.jpg`;
+      photo_url = await compressAndUpload(invSheetNewPhotoBlob, 'expense-photos', fileName);
+    }
+
+    const {error} = await sb.from('invoices').update({
+      number, invoice_date, item_type, amount, category, description, photo_url
+    }).eq('id', invSheetCurrentId);
+    if(error) throw error;
+
+    // Пересчитываем p.expenses
+    const projInvs = state.invoices.map(i=>i.id===invSheetCurrentId?{...i,amount}:i).filter(i=>i.project_id===inv.project_id);
+    const newTotal  = projInvs.reduce((s,i)=>s+Number(i.amount||0),0);
+    await sb.from('projects').update({expenses: newTotal}).eq('id', inv.project_id);
+
+    await logAudit('project', inv.project_id, (state.projects.find(p=>p.id===inv.project_id)||{}).name||'', 'update', {invoice_edited:{old:`${inv.number}—${fmtMoney(inv.amount)}`, new:`${number}—${fmtMoney(amount)}`}});
+
+    closeInvoiceSheet();
+    await loadAll();
+    if(currentObjectId === inv.project_id){ const p=state.projects.find(x=>x.id===inv.project_id); if(p) renderObjectSummary(p); renderObjTabContent(); }
+    showToast('Накладная обновлена');
+  }catch(e){ console.error(e); showToast('Ошибка сохранения'); }
+}
+
+async function deleteInvoiceSheet(){
+  if(!invSheetCurrentId) return;
+  if(!confirm('Удалить эту накладную? Это необратимо.')) return;
+  const inv = state.invoices.find(i=>i.id===invSheetCurrentId);
+  if(!inv) return;
+  try{
+    const {error} = await sb.from('invoices').delete().eq('id', invSheetCurrentId);
+    if(error) throw error;
+
+    // Пересчитываем p.expenses
+    const projInvs = state.invoices.filter(i=>i.project_id===inv.project_id && i.id!==invSheetCurrentId);
+    const newTotal  = projInvs.reduce((s,i)=>s+Number(i.amount||0),0);
+    await sb.from('projects').update({expenses: newTotal}).eq('id', inv.project_id);
+
+    closeInvoiceSheet();
+    await loadAll();
+    if(currentObjectId === inv.project_id){ const p=state.projects.find(x=>x.id===inv.project_id); if(p) renderObjectSummary(p); renderObjTabContent(); }
+    showToast('Накладная удалена');
+  }catch(e){ console.error(e); showToast('Ошибка удаления'); }
+}
+
+// Закрытие оверлея по клику на фон
+document.getElementById('invoiceSheetOverlay').addEventListener('click', function(e){
+  if(e.target === this) closeInvoiceSheet();
+});
 
 async function exportConstrPdf(projectId){
   const p = state.projects.find(x=>x.id===projectId);
@@ -7534,9 +7727,55 @@ function toggleFeature(f, el){
   });
 }
 
-// Параметры обработки фото каталога
+// ============================================================
+// УНИВЕРСАЛЬНОЕ СЖАТИЕ ФОТО (для всех загрузок: накладные, карточки, проекты)
+// ============================================================
 const IMG_MAX_SIDE = 1920;   // px по длинной стороне
 const IMG_QUALITY  = 0.85;   // JPEG качество
+
+// Возвращает Promise<Blob> — сжатый JPEG.
+// Если файл уже меньше maxSide с обеих сторон и меньше 300КБ — не перекодирует.
+function compressImage(file, maxSide, quality){
+  maxSide  = maxSide  || IMG_MAX_SIDE;
+  quality  = quality  || IMG_QUALITY;
+  return new Promise(function(resolve, reject){
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = function(e){
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = function(){
+        let w = img.width, h = img.height;
+        const needsResize = w > maxSide || h > maxSide;
+        const needsReencode = file.size > 300 * 1024 || needsResize;
+        if(!needsReencode){
+          // Уже маленький — возвращаем как есть (в виде Blob)
+          resolve(file);
+          return;
+        }
+        if(needsResize){
+          if(w >= h){ h = Math.round(h * maxSide / w); w = maxSide; }
+          else       { w = Math.round(w * maxSide / h); h = maxSide; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        canvas.toBlob(function(blob){ resolve(blob || file); }, 'image/jpeg', quality);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// Хелпер: сжать → загрузить в storage → вернуть publicUrl
+async function compressAndUpload(file, bucket, path){
+  const compressed = await compressImage(file);
+  const {error} = await sb.storage.from(bucket).upload(path, compressed, {contentType:'image/jpeg', upsert:true});
+  if(error) throw error;
+  const {data: urlData} = sb.storage.from(bucket).getPublicUrl(path);
+  return urlData.publicUrl;
+}
 
 function ceLoadImg(input, previewId, idx, nameId){
   const file = input.files[0];
