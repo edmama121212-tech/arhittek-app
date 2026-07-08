@@ -701,6 +701,11 @@
       </div>
       <button class='btn btn-secondary' id='addCategoryBtn'>+ Добавить категорию</button>
 
+      <div class='section-label'><span class='lbl-text'>Уведомления</span><span class='section-label-line'></span></div>
+      <div class='card' id='notifSettingsCard'>
+        <div class='loading-state'>Загрузка…</div>
+      </div>
+
     </div>
 
   <!-- ===================== КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ ===================== -->
@@ -7750,6 +7755,7 @@ document.getElementById('companySaveBtn').addEventListener('click', saveCompanyI
     document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
     document.getElementById('view-settings').classList.add('active');
     window.scrollTo(0,0);
+    if(typeof renderNotifSettings === 'function') renderNotifSettings();
   });
   document.getElementById('settingsBack').addEventListener('click', ()=>{
     document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
@@ -8880,7 +8886,68 @@ async function requestNotificationPermission(){
   if(Notification.permission === 'denied') return false;
   const result = await Notification.requestPermission();
   if(result === 'granted') subscribeToPush();
+  renderNotifSettings();
   return result === 'granted';
+}
+
+function renderNotifSettings(){
+  const card = document.getElementById('notifSettingsCard');
+  if(!card) return;
+
+  if(!('Notification' in window)){
+    card.innerHTML = `<div class="hint">Уведомления не поддерживаются этим браузером.</div>`;
+    return;
+  }
+
+  const perm = Notification.permission;
+
+  if(perm === 'granted'){
+    card.innerHTML = `
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+        <div>
+          <div style="font-size:13px; font-weight:600; color:#3ecf6b;">Уведомления включены ✓</div>
+          <div class="hint" style="margin-top:2px;">Просрочки и важные события</div>
+        </div>
+        <button class="btn btn-secondary" id="notifTestBtn" style="width:auto; padding:8px 14px; font-size:12px;">Тест</button>
+      </div>
+    `;
+    const testBtn = document.getElementById('notifTestBtn');
+    if(testBtn) testBtn.addEventListener('click', ()=>{
+      sendLocalNotification('ARHITTEK', 'Тестовое уведомление ✓', 'test');
+      showToast('Уведомление отправлено');
+    });
+    return;
+  }
+
+  if(perm === 'denied'){
+    card.innerHTML = `
+      <div style="font-size:13px; font-weight:600; color:var(--red, #e05555); margin-bottom:6px;">Уведомления заблокированы</div>
+      <div class="hint">Браузер/устройство запретили уведомления для этого сайта. Включить обратно можно только вручную:</div>
+      <div class="hint" style="margin-top:8px; line-height:1.6;">
+        <b>iPhone (Safari/PWA):</b> Настройки → Safari (или само приложение) → Уведомления → включить<br>
+        <b>Android/Chrome:</b> три точки → Настройки сайта → Уведомления → включить<br>
+        <b>Компьютер (Chrome):</b> значок замка рядом с адресом → Уведомления → Разрешить
+      </div>
+    `;
+    return;
+  }
+
+  // default — ещё не спрашивали
+  card.innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+      <div>
+        <div style="font-size:13px; font-weight:600;">Уведомления выключены</div>
+        <div class="hint" style="margin-top:2px;">Просрочки и важные события</div>
+      </div>
+      <button class="btn btn-primary" id="notifEnableBtn" style="width:auto; padding:8px 14px; font-size:12px;">Включить</button>
+    </div>
+  `;
+  const enableBtn = document.getElementById('notifEnableBtn');
+  if(enableBtn) enableBtn.addEventListener('click', async ()=>{
+    const ok = await requestNotificationPermission();
+    if(ok) showToast('Уведомления включены ✓');
+    renderNotifSettings();
+  });
 }
 
 function sendLocalNotification(title, body, tag='arhittek'){
