@@ -474,6 +474,7 @@
     <div style="display:flex; align-items:center; gap:8px;">
       <div class="sync-pill" id="userPill" style="display:none; cursor:pointer;" title="Нажмите для выхода"></div>
       <div class="sync-pill"><span class="sync-dot loading" id="syncDot"></span><span id="syncLabel">подключение…</span></div>
+            <button class='icon-btn' id='settingsBtn' style='font-size:18px;' title='Настройки'>⚙</button>
     </div>
   </div>
 </header>
@@ -647,37 +648,24 @@
 
     <div id="more-admin-sections">
 
-    <div class="section-label"><span class="lbl-text">Сотрудники</span><span class="section-label-line"></span></div>
-    <div class="search-box">
-      <input type="text" id="employeeSearch" placeholder="Поиск сотрудника...">
-      <button class="search-clear" id="employeeSearchClear" type="button">✕</button>
-    </div>
-    <div class="card" id="employeesCard">
-      <div class="loading-state">Загрузка…</div>
-    </div>
-    <button class="btn btn-secondary" id="addEmployeeBtn">+ Добавить сотрудника</button>
-
-    <div class="section-label"><span class="lbl-text">Категории проектов</span><span class="section-label-line"></span></div>
-    <div class="card" id="categoriesCard">
-      <div class="loading-state">Загрузка…</div>
-    </div>
-    <button class="btn btn-secondary" id="addCategoryBtn">+ Добавить категорию</button>
-
     <div class="section-label" style="display:none"><span class="lbl-text">Статусы проектов</span><span class="section-label-line"></span></div>
     <div class="card" id="statusesCard" style="display:none">
       <div class="loading-state">Загрузка…</div>
     </div>
 
-    <div class="section-label">
-      <span class="lbl-text">История изменений</span><span class="section-label-line"></span>
-    </div>
-    <div class="search-box">
-      <input type="text" id="historySearch" placeholder="Поиск в истории...">
-      <button class="search-clear" id="historySearchClear" type="button">✕</button>
-    </div>
-    <div class="card" id="historyCard">
-      <div class="loading-state">Загрузка…</div>
-    </div>
+    <div class='section-label' id='historyToggle' onclick='toggleHistorySection()' style='cursor:pointer;'>
+            <span class='lbl-text'>История изменений</span><span class='section-label-line'></span>
+            <span id='historyChevron' style='margin-left:6px;display:inline-block;transition:transform .2s;'>▸</span>
+          </div>
+          <div id='historySectionBody' style='display:none;'>
+          <div class='search-box'>
+            <input type='text' id='historySearch' placeholder='Поиск в истории...'>
+            <button class='search-clear' id='historySearchClear' type='button'>✕</button>
+          </div>
+          <div class='card' id='historyCard'>
+            <div class='loading-state'>Загрузка…</div>
+          </div>
+          </div>
 
     <div class="section-label"><span class="lbl-text">Корзина</span><span class="section-label-line"></span></div>
     <div class="note" style="margin-bottom:10px;">Удалённые проекты, сотрудники и записи. Можно восстановить или удалить навсегда. Элементы старше 2 месяцев удаляются автоматически.</div>
@@ -688,6 +676,32 @@
     </div>
 
   </div>
+
+    <!-- ===================== НАСТРОЙКИ ===================== -->
+    <div class='view' id='view-settings'>
+
+      <div style='display:flex; align-items:center; gap:10px; margin-bottom:14px;'>
+        <button class='icon-btn' id='settingsBack' style='font-size:20px;'>←</button>
+        <div style='font-family:Space Grotesk,sans-serif; font-weight:700; font-size:16px;'>Настройки</div>
+      </div>
+
+      <div class='section-label'><span class='lbl-text'>Сотрудники</span><span class='section-label-line'></span></div>
+      <div class='search-box'>
+        <input type='text' id='employeeSearch' placeholder='Поиск сотрудника...'>
+        <button class='search-clear' id='employeeSearchClear' type='button'>✕</button>
+      </div>
+      <div class='card' id='employeesCard'>
+        <div class='loading-state'>Загрузка…</div>
+      </div>
+      <button class='btn btn-secondary' id='addEmployeeBtn'>+ Добавить сотрудника</button>
+
+      <div class='section-label'><span class='lbl-text'>Категории проектов</span><span class='section-label-line'></span></div>
+      <div class='card' id='categoriesCard'>
+        <div class='loading-state'>Загрузка…</div>
+      </div>
+      <button class='btn btn-secondary' id='addCategoryBtn'>+ Добавить категорию</button>
+
+    </div>
 
   <!-- ===================== КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ ===================== -->
   <div class="view" id="view-kp">
@@ -885,6 +899,28 @@
     </div>
 
     <button class="btn btn-primary" id="companySaveBtn">Сохранить реквизиты</button>
+
+        <div class='section-label'><span class='lbl-text'>Скачать данные</span><span class='section-label-line'></span></div>
+        <div class='card'>
+          <div class='field'>
+            <label>Что скачать</label>
+            <select id='co-export-scope'>
+              <option value='all'>Всё сразу</option>
+              <option value='general'>Только общие данные компании</option>
+              <option value='account'>Только расчётный счёт</option>
+              <option value='card'>Только банковская карта</option>
+            </select>
+          </div>
+          <div class='field'>
+            <label>Формат файла</label>
+            <select id='co-export-format'>
+              <option value='pdf'>PDF</option>
+              <option value='word'>Word (.doc)</option>
+              <option value='excel'>Excel (.xlsx)</option>
+            </select>
+          </div>
+        </div>
+        <button class='btn btn-secondary' id='companyExportBtn'>⬇ Скачать реквизиты</button>
 
   </div>
 
@@ -1261,7 +1297,7 @@
   <div class="nav-btn" data-view="view-projects"><div class="nav-icon">▦</div>Проектный</div>
   <div class="nav-btn" data-view="view-construction"><div class="nav-icon">🏗</div>Стройка</div>
 
-  <div class="nav-btn" data-view="view-cards" id="nav-cards"><div class="nav-icon">🏠</div><span style="font-size:9px;line-height:1.2;">КАТАЛОГ<br>ПРОЕКТОВ</span></div>
+  <div class="nav-btn" data-view="view-cards" id="nav-cards"><div class="nav-icon">🏠</div><span style="line-height:1.2;">Каталог<br>проектов</span></div>
   <div class="nav-btn" data-view="view-more"><div class="nav-icon">☰</div>Ещё</div>
 </nav>
 
@@ -6228,7 +6264,7 @@ async function saveTzAnswers(tzFormId){
   }
 }
 
-function exportTzAnswersToPdf(tzFormId){
+async function exportTzAnswersToPdf(tzFormId){
   const f = state.tzForms.find(x=>x.id===tzFormId);
   if(!f) return;
   const answers = f.answers || {};
@@ -6279,6 +6315,43 @@ function exportTzAnswersToPdf(tzFormId){
     doc.setTextColor(0);
     y += 2;
   });
+
+      const fileGroups = [];
+      Object.entries(answers).forEach(([key, val])=>{
+        if(key.endsWith('_files') && Array.isArray(val) && val.length){
+          const baseKey = key.replace('_files','');
+          const label = TZ_FIELD_LABELS[baseKey] || baseKey;
+          fileGroups.push({label, urls: val});
+  }
+  });
+
+      for(const group of fileGroups){
+        if(y > 260){ doc.addPage(); y = 20; }
+        doc.setFont('Roboto','bold'); doc.setFontSize(10); doc.setTextColor(0);
+        doc.text(group.label + ' — референсы', margin, y); y += 6;
+        for(const url of group.urls){
+          try{
+            const resp = await fetch(url);
+            const blob = await resp.blob();
+            const dataUrl = await new Promise((resolve, reject)=>{
+              const reader = new FileReader();
+              reader.onload = ()=>resolve(reader.result);
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+  });
+            const imgProps = doc.getImageProperties(dataUrl);
+            const maxW = 80, maxH = 60;
+            let w = maxW, h = maxW * imgProps.height / imgProps.width;
+            if(h > maxH){ h = maxH; w = maxH * imgProps.width / imgProps.height; }
+            if(y + h > 285){ doc.addPage(); y = 20; }
+            doc.addImage(dataUrl, imgProps.fileType || 'JPEG', margin, y, w, h);
+            y += h + 4;
+  }catch(e){
+            console.error('Не удалось загрузить референс для PDF', url, e);
+  }
+  }
+        y += 2;
+  }
 
   if(y > 270){ doc.addPage(); y = 20; }
   y = Math.max(y, 270);
@@ -6909,6 +6982,102 @@ async function saveCompanyInfo(){
   }catch(e){
     console.error(e);
     showToast('Ошибка сохранения');
+  }
+
+  function getCompanyExportSections(scope){
+    const general = {
+      'Полное наименование': document.getElementById('co-full-name').value,
+      'Краткое наименование': document.getElementById('co-short-name').value,
+      'Генеральный директор': document.getElementById('co-director').value,
+      'ИНН': document.getElementById('co-inn').value,
+      'КПП': document.getElementById('co-kpp').value,
+      'ОГРН': document.getElementById('co-ogrn').value,
+      'Система налогообложения': document.getElementById('co-tax-system').value,
+      'Юридический адрес': document.getElementById('co-legal-addr').value,
+      'Телефон': document.getElementById('co-phone').value,
+      'Email': document.getElementById('co-email').value,
+  };
+    const account = {
+      'Банк': document.getElementById('co-bank-name').value,
+      'Номер счёта (р/с)': document.getElementById('co-bank-account').value,
+      'БИК банка': document.getElementById('co-bik').value,
+      'Корр. счёт': document.getElementById('co-corr-account').value,
+  };
+    const card = {
+      'Номер карты': document.getElementById('co-card-number').value,
+      'Получатель (ФИО)': document.getElementById('co-card-holder').value,
+      'Банк карты': document.getElementById('co-card-bank').value,
+  };
+    const sections = [];
+    if(scope==='all'||scope==='general') sections.push({title:'Общие данные', data: general});
+    if(scope==='all'||scope==='account') sections.push({title:'Оплата на расчётный счёт', data: account});
+    if(scope==='all'||scope==='card') sections.push({title:'Оплата на банковскую карту', data: card});
+    return sections;
+  }
+
+  function exportCompanyInfo(){
+    const scope = document.getElementById('co-export-scope').value;
+    const format = document.getElementById('co-export-format').value;
+    const sections = getCompanyExportSections(scope);
+    const companyName = (document.getElementById('co-short-name').value || document.getElementById('co-full-name').value || 'Company').trim();
+    const safeName = companyName.replace(/[^a-zA-Zа-яА-Я0-9]/g,'_').slice(0,40) || 'Company';
+    const fileBase = 'Rekvizity-' + safeName + '-' + new Date().toISOString().slice(0,10);
+
+    if(format==='pdf'){
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({unit:'mm', format:'a4'});
+      registerPdfFonts(doc);
+      const margin = 15; let y = 20;
+      const pageWidth = doc.internal.pageSize.getWidth();
+      doc.setFont('Roboto','bold'); doc.setFontSize(16); doc.setTextColor(0);
+      doc.text('Реквизиты компании', margin, y); y += 10;
+      sections.forEach(sec=>{
+        if(y>270){ doc.addPage(); y=20; }
+        doc.setFont('Roboto','bold'); doc.setFontSize(11); doc.setTextColor(0);
+        doc.text(sec.title, margin, y); y += 6;
+        doc.setFont('Roboto','normal'); doc.setFontSize(10); doc.setTextColor(60);
+        Object.entries(sec.data).forEach(([label,val])=>{
+          if(!val) return;
+          if(y>280){ doc.addPage(); y=20; }
+          const lines = doc.splitTextToSize(label+': '+val, pageWidth - margin*2);
+          lines.forEach(line=>{ doc.text(line, margin, y); y+=5.5; });
+  });
+        y += 4;
+  });
+      doc.save(fileBase + '.pdf');
+      showToast('PDF скачивается...');
+  } else if(format==='excel'){
+      const wsData = [];
+      sections.forEach(sec=>{
+        wsData.push([sec.title]);
+        Object.entries(sec.data).forEach(([label,val])=>{ wsData.push([label, val || '']); });
+        wsData.push([]);
+  });
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Реквизиты');
+      XLSX.writeFile(wb, fileBase + '.xlsx');
+      showToast('Excel скачивается...');
+  } else {
+      let html = '<html><head><meta charset=\'utf-8\'><title>Реквизиты</title></head><body>';
+      html += '<h2>Реквизиты компании</h2>';
+      sections.forEach(sec=>{
+        html += '<h3>'+escapeHtml(sec.title)+'</h3><table border=\'0\' cellpadding=\'4\'>';
+        Object.entries(sec.data).forEach(([label,val])=>{
+          if(!val) return;
+          html += '<tr><td><b>'+escapeHtml(label)+'</b></td><td>'+escapeHtml(val)+'</td></tr>';
+  });
+        html += '</table>';
+  });
+      html += '</body></html>';
+      const blob = new Blob(['\ufeff', html], {type:'application/msword'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = fileBase + '.doc';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(()=>URL.revokeObjectURL(url), 1000);
+      showToast('Word скачивается...');
+  }
   }
 }
 
@@ -7575,6 +7744,29 @@ document.getElementById('companyBack').addEventListener('click', ()=>{
   window.scrollTo(0,0);
 });
 document.getElementById('companySaveBtn').addEventListener('click', saveCompanyInfo);
+  document.getElementById('companyExportBtn').addEventListener('click', exportCompanyInfo);
+
+  document.getElementById('settingsBtn').addEventListener('click', ()=>{
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+    document.getElementById('view-settings').classList.add('active');
+    window.scrollTo(0,0);
+  });
+  document.getElementById('settingsBack').addEventListener('click', ()=>{
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+    document.getElementById('view-more').classList.add('active');
+    document.querySelector('.nav-btn[data-view="view-more"]').classList.add('active');
+    window.scrollTo(0,0);
+  });
+
+  function toggleHistorySection(){
+    const body = document.getElementById('historySectionBody');
+    const chevron = document.getElementById('historyChevron');
+    const isOpen = body.style.display !== 'none';
+    body.style.display = isOpen ? 'none' : 'block';
+    chevron.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(90deg)';
+  }
 
 
 
