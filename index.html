@@ -6983,8 +6983,9 @@ async function saveCompanyInfo(){
     console.error(e);
     showToast('Ошибка сохранения');
   }
+}
 
-  function getCompanyExportSections(scope){
+function getCompanyExportSections(scope){
     const general = {
       'Полное наименование': document.getElementById('co-full-name').value,
       'Краткое наименование': document.getElementById('co-short-name').value,
@@ -7079,8 +7080,6 @@ async function saveCompanyInfo(){
       showToast('Word скачивается...');
   }
   }
-}
-
 // KP payment method (account / card) — selected in-session
 let kpPaymentMethod = 'account';
 
