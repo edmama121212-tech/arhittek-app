@@ -1853,8 +1853,18 @@ function animateCountUp(el, duration){
 // ============================================================
 const SUPABASE_URL = 'https://chbkkoxwzpaghanofvqk.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_fOLaPnbXjzQnJwG__wVzzg_D0nMO-n0';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+let sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     window.sb = sb;
+
+// После входа сервер выдаёт токен сессии — пересобираем клиент так, чтобы
+// каждый запрос нёс его заголовком x-session-token. Без этого заголовка
+// доступ к данным (кроме заведомо публичных, вроде каталога) закрыт политиками RLS.
+function applySessionToken(token){
+  sb = token
+    ? supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { global: { headers: { 'x-session-token': token } } })
+    : supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  window.sb = sb;
+}
 
 // ============================================================
 // STATE
@@ -2045,13 +2055,14 @@ function getSession(){
     if(!raw) return null;
     const s = JSON.parse(raw);
     if(!s || !s.employeeId) return null;
-    // Проверяем срок действия — 30 дней
+    // Проверяем срок действия — 30 дней (совпадает со сроком токена сессии в БД)
     const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
     if(s.createdAt && Date.now() - s.createdAt > SESSION_TTL_MS){
       localStorage.removeItem('arhittek_session');
       return null;
     }
     window.session = s;
+    if(s.token) applySessionToken(s.token);
     return s;
   }catch(e){ return null; }
 }
@@ -2059,12 +2070,16 @@ function getSession(){
 function setSession(s){
   session = {...s, createdAt: Date.now()};
   window.session = session;
+  if(session.token) applySessionToken(session.token);
   try{ localStorage.setItem('arhittek_session', JSON.stringify(session)); }catch(e){}
 }
 
 function clearSession(){
+  const token = session && session.token;
   session = null;
   try{ localStorage.removeItem('arhittek_session'); }catch(e){}
+  // Best-effort: гасим токен на сервере, чтобы им нельзя было воспользоваться повторно
+  if(token){ try{ sb.rpc('logout_session', {p_token: token}); }catch(e){} }
   location.reload();
 }
 
@@ -2133,11 +2148,14 @@ async function attemptLogin(){
       employeeId: result.employee_id,
       name: result.name,
       isAdmin: !!result.is_admin,
+      token: result.session_token,
     });
 
     document.getElementById('loginOverlay').style.display = 'none';
     applyRole();
-    renderAll();
+    // Данные (проекты, финансы и т.д.) были недоступны до входа (требуют сессии) —
+    // перезагружаем их теперь, когда клиент несёт токен.
+    await loadAll();
     if('Notification' in window && Notification.permission === 'granted') subscribeToPush();
   }catch(e){
     console.error(e);
@@ -2678,6 +2696,10 @@ async function loadAll(){
   if(loadAllInFlight) return;
   loadAllInFlight = true;
   setSyncStatus('loading', 'синхронизация…');
+  // Восстанавливаем токен сессии (если есть) ДО запроса данных — большинство
+  // таблиц требует его через RLS, иначе первый запрос после перезагрузки страницы
+  // придёт без заголовка и вернёт пусто.
+  if(!session) session = getSession();
   try{
     const [proj, emp, cat, st, dept, led, photos, hist, invs, tzForms, tzRefs, company, kpForms, stages, trashProj, trashEmp, trashCat, trashLed, members] = await Promise.all([
       sb.from('projects').select('*').is('deleted_at', null).order('created_at', {ascending:true}),
@@ -2913,9 +2935,12 @@ function renderOverview(){
   const activeProjects = state.projects.filter(p=>(!doneStatus || p.status_id !== doneStatus.id) && !isFrozen(p));
   const doneProjects = state.projects.filter(p=>doneStatus && p.status_id === doneStatus.id);
 
-  // Реальный долг — все проекты с ненулевым остатком (включая расхождения)
+  // Реальный долг — только проектный отдел (архитектура/дизайн/ландшафт).
+  // У строительных объектов остаток (balance) — это НЕ долг клиента, а ещё не
+  // потраченный бюджет объекта (выделен заказчиком на материалы/работы),
+  // поэтому такие объекты в «Должны клиенты» не входят.
   const totalDebt = state.projects
-    .filter(p => Number(p.balance) > 0)
+    .filter(p => Number(p.balance) > 0 && !isConstructionCategory(p.category_id))
     .reduce((s,p)=>s + (Number(p.balance)||0), 0);
 
   // overdue: end_date in the past and status not done (замороженные не считаются просроченными)
@@ -2927,8 +2952,8 @@ function renderOverview(){
     return d !== null && d < 0;
   });
 
-  // Расхождение: статус «Оплачен» но balance > 0
-  const mismatchCount = state.projects.filter(p=>Number(p.balance) > 0 && p.payment_status === 'Оплачен').length;
+  // Расхождение: статус «Оплачен» но balance > 0 (только проектный отдел, см. totalDebt выше)
+  const mismatchCount = state.projects.filter(p=>Number(p.balance) > 0 && p.payment_status === 'Оплачен' && !isConstructionCategory(p.category_id)).length;
 
   const kpiGrid = document.getElementById('kpiGrid');
   kpiGrid.innerHTML = `
@@ -2955,10 +2980,10 @@ function renderOverview(){
   // Если статус «Оплачен» но balance > 0 — это расхождение, показываем отдельно
   const paidStatus = state.statuses.find(s=>s.name==='Оплачен');
   const debts = state.projects
-    .filter(p=>Number(p.balance) > 0 && p.payment_status !== 'Оплачен')
+    .filter(p=>Number(p.balance) > 0 && p.payment_status !== 'Оплачен' && !isConstructionCategory(p.category_id))
     .sort((a,b)=>b.balance-a.balance);
   const mismatch = state.projects
-    .filter(p=>Number(p.balance) > 0 && p.payment_status === 'Оплачен');
+    .filter(p=>Number(p.balance) > 0 && p.payment_status === 'Оплачен' && !isConstructionCategory(p.category_id));
 
   const debtCard = document.getElementById('debtCard');
   if(!debts.length && !mismatch.length){
