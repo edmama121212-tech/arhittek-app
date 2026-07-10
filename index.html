@@ -1960,6 +1960,28 @@ function isConstructionCategory(catId){
 }
 function findStatus(id){ return state.statuses.find(s=>s.id===id); }
 
+// Расходы объекта: для строительных объектов — всегда свежая сумма из накладных
+// (ручное поле p.expenses для них не источник истины, см. renderConstrSummary).
+// Для остальных проектов — ручное поле p.expenses как и раньше.
+function getProjectExpenses(p){
+  if(isConstructionCategory(p.category_id)){
+    const projInv = state.invoices.filter(inv => inv.project_id === p.id);
+    const matTotal = projInv.filter(i => ['Материал','Инструмент','Расходник','Доставка'].includes(i.item_type)).reduce((s,i)=>s+Number(i.amount),0);
+    const workTotal = projInv.filter(i => i.item_type==='Работа').reduce((s,i)=>s+Number(i.amount),0);
+    return matTotal + workTotal;
+  }
+  return Number(p.expenses) || 0;
+}
+
+// Единая точка расчёта гонорара — строительные объекты считаются по calcConstrFee
+// (% от расходов), остальные — по calcFee (% от цены/прибыли). Раньше эти формулы
+// путались местами (калькулятор гонорара, карточка проекта, экспорт), из-за чего
+// один и тот же объект показывал разные суммы гонорара на разных экранах.
+function getProjectFee(p){
+  const withFreshExpenses = {...p, expenses: getProjectExpenses(p)};
+  return isConstructionCategory(p.category_id) ? calcConstrFee(withFreshExpenses) : calcFee(withFreshExpenses);
+}
+
 // Канонические этапы по типу проекта (встроенный чек-лист).
 const CAT_ID_ARCH   = "f1138228-54da-46a3-86a4-95ba8e1116c2";
 const CAT_ID_DESIGN = "c16f08eb-72e8-4261-bef6-77a8c29284ef";
@@ -3922,7 +3944,19 @@ function openProjectSheet(id){
     }
     // Кнопка «Накладные, материалы, фото» — только для строительных объектов.
     // Для Архитектуры и Дизайна интерьера она не нужна.
-    document.getElementById('pf-open-as-object').style.display = isConstructionCategory(p.category_id) ? '' : 'none';
+    const isConstr = isConstructionCategory(p.category_id);
+    document.getElementById('pf-open-as-object').style.display = isConstr ? '' : 'none';
+    // Для строительных объектов расходы считаются из накладных (вкладка «Стройка»),
+    // а не из этого списка — прячем блок, чтобы не путал устаревшим/нерелевантным числом.
+    const expBlock = document.getElementById('pf-expenses-block');
+    if(expBlock){
+      expBlock.style.display = isConstr ? 'none' : '';
+      const expField = document.getElementById('pf-expenses');
+      if(expField){
+        expField.value = isConstr ? getProjectExpenses(p) : (p.expenses ?? '');
+        expField.title = isConstr ? 'Считается из накладных объекта (вкладка «Стройка»)' : 'Складывается из списка расходов ниже';
+      }
+    }
 
     // История изменений по проекту
     renderProjectHistory(id);
@@ -4190,14 +4224,13 @@ function calcFee(p){
 function renderEmployeeFeeSummary(){
   const container = document.getElementById('employeeFeeSummary');
   if(!container) return;
-  if(!container) return;
 
   const employees = state.employees.filter(e=>e.active!==false);
   const rows = employees.map(emp=>{
     const projects = state.projects.filter(p=>p.employee_id===emp.id || p.co_employee_id===emp.id);
     let earned = 0, paid = 0;
     projects.forEach(p=>{
-      const f = calcFee(p);
+      const f = getProjectFee(p);
       earned += f.feeAmount;
       paid += f.paid;
     });
@@ -4232,15 +4265,15 @@ function renderFeeCalc(){
     return;
   }
   list.innerHTML = projects.map(p=>{
-    const f = calcFee(p);
+    const f = getProjectFee(p);
     const cat = findCategory(p.category_id);
     const emp = findEmployee(p.employee_id);
-    const baseLabel = f.feeBase === 'price' ? '% от цены' : '% от прибыли';
+    const baseLabel = f.feeBase === 'price' ? '% от цены' : f.feeBase === 'expenses' ? '% от расходов' : '% от прибыли';
     return `<div class="fee-card">
       <div style="font-weight:700; font-size:13.5px; margin-bottom:2px;">${escapeHtml(p.name)}</div>
       <div class="li-meta" style="margin-bottom:8px;">${cat?escapeHtml(cat.name):''}${emp?' · '+escapeHtml(emp.name):''}</div>
       <div class="fee-row"><div class="fl">Цена проекта</div><div class="fv">${fmtMoney(p.price)}</div></div>
-      <div class="fee-row"><div class="fl">Расходы</div><div class="fv">${fmtMoney(p.expenses)}</div></div>
+      <div class="fee-row"><div class="fl">Расходы</div><div class="fv">${fmtMoney(getProjectExpenses(p))}</div></div>
       <div class="fee-row"><div class="fl">Прибыль</div><div class="fv">${fmtMoney(f.profit)}</div></div>
       <div class="fee-row"><div class="fl">Ставка (${baseLabel})</div><div class="fv">${f.feePercent}%</div></div>
       <div class="fee-row total"><div class="fl">Гонорар начислен</div><div class="fv">${fmtMoney(f.feeAmount)}</div></div>
@@ -4268,8 +4301,8 @@ const ledgerTypeLabels = {
 function renderFeeSummaryForProject(p){
   const el = document.getElementById('pf-fee-summary');
   if(!el) return;
-  const f = calcFee(p);
-  const baseLabel = f.feeBase === 'price' ? '% от цены' : '% от прибыли';
+  const f = getProjectFee(p);
+  const baseLabel = f.feeBase === 'price' ? '% от цены' : f.feeBase === 'expenses' ? '% от расходов' : '% от прибыли';
   el.innerHTML = `
     <div style="font-weight:700; font-size:13px; margin-bottom:6px;">Гонорар ARHITTEK (${f.feePercent}% · ${baseLabel})</div>
     <div class="fee-row"><div class="fl">Начислено</div><div class="fv">${fmtMoney(f.feeAmount)}</div></div>
@@ -4967,12 +5000,14 @@ function renderStatuses(){
 // ============================================================
 function calcConstrFee(p){
   // Гонорар = fee_percent% от суммарных расходов (expenses)
+  const price = Number(p.price)||0;
   const expenses = Number(p.expenses)||0;
+  const profit = price - expenses;
   const feePercent = Number(p.fee_percent)||0;
-  const feeAmount = expenses * feePercent / 100;
+  const feeAmount = Math.max(0, expenses * feePercent / 100);
   const paid = Number(p.fee_paid)||0;
   const remaining = Math.max(0, feeAmount - paid);
-  return {feePercent, feeAmount, paid, remaining};
+  return {feePercent, feeBase:'expenses', profit, feeAmount, paid, remaining};
 }
 
 function getConstrProjects(){
@@ -5694,10 +5729,11 @@ async function exportConstrPdf(projectId){
   doc.setFont('Roboto','bold'); doc.setFontSize(14);
   doc.text(p.name, margin, y); y += 7;
 
-  // Summary block
-  const f = calcConstrFee(p);
+  // Summary block — расходы всегда пересчитываются из накладных (см. getProjectExpenses),
+  // чтобы отчёт клиенту совпадал с тем, что видно на экране «Стройка».
   const price = Number(p.price)||0;
-  const expenses = Number(p.expenses)||0;
+  const expenses = getProjectExpenses(p);
+  const f = calcConstrFee({...p, expenses});
   const balance = Number(p.balance)||0;
 
   doc.setFont('Roboto','normal'); doc.setFontSize(9);
@@ -6082,7 +6118,7 @@ function buildExportRows(){
     const st = findStatus(p.status_id);
     const emp = findEmployee(p.employee_id);
     const dept = cat ? findDepartment(cat.department_id) : null;
-    const f = calcFee(p);
+    const f = getProjectFee(p);
     return {
       'Название': p.name,
       'ФИО клиента': p.client_name||'',
@@ -6096,7 +6132,7 @@ function buildExportRows(){
       'Цена': p.price||0,
       'Аванс': p.advance||0,
       'Остаток': p.balance||0,
-      'Расходы': p.expenses||0,
+      'Расходы': getProjectExpenses(p),
       'Прибыль': f.profit,
       '% гонорара': f.feePercent,
       'Гонорар начислен': f.feeAmount,
@@ -8476,22 +8512,16 @@ async function saveCard(){
   btn.textContent = 'Сохранить проект';
 }
 
-// Синхронизация карточки с WordPress через приёмник
+// Синхронизация карточки с WordPress через приёмник.
+// Секрет интеграции больше не хранится в клиентском коде — он живёт только
+// в Supabase Edge Function 'sync-card', недоступной для чтения из браузера.
 async function syncCardToWordPress(card, supabaseId){
   const payload = Object.assign({}, card, { supabase_id: supabaseId || '' });
-  const resp = await fetch('https://arhittek.ru/wp-json/arhittek/v1/sync-card', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-AH-Secret': 'arhittek2026secret',
-    },
-    body: JSON.stringify(payload),
-  });
-  if(!resp.ok){
-    const err = await resp.text();
-    throw new Error('Receiver error ' + resp.status + ': ' + err.slice(0,200));
+  const { data, error } = await sb.functions.invoke('sync-card', { body: payload });
+  if(error){
+    throw new Error('Receiver error: ' + (error.message || error));
   }
-  return await resp.json();
+  return data;
 }
 
 async function deleteCard(){
