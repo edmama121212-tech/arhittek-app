@@ -7,7 +7,7 @@
 
 <!-- PWA / Add to Home Screen -->
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0B1929">
+<meta name="theme-color" content="#EEF2F7">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -26,19 +26,19 @@
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 <style>
   :root{
-    --bg:#0B1929;
-    --bg-soft:#0F2035;
-    --card:rgba(255,255,255,0.04);
-    --card-solid:#112240;
-    --line: rgba(255,255,255,0.08);
-    --line-strong: rgba(255,255,255,0.14);
-    --text:#FFFFFF;
-    --text-dim:rgba(255,255,255,0.5);
-    --blue:#4A90E2;
-    --blue-soft:rgba(74,144,226,0.15);
-    --red:#E05252;
-    --green:#52B788;
-    --gold:#E8A33D;
+    --bg:#EEF2F7;
+    --bg-soft:#FFFFFF;
+    --card:rgba(255,255,255,0.86);
+    --card-solid:#FFFFFF;
+    --line: rgba(22,35,58,0.10);
+    --line-strong: rgba(22,35,58,0.16);
+    --text:#16233A;
+    --text-dim:rgba(22,35,58,0.55);
+    --blue:#0071EB;
+    --blue-soft:rgba(0,113,235,0.10);
+    --red:#C0522F;
+    --green:#2E7D5B;
+    --gold:#A6690F;
     --white:#FFFFFF;
     --radius:12px;
     --radius-sm:8px;
@@ -64,7 +64,7 @@
   header{
     padding: 16px 18px 12px;
     position: sticky; top:0; z-index: 50;
-    background: rgba(11,25,41,0.95);
+    background: rgba(238,242,247,0.85);
     backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--line);
   }
@@ -72,8 +72,8 @@
   .brand-left{display:flex; align-items:center; gap:10px;}
   .logo{
     width:36px;height:36px; border-radius:var(--radius-sm);
-    background: rgba(74,144,226,0.2);
-    border: 1px solid rgba(74,144,226,0.4);
+    background: rgba(0,113,235,0.12);
+    border: 1px solid rgba(0,113,235,0.3);
     display:flex; align-items:center; justify-content:center;
     font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:15px;
     color:#fff; flex-shrink:0;
@@ -92,6 +92,16 @@
   .sync-dot.live{background:var(--green); animation:livepulse 2s infinite;}
   @keyframes livepulse{0%,100%{opacity:1; box-shadow:0 0 0 0 rgba(82,183,136,0.5);} 50%{opacity:0.8; box-shadow:0 0 0 4px rgba(82,183,136,0);}}
   @keyframes pulse{0%,100%{opacity:1;} 50%{opacity:0.3;}}
+
+  .brand{min-width:0;}
+  .brand-left{min-width:0; overflow:hidden;}
+  .brand-title,.brand-sub{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  @media(max-width:400px){
+    header{padding:14px 12px 10px;}
+    #syncLabel{display:none;}
+    .sync-pill{padding:5px 8px;}
+    #userPill{display:none !important;}
+  }
 
   main{padding: 14px 16px 0; overflow-x:hidden; max-width:100%;}
   .view{display:none; animation: fade .2s ease;}
@@ -120,13 +130,13 @@
   .kpi.accent-blue .big{color:var(--blue);}
   .kpi.full{grid-column:1/-1;}
 
-  .card{background:var(--card); border-radius:var(--radius); padding:16px; border:1px solid var(--line); margin-bottom:10px;}
+  .card{background:var(--card); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); border-radius:var(--radius); padding:16px; border:1px solid var(--line); margin-bottom:10px; box-shadow:0 10px 20px -8px rgba(22,35,58,0.12), 0 2px 5px rgba(22,35,58,0.06);}
 
   .bar-row{margin-bottom:10px;}
   .bar-row:last-child{margin-bottom:0;}
   .bar-label{display:flex; justify-content:space-between; font-size:12.5px; margin-bottom:6px;}
   .bar-label .hl{font-family:'Space Grotesk',sans-serif; font-weight:700;}
-  .bar-track{height:6px; background:rgba(255,255,255,0.06); border-radius:6px; overflow:hidden;}
+  .bar-track{height:6px; background:rgba(22,35,58,0.08); border-radius:6px; overflow:hidden;}
   .bar-fill{height:100%; border-radius:6px;}
 
   .note{font-size:11px; color:var(--text-dim); line-height:1.6; padding: 4px 2px;}
@@ -134,19 +144,22 @@
 
   /* Bottom nav */
   .bottom-nav{
-    position:fixed; bottom:0; left:0; right:0; z-index:60;
-    background:rgba(11,25,41,0.97); border-top:1px solid var(--line);
-    backdrop-filter: blur(12px);
-    display:flex; padding: 8px 4px calc(8px + env(safe-area-inset-bottom));
+    position:fixed; bottom:14px; left:50%; transform:translateX(-50%); z-index:60;
+    background:#16233A; border-radius:26px;
+    display:flex; gap:2px; padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+    box-shadow:0 20px 40px -10px rgba(22,35,58,0.45), 0 6px 14px rgba(22,35,58,0.28);
+    max-width:calc(100vw - 24px);
+    animation: navfloat 3.4s ease-in-out infinite;
   }
+  @keyframes navfloat{0%,100%{transform:translateX(-50%) translateY(0);} 50%{transform:translateX(-50%) translateY(-2px);}}
   .nav-btn{
     flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;
-    padding:6px 0; border-radius:var(--radius-sm); color:var(--text-dim);
-    cursor:pointer; font-size:10px; font-weight:600; transition: all .2s; min-width:0;
+    padding:6px 10px; border-radius:16px; color:#7d93b3;
+    cursor:pointer; font-size:9.5px; font-weight:600; transition: all .2s; min-width:0;
     letter-spacing:0.02em;
   }
-  .nav-btn.active{color:var(--blue);}
-  .nav-icon{font-size:17px;}
+  .nav-btn.active{color:#fff; background:rgba(0,113,235,0.9);}
+  .nav-icon{font-size:16px;}
 
   /* Filter chips — одинаковый фиксированный размер, перенос по строкам (без растягивания) */
   .filters{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;}
@@ -158,7 +171,7 @@
     white-space:normal; word-break:break-word; line-height:1.2;
     display:flex; align-items:center; justify-content:center; min-height:34px;
   }
-  .filter-chip.active{background:var(--blue-soft); color:var(--blue); border-color:rgba(74,144,226,0.4);}
+  .filter-chip.active{background:var(--blue-soft); color:var(--blue); border-color:rgba(0,113,235,0.4);}
   @media(max-width:340px){ .filter-chip{width:calc(50% - 3px);} }
 
   /* Project rows */
@@ -187,7 +200,7 @@
     background:var(--blue); color:#fff;
     display:flex; align-items:center; justify-content:center;
     font-size:24px; font-weight:700; border:none; cursor:pointer;
-    box-shadow:0 4px 20px rgba(74,144,226,0.4);
+    box-shadow:0 4px 20px rgba(0,113,235,0.4);
     transition: transform .15s;
   }
   .fab:active{transform:scale(0.92);}
@@ -215,13 +228,13 @@
   .field{margin-bottom:10px;}
   .field label{display:block; font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:5px; font-weight:600; line-height:1.25; min-height:13px;}
   .field input, .field select, .field textarea{
-    width:100%; background:rgba(255,255,255,0.05); border:1px solid var(--line-strong); border-radius:var(--radius-sm);
+    width:100%; background:#FFFFFF; border:1px solid var(--line-strong); border-radius:var(--radius-sm);
     color:var(--text); font-size:14px; padding:10px 12px; font-family:'Inter',sans-serif;
     transition: border-color .15s;
   }
   .field textarea{resize:vertical; min-height:60px;}
-  .field input:focus, .field select:focus, .field textarea:focus{outline:none; border-color:rgba(74,144,226,0.6); background:rgba(74,144,226,0.05);}
-  .field input[readonly]{opacity:0.65; cursor:default; background:rgba(255,255,255,0.02);}
+  .field input:focus, .field select:focus, .field textarea:focus{outline:none; border-color:rgba(0,113,235,0.6); background:rgba(0,113,235,0.05);}
+  .field input[readonly]{opacity:0.65; cursor:default; background:rgba(22,35,58,0.03);}
   /* Fix dropdown option contrast in dark theme (browser native option list defaults to white bg) */
   select, select option{ background-color: var(--bg-soft); color: var(--text); }
   /* align-items:end — чтобы input/select в паре не съезжали, когда лейбл слева в 2 строки, а справа в 1 */
@@ -250,23 +263,26 @@
   }
   .btn-primary{background:var(--blue); color:#fff;}
   .btn-primary:active{opacity:0.9; transform:scale(0.98);}
-  .btn-danger{background:rgba(224,82,82,0.12); color:var(--red); border:1px solid rgba(224,82,82,0.3);}
+  .btn-danger{background:rgba(192,82,47,0.10); color:var(--red); border:1px solid rgba(192,82,47,0.3);}
   .btn-danger:active{opacity:0.7;}
-  .btn-secondary{background:rgba(255,255,255,0.05); color:var(--text); border:1px solid var(--line-strong);}
+  .btn-secondary{background:#FFFFFF; color:var(--text); border:1px solid var(--line-strong); box-shadow:0 2px 6px rgba(22,35,58,0.06);}
   .btn-secondary:active{opacity:0.7;}
   .btn-row{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px;}
 
   /* ===== Status chips ===== */
-  .status-chip[data-status="Запись"]{background:rgba(180,190,210,0.12); color:rgba(180,190,210,0.9);}
-  .status-chip[data-status="Ждём аванс"]{background:rgba(232,163,61,0.15); color:var(--gold);}
+  .status-chip[data-status="Запись"]{background:rgba(91,107,130,0.12); color:#5B6B82;}
+  .status-chip[data-status="Ждём аванс"]{background:rgba(166,105,15,0.12); color:var(--gold);}
   .status-chip[data-status="В процессе"]{background:var(--blue-soft); color:var(--blue);}
-  .status-chip[data-status="Ждём оплату"]{background:rgba(232,163,61,0.15); color:var(--gold);}
-  .status-chip[data-status="Завершён"]{background:rgba(82,183,136,0.15); color:var(--green);}
-  .status-chip[data-status="Заморожен"]{background:rgba(120,180,230,0.14); color:#8fc4ea;}
+  .status-chip[data-status="Ждём оплату"]{background:rgba(166,105,15,0.12); color:var(--gold);}
+  .status-chip[data-status="Завершён"]{background:rgba(46,125,91,0.12); color:var(--green);}
+  .status-chip[data-status="Заморожен"]{background:rgba(0,113,235,0.10); color:#1F6FA8;}
   .status-chip.overdue{background:rgba(224,82,82,0.15); color:var(--red);}
 
   /* ===== List items ===== */
-  .list-item{display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--line); gap:10px;}
+  .list-item{display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--line); gap:10px; animation: fadeInRow .35s ease both;}
+  @keyframes fadeInRow{from{opacity:0; transform:translateX(-4px);} to{opacity:1; transform:translateX(0);}}
+  .card{animation: cardRise .3s ease both;}
+  @keyframes cardRise{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);}}
   .list-item:last-child{border-bottom:none;}
   .li-name{font-size:13.5px; font-weight:600;}
   .li-meta{font-size:11px; color:var(--text-dim); margin-top:2px;}
@@ -303,14 +319,14 @@
     width:100%; background:var(--card); border:1px solid var(--line-strong); border-radius:10px;
     color:var(--text); font-size:13.5px; padding:11px 36px 11px 14px; font-family:'Inter',sans-serif;
   }
-  .search-box input:focus{outline:none; border-color:rgba(74,144,226,0.6);}
+  .search-box input:focus{outline:none; border-color:rgba(0,113,235,0.6);}
   .search-box input::placeholder{color:var(--text-dim);}
   .search-clear{
     position:absolute; right:6px; top:50%; transform:translateY(-50%);
     width:26px; height:26px; border:none; background:transparent; color:var(--text-dim);
     font-size:16px; cursor:pointer; display:none; align-items:center; justify-content:center; border-radius:50%;
   }
-  .search-clear:active{background:rgba(255,255,255,0.08);}
+  .search-clear:active{background:rgba(22,35,58,0.1);}
   .search-box.has-value .search-clear{display:flex;}
 
   /* ===== Construction list cards (clickable) ===== */
@@ -320,7 +336,7 @@
     cursor:pointer; transition: border-color .2s;
   }
   .obj-card:active{opacity:0.8;}
-  .obj-card:hover{border-color:rgba(74,144,226,0.35);}
+  .obj-card:hover{border-color:rgba(0,113,235,0.35);}
   .obj-head{display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;}
   .obj-title{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:16px;}
   .obj-sub{font-size:11px; color:var(--text-dim); margin-top:3px;}
@@ -330,18 +346,18 @@
   .obj-rows{display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin:10px 0;}
   .obj-stat{font-size:11px; color:var(--text-dim);}
   .obj-stat b{display:block; font-family:'Space Grotesk',sans-serif; font-size:14px; color:var(--text); font-weight:700; margin-top:2px;}
-  .obj-bar{height:6px; border-radius:4px; background:rgba(255,255,255,0.06); overflow:hidden; margin-bottom:4px;}
+  .obj-bar{height:6px; border-radius:4px; background:rgba(22,35,58,0.08); overflow:hidden; margin-bottom:4px;}
   .obj-bar i{display:block; height:100%; background:var(--blue); border-radius:4px;}
   .obj-bar-lbl{display:flex; justify-content:space-between; font-size:10px; color:var(--text-dim); letter-spacing:0.02em;}
   .obj-chevron{color:var(--text-dim); font-size:18px; margin-left:8px; flex-shrink:0;}
 
   /* Construction summary table (Обзор) */
   .constr-sum-table{width:100%; border-collapse:collapse; font-size:12px;}
-  .constr-sum-table th{padding:8px 10px; text-align:left; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-dim); border-bottom:1px solid var(--line); white-space:nowrap; background:rgba(255,255,255,0.02);}
+  .constr-sum-table th{padding:8px 10px; text-align:left; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-dim); border-bottom:1px solid var(--line); white-space:nowrap; background:rgba(22,35,58,0.03);}
   .constr-sum-table td{padding:9px 10px; border-bottom:1px solid var(--line); white-space:nowrap; font-family:'Space Grotesk',sans-serif; font-weight:500; font-size:12px;}
-  .constr-sum-table tfoot td{border-bottom:none; border-top:2px solid var(--line); font-weight:700; font-size:12px; background:rgba(255,255,255,0.02);}
-  .constr-sum-row:hover{background:rgba(255,255,255,0.03);}
-  .constr-sum-row:active{background:rgba(74,144,226,0.07);}
+  .constr-sum-table tfoot td{border-bottom:none; border-top:2px solid var(--line); font-weight:700; font-size:12px; background:rgba(22,35,58,0.03);}
+  .constr-sum-row:hover{background:rgba(22,35,58,0.04);}
+  .constr-sum-row:active{background:rgba(0,113,235,0.07);}
   .constr-sum-table th:first-child,.constr-sum-table td:first-child{font-family:'Inter',sans-serif;}
 
   /* Object summary in detail view */
@@ -368,10 +384,10 @@
   /* Add invoice form */
   .add-invoice-form label{display:block; font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.08em; margin:10px 0 5px; font-weight:600;}
   .add-invoice-form input, .add-invoice-form select{
-    width:100%; background:rgba(255,255,255,0.05); border:1px solid var(--line-strong); border-radius:var(--radius-sm);
+    width:100%; background:#FFFFFF; border:1px solid var(--line-strong); border-radius:var(--radius-sm);
     color:var(--text); font-size:13px; padding:10px 12px; font-family:'Inter',sans-serif; margin-bottom:2px;
   }
-  .add-invoice-form input:focus, .add-invoice-form select:focus{outline:none; border-color:rgba(74,144,226,0.6);}
+  .add-invoice-form input:focus, .add-invoice-form select:focus{outline:none; border-color:rgba(0,113,235,0.6);}
 
   /* ===== History / audit log ===== */
   .history-item{padding:10px 0; border-bottom:1px solid var(--line); font-size:12.5px;}
@@ -405,7 +421,7 @@
   .inv-amount.mat{color:var(--text);}
   .inv-date{font-size:10.5px; color:var(--text-dim); margin-top:2px;}
   .inv-type-badge{font-size:9.5px; padding:2px 7px; border-radius:10px; font-weight:600; margin-top:3px; display:inline-block;}
-  .inv-type-mat{background:rgba(255,255,255,0.08); color:var(--text-dim);}
+  .inv-type-mat{background:rgba(22,35,58,0.08); color:var(--text-dim);}
   .inv-type-work{background:rgba(217,104,79,0.15); color:var(--red);}
   .inv-type-del{background:rgba(91,143,185,0.15); color:#7DAEDB;}
 
@@ -423,10 +439,10 @@
   .yn-group{display:flex; gap:8px;}
   .yn-btn{
     flex:1; padding:11px; border-radius:var(--radius-sm); border:1px solid var(--line-strong);
-    background:rgba(255,255,255,0.03); cursor:pointer; text-align:center; font-size:13px; font-weight:600;
+    background:rgba(22,35,58,0.04); cursor:pointer; text-align:center; font-size:13px; font-weight:600;
     transition: all .15s;
   }
-  .yn-btn.selected{background:var(--blue-soft); border-color:rgba(74,144,226,0.5); color:var(--blue);}
+  .yn-btn.selected{background:var(--blue-soft); border-color:rgba(0,113,235,0.5); color:var(--blue);}
 
   .kp-service{background:var(--card); border-radius:var(--radius); padding:14px; border:1px solid var(--line); margin-bottom:10px;}
   .kp-service-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;}
@@ -471,10 +487,10 @@
         <div class="brand-sub">Пульт управления</div>
       </div>
     </div>
-    <div style="display:flex; align-items:center; gap:8px;">
-      <div class="sync-pill" id="userPill" style="display:none; cursor:pointer;" title="Нажмите для выхода"></div>
-      <div class="sync-pill"><span class="sync-dot loading" id="syncDot"></span><span id="syncLabel">подключение…</span></div>
-            <button class='icon-btn' id='settingsBtn' style='font-size:18px;' title='Настройки'>⚙</button>
+    <div id="headerActions" style="display:flex; align-items:center; gap:8px; min-width:0; flex-shrink:1;">
+      <div class="sync-pill" id="userPill" style="display:none; cursor:pointer; min-width:0;" title="Нажмите для выхода"></div>
+      <div class="sync-pill" style="flex-shrink:0;"><span class="sync-dot loading" id="syncDot"></span><span id="syncLabel">подключение…</span></div>
+            <button class='icon-btn' id='settingsBtn' style='font-size:18px; flex-shrink:0;' title='Настройки'>⚙</button>
     </div>
   </div>
 </header>
@@ -525,7 +541,7 @@
     </div>
     <div class="filters" id="paymentFilters" style="display:none;"></div>
     <div class="filters" id="employeeFilters"></div>
-    <div id="filter-active-badge" style="display:none;margin:4px 16px 0;background:var(--blue-soft);color:var(--blue);border:1px solid rgba(74,144,226,0.3);border-radius:20px;padding:3px 12px;font-size:12px;font-weight:600;cursor:pointer;" onclick="resetAllFilters()">✕ Сбросить фильтры: <span id="filter-badge-text"></span></div>
+    <div id="filter-active-badge" style="display:none;margin:4px 16px 0;background:var(--blue-soft);color:var(--blue);border:1px solid rgba(0,113,235,0.3);border-radius:20px;padding:3px 12px;font-size:12px;font-weight:600;cursor:pointer;" onclick="resetAllFilters()">✕ Сбросить фильтры: <span id="filter-badge-text"></span></div>
 
     <div class="card" id="projectsCard">
       <div class="loading-state">Загрузка…</div>
@@ -1658,8 +1674,8 @@
     <div class="field" id="ef-pin-field" style="display:none;">
       <label>Новый PIN-код (до 6 цифр). Оставьте пустым, чтобы не менять текущий</label>
       <div style="display:flex; gap:8px; align-items:center;">
-        <input type="text" id="ef-pin" inputmode="numeric" maxlength="6" placeholder="оставить как есть" style="flex:1;">
-        <button class="btn btn-secondary" type="button" style="padding:10px 12px; font-size:12px; white-space:nowrap;"
+        <input type="text" id="ef-pin" inputmode="numeric" maxlength="6" placeholder="оставить как есть" style="flex:1 1 auto; width:auto; min-width:0;">
+        <button class="btn btn-secondary" type="button" style="padding:10px 12px; font-size:12px; white-space:nowrap; flex:0 0 auto; width:auto;"
           onclick="const p=Math.floor(100000+Math.random()*900000).toString(); document.getElementById('ef-pin').value=p; showToast('Новый PIN: '+p+' — запишите!');">
           🔀 Случайный
         </button>
@@ -1669,6 +1685,17 @@
       <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
         <input type="checkbox" id="ef-can-edit-cards" style="width:18px;height:18px;cursor:pointer;">
         <span>Может редактировать каталог готовых проектов</span>
+      </label>
+    </div>
+    <div class="field" id="ef-sections-field" style="display:none;">
+      <label>Видимые разделы приложения</label>
+      <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:8px;">
+        <input type="checkbox" id="ef-see-projects" style="width:18px;height:18px;cursor:pointer;">
+        <span>Проектный (только свои проекты)</span>
+      </label>
+      <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+        <input type="checkbox" id="ef-see-construction" style="width:18px;height:18px;cursor:pointer;">
+        <span>Стройка (только свои объекты)</span>
       </label>
     </div>
     <button class="btn btn-primary" id="ef-save">Сохранить</button>
@@ -1731,6 +1758,22 @@
 <div class="toast" id="toast"></div><button class="fab" id="addProjectFab">+</button>
 
 <script>
+// ============================================================
+// АНИМАЦИИ (единый принцип для всего приложения)
+// ============================================================
+function animateCountUp(el, duration){
+  duration = duration || 700;
+  const target = parseInt(el.getAttribute('data-countup'), 10);
+  if(isNaN(target)){ return; }
+  const start = performance.now();
+  function step(ts){
+    const p = Math.min((ts - start) / duration, 1);
+    el.textContent = Math.round(p * target);
+    if(p < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
 // ============================================================
 // SUPABASE CONNECTION
 // ============================================================
@@ -2024,25 +2067,40 @@ function getEmployeeRole(){
   return emp ? (emp.role||'').toLowerCase() : null;
 }
 
+// Эвристика по роли (используется как fallback, если can_see_construction не задано явно в БД,
+// а также в форме сотрудника — чтобы предложить осмысленное значение по умолчанию)
+function canSeeConstructionForRole(role){
+  role = (role||'').toLowerCase();
+  return !!(role && (role.includes('прораб') || role.includes('менеджер') || role.includes('manager')));
+}
+
+// Эвристика по роли для раздела "Проектный" (fallback)
+function canSeeProjectsForRole(role){
+  role = (role||'').toLowerCase();
+  // По умолчанию все не-admin видят проектный, если явно не выключено
+  return true;
+}
+
 // Может ли видеть строительный отдел
 function canSeeConstruction(){
   if(!session) return false;
   if(session.isAdmin) return true;
-  const role = getEmployeeRole();
-  // Прораб, менеджер — могут видеть стройку
-  if(role && (role.includes('прораб') || role.includes('менеджер') || role.includes('manager'))) return true;
-  return false;
+  const emp = state.employees.find(e=>e.id===session.employeeId);
+  if(emp && emp.can_see_construction === true) return true;
+  if(emp && emp.can_see_construction === false) return false;
+  // Поле не задано явно в БД — используем эвристику по роли
+  return canSeeConstructionForRole(getEmployeeRole());
 }
 
 // Может ли видеть проектный отдел
 function canSeeProjects(){
   if(!session) return false;
   if(session.isAdmin) return true;
-  const role = getEmployeeRole();
-  // Архитекторы, дизайнеры, менеджеры — могут видеть проектный
-  if(role && (role.includes('архитект') || role.includes('дизайн') || role.includes('менеджер') || role.includes('manager'))) return true;
-  // По умолчанию все не-admin видят проектный
-  return true;
+  const emp = state.employees.find(e=>e.id===session.employeeId);
+  if(emp && emp.can_see_projects === true) return true;
+  if(emp && emp.can_see_projects === false) return false;
+  // Поле не задано явно в БД — используем эвристику по роли
+  return canSeeProjectsForRole(getEmployeeRole());
 }
 
 function applyRole(){
@@ -2527,7 +2585,7 @@ async function loadAll(){
   try{
     const [proj, emp, cat, st, dept, led, photos, hist, invs, tzForms, tzRefs, company, kpForms, stages, trashProj, trashEmp, trashCat, trashLed, members] = await Promise.all([
       sb.from('projects').select('*').is('deleted_at', null).order('created_at', {ascending:true}),
-      sb.from('employees').select('id,name,role,is_admin,active,can_edit_cards,deleted_at,created_at').is('deleted_at', null).order('name'),
+      sb.from('employees').select('id,name,role,is_admin,active,can_edit_cards,can_see_projects,can_see_construction,deleted_at,created_at').is('deleted_at', null).order('name'),
       sb.from('categories').select('*').is('deleted_at', null).order('sort_order'),
       sb.from('statuses').select('*').order('sort_order'),
       sb.from('departments').select('*').order('sort_order'),
@@ -2541,7 +2599,7 @@ async function loadAll(){
       sb.from('kp_forms').select('*').order('created_at', {ascending:false}),
       sb.from('project_stages').select('*').order('sort_order', {ascending:true}),
       sb.from('projects').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
-      sb.from('employees').select('id,name,role,is_admin,active,can_edit_cards,deleted_at,created_at').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
+      sb.from('employees').select('id,name,role,is_admin,active,can_edit_cards,can_see_projects,can_see_construction,deleted_at,created_at').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
       sb.from('categories').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
       sb.from('ledger_entries').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
       sb.from('project_members').select('*'),
@@ -2779,7 +2837,7 @@ function renderOverview(){
   const kpiGrid = document.getElementById('kpiGrid');
   kpiGrid.innerHTML = `
     <div class="kpi accent-red" style="cursor:pointer;" onclick="document.getElementById('debtCard').scrollIntoView({behavior:'smooth'})">
-      <div class="big">${overdue.length}</div>
+      <div class="big" data-countup="${overdue.length}">0</div>
       <div class="lbl">Просрочки</div>
     </div>
     <div class="kpi accent-gold" style="cursor:pointer;" onclick="document.getElementById('debtCard').scrollIntoView({behavior:'smooth'})">
@@ -2787,14 +2845,15 @@ function renderOverview(){
       <div class="lbl">Должны клиенты${mismatchCount > 0 ? ` <span style="color:var(--red);">⚠${mismatchCount}</span>` : ''}</div>
     </div>
     <div class="kpi">
-      <div class="big">${activeProjects.length}</div>
+      <div class="big" data-countup="${activeProjects.length}">0</div>
       <div class="lbl">В работе</div>
     </div>
     <div class="kpi accent-green">
-      <div class="big">${doneProjects.length}</div>
+      <div class="big" data-countup="${doneProjects.length}">0</div>
       <div class="lbl">Завершено</div>
     </div>
   `;
+  kpiGrid.querySelectorAll('[data-countup]').forEach(animateCountUp);
 
   // Debt list — только проекты где balance > 0 И статус не «Оплачен»
   // Если статус «Оплачен» но balance > 0 — это расхождение, показываем отдельно
@@ -3118,9 +3177,9 @@ function renderAnalytics(){
       ${modes.map(m=>`
         <div onclick="analyticsMode='${m.id}'; renderAnalytics();"
              style="padding:5px 12px; border-radius:16px; font-size:11px; font-weight:600; cursor:pointer;
-                    background:${analyticsMode===m.id ? 'var(--blue-soft)' : 'rgba(255,255,255,0.05)'};
+                    background:${analyticsMode===m.id ? 'var(--blue-soft)' : 'rgba(22,35,58,0.05)'};
                     color:${analyticsMode===m.id ? 'var(--blue)' : 'var(--text-dim)'};
-                    border:1px solid ${analyticsMode===m.id ? 'rgba(74,144,226,0.4)' : 'var(--line-strong)'};">
+                    border:1px solid ${analyticsMode===m.id ? 'rgba(0,113,235,0.4)' : 'var(--line-strong)'};">
           ${m.label}
         </div>`).join('')}
       <div style="margin-left:auto; font-size:10px; color:var(--text-dim); align-self:center;">последние 12 мес.</div>
@@ -3134,9 +3193,9 @@ function renderAnalytics(){
           <!-- Сетка Y -->
           ${yTicks.map(t=>`
             <line x1="0" y1="${t.y.toFixed(1)}" x2="${chartW}" y2="${t.y.toFixed(1)}"
-                  stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+                  stroke="rgba(22,35,58,0.1)" stroke-width="1"/>
             <text x="-6" y="${(t.y+4).toFixed(1)}" text-anchor="end"
-                  font-size="9" fill="rgba(255,255,255,0.35)">${fmtK(t.v)}</text>
+                  font-size="9" fill="rgba(22,35,58,0.5)">${fmtK(t.v)}</text>
           `).join('')}
 
           <!-- Area доход -->
@@ -3188,12 +3247,12 @@ function renderAnalytics(){
             const anchor = i === n-1 ? 'end' : 'middle';
             const xOff = i === n-1 ? scaleX(i)+2 : scaleX(i);
             return `<text x="${xOff.toFixed(1)}" y="${(chartH+14).toFixed(1)}"
-                         text-anchor="${anchor}" font-size="9" fill="rgba(255,255,255,0.4)">${m.label}</text>`;
+                         text-anchor="${anchor}" font-size="9" fill="rgba(22,35,58,0.55)">${m.label}</text>`;
           }).join('')}
 
           <!-- Ось X -->
           <line x1="0" y1="${chartH}" x2="${chartW}" y2="${chartH}"
-                stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+                stroke="rgba(22,35,58,0.15)" stroke-width="1"/>
         </g>
       </svg>
     </div>
@@ -3350,9 +3409,9 @@ function renderPL(){
               flex:1; min-width:56px; text-align:center; padding:7px 4px;
               border-radius:8px; cursor:pointer; font-size:11px; font-weight:700;
               font-family:'Space Grotesk',sans-serif; white-space:nowrap;
-              background:${plPeriod===period ? 'var(--blue-soft)' : 'rgba(255,255,255,0.04)'};
+              background:${plPeriod===period ? 'var(--blue-soft)' : 'rgba(22,35,58,0.05)'};
               color:${plPeriod===period ? 'var(--blue)' : 'var(--text-dim)'};
-              border:1px solid ${plPeriod===period ? 'rgba(74,144,226,0.4)' : 'var(--line-strong)'};
+              border:1px solid ${plPeriod===period ? 'rgba(0,113,235,0.4)' : 'var(--line-strong)'};
             ">${labels[period]}</div>
           `).join('')}
 </div>
@@ -3712,7 +3771,7 @@ function renderProjectMemberChips(){
   if(!list) return;
   list.innerHTML = currentProjectMembers.map(m=>{
     const emp = findEmployee(m.employee_id);
-    return `<div style="display:inline-flex;align-items:center;gap:4px;background:rgba(74,144,226,0.15);border:1px solid rgba(74,144,226,0.3);border-radius:20px;padding:3px 10px 3px 8px;font-size:12px;">
+    return `<div style="display:inline-flex;align-items:center;gap:4px;background:rgba(0,113,235,0.15);border:1px solid rgba(0,113,235,0.3);border-radius:20px;padding:3px 10px 3px 8px;font-size:12px;">
       ${escapeHtml(emp?emp.name:m.employee_id)}
       <span onclick="removeProjectMember('${m.employee_id}')" style="cursor:pointer;opacity:0.6;font-size:14px;line-height:1;">×</span>
     </div>`;
@@ -4607,8 +4666,13 @@ function openEmployeeSheet(id){
     document.getElementById('ef-active').value = e.active===false ? 'false' : 'true';
     document.getElementById('ef-pin').value = '';
     document.getElementById('ef-can-edit-cards').checked = !!e.can_edit_cards;
+    // Если поля can_see_* ещё не заданы явно (null) — подставляем текущее фактическое поведение по роли, как отправную точку
+    document.getElementById('ef-see-projects').checked = (e.can_see_projects === null || e.can_see_projects === undefined) ? canSeeProjectsForRole(e.role) : !!e.can_see_projects;
+    document.getElementById('ef-see-construction').checked = (e.can_see_construction === null || e.can_see_construction === undefined) ? canSeeConstructionForRole(e.role) : !!e.can_see_construction;
     pinField.style.display = isAdmin ? '' : 'none';
     if(cardEditField) cardEditField.style.display = isAdmin ? '' : 'none';
+    const sectionsField = document.getElementById('ef-sections-field');
+    if(sectionsField) sectionsField.style.display = isAdmin ? '' : 'none';
   }else{
     title.textContent = 'Новый сотрудник';
     deleteBtn.style.display = 'none';
@@ -4617,8 +4681,12 @@ function openEmployeeSheet(id){
     document.getElementById('ef-active').value = 'true';
     document.getElementById('ef-pin').value = '';
     document.getElementById('ef-can-edit-cards').checked = false;
+    document.getElementById('ef-see-projects').checked = true;
+    document.getElementById('ef-see-construction').checked = false;
     pinField.style.display = isAdmin ? '' : 'none';
     if(cardEditField) cardEditField.style.display = isAdmin ? '' : 'none';
+    const sectionsField2 = document.getElementById('ef-sections-field');
+    if(sectionsField2) sectionsField2.style.display = isAdmin ? '' : 'none';
   }
   overlay.classList.add('active');
 }
@@ -4647,6 +4715,8 @@ async function saveEmployee(){
       payload.pin_code = pinInput;
     }
     payload.can_edit_cards = document.getElementById('ef-can-edit-cards').checked;
+    payload.can_see_projects = document.getElementById('ef-see-projects').checked;
+    payload.can_see_construction = document.getElementById('ef-see-construction').checked;
   }
   try{
     if(editingEmployeeId){
@@ -5100,7 +5170,7 @@ function makeInvoiceRow(inv){
         <div class="inv-num">${escapeHtml(inv.number||inv.description||'—')}</div>
         ${inv.description && inv.number && inv.description!==inv.number ? `<div class="inv-desc">${escapeHtml(inv.description)}</div>` : ''}
         <span class="inv-type-badge inv-type-${typeCls}">${escapeHtml(inv.item_type)}</span>
-        ${inv.category ? `<span class="inv-type-badge" style="background:rgba(255,255,255,0.06);color:var(--text-dim);">${escapeHtml(inv.category)}</span>` : ''}
+        ${inv.category ? `<span class="inv-type-badge" style="background:rgba(22,35,58,0.08);color:var(--text-dim);">${escapeHtml(inv.category)}</span>` : ''}
       </div>
       <div class="inv-right">
         <div class="inv-amount ${typeCls}">${fmtMoney(inv.amount)}</div>
@@ -6214,7 +6284,7 @@ function viewTzAnswers(tzFormId){
     html += `<div class="fee-row" style="display:block; padding:8px 0;">
       <div class="fl" style="margin-bottom:3px;">${escapeHtml(label)}</div>
       <textarea class="tz-edit-field" data-key="${escapeHtml(key)}" data-is-array="${Array.isArray(val)?'1':'0'}"
-        style="width:100%; background:rgba(255,255,255,0.05); border:1px solid var(--line-strong); border-radius:var(--radius-sm); color:var(--text); font-size:13px; padding:8px 10px; font-family:'Inter',sans-serif; min-height:38px;">${escapeHtml(displayVal)}</textarea>
+        style="width:100%; background:#FFFFFF; border:1px solid var(--line-strong); border-radius:var(--radius-sm); color:var(--text); font-size:13px; padding:8px 10px; font-family:'Inter',sans-serif; min-height:38px;">${escapeHtml(displayVal)}</textarea>
     </div>`;
   });
 
@@ -7922,13 +7992,13 @@ function renderCardsList(){
             ${card.floors} эт. · ${card.total_area||'—'} м² · ${card.footprint||''}
           </div>
           <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
-            <span style="font-size:10px;background:rgba(74,144,226,0.15);color:var(--blue);padding:2px 8px;border-radius:20px;font-weight:600;">${card.floors === 1 ? '1 этаж' : card.floors === 2 ? '2 этажа' : card.floors+'+ эт.'}</span>
-            ${card.beds ? `<span style="font-size:10px;background:rgba(255,255,255,0.06);color:var(--text-dim);padding:2px 8px;border-radius:20px;">${card.beds} спал.</span>` : ''}
+            <span style="font-size:10px;background:rgba(0,113,235,0.15);color:var(--blue);padding:2px 8px;border-radius:20px;font-weight:600;">${card.floors === 1 ? '1 этаж' : card.floors === 2 ? '2 этажа' : card.floors+'+ эт.'}</span>
+            ${card.beds ? `<span style="font-size:10px;background:rgba(22,35,58,0.08);color:var(--text-dim);padding:2px 8px;border-radius:20px;">${card.beds} спал.</span>` : ''}
           </div>
         </div>
         <div style="text-align:right;flex-shrink:0;">
           ${card.images?.[0]
-            ? `<img src="${card.images[0]}" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid rgba(255,255,255,0.08);" onerror="this.parentNode.innerHTML='<div style=\'width:56px;height:56px;border-radius:8px;background:rgba(61,143,224,0.1);display:flex;align-items:center;justify-content:center;font-size:22px;border:1px dashed rgba(61,143,224,0.3);\'>🏠</div>'"/>`
+            ? `<img src="${card.images[0]}" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid rgba(22,35,58,0.1);" onerror="this.parentNode.innerHTML='<div style=\'width:56px;height:56px;border-radius:8px;background:rgba(61,143,224,0.1);display:flex;align-items:center;justify-content:center;font-size:22px;border:1px dashed rgba(61,143,224,0.3);\'>🏠</div>'"/>`
             : `<div style="width:56px;height:56px;border-radius:8px;background:rgba(61,143,224,0.08);display:flex;align-items:center;justify-content:center;font-size:22px;border:1px dashed rgba(61,143,224,0.25);" title="Фото не загружено">🏠</div>`}
           <div style="font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:700;color:var(--blue);margin-top:4px;">${card.price ? card.price+' ₽' : ''}</div>
         </div>
@@ -8446,7 +8516,7 @@ async function renderShareLinks(){
         </div>` : ''}
       </div>
       <div style="display:flex;gap:6px;flex-shrink:0;">
-        ${!isExpired ? `<button style="background:rgba(74,144,226,0.15);color:var(--blue);border:none;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit;"
+        ${!isExpired ? `<button style="background:rgba(0,113,235,0.15);color:var(--blue);border:none;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit;"
           onclick="navigator.clipboard.writeText('${base}catalog.html?t=${link.token}').then(()=>showToast('Скопировано!'))">
           Копировать
         </button>` : ''}
