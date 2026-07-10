@@ -537,12 +537,13 @@ async function init(){
   }
 
   try{
-    const {data, error} = await sb.from('tz_forms').select('*').eq('token', token).single();
-    if(error || !data){
+    const {data, error} = await sb.rpc('get_tz_form_by_token', {p_token: token});
+    const row = Array.isArray(data) ? data[0] : data;
+    if(error || !row){
       renderError('Форма не найдена', 'Возможно, ссылка устарела или была изменена. Пожалуйста, уточните корректную ссылку у ARHITTEK.');
       return;
     }
-    tzForm = data;
+    tzForm = row;
     answers = tzForm.answers || {};
     renderForm();
   }catch(e){
@@ -825,12 +826,12 @@ async function autoSave(){
   const status = document.getElementById('saveStatus');
   if(status) status.textContent = 'Сохранение…';
   try{
-    await sb.from('tz_forms').update({
-      answers: answers,
-      client_name: answers.full_name || tzForm?.client_name || '',
-      status: 'Заполняется',
-      submitted_at: new Date().toISOString(),
-    }).eq('id', tzForm.id);
+    const {error} = await sb.rpc('submit_tz_form', {
+      p_token: token,
+      p_answers: answers,
+      p_client_name: answers.full_name || tzForm?.client_name || '',
+    });
+    if(error) throw error;
     if(status) status.textContent = 'Сохранено · ' + new Date().toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'});
     updateProgressBar();
   }catch(e){
