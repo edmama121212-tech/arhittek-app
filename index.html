@@ -92,7 +92,7 @@
     font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:15px;
     color:#fff; flex-shrink:0; overflow:hidden;
   }
-  .brand-title{font-size:17px; font-weight:700; letter-spacing:0.02em;}
+  .brand-title{font-family:'Space Grotesk',sans-serif; font-size:17px; font-weight:700; letter-spacing:0.02em;}
   .brand-sub{font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.1em; margin-top:1px;}
   .sync-pill{
     font-size:10px; color:var(--text-dim); border:1px solid var(--line-strong);
@@ -500,7 +500,7 @@
 <div id="loginOverlay" style="display:none; position:fixed; inset:0; z-index:500; background:var(--bg); flex-direction:column; align-items:center; justify-content:center; padding:24px;">
   <div style="width:100%; max-width:360px;">
     <div style="text-align:center; margin-bottom:28px;">
-      <div class="logo" style="width:52px; height:52px; font-size:22px; margin:0 auto 12px;"><svg width="60%" height="60%" viewBox="0 0 24 24" fill="none" stroke="#16233A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 L12 4 L21 11.5"/><path d="M6 10 V20 H18 V10"/><path d="M10 20 V14 H14 V20"/></svg></div>
+      <div class="logo" style="width:52px; height:52px; font-size:22px; margin:0 auto 12px;"><svg width="60%" height="60%" viewBox="0 0 24 24" fill="none" stroke="#16233A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4 L6 10 L6 19 L14 19 L14 14 L18 14 L18 10 Z"/></svg></div>
       <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:19px;">ARHIT<span style="color:#3D8FE0;">TEK</span></div>
       <div class="brand-sub" style="margin-top:4px;">Вход в пульт управления</div>
     </div>
@@ -525,7 +525,7 @@
 <header>
   <div class="brand">
     <div class="brand-left">
-      <div class="logo"><svg width="60%" height="60%" viewBox="0 0 24 24" fill="none" stroke="#16233A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 L12 4 L21 11.5"/><path d="M6 10 V20 H18 V10"/><path d="M10 20 V14 H14 V20"/></svg></div>
+      <div class="logo"><svg width="60%" height="60%" viewBox="0 0 24 24" fill="none" stroke="#16233A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4 L6 10 L6 19 L14 19 L14 14 L18 14 L18 10 Z"/></svg></div>
       <div style="min-width:0; overflow:hidden;">
         <div class="brand-title">ARHIT<span style="color:#3D8FE0;">TEK</span></div>
         <div class="brand-sub">Пульт управления</div>
@@ -5129,6 +5129,8 @@ function openObjectView(id){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-object').classList.add('active');
   document.querySelector('.nav-btn[data-view="view-construction"]')?.classList.add('active');
+  const fab = document.getElementById('addProjectFab');
+  if(fab) fab.style.display = 'none';
   window.scrollTo(0,0);
 }
 
@@ -7748,6 +7750,8 @@ document.getElementById('objBack').addEventListener('click', ()=>{
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('view-construction').classList.add('active');
   document.querySelector('.nav-btn[data-view="view-construction"]').classList.add('active');
+  const fab = document.getElementById('addProjectFab');
+  if(fab){ fab.style.display = ''; fab.title = 'Добавить объект'; }
   window.scrollTo(0,0);
 });
 
