@@ -1,10 +1,22 @@
-// ARHITTEK Service Worker v1.4 (bypass HTTP disk cache — fixes stale iOS PWA content)
-const CACHE = 'arhittek-v1.4';
+// ARHITTEK Service Worker v1.5 (bypass HTTP disk cache — fixes stale iOS PWA content)
+const CACHE = 'arhittek-v1.5';
 const ASSETS = ['./index.html', './manifest.json'];
+// CDN-библиотеки — кэшируем отдельно от основных ASSETS: если jsdelivr на
+// момент установки недоступен, это не должно валить весь install (addAll — all-or-nothing).
+const CDN_ASSETS = [
+  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
+  'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+  'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js',
+  'https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js',
+];
 
 self.addEventListener('install', e=>{
   e.waitUntil(
-    caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting())
+    caches.open(CACHE)
+      .then(c=>c.addAll(ASSETS).then(()=>Promise.all(
+        CDN_ASSETS.map(url=>c.add(url).catch(()=>{}))
+      )))
+      .then(()=>self.skipWaiting())
   );
 });
 
