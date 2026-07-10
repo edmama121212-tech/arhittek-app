@@ -470,6 +470,28 @@
   .kp-service-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;}
   .kp-service-title{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:13.5px; color:var(--text-dim);}
   .kp-service-sum{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:15px; color:var(--gold); text-align:right; margin-top:8px;}
+
+  /* От 900px — полноценная веб-версия: больше пространства, многоколоночные блоки,
+     навигация остаётся горизонтальной пилюлей внизу (просто шире и с большим отступом снизу).
+     Этот блок должен быть последним в каскаде, иначе его перебивают более ранние правила той же специфичности. */
+  @media (min-width: 900px){
+    html{ background:#C7CCD6 !important; }
+    body{
+      max-width:1080px !important;
+      box-shadow:0 0 60px rgba(22,35,58,0.18) !important;
+      padding-bottom:100px;
+    }
+    main{ padding-left:32px; padding-right:32px; }
+    .kpi-grid{ grid-template-columns:repeat(4,1fr); }
+    .bottom-nav{
+      left:50% !important; right:auto !important; bottom:20px !important; top:auto !important;
+      transform:translateX(-50%) !important; flex-direction:row !important;
+      width:auto; max-width:560px !important; border-radius:26px !important;
+      padding:9px 16px calc(9px + env(safe-area-inset-bottom)) !important; gap:6px;
+    }
+    .nav-btn{ padding:6px 16px; }
+    .fab{ left:auto !important; right:calc(50% - 540px + 24px) !important; bottom:20px !important; }
+  }
 </style>
 </head>
 <body>
