@@ -2726,7 +2726,7 @@ async function loadAll(){
   // придёт без заголовка и вернёт пусто.
   if(!session) session = getSession();
   try{
-    const [proj, emp, cat, st, dept, led, photos, hist, invs, tzForms, tzRefs, company, kpForms, stages, trashProj, trashEmp, trashCat, trashLed, members] = await Promise.all([
+    const [proj, emp, cat, st, dept, led, photos, invs, tzForms, tzRefs, company, kpForms, stages, members] = await Promise.all([
       sb.from('projects').select('*').is('deleted_at', null).order('created_at', {ascending:true}),
       sb.from('employees').select('id,name,role,is_admin,active,can_edit_cards,can_see_projects,can_see_construction,deleted_at,created_at').is('deleted_at', null).order('name'),
       sb.from('categories').select('*').is('deleted_at', null).order('sort_order'),
@@ -2734,22 +2734,17 @@ async function loadAll(){
       sb.from('departments').select('*').order('sort_order'),
       sb.from('ledger_entries').select('*').is('deleted_at', null).order('created_at', {ascending:false}),
       sb.from('expense_photos').select('*').order('created_at', {ascending:false}),
-      sb.from('audit_log').select('*').order('created_at', {ascending:false}).limit(5000),
       sb.from('invoices').select('*').order('invoice_date', {ascending:true}),
       sb.from('tz_forms').select('*').order('created_at', {ascending:false}),
       sb.from('tz_references').select('*'),
       sb.from('company_info').select('*').limit(1).maybeSingle(),
       sb.from('kp_forms').select('*').order('created_at', {ascending:false}),
       sb.from('project_stages').select('*').order('sort_order', {ascending:true}),
-      sb.from('projects').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
-      sb.from('employees').select('id,name,role,is_admin,active,can_edit_cards,can_see_projects,can_see_construction,deleted_at,created_at').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
-      sb.from('categories').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
-      sb.from('ledger_entries').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
       sb.from('project_members').select('*'),
     ]);
 
     // kpForms and stages are optional — may not exist until migrations run
-    const errs = [proj,emp,cat,st,dept,led,photos,hist,invs,tzForms,tzRefs,company,trashProj,trashEmp,trashCat,trashLed].map(r=>r.error).filter(Boolean);
+    const errs = [proj,emp,cat,st,dept,led,photos,invs,tzForms,tzRefs,company].map(r=>r.error).filter(Boolean);
     if(errs.length) throw errs[0];
     state.kpForms = kpForms.error ? [] : (kpForms.data || []);
     state.projectStages = stages.error ? [] : (stages.data || []);
@@ -2790,25 +2785,20 @@ async function loadAll(){
     }
     state.ledger = led.data || [];
     state.photos = photos.data || [];
-    state.history = hist.data || [];
     state.invoices = invs.data || [];
     state.tzForms = tzForms.data || [];
     state.tzReferences = tzRefs.data || [];
     state.companyInfo = company.data || null;
-    state.trash = {
-      projects: trashProj.data || [],
-      employees: trashEmp.data || [],
-      categories: trashCat.data || [],
-      ledger: trashLed.data || [],
-    };
-
-    purgeOldTrash();
 
     // Показываем live-статус если realtime канал активен
     const isLive = realtimeChannel && realtimeChannel.state === 'joined';
     setSyncStatus(isLive ? 'live' : 'on', isLive ? 'live · обновляется' : 'синхронизировано');
     renderAll();
     updateTzBadge();
+    // Журнал аудита (до 5000 записей) и корзина удалённых объектов никому не
+    // нужны для первого экрана — грузим их отдельно, в фоне, не задерживая
+    // основную отрисовку (см. loadDeferredData).
+    loadDeferredData();
 
     // Auth check (after first load, employees list is available)
     if(!session){
@@ -2840,6 +2830,32 @@ async function loadAll(){
     // Проверяем просрочки для уведомлений (один раз в день)
     if(typeof checkOverdueNotifications === 'function') checkOverdueNotifications();
   }
+}
+
+// Журнал аудита и корзина удалённых объектов — тяжёлые (audit_log до 5000 строк)
+// и нужны только во вкладках «История»/«Корзина», поэтому грузятся отдельно от
+// loadAll() и не задерживают первую отрисовку приложения. Перерисовывает те же
+// (обычно скрытые) секции, что и renderAll(), когда данные приходят.
+async function loadDeferredData(){
+  try{
+    const [hist, trashProj, trashEmp, trashCat, trashLed] = await Promise.all([
+      sb.from('audit_log').select('*').order('created_at', {ascending:false}).limit(5000),
+      sb.from('projects').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
+      sb.from('employees').select('id,name,role,is_admin,active,can_edit_cards,can_see_projects,can_see_construction,deleted_at,created_at').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
+      sb.from('categories').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
+      sb.from('ledger_entries').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
+    ]);
+    state.history = hist.error ? [] : (hist.data || []);
+    state.trash = {
+      projects: trashProj.error ? [] : (trashProj.data || []),
+      employees: trashEmp.error ? [] : (trashEmp.data || []),
+      categories: trashCat.error ? [] : (trashCat.data || []),
+      ledger: trashLed.error ? [] : (trashLed.data || []),
+    };
+    purgeOldTrash();
+    renderHistory();
+    renderTrash();
+  }catch(e){ console.error('loadDeferredData error', e); }
 }
 
 function renderAll(){
@@ -5929,7 +5945,9 @@ async function exportConstrPdf(projectId){
         const descStr = (inv.description||'').slice(0,50);
         const label = numStr === descStr ? numStr : (numStr ? numStr + (descStr ? ' / '+descStr : '') : descStr);
         doc.setTextColor(0);
-        doc.text(doc.splitTextToSize(label, contentWidth-35)[0], margin+2, y);
+        // Ширина колонки названия должна заканчиваться ДО колонки даты (margin+80),
+        // иначе длинные названия накладных наезжают на дату — как на скриншоте отчёта.
+        doc.text(doc.splitTextToSize(label, 74)[0], margin+2, y);
         if(dateStr){ doc.setTextColor(140); doc.text(dateStr, margin+80, y); doc.setTextColor(0); }
         doc.setFont('Roboto','bold');
         doc.text(`${fmt(inv.amount)} руб.`, pageWidth-margin, y, {align:'right'});
