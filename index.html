@@ -3048,7 +3048,11 @@ function renderOverview(){
     const netRows = [...debts, ...mismatch].map(p=>{
       const balance = Number(p.balance) || 0;
       const f = getProjectFee(p);
-      return {p, balance, feeRemaining: Math.max(0, f.remaining), net: balance - Math.max(0, f.remaining)};
+      const feeRemaining = Math.max(0, f.remaining);
+      // Если гонорар исполнителя ≤ 30 000₽, расходы легли на компанию — они ещё не
+      // учтены в остатке гонорара (companyExpenseShare), поэтому вычитаем отдельно.
+      const net = balance - feeRemaining - (f.companyExpenseShare || 0);
+      return {p, balance, feeRemaining, net};
     }).sort((a,b)=>b.net-a.net);
 
     if(!netRows.length){
@@ -4278,6 +4282,11 @@ async function markPaid(id){
 // ============================================================
 // FEE CALCULATOR
 // ============================================================
+// Порог для правила «кто несёт расходы» (только проектный отдел — не Стройка):
+// гонорар исполнителя от полной цены > 30 000₽ — расходы вычитаются из его гонорара;
+// иначе расходы ложатся на доход компании, а исполнитель получает гонорар целиком.
+const EXECUTOR_FEE_EXPENSE_THRESHOLD = 30000;
+
 function calcFee(p){
   const cat = findCategory(p.category_id);
   const feePercent = (p.fee_percent !== null && p.fee_percent !== undefined) ? Number(p.fee_percent) : (cat ? Number(cat.fee_percent) : 0);
@@ -4287,13 +4296,21 @@ function calcFee(p){
   const price = Number(p.price) || 0;
   const expenses = Number(p.expenses) || 0;
   const profit = price - expenses;
-  const base = feeBase === 'price' ? price : profit;
 
-  // Гонорар исполнителя и соисполнителя считаются от одной и той же базы,
-  // каждый по своему проценту — у каждого может быть свой % (см. карточку проекта).
-  let mainFeeAmount = base * feePercent / 100;
-  if(mainFeeAmount < 0) mainFeeAmount = 0;
-  let coFeeAmount = p.co_employee_id ? base * coFeePercent / 100 : 0;
+  let grossMainFee = price * feePercent / 100;
+  if(grossMainFee < 0) grossMainFee = 0;
+
+  let mainFeeAmount, companyExpenseShare;
+  if(grossMainFee > EXECUTOR_FEE_EXPENSE_THRESHOLD){
+    mainFeeAmount = Math.max(0, grossMainFee - expenses);
+    companyExpenseShare = 0;
+  }else{
+    mainFeeAmount = grossMainFee;
+    companyExpenseShare = expenses;
+  }
+
+  // Соисполнитель — свой % от полной цены, правило порога/расходов на него не распространяется.
+  let coFeeAmount = p.co_employee_id ? price * coFeePercent / 100 : 0;
   if(coFeeAmount < 0) coFeeAmount = 0;
 
   const feeAmount = mainFeeAmount + coFeeAmount;
@@ -4302,7 +4319,7 @@ function calcFee(p){
   const paid = mainPaid + coPaid;
   const remaining = feeAmount - paid;
 
-  return {feePercent, feeBase, coFeePercent, profit, feeAmount, paid, remaining, mainFeeAmount, coFeeAmount, mainPaid, coPaid};
+  return {feePercent, feeBase, coFeePercent, profit, feeAmount, paid, remaining, mainFeeAmount, coFeeAmount, mainPaid, coPaid, grossMainFee, companyExpenseShare};
 }
 
 function renderEmployeeFeeSummary(){
@@ -4354,7 +4371,7 @@ function renderFeeCalc(){
     const f = getProjectFee(p);
     const cat = findCategory(p.category_id);
     const emp = findEmployee(p.employee_id);
-    const baseLabel = f.feeBase === 'price' ? '% от цены' : f.feeBase === 'expenses' ? '% от расходов' : '% от прибыли';
+    const baseLabel = f.feeBase === 'expenses' ? '% от расходов' : '% от цены';
     return `<div class="fee-card">
       <div style="font-weight:700; font-size:13.5px; margin-bottom:2px;">${escapeHtml(p.name)}</div>
       <div class="li-meta" style="margin-bottom:8px;">${cat?escapeHtml(cat.name):''}${emp?' · '+escapeHtml(emp.name):''}</div>
@@ -4388,12 +4405,17 @@ function renderFeeSummaryForProject(p){
   const el = document.getElementById('pf-fee-summary');
   if(!el) return;
   const f = getProjectFee(p);
-  const baseLabel = f.feeBase === 'price' ? '% от цены' : f.feeBase === 'expenses' ? '% от расходов' : '% от прибыли';
+  const baseLabel = f.feeBase === 'expenses' ? '% от расходов' : '% от цены';
   const hasCoExec = !!p.co_employee_id;
+  const expenses = Number(p.expenses) || 0;
+  const expensesNote = (f.feeBase !== 'expenses' && expenses > 0)
+    ? `<div class="fee-row" style="color:var(--text-dim); font-size:11.5px;"><div class="fl">Расходы ${fmtMoney(expenses)} (порог ${fmtMoney(EXECUTOR_FEE_EXPENSE_THRESHOLD)})</div><div class="fv">${f.companyExpenseShare > 0 ? 'с дохода компании' : 'с гонорара исполнителя'}</div></div>`
+    : '';
   el.innerHTML = `
     <div style="font-weight:700; font-size:13px; margin-bottom:6px;">Гонорар (${baseLabel})</div>
     <div class="fee-row"><div class="fl">Исполнитель — ${f.feePercent}%</div><div class="fv">${fmtMoney(f.mainFeeAmount)}</div></div>
     ${hasCoExec ? `<div class="fee-row"><div class="fl">Соисполнитель — ${f.coFeePercent}%</div><div class="fv">${fmtMoney(f.coFeeAmount)}</div></div>` : ''}
+    ${expensesNote}
     <div class="fee-row"><div class="fl">Начислено всего</div><div class="fv">${fmtMoney(f.feeAmount)}</div></div>
     <div class="fee-row"><div class="fl">Выплачено всего</div><div class="fv">${fmtMoney(f.paid)}</div></div>
     <div class="fee-row remaining"><div class="fl">Осталось выплатить</div><div class="fv">${fmtMoney(Math.max(0,f.remaining))}</div></div>
@@ -5101,7 +5123,8 @@ function calcConstrFee(p){
   const coPaid = Number(p.co_fee_paid)||0;
   const paid = mainPaid + coPaid;
   const remaining = Math.max(0, feeAmount - paid);
-  return {feePercent, feeBase:'expenses', coFeePercent, profit, feeAmount, paid, remaining, mainFeeAmount, coFeeAmount, mainPaid, coPaid};
+  // Правило порога 30 000₽ на Стройку не распространяется — расходы тут и так база гонорара.
+  return {feePercent, feeBase:'expenses', coFeePercent, profit, feeAmount, paid, remaining, mainFeeAmount, coFeeAmount, mainPaid, coPaid, grossMainFee: mainFeeAmount, companyExpenseShare: 0};
 }
 
 function getConstrProjects(){
