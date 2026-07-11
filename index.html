@@ -5627,7 +5627,7 @@ function renderObjTabContent(){
       <div class="photo-grid">
         ${photos.length ? photos.map(ph=>`
           <div class="photo-thumb">
-            <img src="${ph.photo_url}" alt="">
+            <img src="${ph.photo_url}" alt="" loading="lazy">
             ${ph.amount ? `<div class="photo-amt">${fmtMoney(ph.amount)}</div>` : ''}
           </div>`).join('') : '<div class="empty-state" style="grid-column:1/-1; padding:14px;">Фото пока нет</div>'}
       </div>
@@ -6582,7 +6582,7 @@ function viewTzAnswers(tzFormId){
     html += `<div style="padding:8px 0;">
       <div class="fl" style="margin-bottom:6px;">${escapeHtml(label)} — референсы</div>
       <div class="photo-grid">
-        ${val.map(url=>`<div class="photo-thumb"><img src="${escapeHtml(url)}"></div>`).join('')}
+        ${val.map(url=>`<div class="photo-thumb"><img src="${escapeHtml(url)}" loading="lazy"></div>`).join('')}
       </div>
     </div>`;
   });
@@ -8977,7 +8977,7 @@ function buildCardHTML(card){
     <div class="panel" id="floor2">
       <div class="plan-wrap">
         <div class="plan-label">Планировочное решение · 2-й этаж <span>${escapeHtml(card.floor2_area||'')} м²</span></div>
-        <div class="plan-img-container">${plan2?`<img class="plan-img" src="${plan2}" style="width:100%;height:auto;border-radius:4px;"/>`:''}</div>
+        <div class="plan-img-container">${plan2?`<img class="plan-img" src="${plan2}" loading="lazy" style="width:100%;height:auto;border-radius:4px;"/>`:''}</div>
       </div>
       <div class="explication">
         <div class="expl-header"><span class="expl-header-title">Экспликация</span><span class="expl-header-total">${escapeHtml(card.floor2_area||'')} м²</span></div>
@@ -9065,7 +9065,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div class="swiper-wrap" id="swiperWrap">
     <div class="swiper-track" id="swiperTrack">
       <div class="swiper-slide">${facade1?`<img src="${facade1}"/>`:'<div style="width:100%;height:100%;background:#222;"></div>'}<div class="swiper-overlay"></div></div>
-      ${facade2?`<div class="swiper-slide"><img src="${facade2}"/><div class="swiper-overlay"></div></div>`:''}
+      ${facade2?`<div class="swiper-slide"><img src="${facade2}" loading="lazy"/><div class="swiper-overlay"></div></div>`:''}
     </div>
     <div class="swiper-caption">${escapeHtml(card.title||'')}</div>
     <div class="swiper-num">№ ${escapeHtml(card.project_number||'')}</div>
@@ -9075,7 +9075,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div class="panel" id="floor1">
   <div class="plan-wrap">
     <div class="plan-label">Планировочное решение · 1-й этаж <span>${escapeHtml(card.floor1_area||'')} м²</span></div>
-    <div class="plan-img-container">${plan1?`<img class="plan-img" src="${plan1}" style="width:100%;height:auto;border-radius:4px;"/>`:''}</div>
+    <div class="plan-img-container">${plan1?`<img class="plan-img" src="${plan1}" loading="lazy" style="width:100%;height:auto;border-radius:4px;"/>`:''}</div>
   </div>
   <div class="explication">
     <div class="expl-header"><span class="expl-header-title">Экспликация</span><span class="expl-header-total">${escapeHtml(card.floor1_area||'')} м²</span></div>
