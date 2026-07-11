@@ -558,11 +558,8 @@
       <div class="section-label"><span class="lbl-text">Аналитика по месяцам</span><span class="section-label-line"></span></div>
       <div class="card" id="analyticsBlock" style="padding:14px 10px 10px;"></div>
 
-      <div class="section-label"><span class="lbl-text">Долги клиентов</span><span class="section-label-line"></span></div>
-      <div class="card" id="debtCard"></div>
-
-      <div class="section-label"><span class="lbl-text">Выручка компании</span><span class="section-label-line"></span></div>
-      <div class="card" id="netCard"></div>
+      <div class="section-label"><span class="lbl-text">Долги и выручка по проектам</span><span class="section-label-line"></span></div>
+      <div class="card" id="debtCard" style="padding:0;"></div>
 
       <div class="card" id="activeProjectsCard" style="display:none;"></div>
 
@@ -3005,9 +3002,10 @@ function renderOverview(){
   `;
   kpiGrid.querySelectorAll('[data-countup]').forEach(animateCountUp);
 
-  // Debt list — только проекты где balance > 0 И статус не «Оплачен»
-  // Если статус «Оплачен» но balance > 0 — это расхождение, показываем отдельно
-  const paidStatus = state.statuses.find(s=>s.name==='Оплачен');
+  // Долги и выручка — один объединённый список: проекты где balance > 0
+  // (проектный отдел; строительные объекты не входят — там остаток это бюджет
+  // объекта, а не долг клиента). Статус «Оплачен» но balance > 0 — расхождение,
+  // помечается отдельно, но участвует в тех же итогах.
   const debts = state.projects
     .filter(p=>Number(p.balance) > 0 && p.payment_status !== 'Оплачен' && !isConstructionCategory(p.category_id))
     .sort((a,b)=>b.balance-a.balance);
@@ -3018,51 +3016,9 @@ function renderOverview(){
   if(!debts.length && !mismatch.length){
     debtCard.innerHTML = '<div class="empty-state">Все проекты оплачены полностью</div>';
   }else{
-    let html = debts.map(p=>{
-      const cat = findCategory(p.category_id);
-      return `<div class="list-item" onclick="openProjectSheet('${p.id}')" style="cursor:pointer;">
-        <div>
-          <div class="li-name">${escapeHtml(p.name)}</div>
-          <div class="li-meta">${cat ? escapeHtml(cat.name) : '—'}${p.client_name ? ' · 👤 '+escapeHtml(p.client_name) : ''}</div>
-        </div>
-        <div style="display:flex; align-items:center; gap:8px;">
-          <span style="color:var(--gold); font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:14px;">${fmtMoney(p.balance)}</span>
-        </div>
-      </div>`;
-    }).join('');
-
-    // Расхождение: статус «Оплачен» но balance != 0
-    if(mismatch.length){
-      html += `<div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--line);">
-        <div style="font-size:10px; color:var(--gold); font-weight:700; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:6px;">⚠ Расхождение статуса и остатка</div>
-        ${mismatch.map(p=>{
-          const cat = findCategory(p.category_id);
-          return `<div class="list-item" onclick="openProjectSheet('${p.id}')" style="cursor:pointer;">
-            <div>
-              <div class="li-name">${escapeHtml(p.name)}</div>
-              <div class="li-meta" style="color:var(--gold);">Статус: Оплачен, но остаток ${fmtMoney(p.balance)}</div>
-            </div>
-            <div style="display:flex; align-items:center; gap:8px;">
-              <span style="color:var(--gold); font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:14px;">${fmtMoney(p.balance)}</span>
-            </div>
-          </div>`;
-        }).join('')}
-      </div>`;
-    }
-
-    const totalShown = [...debts, ...mismatch].reduce((s,p)=>s+Number(p.balance),0);
-    html += `<div class="note" style="margin-top:6px; padding-top:8px; border-top:1px solid var(--line);">Итого по всем проектам: <b style="color:var(--text)">${fmtMoney(totalDebt)}</b></div>`;
-    debtCard.innerHTML = html;
-  }
-
-  // Выручка компании: сколько ЕЩЁ ОСТАЛОСЬ ПОЛУЧИТЬ — из непогашенного остатка (balance)
-  // вычитаем гонорар исполнителя и соисполнителя, который ещё не выплачен. Тот же список
-  // проектов, что и «Долги клиентов» (проектный отдел, строительные объекты не входят —
-  // там остаток это бюджет объекта, а не долг компании).
-  const netCard = document.getElementById('netCard');
-  if(netCard){
-    const netRows = [...debts, ...mismatch].map(p=>{
+    const rows = [...debts, ...mismatch].map(p=>{
       const balance = Number(p.balance) || 0;
+      const expenses = getProjectExpenses(p);
       const f = getProjectFee(p);
       const feeRemaining = Math.max(0, f.remaining);
       // Если гонорар исполнителя ≤ 30 000₽, расходы легли на компанию — они ещё не
@@ -3070,37 +3026,56 @@ function renderOverview(){
       const net = balance - feeRemaining - (f.companyExpenseShare || 0);
       const mainRemaining = Math.max(0, (f.mainFeeAmount||0) - (f.mainPaid||0));
       const coRemaining = Math.max(0, (f.coFeeAmount||0) - (f.coPaid||0));
-      const mainEmp = findEmployee(p.employee_id);
-      const coEmp = p.co_employee_id ? findEmployee(p.co_employee_id) : null;
-      return {p, balance, feeRemaining, net, mainRemaining, coRemaining, mainEmp, coEmp};
-    }).sort((a,b)=>b.net-a.net);
+      const feeTotal = mainRemaining + coRemaining;
+      const isMismatch = p.payment_status === 'Оплачен';
+      return {p, balance, expenses, net, feeTotal, isMismatch};
+    }).sort((a,b)=>b.balance-a.balance);
 
-    if(!netRows.length){
-      netCard.innerHTML = '<div class="empty-state">Нет непогашенных долгов</div>';
-    }else{
-      const totalNet = netRows.reduce((s,r)=>s+r.net,0);
-      const headerRow = `<div style="display:flex; justify-content:flex-end; gap:10px; padding-bottom:6px; margin-bottom:2px; border-bottom:1px solid var(--line);">
-        <div style="text-align:right; min-width:74px; font-size:9px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.04em;">Компания</div>
-        <div style="text-align:right; min-width:74px; font-size:9px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.04em;">Исполнитель</div>
+    const totalBalance  = rows.reduce((s,r)=>s+r.balance,0);
+    const totalNet      = rows.reduce((s,r)=>s+r.net,0);
+    const totalFee      = rows.reduce((s,r)=>s+r.feeTotal,0);
+    const totalExpenses = rows.reduce((s,r)=>s+r.expenses,0);
+
+    const rowsHtml = rows.map(({p, balance, expenses, net, feeTotal, isMismatch})=>{
+      const netColor = net < 0 ? 'var(--red)' : 'var(--green)';
+      return `<tr onclick="openProjectSheet('${p.id}')" style="cursor:pointer;" class="constr-sum-row">
+        <td>
+          <div style="font-weight:600; font-size:12px; color:var(--text); white-space:normal; max-width:140px;">${escapeHtml(p.name)}</div>
+          ${isMismatch ? `<div style="font-size:9px; color:var(--gold); margin-top:1px;">⚠ статус «Оплачен»</div>` : ''}
+        </td>
+        <td style="color:var(--gold);">${fmtMoney(balance)}</td>
+        <td style="color:${netColor};">${fmtMoney(net)}</td>
+        <td style="color:var(--blue);">${feeTotal > 0 ? fmtMoney(feeTotal) : '—'}</td>
+        <td style="color:var(--text-dim);">${fmtMoney(expenses)}</td>
+      </tr>`;
+    }).join('');
+
+    debtCard.innerHTML = `
+      <div style="overflow-x:auto; -webkit-overflow-scrolling:touch;">
+      <table class="constr-sum-table">
+        <thead>
+          <tr>
+            <th>Проект</th>
+            <th>Долг</th>
+            <th>Заработок компании</th>
+            <th>Заработок исполнителя</th>
+            <th>Затраты</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td style="font-weight:700; color:var(--text);">Итого</td>
+            <td style="color:var(--gold);">${fmtMoney(totalBalance)}</td>
+            <td style="color:${totalNet<0?'var(--red)':'var(--green)'};">${fmtMoney(totalNet)}</td>
+            <td style="color:var(--blue);">${fmtMoney(totalFee)}</td>
+            <td style="color:var(--text-dim);">${fmtMoney(totalExpenses)}</td>
+          </tr>
+        </tfoot>
+      </table>
       </div>`;
-      netCard.innerHTML = headerRow + netRows.map(({p, net, mainRemaining, coRemaining, mainEmp, coEmp})=>{
-        const cat = findCategory(p.category_id);
-        const netColor = net < 0 ? 'var(--red)' : 'var(--green)';
-        const feeTotal = mainRemaining + coRemaining;
-        const empNames = [mainRemaining>0 ? (mainEmp?mainEmp.name:'исполнитель') : null, coRemaining>0 ? (coEmp?coEmp.name:'соисполнитель') : null].filter(Boolean).join(', ');
-        return `<div class="list-item" onclick="openProjectSheet('${p.id}')" style="cursor:pointer;">
-          <div>
-            <div class="li-name">${escapeHtml(p.name)}</div>
-            <div class="li-meta">${cat ? escapeHtml(cat.name) : '—'}${empNames ? ' · '+escapeHtml(empNames) : ''}</div>
-          </div>
-          <div style="display:flex; align-items:center; gap:10px;">
-            <div style="text-align:right; min-width:74px; color:${netColor}; font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:14px;">${fmtMoney(net)}</div>
-            <div style="text-align:right; min-width:74px; color:var(--gold); font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:14px;">${feeTotal > 0 ? fmtMoney(feeTotal) : '—'}</div>
-          </div>
-        </div>`;
-      }).join('') +
-      `<div class="note" style="margin-top:6px; padding-top:8px; border-top:1px solid var(--line);">Итого осталось получить: <b style="color:var(--text)">${fmtMoney(totalNet)}</b></div>`;
-    }
   }
 
   // Active projects with deadlines, sorted by days left
@@ -8187,6 +8162,7 @@ let ceStyleSelected = '';
 let ceFeatureSelected = [];
 let ceCurrentId = null;
 let ceImages = [null, null, null, null]; // [facade1, facade2, plan1, plan2]
+let ceThumbs = [null, null, null, null]; // маленькие превью тех же 4 фото — для быстрого каталога
 let ceFloorsSelected = 2;
 
 // Показ/скрытие adminbar при смене view
@@ -8214,9 +8190,77 @@ async function loadCards(){
     applyCardsRole();
     renderCardsList();
     renderShareLinks();
+    backfillCardThumbnails(); // фоново, не блокирует отрисовку
   } catch(e){
     console.error('loadCards error', e);
   }
+}
+
+// Декодирует картинку (data: или https:) в маленький JPEG-превью через canvas.
+function makeThumbFromUrl(url){
+  return new Promise((resolve, reject)=>{
+    const img = new Image();
+    if(!url.startsWith('data:')) img.crossOrigin = 'anonymous';
+    img.onload = ()=>{
+      let w = img.naturalWidth, h = img.naturalHeight;
+      if(w > THUMB_MAX_SIDE || h > THUMB_MAX_SIDE){
+        if(w >= h){ h = Math.round(h*THUMB_MAX_SIDE/w); w = THUMB_MAX_SIDE; }
+        else      { w = Math.round(w*THUMB_MAX_SIDE/h); h = THUMB_MAX_SIDE; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      try{ resolve(canvas.toDataURL('image/jpeg', THUMB_QUALITY)); }
+      catch(e){ reject(e); }
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+// Разовая фоновая починка старых карточек каталога:
+//  1) картинки, всё ещё хранящиеся как base64 прямо в строке БД (раздувают project_cards),
+//     выгружаются в Storage и заменяются на URL;
+//  2) для всех фото генерируется маленькое превью (thumbnails) — чтобы список каталога
+//     не грузил полноразмерные фото ради иконки 56×56.
+// Идемпотентно — карточки, у которых всё уже в порядке, пропускаются.
+async function backfillCardThumbnails(){
+  if(!canEditCards()) return;
+  const needsWork = cardsData.filter(c =>
+    Array.isArray(c.images) && c.images.some(Boolean) &&
+    (!Array.isArray(c.thumbnails) || c.thumbnails.length < c.images.filter(Boolean).length || c.images.some(im=>im && im.startsWith('data:')))
+  );
+  if(!needsWork.length) return;
+  for(const card of needsWork){
+    try{
+      const newImages = [];
+      const newThumbs = [];
+      for(let i=0;i<card.images.length;i++){
+        const src = card.images[i];
+        if(!src){ newImages.push(null); newThumbs.push(null); continue; }
+        let fullUrl = src;
+        if(src.startsWith('data:')){
+          const blob = dataURLtoBlob(src);
+          const fileName = `cards/backfill_${card.id}_${Date.now()}_${i}_${Math.random().toString(36).slice(2,7)}.jpg`;
+          const {error: upErr} = await sb.storage.from('expense-photos').upload(fileName, blob, {contentType:'image/jpeg', upsert:true});
+          if(upErr) throw upErr;
+          fullUrl = sb.storage.from('expense-photos').getPublicUrl(fileName).data.publicUrl;
+        }
+        newImages.push(fullUrl);
+        const thumbDataUrl = await makeThumbFromUrl(fullUrl);
+        const thumbBlob = dataURLtoBlob(thumbDataUrl);
+        const thumbName = `cards/thumb_${card.id}_${Date.now()}_${i}_${Math.random().toString(36).slice(2,7)}.jpg`;
+        const {error: thErr} = await sb.storage.from('expense-photos').upload(thumbName, thumbBlob, {contentType:'image/jpeg', upsert:true});
+        if(thErr) throw thErr;
+        newThumbs.push(sb.storage.from('expense-photos').getPublicUrl(thumbName).data.publicUrl);
+      }
+      const {error: updErr} = await sb.from('project_cards').update({images:newImages, thumbnails:newThumbs}).eq('id', card.id);
+      if(updErr) throw updErr;
+      card.images = newImages;
+      card.thumbnails = newThumbs;
+    }catch(e){ console.warn('Не удалось обновить превью карточки каталога', card.id, e); }
+  }
+  renderCardsList();
 }
 
 // ── Рендер списка карточек ──
@@ -8292,8 +8336,8 @@ function renderCardsList(){
           </div>
         </div>
         <div style="text-align:right;flex-shrink:0;">
-          ${card.images?.[0]
-            ? `<img src="${card.images[0]}" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid rgba(22,35,58,0.1);" onerror="this.parentNode.innerHTML='<div style=\'width:56px;height:56px;border-radius:8px;background:rgba(61,143,224,0.1);display:flex;align-items:center;justify-content:center;font-size:22px;border:1px dashed rgba(61,143,224,0.3);\'>🏠</div>'"/>`
+          ${(card.thumbnails?.[0] || card.images?.[0])
+            ? `<img src="${card.thumbnails?.[0] || card.images[0]}" loading="lazy" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid rgba(22,35,58,0.1);" onerror="this.parentNode.innerHTML='<div style=\'width:56px;height:56px;border-radius:8px;background:rgba(61,143,224,0.1);display:flex;align-items:center;justify-content:center;font-size:22px;border:1px dashed rgba(61,143,224,0.3);\'>🏠</div>'"/>`
             : `<div style="width:56px;height:56px;border-radius:8px;background:rgba(61,143,224,0.08);display:flex;align-items:center;justify-content:center;font-size:22px;border:1px dashed rgba(61,143,224,0.25);" title="Фото не загружено">🏠</div>`}
           <div style="font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:700;color:var(--blue);margin-top:4px;">${card.price ? card.price+' ₽' : ''}</div>
         </div>
@@ -8307,6 +8351,7 @@ function openCardEditor(id){
   if(!canEditCards()){ showToast('Нет доступа'); return; }
   ceCurrentId = id || null;
   ceImages = [null, null, null, null];
+  ceThumbs = [null, null, null, null];
 
   // Reset form
   ['ce-num','ce-title','ce-area','ce-footprint','ce-beds','ce-baths','ce-price','ce-tags','ce-area1','ce-area2','ce-expl1','ce-expl2'].forEach(f=>{
@@ -8369,6 +8414,7 @@ function openCardEditor(id){
           }
         });
         ceImages = [...card.images, null, null, null, null].slice(0,4);
+        ceThumbs = card.thumbnails ? [...card.thumbnails, null, null, null, null].slice(0,4) : [null, null, null, null];
       }
     }
   } else {
@@ -8434,6 +8480,8 @@ function toggleFeature(f, el){
 // ============================================================
 const IMG_MAX_SIDE = 1920;   // px по длинной стороне
 const IMG_QUALITY  = 0.85;   // JPEG качество
+const THUMB_MAX_SIDE = 240;  // px — маленькое превью для списков (каталог и т.п.)
+const THUMB_QUALITY  = 0.7;
 
 // Возвращает Promise<Blob> — сжатый JPEG.
 // Если файл уже меньше maxSide с обеих сторон и меньше 300КБ — не перекодирует.
@@ -8511,8 +8559,20 @@ function ceLoadImg(input, previewId, idx, nameId){
     const canvas = document.createElement('canvas');
     canvas.width = w; canvas.height = h;
     canvas.getContext('2d').drawImage(source, 0, 0, w, h);
-    if(source.close) source.close();
     const compressed = canvas.toDataURL('image/jpeg', IMG_QUALITY);
+
+    // Маленькое превью (для списка каталога) — из того же декодированного источника
+    let tw = width, th = height;
+    if(tw > THUMB_MAX_SIDE || th > THUMB_MAX_SIDE){
+      if(tw >= th){ th = Math.round(th * THUMB_MAX_SIDE / tw); tw = THUMB_MAX_SIDE; }
+      else        { tw = Math.round(tw * THUMB_MAX_SIDE / th); th = THUMB_MAX_SIDE; }
+    }
+    const thumbCanvas = document.createElement('canvas');
+    thumbCanvas.width = tw; thumbCanvas.height = th;
+    thumbCanvas.getContext('2d').drawImage(source, 0, 0, tw, th);
+    const thumb = thumbCanvas.toDataURL('image/jpeg', THUMB_QUALITY);
+
+    if(source.close) source.close();
 
     // Показываем размер после сжатия
     const kb = Math.round(compressed.length * 0.75 / 1024);
@@ -8520,6 +8580,7 @@ function ceLoadImg(input, previewId, idx, nameId){
     if(nm) nm.textContent = `${file.name.slice(0,18)}… · ${kb} КБ`;
 
     ceImages[idx] = compressed;
+    ceThumbs[idx] = thumb;
     const el = document.getElementById(previewId);
     if(el){ el.src = compressed; el.style.display = 'block'; }
     if(idx===0){ const pi=document.getElementById('prev-facade-img'); if(pi){pi.src=compressed;pi.style.display='block';} const ph=document.getElementById('prev-facade-ph'); if(ph)ph.style.display='none'; }
@@ -8614,6 +8675,9 @@ async function saveCard(){
     // Сначала выгружаем фото в Storage (снимает проблему больших base64 в строке БД)
     const uploadedImages = await uploadCardImages(ceImages);
     ceImages = uploadedImages.slice(); // чтобы повторное сохранение не грузило заново
+    // Маленькие превью — отдельно, чтобы список каталога не грузил полноразмерные фото
+    const uploadedThumbs = await uploadCardImages(ceThumbs);
+    ceThumbs = uploadedThumbs.slice();
     const payload = {
       project_number: document.getElementById('ce-num').value.trim(),
       title: 'Проект №'+(document.getElementById('ce-num').value.trim())+' — '+(document.getElementById('ce-title').value.trim()),
@@ -8638,6 +8702,7 @@ async function saveCard(){
       expl1: parseExpl(document.getElementById('ce-expl1').value),
       expl2: ceFloorsSelected >= 2 ? parseExpl(document.getElementById('ce-expl2').value) : [],
       images: uploadedImages,
+      thumbnails: uploadedThumbs,
       updated_at: new Date().toISOString(),
     };
 
