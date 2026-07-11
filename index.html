@@ -3052,23 +3052,34 @@ function renderOverview(){
       // Если гонорар исполнителя ≤ 30 000₽, расходы легли на компанию — они ещё не
       // учтены в остатке гонорара (companyExpenseShare), поэтому вычитаем отдельно.
       const net = balance - feeRemaining - (f.companyExpenseShare || 0);
-      return {p, balance, feeRemaining, net};
+      const mainRemaining = Math.max(0, (f.mainFeeAmount||0) - (f.mainPaid||0));
+      const coRemaining = Math.max(0, (f.coFeeAmount||0) - (f.coPaid||0));
+      const mainEmp = findEmployee(p.employee_id);
+      const coEmp = p.co_employee_id ? findEmployee(p.co_employee_id) : null;
+      return {p, balance, feeRemaining, net, mainRemaining, coRemaining, mainEmp, coEmp};
     }).sort((a,b)=>b.net-a.net);
 
     if(!netRows.length){
       netCard.innerHTML = '<div class="empty-state">Нет непогашенных долгов</div>';
     }else{
       const totalNet = netRows.reduce((s,r)=>s+r.net,0);
-      netCard.innerHTML = netRows.map(({p, net, feeRemaining})=>{
+      const headerRow = `<div style="display:flex; justify-content:flex-end; gap:10px; padding-bottom:6px; margin-bottom:2px; border-bottom:1px solid var(--line);">
+        <div style="text-align:right; min-width:74px; font-size:9px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.04em;">Компания</div>
+        <div style="text-align:right; min-width:74px; font-size:9px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.04em;">Исполнитель</div>
+      </div>`;
+      netCard.innerHTML = headerRow + netRows.map(({p, net, mainRemaining, coRemaining, mainEmp, coEmp})=>{
         const cat = findCategory(p.category_id);
-        const color = net < 0 ? 'var(--red)' : 'var(--gold)';
+        const netColor = net < 0 ? 'var(--red)' : 'var(--green)';
+        const feeTotal = mainRemaining + coRemaining;
+        const empNames = [mainRemaining>0 ? (mainEmp?mainEmp.name:'исполнитель') : null, coRemaining>0 ? (coEmp?coEmp.name:'соисполнитель') : null].filter(Boolean).join(', ');
         return `<div class="list-item" onclick="openProjectSheet('${p.id}')" style="cursor:pointer;">
           <div>
             <div class="li-name">${escapeHtml(p.name)}</div>
-            <div class="li-meta">${cat ? escapeHtml(cat.name) : '—'}${feeRemaining > 0 ? ' · гонорар к выплате ' + fmtMoney(feeRemaining) : ''}</div>
+            <div class="li-meta">${cat ? escapeHtml(cat.name) : '—'}${empNames ? ' · '+escapeHtml(empNames) : ''}</div>
           </div>
-          <div style="display:flex; align-items:center; gap:8px;">
-            <span style="color:${color}; font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:14px;">${fmtMoney(net)}</span>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div style="text-align:right; min-width:74px; color:${netColor}; font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:14px;">${fmtMoney(net)}</div>
+            <div style="text-align:right; min-width:74px; color:var(--gold); font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:14px;">${feeTotal > 0 ? fmtMoney(feeTotal) : '—'}</div>
           </div>
         </div>`;
       }).join('') +
