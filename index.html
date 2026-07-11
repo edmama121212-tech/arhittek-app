@@ -2994,7 +2994,7 @@ function renderOverview(){
   }else{
     let html = debts.map(p=>{
       const cat = findCategory(p.category_id);
-      return `<div class="list-item">
+      return `<div class="list-item" onclick="openProjectSheet('${p.id}')" style="cursor:pointer;">
         <div>
           <div class="li-name">${escapeHtml(p.name)}</div>
           <div class="li-meta">${cat ? escapeHtml(cat.name) : '—'}${p.client_name ? ' · 👤 '+escapeHtml(p.client_name) : ''}</div>
@@ -3011,7 +3011,7 @@ function renderOverview(){
         <div style="font-size:10px; color:var(--gold); font-weight:700; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:6px;">⚠ Расхождение статуса и остатка</div>
         ${mismatch.map(p=>{
           const cat = findCategory(p.category_id);
-          return `<div class="list-item">
+          return `<div class="list-item" onclick="openProjectSheet('${p.id}')" style="cursor:pointer;">
             <div>
               <div class="li-name">${escapeHtml(p.name)}</div>
               <div class="li-meta" style="color:var(--gold);">Статус: Оплачен, но остаток ${fmtMoney(p.balance)}</div>
@@ -3046,7 +3046,7 @@ function renderOverview(){
       netCard.innerHTML = netRows.map(({p, net, feeRemaining})=>{
         const cat = findCategory(p.category_id);
         const color = net < 0 ? 'var(--red)' : 'var(--gold)';
-        return `<div class="list-item">
+        return `<div class="list-item" onclick="openProjectSheet('${p.id}')" style="cursor:pointer;">
           <div>
             <div class="li-name">${escapeHtml(p.name)}</div>
             <div class="li-meta">${cat ? escapeHtml(cat.name) : '—'}${feeRemaining > 0 ? ' · гонорар ' + fmtMoney(feeRemaining) : ''}</div>
