@@ -561,7 +561,7 @@
       <div class="section-label"><span class="lbl-text">Долги клиентов</span><span class="section-label-line"></span></div>
       <div class="card" id="debtCard"></div>
 
-      <div class="section-label"><span class="lbl-text">Долг за вычетом гонорара</span><span class="section-label-line"></span></div>
+      <div class="section-label"><span class="lbl-text">Выручка компании</span><span class="section-label-line"></span></div>
       <div class="card" id="netCard"></div>
 
       <div class="card" id="activeProjectsCard" style="display:none;"></div>
@@ -1489,7 +1489,7 @@
         <input type="number" id="pf-expenses" placeholder="0" readonly title="Складывается из списка расходов ниже">
       </div>
       <div class="field">
-        <label>Выплачено гонорара, ₽</label>
+        <label>Выплачено гонорара исполнителю, ₽</label>
         <input type="number" id="pf-feepaid" placeholder="0">
       </div>
     </div>
@@ -1516,7 +1516,7 @@
 
     <div class="field-row">
       <div class="field">
-        <label>% гонорара (своё, иначе из категории)</label>
+        <label>% гонорара исполнителя (своё, иначе из категории)</label>
         <input type="number" id="pf-feepercent" placeholder="например: 40">
       </div>
       <div class="field">
@@ -1526,6 +1526,16 @@
           <option value="profit">% от прибыли</option>
           <option value="price">% от цены</option>
         </select>
+      </div>
+    </div>
+    <div class="field-row" id="pf-cofee-row">
+      <div class="field">
+        <label>% гонорара соисполнителя</label>
+        <input type="number" id="pf-co-feepercent" placeholder="например: 20">
+      </div>
+      <div class="field">
+        <label>Выплачено гонорара соисполнителю, ₽</label>
+        <input type="number" id="pf-co-feepaid" placeholder="0">
       </div>
     </div>
 
@@ -3029,34 +3039,33 @@ function renderOverview(){
     debtCard.innerHTML = html;
   }
 
-  // Тот же список долгов, но за вычетом гонорара исполнителя, который ещё не выплачен —
-  // показывает, сколько из непогашенного долга реально останется компании.
+  // Выручка компании: (цена − расходы) − гонорар исполнителя и соисполнителя,
+  // по всем проектам с ценой > 0 — независимо от того, оплатил клиент уже или нет.
   const netCard = document.getElementById('netCard');
   if(netCard){
-    const netRows = [...debts, ...mismatch].map(p=>{
-      const balance = Number(p.balance) || 0;
+    const netRows = state.projects.filter(p=>Number(p.price) > 0).map(p=>{
       const f = getProjectFee(p);
-      return {p, balance, feeRemaining: f.remaining, net: balance - f.remaining};
+      return {p, feeAmount: f.feeAmount, net: f.profit - f.feeAmount};
     }).sort((a,b)=>b.net-a.net);
 
     if(!netRows.length){
-      netCard.innerHTML = '<div class="empty-state">Нет непогашенных долгов</div>';
+      netCard.innerHTML = '<div class="empty-state">Нет проектов с указанной ценой</div>';
     }else{
       const totalNet = netRows.reduce((s,r)=>s+r.net,0);
-      netCard.innerHTML = netRows.map(({p, net, feeRemaining})=>{
+      netCard.innerHTML = netRows.map(({p, net, feeAmount})=>{
         const cat = findCategory(p.category_id);
         const color = net < 0 ? 'var(--red)' : 'var(--gold)';
         return `<div class="list-item" onclick="openProjectSheet('${p.id}')" style="cursor:pointer;">
           <div>
             <div class="li-name">${escapeHtml(p.name)}</div>
-            <div class="li-meta">${cat ? escapeHtml(cat.name) : '—'}${feeRemaining > 0 ? ' · гонорар ' + fmtMoney(feeRemaining) : ''}</div>
+            <div class="li-meta">${cat ? escapeHtml(cat.name) : '—'}${feeAmount > 0 ? ' · гонорар ' + fmtMoney(feeAmount) : ''}</div>
           </div>
           <div style="display:flex; align-items:center; gap:8px;">
             <span style="color:${color}; font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:14px;">${fmtMoney(net)}</span>
           </div>
         </div>`;
       }).join('') +
-      `<div class="note" style="margin-top:6px; padding-top:8px; border-top:1px solid var(--line);">Итого чистыми: <b style="color:var(--text)">${fmtMoney(totalNet)}</b></div>`;
+      `<div class="note" style="margin-top:6px; padding-top:8px; border-top:1px solid var(--line);">Итого выручка: <b style="color:var(--text)">${fmtMoney(totalNet)}</b></div>`;
     }
   }
 
@@ -3903,6 +3912,9 @@ function recalcLiveFeeSummary(){
     fee_percent: document.getElementById('pf-feepercent').value === '' ? null : parseFloat(document.getElementById('pf-feepercent').value),
     fee_base: document.getElementById('pf-feebase').value || null,
     fee_paid: parseFloat(document.getElementById('pf-feepaid').value) || 0,
+    co_employee_id: document.getElementById('pf-co-employee').value || null,
+    co_fee_percent: document.getElementById('pf-co-feepercent').value === '' ? null : parseFloat(document.getElementById('pf-co-feepercent').value),
+    co_fee_paid: parseFloat(document.getElementById('pf-co-feepaid').value) || 0,
   };
   renderFeeSummaryForProject(live);
 }
@@ -3913,7 +3925,7 @@ document.getElementById('pf-price').addEventListener('input', ()=>{
   document.getElementById('pf-balance').value = Math.max(0, price - advance);
   recalcLiveFeeSummary();
 });
-['pf-expenses','pf-feepercent','pf-feebase','pf-feepaid'].forEach(id=>{
+['pf-expenses','pf-feepercent','pf-feebase','pf-feepaid','pf-co-employee','pf-co-feepercent','pf-co-feepaid'].forEach(id=>{
   document.getElementById(id).addEventListener('input', recalcLiveFeeSummary);
   document.getElementById(id).addEventListener('change', recalcLiveFeeSummary);
 });
@@ -3981,6 +3993,8 @@ function openProjectSheet(id){
     document.getElementById('pf-feepaid').value = p.fee_paid ?? '';
     document.getElementById('pf-feepercent').value = p.fee_percent ?? '';
     document.getElementById('pf-feebase').value = p.fee_base || '';
+    document.getElementById('pf-co-feepercent').value = p.co_fee_percent ?? '';
+    document.getElementById('pf-co-feepaid').value = p.co_fee_paid ?? '';
     document.getElementById('pf-start').value = p.start_date || '';
     document.getElementById('pf-end').value = p.end_date || '';
     document.getElementById('pf-notes').value = p.notes || '';
@@ -4054,6 +4068,8 @@ function openProjectSheet(id){
     document.getElementById('pf-feepaid').value = '';
     document.getElementById('pf-feepercent').value = '';
     document.getElementById('pf-feebase').value = '';
+    document.getElementById('pf-co-feepercent').value = '';
+    document.getElementById('pf-co-feepaid').value = '';
     document.getElementById('pf-start').value = '';
     document.getElementById('pf-end').value = '';
     document.getElementById('pf-notes').value = '';
@@ -4122,6 +4138,8 @@ async function saveProject(){
     fee_paid: parseFloat(document.getElementById('pf-feepaid').value) || 0,
     fee_percent: document.getElementById('pf-feepercent').value === '' ? null : parseFloat(document.getElementById('pf-feepercent').value),
     fee_base: document.getElementById('pf-feebase').value || null,
+    co_fee_percent: document.getElementById('pf-co-feepercent').value === '' ? null : parseFloat(document.getElementById('pf-co-feepercent').value),
+    co_fee_paid: parseFloat(document.getElementById('pf-co-feepaid').value) || 0,
     start_date: document.getElementById('pf-start').value || null,
     end_date: document.getElementById('pf-end').value || null,
     notes: document.getElementById('pf-notes').value.trim(),
@@ -4261,23 +4279,27 @@ function calcFee(p){
   const cat = findCategory(p.category_id);
   const feePercent = (p.fee_percent !== null && p.fee_percent !== undefined) ? Number(p.fee_percent) : (cat ? Number(cat.fee_percent) : 0);
   const feeBase = p.fee_base || (cat ? cat.fee_base : 'profit');
+  const coFeePercent = Number(p.co_fee_percent) || 0;
 
   const price = Number(p.price) || 0;
   const expenses = Number(p.expenses) || 0;
   const profit = price - expenses;
+  const base = feeBase === 'price' ? price : profit;
 
-  let feeAmount;
-  if(feeBase === 'price'){
-    feeAmount = price * feePercent / 100;
-  }else{
-    feeAmount = profit * feePercent / 100;
-  }
-  if(feeAmount < 0) feeAmount = 0;
+  // Гонорар исполнителя и соисполнителя считаются от одной и той же базы,
+  // каждый по своему проценту — у каждого может быть свой % (см. карточку проекта).
+  let mainFeeAmount = base * feePercent / 100;
+  if(mainFeeAmount < 0) mainFeeAmount = 0;
+  let coFeeAmount = p.co_employee_id ? base * coFeePercent / 100 : 0;
+  if(coFeeAmount < 0) coFeeAmount = 0;
 
-  const paid = Number(p.fee_paid) || 0;
+  const feeAmount = mainFeeAmount + coFeeAmount;
+  const mainPaid = Number(p.fee_paid) || 0;
+  const coPaid = Number(p.co_fee_paid) || 0;
+  const paid = mainPaid + coPaid;
   const remaining = feeAmount - paid;
 
-  return {feePercent, feeBase, profit, feeAmount, paid, remaining};
+  return {feePercent, feeBase, coFeePercent, profit, feeAmount, paid, remaining, mainFeeAmount, coFeeAmount, mainPaid, coPaid};
 }
 
 function renderEmployeeFeeSummary(){
@@ -4290,8 +4312,10 @@ function renderEmployeeFeeSummary(){
     let earned = 0, paid = 0;
     projects.forEach(p=>{
       const f = getProjectFee(p);
-      earned += f.feeAmount;
-      paid += f.paid;
+      // У каждого своя доля гонорара — исполнителю mainFeeAmount, соисполнителю coFeeAmount,
+      // иначе при совпадении обоих полей на одном проекте сумма считалась бы дважды.
+      if(p.employee_id === emp.id){ earned += f.mainFeeAmount; paid += f.mainPaid; }
+      if(p.co_employee_id === emp.id){ earned += f.coFeeAmount; paid += f.coPaid; }
     });
     return {emp, count: projects.length, earned, paid, remaining: Math.max(0, earned - paid)};
   }).filter(r=>r.count > 0);
@@ -4362,10 +4386,13 @@ function renderFeeSummaryForProject(p){
   if(!el) return;
   const f = getProjectFee(p);
   const baseLabel = f.feeBase === 'price' ? '% от цены' : f.feeBase === 'expenses' ? '% от расходов' : '% от прибыли';
+  const hasCoExec = !!p.co_employee_id;
   el.innerHTML = `
-    <div style="font-weight:700; font-size:13px; margin-bottom:6px;">Гонорар ARHITTEK (${f.feePercent}% · ${baseLabel})</div>
-    <div class="fee-row"><div class="fl">Начислено</div><div class="fv">${fmtMoney(f.feeAmount)}</div></div>
-    <div class="fee-row"><div class="fl">Выплачено</div><div class="fv">${fmtMoney(f.paid)}</div></div>
+    <div style="font-weight:700; font-size:13px; margin-bottom:6px;">Гонорар (${baseLabel})</div>
+    <div class="fee-row"><div class="fl">Исполнитель — ${f.feePercent}%</div><div class="fv">${fmtMoney(f.mainFeeAmount)}</div></div>
+    ${hasCoExec ? `<div class="fee-row"><div class="fl">Соисполнитель — ${f.coFeePercent}%</div><div class="fv">${fmtMoney(f.coFeeAmount)}</div></div>` : ''}
+    <div class="fee-row"><div class="fl">Начислено всего</div><div class="fv">${fmtMoney(f.feeAmount)}</div></div>
+    <div class="fee-row"><div class="fl">Выплачено всего</div><div class="fv">${fmtMoney(f.paid)}</div></div>
     <div class="fee-row remaining"><div class="fl">Осталось выплатить</div><div class="fv">${fmtMoney(Math.max(0,f.remaining))}</div></div>
   `;
 }
@@ -5058,15 +5085,20 @@ function renderStatuses(){
 // CONSTRUCTION OBJECTS (Строительный отдел)
 // ============================================================
 function calcConstrFee(p){
-  // Гонорар = fee_percent% от суммарных расходов (expenses)
+  // Гонорар = fee_percent% от суммарных расходов (expenses); соисполнитель — свой % от той же базы
   const price = Number(p.price)||0;
   const expenses = Number(p.expenses)||0;
   const profit = price - expenses;
   const feePercent = Number(p.fee_percent)||0;
-  const feeAmount = Math.max(0, expenses * feePercent / 100);
-  const paid = Number(p.fee_paid)||0;
+  const coFeePercent = Number(p.co_fee_percent)||0;
+  const mainFeeAmount = Math.max(0, expenses * feePercent / 100);
+  const coFeeAmount = p.co_employee_id ? Math.max(0, expenses * coFeePercent / 100) : 0;
+  const feeAmount = mainFeeAmount + coFeeAmount;
+  const mainPaid = Number(p.fee_paid)||0;
+  const coPaid = Number(p.co_fee_paid)||0;
+  const paid = mainPaid + coPaid;
   const remaining = Math.max(0, feeAmount - paid);
-  return {feePercent, feeBase:'expenses', profit, feeAmount, paid, remaining};
+  return {feePercent, feeBase:'expenses', coFeePercent, profit, feeAmount, paid, remaining, mainFeeAmount, coFeeAmount, mainPaid, coPaid};
 }
 
 function getConstrProjects(){
