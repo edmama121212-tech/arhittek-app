@@ -3039,33 +3039,36 @@ function renderOverview(){
     debtCard.innerHTML = html;
   }
 
-  // Выручка компании: (цена − расходы) − гонорар исполнителя и соисполнителя,
-  // по всем проектам с ценой > 0 — независимо от того, оплатил клиент уже или нет.
+  // Выручка компании: сколько ЕЩЁ ОСТАЛОСЬ ПОЛУЧИТЬ — из непогашенного остатка (balance)
+  // вычитаем гонорар исполнителя и соисполнителя, который ещё не выплачен. Тот же список
+  // проектов, что и «Долги клиентов» (проектный отдел, строительные объекты не входят —
+  // там остаток это бюджет объекта, а не долг компании).
   const netCard = document.getElementById('netCard');
   if(netCard){
-    const netRows = state.projects.filter(p=>Number(p.price) > 0).map(p=>{
+    const netRows = [...debts, ...mismatch].map(p=>{
+      const balance = Number(p.balance) || 0;
       const f = getProjectFee(p);
-      return {p, feeAmount: f.feeAmount, net: f.profit - f.feeAmount};
+      return {p, balance, feeRemaining: Math.max(0, f.remaining), net: balance - Math.max(0, f.remaining)};
     }).sort((a,b)=>b.net-a.net);
 
     if(!netRows.length){
-      netCard.innerHTML = '<div class="empty-state">Нет проектов с указанной ценой</div>';
+      netCard.innerHTML = '<div class="empty-state">Нет непогашенных долгов</div>';
     }else{
       const totalNet = netRows.reduce((s,r)=>s+r.net,0);
-      netCard.innerHTML = netRows.map(({p, net, feeAmount})=>{
+      netCard.innerHTML = netRows.map(({p, net, feeRemaining})=>{
         const cat = findCategory(p.category_id);
         const color = net < 0 ? 'var(--red)' : 'var(--gold)';
         return `<div class="list-item" onclick="openProjectSheet('${p.id}')" style="cursor:pointer;">
           <div>
             <div class="li-name">${escapeHtml(p.name)}</div>
-            <div class="li-meta">${cat ? escapeHtml(cat.name) : '—'}${feeAmount > 0 ? ' · гонорар ' + fmtMoney(feeAmount) : ''}</div>
+            <div class="li-meta">${cat ? escapeHtml(cat.name) : '—'}${feeRemaining > 0 ? ' · гонорар к выплате ' + fmtMoney(feeRemaining) : ''}</div>
           </div>
           <div style="display:flex; align-items:center; gap:8px;">
             <span style="color:${color}; font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:14px;">${fmtMoney(net)}</span>
           </div>
         </div>`;
       }).join('') +
-      `<div class="note" style="margin-top:6px; padding-top:8px; border-top:1px solid var(--line);">Итого выручка: <b style="color:var(--text)">${fmtMoney(totalNet)}</b></div>`;
+      `<div class="note" style="margin-top:6px; padding-top:8px; border-top:1px solid var(--line);">Итого осталось получить: <b style="color:var(--text)">${fmtMoney(totalNet)}</b></div>`;
     }
   }
 
