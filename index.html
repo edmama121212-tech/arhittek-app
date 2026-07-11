@@ -561,6 +561,9 @@
       <div class="section-label"><span class="lbl-text">Долги клиентов</span><span class="section-label-line"></span></div>
       <div class="card" id="debtCard"></div>
 
+      <div class="section-label"><span class="lbl-text">Долг за вычетом гонорара</span><span class="section-label-line"></span></div>
+      <div class="card" id="netCard"></div>
+
       <div class="card" id="activeProjectsCard" style="display:none;"></div>
 
       <div id="stagesNotifBlock"></div>
@@ -3024,6 +3027,37 @@ function renderOverview(){
     const totalShown = [...debts, ...mismatch].reduce((s,p)=>s+Number(p.balance),0);
     html += `<div class="note" style="margin-top:6px; padding-top:8px; border-top:1px solid var(--line);">Итого по всем проектам: <b style="color:var(--text)">${fmtMoney(totalDebt)}</b></div>`;
     debtCard.innerHTML = html;
+  }
+
+  // Тот же список долгов, но за вычетом гонорара исполнителя, который ещё не выплачен —
+  // показывает, сколько из непогашенного долга реально останется компании.
+  const netCard = document.getElementById('netCard');
+  if(netCard){
+    const netRows = [...debts, ...mismatch].map(p=>{
+      const balance = Number(p.balance) || 0;
+      const f = getProjectFee(p);
+      return {p, balance, feeRemaining: f.remaining, net: balance - f.remaining};
+    }).sort((a,b)=>b.net-a.net);
+
+    if(!netRows.length){
+      netCard.innerHTML = '<div class="empty-state">Нет непогашенных долгов</div>';
+    }else{
+      const totalNet = netRows.reduce((s,r)=>s+r.net,0);
+      netCard.innerHTML = netRows.map(({p, net, feeRemaining})=>{
+        const cat = findCategory(p.category_id);
+        const color = net < 0 ? 'var(--red)' : 'var(--gold)';
+        return `<div class="list-item">
+          <div>
+            <div class="li-name">${escapeHtml(p.name)}</div>
+            <div class="li-meta">${cat ? escapeHtml(cat.name) : '—'}${feeRemaining > 0 ? ' · гонорар ' + fmtMoney(feeRemaining) : ''}</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="color:${color}; font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:14px;">${fmtMoney(net)}</span>
+          </div>
+        </div>`;
+      }).join('') +
+      `<div class="note" style="margin-top:6px; padding-top:8px; border-top:1px solid var(--line);">Итого чистыми: <b style="color:var(--text)">${fmtMoney(totalNet)}</b></div>`;
+    }
   }
 
   // Active projects with deadlines, sorted by days left
