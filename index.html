@@ -1675,6 +1675,11 @@
       <input type="text" id="invSheet-desc" placeholder="что куплено / какая работа">
     </div>
 
+    <div class="field" style="display:flex;align-items:center;gap:8px;flex-direction:row;">
+      <input type="checkbox" id="invSheet-paid-client" style="width:auto;">
+      <label style="margin:0;" for="invSheet-paid-client">🤝 Оплачено заказчиком напрямую (минуя компанию)</label>
+    </div>
+
     <div class="field">
       <label>Заменить фото</label>
       <div style="display:flex;gap:8px;margin-bottom:6px;">
@@ -1994,6 +1999,16 @@ function getProjectExpenses(p){
     return matTotal + workTotal;
   }
   return Number(p.expenses) || 0;
+}
+
+// Накладные, отмеченные «оплачено заказчиком напрямую» (заказчик оплатил
+// поставщику сам, минуя компанию). Сумма всё равно входит в затраты объекта
+// (getProjectExpenses), но не должна считаться перерасходом компании —
+// компания эти деньги не тратила и не получала.
+function getProjectDirectClientPaid(p){
+  return state.invoices
+    .filter(inv => inv.project_id === p.id && inv.paid_by_client)
+    .reduce((s,i)=>s+Number(i.amount||0), 0);
 }
 
 // Единая точка расчёта гонорара — строительные объекты считаются по calcConstrFee
@@ -2879,12 +2894,13 @@ function renderConstrSummary(){
     // ФИКС (аудит, находка №1): расходы Стройки считаются ТОЛЬКО из накладных,
     // без исключений — эталон Митаева 21. Ручное поле p.expenses здесь больше
     // не используется, чтобы Обзор и вкладка «Стройка» всегда показывали одно и то же число.
-    const expenses  = invExpenses;
-    const budgetLeft= price - invExpenses;
-    const isOver    = budgetLeft < 0;
+    const expenses    = invExpenses;
+    const directPaid  = getProjectDirectClientPaid(p);
+    const budgetLeft  = price + directPaid - invExpenses;
+    const isOver      = budgetLeft < 0;
     const f         = calcConstrFee({...p, expenses});
     const st        = findStatus(p.status_id);
-    return { p, price, expenses, budgetLeft, isOver, f, st };
+    return { p, price, expenses, directPaid, budgetLeft, isOver, f, st };
   });
 
   // Итоговые суммы
@@ -2894,13 +2910,13 @@ function renderConstrSummary(){
   const totFee      = rows.reduce((s,r)=>s+r.f.feeAmount,0);
   const totFeePaid  = rows.reduce((s,r)=>s+r.f.paid,0);
 
-  const rowsHtml = rows.map(({p, price, expenses, budgetLeft, isOver, f, st}) => `
+  const rowsHtml = rows.map(({p, price, expenses, directPaid, budgetLeft, isOver, f, st}) => `
     <tr onclick="openObjectView('${p.id}')" style="cursor:pointer;" class="constr-sum-row">
       <td>
         <div style="font-weight:600; font-size:13px; color:var(--text);">${escapeHtml(p.name)}</div>
         ${st ? `<div style="font-size:10px; color:var(--text-dim); margin-top:2px;">${escapeHtml(st.name)}</div>` : ''}
       </td>
-      <td style="color:${isOver ? 'var(--red)' : 'var(--text)'}; font-weight:${isOver ? '700' : '400'};">${isOver ? '⚠ ' : ''}${fmtMoney(budgetLeft)}</td>
+      <td style="color:${isOver ? 'var(--red)' : 'var(--text)'}; font-weight:${isOver ? '700' : '400'};" title="${directPaid > 0 ? 'Из них '+fmtMoney(directPaid)+' оплачено заказчиком напрямую' : ''}">${isOver ? '⚠ ' : ''}${fmtMoney(budgetLeft)}${directPaid > 0 ? ' 🤝' : ''}</td>
       <td style="color:var(--red);">${fmtMoney(expenses)}</td>
       <td style="color:var(--green);">${fmtMoney(price)}</td>
       <td style="color:var(--blue);">${f.feePercent ? f.feePercent+'%' : '—'}</td>
@@ -5222,9 +5238,10 @@ function renderConstruction(){
       .filter(i=>i.item_type==='Работа')
       .reduce((s,i)=>s+Number(i.amount),0);
     const expenses = matTotal + workTotal;
+    const directPaid = getProjectDirectClientPaid(p);
     const f = calcConstrFee({...p, expenses});
     const pct = price > 0 ? Math.min(100, Math.round((expenses/price)*100)) : 0;
-    const budgetLeft = price - expenses;
+    const budgetLeft = price + directPaid - expenses;
     const isOverspent = budgetLeft < 0;
 
     if(!showFinance){
@@ -5270,6 +5287,10 @@ function renderConstruction(){
           <div class="fl">🔨 Работы</div>
           <div class="fv">${fmtMoney(workTotal)}</div>
         </div>
+        ${directPaid > 0 ? `<div class="fee-row" style="padding:5px 0;">
+          <div class="fl">🤝 Оплачено заказчиком напрямую</div>
+          <div class="fv" style="color:var(--text-dim);">${fmtMoney(directPaid)}</div>
+        </div>` : ''}
         <div class="fee-row" style="padding:5px 0; border-top:1px solid var(--line); margin-top:2px;">
           <div class="fl">Итого расход</div>
           <div class="fv" style="color:var(--red);">${fmtMoney(expenses)}</div>
@@ -5333,7 +5354,8 @@ function renderObjectSummary(p){
   const matTotal = projInvoices.filter(i=>['Материал','Инструмент','Расходник','Доставка'].includes(i.item_type)).reduce((s,i)=>s+Number(i.amount),0);
   const workTotal = projInvoices.filter(i=>i.item_type==='Работа').reduce((s,i)=>s+Number(i.amount),0);
   const expenses = matTotal + workTotal;
-  const balance = price - expenses;
+  const directPaid = getProjectDirectClientPaid(p);
+  const balance = price + directPaid - expenses;
   const isOverspent = balance < 0;
   const f = calcConstrFee({...p, expenses});
 
@@ -5350,6 +5372,7 @@ function renderObjectSummary(p){
       <div class="fee-row"><div class="fl">Приход от заказчика</div><div class="fv" style="color:var(--green)">${fmtMoney(price)}</div></div>
       <div class="fee-row"><div class="fl">Материалы и чеки</div><div class="fv">${fmtMoney(matTotal)}</div></div>
       <div class="fee-row"><div class="fl">Работы</div><div class="fv">${fmtMoney(workTotal)}</div></div>
+      ${directPaid > 0 ? `<div class="fee-row"><div class="fl">🤝 Из них оплачено заказчиком напрямую</div><div class="fv" style="color:var(--text-dim)">${fmtMoney(directPaid)}</div></div>` : ''}
       <div class="fee-row"><div class="fl">Итого расход</div><div class="fv" style="color:var(--red)">${fmtMoney(expenses)}</div></div>
       <div class="fee-row"><div class="fl">${isOverspent ? '⚠ Перерасход' : 'Остаток на объекте'}</div><div class="fv" style="color:${isOverspent?'var(--red)':'var(--gold)'}">${isOverspent ? '−'+fmtMoney(Math.abs(balance)) : fmtMoney(balance)}</div></div>
       <div class="fee-row total"><div class="fl">Гонорар ARHITTEK ${f.feePercent}% от расходов</div><div class="fv">${fmtMoney(f.feeAmount)}</div></div>
@@ -5410,6 +5433,7 @@ function makeInvoiceRow(inv){
         ${inv.description && inv.number && inv.description!==inv.number ? `<div class="inv-desc">${escapeHtml(inv.description)}</div>` : ''}
         <span class="inv-type-badge inv-type-${typeCls}">${escapeHtml(inv.item_type)}</span>
         ${inv.category ? `<span class="inv-type-badge" style="background:rgba(22,35,58,0.08);color:var(--text-dim);">${escapeHtml(inv.category)}</span>` : ''}
+        ${inv.paid_by_client ? `<span class="inv-type-badge" style="background:rgba(232,163,61,0.15);color:var(--gold);" title="Заказчик оплатил напрямую, минуя компанию">🤝 Оплачено заказчиком</span>` : ''}
       </div>
       <div class="inv-right">
         <div class="inv-amount ${typeCls}">${fmtMoney(inv.amount)}</div>
@@ -5590,6 +5614,10 @@ function renderObjTabContent(){
         </select>
         <label>Сумма, ₽</label>
         <input type="number" id="inv-amount-obj" placeholder="0">
+        <div style="display:flex;align-items:center;gap:8px;margin:6px 0;">
+          <input type="checkbox" id="inv-paid-client-obj" style="width:auto;">
+          <label style="margin:0;" for="inv-paid-client-obj">🤝 Оплачено заказчиком напрямую (минуя компанию)</label>
+        </div>
         <label>Фото накладной (необязательно)</label>
         <div style="display:flex; gap:8px; margin-bottom:6px;">
           <label class="photo-upload-label" style="flex:1; margin:0;" for="inv-photo-obj">🖼 Из галереи</label>
@@ -5651,6 +5679,8 @@ async function addInvoice(projectId){
   const description = document.getElementById(`inv-desc-${suffix}`).value.trim();
   const item_type = document.getElementById(`inv-type-${suffix}`).value;
   const amount = parseFloat(document.getElementById(`inv-amount-${suffix}`).value);
+  const paidClientEl = document.getElementById(`inv-paid-client-${suffix}`);
+  const paid_by_client = paidClientEl ? paidClientEl.checked : false;
   const photoInput = document.getElementById(`inv-photo-${suffix}`);
   const photoFile = photoInput?.files?.[0];
 
@@ -5668,7 +5698,7 @@ async function addInvoice(projectId){
     }
 
     const {error} = await sb.from('invoices').insert({
-      project_id: projectId, number, invoice_date, category, item_type, description, amount, photo_url
+      project_id: projectId, number, invoice_date, category, item_type, description, amount, photo_url, paid_by_client
     });
     if(error) throw error;
 
@@ -5716,6 +5746,7 @@ function openInvoiceSheet(invId){
   document.getElementById('invSheet-amount').value   = inv.amount || '';
   document.getElementById('invSheet-category').value = inv.category || '';
   document.getElementById('invSheet-desc').value     = inv.description || '';
+  document.getElementById('invSheet-paid-client').checked = !!inv.paid_by_client;
   document.getElementById('invSheet-photo-name').textContent = '';
 
   // Фото
@@ -5768,6 +5799,7 @@ async function saveInvoiceSheet(){
   const amount       = parseFloat(document.getElementById('invSheet-amount').value);
   const category     = document.getElementById('invSheet-category').value.trim();
   const description  = document.getElementById('invSheet-desc').value.trim();
+  const paid_by_client = document.getElementById('invSheet-paid-client').checked;
 
   if(!amount || amount <= 0){ showToast('Укажите сумму'); return; }
   if(!invoice_date){ showToast('Укажите дату накладной'); return; }
@@ -5781,7 +5813,7 @@ async function saveInvoiceSheet(){
     }
 
     const {error} = await sb.from('invoices').update({
-      number, invoice_date, item_type, amount, category, description, photo_url
+      number, invoice_date, item_type, amount, category, description, photo_url, paid_by_client
     }).eq('id', invSheetCurrentId);
     if(error) throw error;
 
