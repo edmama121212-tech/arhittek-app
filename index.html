@@ -799,6 +799,16 @@
         <div class='loading-state'>Загрузка…</div>
       </div>
 
+      <div class='section-label' id='catalogPriceSection' style='display:none;'><span class='lbl-text'>Цена готовых проектов (каталог)</span><span class='section-label-line'></span></div>
+      <div class='card' id='catalogPriceCard' style='display:none;'>
+        <div class='field'>
+          <label>Ставка за м², ₽</label>
+          <input type='number' id='catalog-price-per-sqm' placeholder='150'>
+        </div>
+        <div class='note' style='margin-bottom:10px;'>Цена в карточках каталога считается автоматически: площадь этажа × эта ставка. При сохранении новой ставки поле цены в карточке можно подправить вручную под конкретный проект.</div>
+        <button class='btn btn-primary' id='catalogPriceSaveBtn'>Сохранить ставку</button>
+      </div>
+
     </div>
 
   <!-- ===================== КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ ===================== -->
@@ -1174,7 +1184,7 @@
         <div style="margin-bottom:10px;"><div style="font-size:10px;color:#6b7280;letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:6px;">Номер проекта</div><input class="ce-inp" id="ce-num" placeholder="13225" oninput="cePreview()"/></div>
         <div style="margin-bottom:10px;"><div style="font-size:10px;color:#6b7280;letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:6px;">Название (без номера)</div><input class="ce-inp" id="ce-title" placeholder="дом в классическом стиле с навесом" oninput="cePreview()"/></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
-          <div><div style="font-size:10px;color:#6b7280;letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:6px;">Площадь, м²</div><input class="ce-inp" id="ce-area" placeholder="493" oninput="cePreview()"/></div>
+          <div><div style="font-size:10px;color:#6b7280;letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:6px;">Площадь, м²</div><input class="ce-inp" id="ce-area" placeholder="493" oninput="ceAutoPrice()"/></div>
           <div><div style="font-size:10px;color:#6b7280;letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:6px;">Габарит</div><input class="ce-inp" id="ce-footprint" placeholder="20×29" oninput="cePreview()"/></div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
@@ -1221,12 +1231,26 @@
 
         <div style="margin-bottom:10px;">
           <div style="font-size:10px;color:#6b7280;letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:4px;">Экспликация 1-го этажа</div>
-          <div style="font-size:10px;color:#4b5563;margin-bottom:6px;">Каждая строка: Название: площадь</div>
+          <div style="font-size:10px;color:#4b5563;margin-bottom:6px;">Каждая строка: Название: площадь — или отсканируйте таблицу</div>
           <textarea class="ce-inp" id="ce-expl1" rows="5" placeholder="Прихожая: 20.40&#10;Коридор: 24.79&#10;Зал: 36.90" style="resize:vertical;font-size:11px;" oninput="cePreview()"></textarea>
+          <div style="display:flex;gap:8px;margin-top:6px;">
+            <label class="ce-scan-btn" for="ce-expl1-scan-photo">🖼 Фото таблицы</label>
+            <label class="ce-scan-btn" for="ce-expl1-scan-camera">📷 Сканировать</label>
+          </div>
+          <input type="file" id="ce-expl1-scan-photo" accept="image/*" style="display:none;" onchange="scanExplication(this,'ce-expl1')">
+          <input type="file" id="ce-expl1-scan-camera" accept="image/*" capture="environment" style="display:none;" onchange="scanExplication(this,'ce-expl1')">
+          <div id="ce-expl1-scan-status"></div>
         </div>
         <div id="ce-expl2-field" style="margin-bottom:20px;">
           <div style="font-size:10px;color:#6b7280;letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:4px;">Экспликация 2-го этажа</div>
           <textarea class="ce-inp" id="ce-expl2" rows="5" placeholder="Спальня: 23.25&#10;Спальня: 22.60&#10;Гардероб: 10.00" style="resize:vertical;font-size:11px;" oninput="cePreview()"></textarea>
+          <div style="display:flex;gap:8px;margin-top:6px;">
+            <label class="ce-scan-btn" for="ce-expl2-scan-photo">🖼 Фото таблицы</label>
+            <label class="ce-scan-btn" for="ce-expl2-scan-camera">📷 Сканировать</label>
+          </div>
+          <input type="file" id="ce-expl2-scan-photo" accept="image/*" style="display:none;" onchange="scanExplication(this,'ce-expl2')">
+          <input type="file" id="ce-expl2-scan-camera" accept="image/*" capture="environment" style="display:none;" onchange="scanExplication(this,'ce-expl2')">
+          <div id="ce-expl2-scan-status"></div>
         </div>
       </div>
 
@@ -1342,6 +1366,15 @@
 </div>
 <style>
 .ce-inp{width:100%;background:#1f2937;border:1px solid #374151;border-radius:8px;padding:9px 11px;font-size:13px;color:#e5e7eb;font-family:inherit;outline:none;transition:border-color .15s;box-sizing:border-box;}
+.ce-scan-btn{flex:1;text-align:center;padding:8px;border-radius:8px;border:1px dashed #374151;color:#9ca3af;font-size:11px;cursor:pointer;transition:border-color .15s,color .15s;}
+.ce-scan-btn:hover{border-color:#3D8FE0;color:#3D8FE0;}
+.ce-scan-status{font-size:11px;color:#9ca3af;margin-top:6px;line-height:1.5;}
+.ce-scan-preview{background:#1f2937;border:1px solid #374151;border-radius:8px;padding:8px 10px;margin-top:6px;font-size:11px;color:#e5e7eb;}
+.ce-scan-preview .row{padding:2px 0;display:flex;justify-content:space-between;gap:8px;}
+.ce-scan-actions{display:flex;gap:8px;margin-top:8px;}
+.ce-scan-actions button{flex:1;padding:7px;border-radius:6px;border:none;font-size:11.5px;font-weight:600;cursor:pointer;}
+.ce-scan-add{background:#3D8FE0;color:#fff;}
+.ce-scan-cancel{background:#374151;color:#e5e7eb;}
 .ce-inp:focus{border-color:#3b82f6;}
 </style>
 
@@ -7341,6 +7374,33 @@ function openCompanyView(){
   window.scrollTo(0,0);
 }
 
+// Настройка «Ставка за м²» для каталога готовых проектов — видна только
+// редакторам каталога (canEditCards), как и сама вкладка «Каталог».
+function renderCatalogPriceSettings(){
+  const section = document.getElementById('catalogPriceSection');
+  const card = document.getElementById('catalogPriceCard');
+  if(!section || !card) return;
+  if(!canEditCards()){ section.style.display = 'none'; card.style.display = 'none'; return; }
+  section.style.display = '';
+  card.style.display = '';
+  const input = document.getElementById('catalog-price-per-sqm');
+  if(input) input.value = getCatalogPricePerSqm();
+}
+
+async function saveCatalogPricePerSqm(){
+  const val = parseFloat(document.getElementById('catalog-price-per-sqm').value);
+  if(!val || val <= 0){ showToast('Укажите положительную ставку'); return; }
+  showToast('Сохранение…');
+  try{
+    if(state.companyInfo && state.companyInfo.id){
+      const {error} = await sb.from('company_info').update({price_per_sqm: val}).eq('id', state.companyInfo.id);
+      if(error) throw error;
+    }
+    state.companyInfo = {...(state.companyInfo||{}), price_per_sqm: val};
+    showToast('Ставка сохранена');
+  }catch(e){ console.error(e); showToast('Ошибка сохранения'); }
+}
+
 async function saveCompanyInfo(){
   const payload = {
     full_name: document.getElementById('co-full-name').value.trim(),
@@ -8148,7 +8208,9 @@ document.getElementById('companySaveBtn').addEventListener('click', saveCompanyI
     document.getElementById('view-settings').classList.add('active');
     window.scrollTo(0,0);
     if(typeof renderNotifSettings === 'function') renderNotifSettings();
+    renderCatalogPriceSettings();
   });
+  document.getElementById('catalogPriceSaveBtn').addEventListener('click', saveCatalogPricePerSqm);
   document.getElementById('settingsBack').addEventListener('click', ()=>{
     document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
     document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
@@ -8444,6 +8506,8 @@ function openCardEditor(id){
   ceCurrentId = id || null;
   ceImages = [null, null, null, null];
   ceThumbs = [null, null, null, null];
+  ceScanPending = {};
+  ['ce-expl1-scan-status','ce-expl2-scan-status'].forEach(id2=>{ const el=document.getElementById(id2); if(el) el.innerHTML=''; });
 
   // Reset form
   ['ce-num','ce-title','ce-area','ce-footprint','ce-beds','ce-baths','ce-price','ce-tags','ce-area1','ce-area2','ce-expl1','ce-expl2'].forEach(f=>{
@@ -8686,6 +8750,132 @@ function cePrevTab(panelId,tabEl){
   document.getElementById('prev-tabs').querySelectorAll('div').forEach(t=>{t.style.color='#888';t.style.borderBottomColor='transparent';t.style.fontWeight='500';});
   const panel=document.getElementById(panelId); if(panel) panel.style.display='block';
   tabEl.style.color='#3D8FE0'; tabEl.style.borderBottomColor='#3D8FE0'; tabEl.style.fontWeight='600';
+}
+
+// Текущая ставка за м² для каталога готовых проектов (Ещё → Настройки)
+function getCatalogPricePerSqm(){
+  return Number(state.companyInfo?.price_per_sqm) || 150;
+}
+
+// Автоподстановка цены в редакторе карточки при вводе площади — площадь × ставка.
+// Поле цены остаётся редактируемым: если поправить его вручную и не менять
+// площадь дальше, ручное значение сохранится.
+function ceAutoPrice(){
+  const areaRaw = document.getElementById('ce-area').value;
+  const area = parseFloat((areaRaw||'').replace(',','.'));
+  if(area > 0){
+    const price = Math.round(area * getCatalogPricePerSqm());
+    document.getElementById('ce-price').value = price;
+  }
+  cePreview();
+}
+
+// ============================================================
+// СКАНИРОВАНИЕ ЭКСПЛИКАЦИИ (OCR) — фото/камера → список комнат с площадями
+// ============================================================
+let ceScanPending = {}; // fieldId -> распознанные строки, ждут подтверждения
+
+// Библиотека распознавания грузится только когда реально нужна — не тормозит
+// обычную загрузку приложения (Tesseract.js — это ~500КБ+ данные языка).
+function loadTesseractScript(){
+  return new Promise((resolve, reject)=>{
+    if(window.Tesseract){ resolve(); return; }
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('Не удалось загрузить библиотеку распознавания'));
+    document.head.appendChild(s);
+  });
+}
+
+// Разбирает сырой текст, распознанный с фото таблицы экспликации, на пары
+// «название комнаты — площадь». Рассчитано на строки вида «1 Кухня 12,5»,
+// «Спальня: 14.0 м²» и т.п. — реальный OCR по table-фото шумный, поэтому
+// результат всегда показывается на подтверждение, а не вставляется молча.
+function parseOcrExplicationText(text){
+  // Строки-итоги (не комнаты) — пропускаем всегда, даже с цифрой в конце.
+  // \b не работает с кириллицей в JS-регекспах, поэтому граница слова — через lookahead.
+  const TOTAL_WORDS = /^(итого|всего|общая\s+площадь|сумма)(?=[\s:.,]|$)/i;
+  // Заголовки таблицы — пропускаем, только если в строке вообще нет цифр
+  // (иначе так же отфильтровали бы настоящую комнату с похожим словом).
+  const HEADER_WORDS = /наименование|площадь,?\s*м|экспликац|помещен|поз\.?$/i;
+  const lines = (text||'').split('\n').map(l=>l.trim()).filter(Boolean);
+  const results = [];
+  for(const line of lines){
+    if(TOTAL_WORDS.test(line)) continue;
+    if(HEADER_WORDS.test(line) && !/\d/.test(line)) continue;
+    const m = line.match(/^(.*?)[\s:.\-–—]*?(\d{1,3}[.,]\d{1,2}|\d{1,3})\s*(?:м\s*[²2]|кв\.?\s*м\.?)?\.?\s*$/iu);
+    if(!m) continue;
+    let name = m[1].replace(/^\s*(?:№\s*)?\d{1,2}[.)]?\s+/, '').replace(/[\s:.\-–—]+$/, '').trim();
+    let area = m[2].replace(',', '.');
+    const areaNum = parseFloat(area);
+    if(!name || name.length < 2 || !areaNum || areaNum <= 0 || areaNum > 300) continue;
+    results.push({name, area});
+  }
+  return results;
+}
+
+async function scanExplication(input, fieldId){
+  const file = input.files[0];
+  if(!file) return;
+  const statusEl = document.getElementById(fieldId+'-scan-status');
+  statusEl.className = 'ce-scan-status';
+  statusEl.innerHTML = '⏳ Загружаем распознавание…';
+
+  try{
+    await loadTesseractScript();
+    statusEl.innerHTML = '⏳ Распознаём текст на фото…';
+    const { data: { text } } = await Tesseract.recognize(file, 'rus', {
+      logger: m => {
+        if(m.status === 'recognizing text' && m.progress != null){
+          statusEl.innerHTML = `⏳ Распознаём… ${Math.round(m.progress*100)}%`;
+        }
+      }
+    });
+
+    const rows = parseOcrExplicationText(text);
+    if(!rows.length){
+      ceScanPending[fieldId] = null;
+      statusEl.innerHTML = `
+        <div class="ce-scan-preview">
+          Не удалось разобрать таблицу на комнаты и площади. Распознанный текст (проверьте и впишите вручную):<br>
+          <div style="margin-top:4px;color:#9ca3af;white-space:pre-wrap;">${escapeHtml((text||'').trim().slice(0,400)) || '(пусто)'}</div>
+        </div>`;
+      input.value = '';
+      return;
+    }
+
+    ceScanPending[fieldId] = rows;
+    statusEl.innerHTML = `
+      <div class="ce-scan-preview">
+        Распознано комнат: ${rows.length}
+        ${rows.map(r=>`<div class="row"><span>${escapeHtml(r.name)}</span><span>${escapeHtml(r.area)}</span></div>`).join('')}
+        <div class="ce-scan-actions">
+          <button type="button" class="ce-scan-add" onclick="applyScannedExplication('${fieldId}')">Добавить в список</button>
+          <button type="button" class="ce-scan-cancel" onclick="cancelScannedExplication('${fieldId}')">Отмена</button>
+        </div>
+      </div>`;
+  }catch(e){
+    console.error('OCR error', e);
+    statusEl.innerHTML = '⚠ Не удалось распознать фото — попробуйте другое фото или впишите вручную';
+  }
+  input.value = '';
+}
+
+function applyScannedExplication(fieldId){
+  const rows = ceScanPending[fieldId];
+  if(!rows || !rows.length) return;
+  const ta = document.getElementById(fieldId);
+  const newLines = rows.map(r=>`${r.name}: ${r.area}`).join('\n');
+  ta.value = ta.value.trim() ? ta.value.trim()+'\n'+newLines : newLines;
+  cancelScannedExplication(fieldId);
+  cePreview();
+}
+
+function cancelScannedExplication(fieldId){
+  ceScanPending[fieldId] = null;
+  const statusEl = document.getElementById(fieldId+'-scan-status');
+  if(statusEl) statusEl.innerHTML = '';
 }
 
 function cePreview(){
