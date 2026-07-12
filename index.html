@@ -8788,6 +8788,30 @@ function loadTesseractScript(){
   });
 }
 
+// Готовит фото для OCR: увеличивает мелкий текст и повышает контраст —
+// сильно улучшает распознавание таблиц (тонкие линии сетки, неровный свет
+// на фото с телефона) по сравнению с сырым фото без обработки.
+async function preprocessForOcr(file){
+  const {source, width, height} = await loadOrientedImage(file);
+  const TARGET_SIDE = 2000;
+  const scale = TARGET_SIDE / Math.max(width, height);
+  const w = Math.round(width * scale), h = Math.round(height * scale);
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(source, 0, 0, w, h);
+  if(source.close) source.close();
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const d = imgData.data;
+  for(let i=0;i<d.length;i+=4){
+    const gray = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+    const contrasted = Math.min(255, Math.max(0, (gray-128)*1.6 + 128));
+    d[i] = d[i+1] = d[i+2] = contrasted;
+  }
+  ctx.putImageData(imgData, 0, 0);
+  return canvas;
+}
+
 // Разбирает сырой текст, распознанный с фото таблицы экспликации, на пары
 // «название комнаты — площадь». Рассчитано на строки вида «1 Кухня 12,5»,
 // «Спальня: 14.0 м²» и т.п. — реальный OCR по table-фото шумный, поэтому
@@ -8822,16 +8846,29 @@ async function scanExplication(input, fieldId){
   statusEl.className = 'ce-scan-status';
   statusEl.innerHTML = '⏳ Загружаем распознавание…';
 
+  let worker = null;
   try{
     await loadTesseractScript();
+    statusEl.innerHTML = '⏳ Готовим фото…';
+    const prepared = await preprocessForOcr(file);
+
     statusEl.innerHTML = '⏳ Распознаём текст на фото…';
-    const { data: { text } } = await Tesseract.recognize(file, 'rus', {
+    // Важно: НЕ используем Tesseract.recognize() напрямую — у него нет доступа
+    // к setParameters, а с настройками по умолчанию (авто-разметка страницы)
+    // движок на таблицах путает линии сетки с символами и сбивает порядок
+    // чтения по столбцам. SINGLE_BLOCK читает как один связный блок построчно.
+    worker = await Tesseract.createWorker('rus', Tesseract.OEM.LSTM_ONLY, {
       logger: m => {
         if(m.status === 'recognizing text' && m.progress != null){
           statusEl.innerHTML = `⏳ Распознаём… ${Math.round(m.progress*100)}%`;
         }
       }
     });
+    await worker.setParameters({
+      tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
+      preserve_interword_spaces: '1',
+    });
+    const { data: { text } } = await worker.recognize(prepared);
 
     const rows = parseOcrExplicationText(text);
     if(!rows.length){
@@ -8841,25 +8878,25 @@ async function scanExplication(input, fieldId){
           Не удалось разобрать таблицу на комнаты и площади. Распознанный текст (проверьте и впишите вручную):<br>
           <div style="margin-top:4px;color:#9ca3af;white-space:pre-wrap;">${escapeHtml((text||'').trim().slice(0,400)) || '(пусто)'}</div>
         </div>`;
-      input.value = '';
-      return;
+    } else {
+      ceScanPending[fieldId] = rows;
+      statusEl.innerHTML = `
+        <div class="ce-scan-preview">
+          Распознано комнат: ${rows.length}
+          ${rows.map(r=>`<div class="row"><span>${escapeHtml(r.name)}</span><span>${escapeHtml(r.area)}</span></div>`).join('')}
+          <div class="ce-scan-actions">
+            <button type="button" class="ce-scan-add" onclick="applyScannedExplication('${fieldId}')">Добавить в список</button>
+            <button type="button" class="ce-scan-cancel" onclick="cancelScannedExplication('${fieldId}')">Отмена</button>
+          </div>
+        </div>`;
     }
-
-    ceScanPending[fieldId] = rows;
-    statusEl.innerHTML = `
-      <div class="ce-scan-preview">
-        Распознано комнат: ${rows.length}
-        ${rows.map(r=>`<div class="row"><span>${escapeHtml(r.name)}</span><span>${escapeHtml(r.area)}</span></div>`).join('')}
-        <div class="ce-scan-actions">
-          <button type="button" class="ce-scan-add" onclick="applyScannedExplication('${fieldId}')">Добавить в список</button>
-          <button type="button" class="ce-scan-cancel" onclick="cancelScannedExplication('${fieldId}')">Отмена</button>
-        </div>
-      </div>`;
   }catch(e){
     console.error('OCR error', e);
     statusEl.innerHTML = '⚠ Не удалось распознать фото — попробуйте другое фото или впишите вручную';
+  }finally{
+    if(worker) await worker.terminate();
+    input.value = '';
   }
-  input.value = '';
 }
 
 function applyScannedExplication(fieldId){
