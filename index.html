@@ -8799,6 +8799,8 @@ async function preprocessForOcr(file){
   const canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;
   const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(source, 0, 0, w, h);
   if(source.close) source.close();
   const imgData = ctx.getImageData(0, 0, w, h);
@@ -8812,7 +8814,48 @@ async function preprocessForOcr(file){
   return canvas;
 }
 
-// Разбирает сырой текст, распознанный с фото таблицы экспликации, на пары
+// Tesseract сам решает, в каком порядке склеивать распознанные слова в
+// строки текста — и на многоколоночных таблицах (№ / Наименование / Площадь)
+// он регулярно перемешивает соседние колонки в одну «кашу» из букв и цифр.
+// Поэтому строку с raw text не используем вообще: берём слова с их
+// координатами (bbox) и сами группируем их в строки по вертикали, а внутри
+// строки сортируем по горизонтали — это даёт правильный порядок «слева направо».
+function extractOcrWords(data){
+  const words = [];
+  for(const block of (data && data.blocks) || []){
+    for(const para of block.paragraphs || []){
+      for(const line of para.lines || []){
+        for(const word of line.words || []){
+          const text = (word.text||'').trim();
+          if(!text || !word.bbox) continue;
+          words.push({ text, confidence: word.confidence, x0: word.bbox.x0, x1: word.bbox.x1, y0: word.bbox.y0, y1: word.bbox.y1 });
+        }
+      }
+    }
+  }
+  return words;
+}
+
+function wordsToRowLines(words, minConfidence){
+  const kept = words.filter(w => w.confidence == null || w.confidence >= minConfidence);
+  if(!kept.length) return [];
+  const heights = kept.map(w => w.y1 - w.y0).sort((a,b) => a-b);
+  const medianH = heights[Math.floor(heights.length/2)] || 20;
+  const yTol = Math.max(medianH * 0.6, 8);
+  const sorted = kept.slice().sort((a,b) => (a.y0+a.y1) - (b.y0+b.y1));
+  const rows = [];
+  for(const w of sorted){
+    const cy = (w.y0 + w.y1) / 2;
+    let row = rows.find(r => Math.abs(r.cy - cy) <= yTol);
+    if(!row){ row = { cy, words: [] }; rows.push(row); }
+    row.words.push(w);
+    row.cy = row.words.reduce((s,x) => s + (x.y0+x.y1)/2, 0) / row.words.length;
+  }
+  rows.sort((a,b) => a.cy - b.cy);
+  return rows.map(r => r.words.slice().sort((a,b) => a.x0-b.x0).map(w => w.text).join(' '));
+}
+
+// Разбирает строки (уже собранные из слов по координатам, см. выше) на пары
 // «название комнаты — площадь». Рассчитано на строки вида «1 Кухня 12,5»,
 // «Спальня: 14.0 м²» и т.п. — реальный OCR по table-фото шумный, поэтому
 // результат всегда показывается на подтверждение, а не вставляется молча.
@@ -8854,9 +8897,10 @@ async function scanExplication(input, fieldId){
 
     statusEl.innerHTML = '⏳ Распознаём текст на фото…';
     // Важно: НЕ используем Tesseract.recognize() напрямую — у него нет доступа
-    // к setParameters, а с настройками по умолчанию (авто-разметка страницы)
-    // движок на таблицах путает линии сетки с символами и сбивает порядок
-    // чтения по столбцам. SINGLE_BLOCK читает как один связный блок построчно.
+    // к setParameters. PSM.AUTO (движок сам ищет разметку страницы) точнее
+    // находит отдельные слова на таблице, чем SINGLE_BLOCK — но сам порядок
+    // склейки слов в строки от Tesseract всё равно ненадёжен на колонках,
+    // поэтому строки мы собираем сами из координат слов (см. wordsToRowLines).
     worker = await Tesseract.createWorker('rus', Tesseract.OEM.LSTM_ONLY, {
       logger: m => {
         if(m.status === 'recognizing text' && m.progress != null){
@@ -8865,18 +8909,22 @@ async function scanExplication(input, fieldId){
       }
     });
     await worker.setParameters({
-      tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
+      tessedit_pageseg_mode: Tesseract.PSM.AUTO,
       preserve_interword_spaces: '1',
     });
-    const { data: { text } } = await worker.recognize(prepared);
+    const { data } = await worker.recognize(prepared, {}, { blocks: true, text: true });
 
-    const rows = parseOcrExplicationText(text);
+    const words = extractOcrWords(data);
+    const rowLines = wordsToRowLines(words, 35);
+    const rebuiltText = rowLines.join('\n');
+    const rows = parseOcrExplicationText(rebuiltText);
     if(!rows.length){
       ceScanPending[fieldId] = null;
+      const fallbackText = rebuiltText || data.text || '';
       statusEl.innerHTML = `
         <div class="ce-scan-preview">
           Не удалось разобрать таблицу на комнаты и площади. Распознанный текст (проверьте и впишите вручную):<br>
-          <div style="margin-top:4px;color:#9ca3af;white-space:pre-wrap;">${escapeHtml((text||'').trim().slice(0,400)) || '(пусто)'}</div>
+          <div style="margin-top:4px;color:#9ca3af;white-space:pre-wrap;">${escapeHtml(fallbackText.trim().slice(0,400)) || '(пусто)'}</div>
         </div>`;
     } else {
       ceScanPending[fieldId] = rows;
