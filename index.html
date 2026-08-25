@@ -5412,13 +5412,21 @@ function renderObjectSummary(p){
   const matTotal = projInvoices.filter(i=>['Материал','Инструмент','Расходник','Доставка'].includes(i.item_type)).reduce((s,i)=>s+Number(i.amount),0);
   const workTotal = projInvoices.filter(i=>i.item_type==='Работа').reduce((s,i)=>s+Number(i.amount),0);
   const expenses = matTotal + workTotal;
+
+  // Фактический приход по объекту берём из журнала поступлений.
+  // p.price остаётся плановым/договорным бюджетом и не подменяет фактический приход.
+  const incomeTypes = ['advance','final_payment','materials_budget','construction_budget','income'];
+  const received = (state.ledger || [])
+    .filter(l=>l.project_id===p.id && incomeTypes.includes(l.type) && !l.deleted_at)
+    .reduce((s,l)=>s+Number(l.amount||0),0);
+
   const directPaid = getProjectDirectClientPaid(p);
-  const balance = price + directPaid - expenses;
+  const balance = received + directPaid - expenses;
   const isOverspent = balance < 0;
   const f = calcConstrFee({...p, expenses});
 
-  const noBudgetWarning = price === 0 && expenses > 0
-    ? `<div style="background:rgba(232,163,61,0.12); border:1px solid rgba(232,163,61,0.3); border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:12px; color:var(--gold);">⚠ Бюджет не задан — укажите сумму прихода в карточке объекта для корректного расчёта остатка.</div>`
+  const noBudgetWarning = received === 0 && expenses > 0
+    ? `<div style="background:rgba(232,163,61,0.12); border:1px solid rgba(232,163,61,0.3); border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:12px; color:var(--gold);">⚠ Приход от заказчика не зарегистрирован — добавьте сумму прихода для корректного расчёта остатка.</div>`
     : '';
   const overspentWarning = isOverspent
     ? `<div style="background:rgba(224,82,82,0.12); border:1px solid rgba(224,82,82,0.3); border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:12px; color:var(--red);">🔴 Перерасход бюджета: ${fmtMoney(Math.abs(balance))} — расходы превышают приход от заказчика!</div>`
@@ -5427,7 +5435,7 @@ function renderObjectSummary(p){
   document.getElementById('objSummary').innerHTML = `
     ${noBudgetWarning}${overspentWarning}
     <div class="fee-card">
-      <div class="fee-row"><div class="fl">Приход от заказчика</div><div class="fv" style="color:var(--green)">${fmtMoney(price)}</div></div>
+      <div class="fee-row"><div class="fl">Приход от заказчика</div><div class="fv" style="color:var(--green)">${fmtMoney(received)}</div></div>
       <div class="fee-row"><div class="fl">Материалы и чеки</div><div class="fv">${fmtMoney(matTotal)}</div></div>
       <div class="fee-row"><div class="fl">Работы</div><div class="fv">${fmtMoney(workTotal)}</div></div>
       ${directPaid > 0 ? `<div class="fee-row"><div class="fl">🤝 Из них оплачено заказчиком напрямую</div><div class="fv" style="color:var(--text-dim)">${fmtMoney(directPaid)}</div></div>` : ''}
