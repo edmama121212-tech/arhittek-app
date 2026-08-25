@@ -2958,47 +2958,33 @@ function renderConstrSummary(){
   if(!el) return;
 
   const projects = getConstrProjects();
-
   if(!projects.length){
     el.innerHTML = '<div class="empty-state" style="padding:16px;">Нет строительных объектов</div>';
     return;
   }
 
-  // Считаем финансы по каждому объекту (та же логика что в renderConstruction)
   const rows = projects.map(p => {
-    const price   = Number(p.price) || 0;   // приход от заказчика
-    const projInv = state.invoices.filter(inv => inv.project_id === p.id);
-    const matTotal = projInv.filter(i => ['Материал','Инструмент','Расходник','Доставка'].includes(i.item_type)).reduce((s,i)=>s+Number(i.amount),0);
-    const workTotal = projInv.filter(i => i.item_type==='Работа').reduce((s,i)=>s+Number(i.amount),0);
-    const invExpenses = matTotal + workTotal;
-    // ФИКС (аудит, находка №1): расходы Стройки считаются ТОЛЬКО из накладных,
-    // без исключений — эталон Митаева 21. Ручное поле p.expenses здесь больше
-    // не используется, чтобы Обзор и вкладка «Стройка» всегда показывали одно и то же число.
-    const expenses    = invExpenses;
-    const directPaid  = getProjectDirectClientPaid(p);
-    const budgetLeft  = price + directPaid - invExpenses;
-    const isOver      = budgetLeft < 0;
-    const f         = calcConstrFee({...p, expenses});
-    const st        = findStatus(p.status_id);
-    return { p, price, expenses, directPaid, budgetLeft, isOver, f, st };
+    const fin = getConstructionFinancials(p);
+    const f = calcConstrFee({...p, expenses: fin.expenses});
+    const st = findStatus(p.status_id);
+    return {p, ...fin, f, st};
   });
 
-  // Итоговые суммы
-  const totPrice    = rows.reduce((s,r)=>s+r.price,0);
   const totExpenses = rows.reduce((s,r)=>s+r.expenses,0);
-  const totLeft     = rows.reduce((s,r)=>s+r.budgetLeft,0);
-  const totFee      = rows.reduce((s,r)=>s+r.f.feeAmount,0);
-  const totFeePaid  = rows.reduce((s,r)=>s+r.f.paid,0);
+  const totReceived = rows.reduce((s,r)=>s+r.received,0);
+  const totDirectPaid = rows.reduce((s,r)=>s+r.directPaid,0);
+  const totLeft = rows.reduce((s,r)=>s+r.balance,0);
+  const totFeePaid = rows.reduce((s,r)=>s+r.f.paid,0);
 
-  const rowsHtml = rows.map(({p, price, expenses, directPaid, budgetLeft, isOver, f, st}) => `
+  const rowsHtml = rows.map(({p, received, expenses, directPaid, balance, isOverspent, f, st}) => `
     <tr onclick="openObjectView('${p.id}')" style="cursor:pointer;" class="constr-sum-row">
       <td>
         <div style="font-weight:600; font-size:13px; color:var(--text);">${escapeHtml(p.name)}</div>
         ${st ? `<div style="font-size:10px; color:var(--text-dim); margin-top:2px;">${escapeHtml(st.name)}</div>` : ''}
       </td>
-      <td style="color:${isOver ? 'var(--red)' : 'var(--text)'}; font-weight:${isOver ? '700' : '400'};" title="${directPaid > 0 ? 'Из них '+fmtMoney(directPaid)+' оплачено заказчиком напрямую' : ''}">${isOver ? '⚠ ' : ''}${fmtMoney(budgetLeft)}${directPaid > 0 ? ' 🤝' : ''}</td>
+      <td style="color:${isOverspent ? 'var(--red)' : 'var(--text)'}; font-weight:${isOverspent ? '700' : '400'};" title="${directPaid > 0 ? 'Из них '+fmtMoney(directPaid)+' оплачено заказчиком напрямую' : ''}">${isOverspent ? '⚠ ' : ''}${fmtMoney(balance)}${directPaid > 0 ? ' 🤝' : ''}</td>
       <td style="color:var(--red);">${fmtMoney(expenses)}</td>
-      <td style="color:var(--green);">${fmtMoney(price)}</td>
+      <td style="color:var(--green);">${fmtMoney(received)}</td>
       <td style="color:var(--blue);">${f.feePercent ? f.feePercent+'%' : '—'}</td>
       <td style="color:var(--text-dim);">${f.paid > 0 ? fmtMoney(f.paid) : '—'}</td>
     </tr>
@@ -3007,31 +2993,19 @@ function renderConstrSummary(){
   el.innerHTML = `
     <div style="overflow-x:auto; -webkit-overflow-scrolling:touch;">
     <table class="constr-sum-table">
-      <thead>
-        <tr>
-          <th>Объект</th>
-          <th>Остаток</th>
-          <th>Расход</th>
-          <th>Приход</th>
-          <th>Гонорар</th>
-          <th>Выплачен</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rowsHtml}
-      </tbody>
+      <thead><tr><th>Объект</th><th>Остаток</th><th>Расход</th><th>Приход</th><th>Гонорар</th><th>Выплачен</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
       <tfoot>
         <tr>
           <td style="font-weight:700; color:var(--text);">Итого</td>
-          <td></td>
-          <td></td>
-          <td></td>
+          <td style="font-weight:700; color:${totLeft < 0 ? 'var(--red)' : 'var(--gold)'};">${fmtMoney(totLeft)}</td>
+          <td style="font-weight:700; color:var(--red);">${fmtMoney(totExpenses)}</td>
+          <td style="font-weight:700; color:var(--green);">${fmtMoney(totReceived)}</td>
           <td></td>
           <td style="color:var(--text-dim); font-weight:700;">${totFeePaid > 0 ? fmtMoney(totFeePaid) : '—'}</td>
         </tr>
       </tfoot>
-    </table>
-    </div>
+    </table></div>
   `;
 }
 
@@ -3357,7 +3331,8 @@ function renderAnalytics(){
     const isConstr = constrIds.has(e.project_id);
     if(analyticsMode === 'project' && isConstr) return;
     if(analyticsMode === 'constr' && !isConstr) return;
-    if(['advance','final_payment','income'].includes(e.type)){
+    const incomeTypesForAnalytics = isConstr ? CONSTRUCTION_INCOME_TYPES : ['advance','final_payment','income'];
+    if(incomeTypesForAnalytics.includes(e.type)){
       monthMap[key].income += Number(e.amount)||0;
     }
     if(['expense','payment','withdrawal'].includes(e.type)){
@@ -3651,10 +3626,10 @@ function renderPL(){
     const totalProfitSign = totalProfit >= 0 ? '+' : '';
 
     const totalDebt = state.projects
-      .filter(p => Number(p.balance) > 0)
+      .filter(p => !isConstructionProject(p) && Number(p.balance) > 0)
       .reduce((s,p) => s + (Number(p.balance)||0), 0);
 
-    const constrBudgetLeft = constrProjects.reduce((s,p) => s + (Number(p.balance)||0), 0);
+    const constrBudgetLeft = constrProjects.reduce((s,p) => s + getConstructionFinancials(p).balance, 0);
 
     el.innerHTML = `
                                                   <div class="card" style="margin-bottom:10px;">
@@ -3733,7 +3708,7 @@ function renderPL(){
           </div>
           ${constrProjects.length > 0 ? `<div class="fee-row">
             <div class="fl" style="color:var(--text-dim);">Долг клиентов · Строительный</div>
-            <div class="fv" style="color:var(--gold);">${fmtMoney(constrProjects.reduce((s,p)=>s+Math.max(0,Number(p.balance)||0),0))}</div>
+            <div class="fv" style="color:var(--gold);">${fmtMoney(Math.max(0, constrProjects.reduce((s,p)=>s+getConstructionFinancials(p).balance,0)))}</div>
           </div>` : ''}
           <div class="fee-row total" style="border-top:1px solid var(--line); margin-top:4px; padding-top:6px;">
             <div class="fl" style="color:var(--text-dim); font-weight:700;">Итого долг клиентов</div>
@@ -4318,6 +4293,10 @@ async function deleteProject(){
 async function updateProjectBalance(id, newBalance){
   try{
     const p = state.projects.find(x=>x.id===id);
+    if(p && isConstructionProject(p)){
+      showToast('Для строительного объекта остаток рассчитывается автоматически по приходам и расходам.');
+      return;
+    }
     const advance = p ? (Number(p.advance)||0) : 0;
     let payment_status;
     if(newBalance <= 0) payment_status = 'Оплачен';
@@ -4481,6 +4460,7 @@ const ledgerTypeLabels = {
   payment: {label:'Выплата мастеру', cls:'var(--red)', sign:'−'},
   final_payment: {label:'Оплата остатка', cls:'var(--green)', sign:'+'},
   materials_budget: {label:'Бюджет на материалы', cls:'var(--green)', sign:'+'},
+  construction_budget: {label:'Бюджет строительства', cls:'var(--green)', sign:'+'},
   fee_payment: {label:'Гонорар ARHITTEK', cls:'var(--blue)', sign:'+'},
   withdrawal: {label:'Вывод средств', cls:'var(--red)', sign:'−'},
   project_expense: {label:'Расход по проекту', cls:'var(--red)', sign:'−'},
@@ -4510,7 +4490,7 @@ function renderFeeSummaryForProject(p){
 function renderPaymentHistory(projectId){
   const container = document.getElementById('pf-payment-history');
   if(!container) return;
-  const paymentTypes = ['advance','final_payment','materials_budget','fee_payment','withdrawal'];
+  const paymentTypes = ['advance','final_payment','materials_budget','construction_budget','income','fee_payment','withdrawal'];
   const entries = state.ledger
     .filter(l=>l.project_id===projectId && paymentTypes.includes(l.type))
     .sort((a,b)=> new Date(b.entry_date) - new Date(a.entry_date) || new Date(b.created_at) - new Date(a.created_at));
@@ -4810,6 +4790,12 @@ async function savePayment(){
     }).select().single();
     if(error) throw error;
 
+    if(isConstructionProject(p) && paymentType !== 'fee_payment' && paymentType !== 'withdrawal'){
+      const finAfterPayment = getConstructionFinancials(p, [...(state.ledger||[]), data]);
+      const {error: syncErr} = await sb.from('projects').update({balance: finAfterPayment.balance}).eq('id', projectId);
+      if(syncErr) throw syncErr;
+    }
+
     await logAudit('project', projectId, p.name, 'update', {
       payment: {old:null, new: `${t?.label||paymentType} — ${fmtMoney(amount)}${note?' ('+note+')':''}`}
     });
@@ -4879,7 +4865,11 @@ async function cancelPayment(entryId){
 
     // Reverse the project financial fields
     const updates = {};
-    if(e.type === 'fee_payment'){
+    if(p && isConstructionProject(p) && e.type !== 'fee_payment' && e.type !== 'withdrawal'){
+      const ledgerAfterCancel = (state.ledger||[]).map(x=>x.id===entryId ? {...x, deleted_at:new Date().toISOString()} : x);
+      const finAfterCancel = getConstructionFinancials(p, ledgerAfterCancel);
+      updates.balance = finAfterCancel.balance;
+    }else if(e.type === 'fee_payment'){
       updates.fee_paid = Math.max(0, (Number(p?.fee_paid)||0) - (Number(e.amount)||0));
     } else if(e.type !== 'withdrawal'){
       const newAdvance = Math.max(0, (Number(p?.advance)||0) - (Number(e.amount)||0));
@@ -5194,6 +5184,56 @@ function renderStatuses(){
 // ============================================================
 // CONSTRUCTION OBJECTS (Строительный отдел)
 // ============================================================
+// ============================================================
+// ЕДИНЫЙ РАСЧЁТ ФИНАНСОВ СТРОИТЕЛЬНОГО ОБЪЕКТА
+// ============================================================
+const CONSTRUCTION_INCOME_TYPES = ['advance','final_payment','materials_budget','construction_budget','income'];
+
+function isConstructionProject(p){
+  if(!p) return false;
+  const cat = findCategory(p.category_id);
+  const constrDept = state.departments.find(d=>d.name==='Строительный отдел');
+  if(cat){
+    if(constrDept && cat.department_id === constrDept.id) return true;
+    const nm = (cat.name||'').toLowerCase();
+    if(nm.includes('строительств') || nm.includes('ремонт') || nm.includes('монтаж')) return true;
+  }
+  return (state.invoices||[]).some(inv=>inv.project_id===p.id);
+}
+
+function getConstructionReceived(projectId, ledgerOverride=null){
+  const ledger = ledgerOverride || state.ledger || [];
+  return ledger
+    .filter(e => e.project_id === projectId && CONSTRUCTION_INCOME_TYPES.includes(e.type) && !e.deleted_at)
+    .reduce((s,e) => s + Number(e.amount||0), 0);
+}
+
+function getConstructionExpenses(p){
+  const projInvoices = (state.invoices||[]).filter(inv=>inv.project_id===p.id);
+  const matTotal = projInvoices
+    .filter(i=>['Материал','Инструмент','Расходник','Доставка'].includes(i.item_type))
+    .reduce((s,i)=>s+Number(i.amount||0),0);
+  const workTotal = projInvoices
+    .filter(i=>i.item_type==='Работа')
+    .reduce((s,i)=>s+Number(i.amount||0),0);
+  return {matTotal, workTotal, expenses: matTotal + workTotal};
+}
+
+function getConstructionFinancials(p, ledgerOverride=null){
+  const {matTotal, workTotal, expenses} = getConstructionExpenses(p);
+  const received = getConstructionReceived(p.id, ledgerOverride);
+  const directPaid = getProjectDirectClientPaid(p);
+  const balance = received + directPaid - expenses;
+  const pct = received > 0 ? Math.min(100, Math.round((expenses / received) * 100)) : (expenses > 0 ? 100 : 0);
+  return {received, directPaid, matTotal, workTotal, expenses, balance, pct, isOverspent: balance < 0};
+}
+
+function syncConstructionProjectBalance(p, ledgerOverride=null){
+  if(!p || !isConstructionProject(p)) return null;
+  const f = getConstructionFinancials(p, ledgerOverride);
+  return f;
+}
+
 function calcConstrFee(p){
   // Гонорар = fee_percent% от суммарных расходов (expenses); соисполнитель — свой % от той же базы
   const price = Number(p.price)||0;
@@ -5253,110 +5293,47 @@ function renderConstruction(){
   const list = document.getElementById('constructionList');
   let projects = getConstrProjects();
 
-  if(session && !session.isAdmin){
-    projects = projects.filter(p=>isProjectMember(p.id));
-  }
-
-  // Фильтр по статусу
-  if(activeConstrStatusFilter !== 'all'){
-    projects = projects.filter(p=>p.status_id === activeConstrStatusFilter);
-  }
-
-  // Поиск
+  if(session && !session.isAdmin) projects = projects.filter(p=>isProjectMember(p.id));
+  if(activeConstrStatusFilter !== 'all') projects = projects.filter(p=>p.status_id === activeConstrStatusFilter);
   if(constrSearchQuery.trim()){
     const q = constrSearchQuery.trim().toLowerCase();
-    projects = projects.filter(p=>
-      (p.name||'').toLowerCase().includes(q) ||
-      (p.address||'').toLowerCase().includes(q)
-    );
+    projects = projects.filter(p=>(p.name||'').toLowerCase().includes(q) || (p.address||'').toLowerCase().includes(q));
   }
 
   if(!projects.length){
     const isFiltered = activeConstrStatusFilter !== 'all' || constrSearchQuery.trim();
-    list.innerHTML = `<div class="empty-state">
-      ${isFiltered
-        ? 'Нет объектов по этому фильтру'
-        : '<div style="font-size:32px;margin-bottom:10px;">🏗</div><div>Объектов строительства пока нет</div><button class="btn btn-primary" style="margin-top:14px;width:auto;padding:10px 24px;" onclick="document.querySelector(\'.fab\').click()">+ Добавить объект</button>'}
-    </div>`;
+    list.innerHTML = `<div class="empty-state">${isFiltered ? 'Нет объектов по этому фильтру' : '<div style="font-size:32px;margin-bottom:10px;">🏗</div><div>Объектов строительства пока нет</div><button class="btn btn-primary" style="margin-top:14px;width:auto;padding:10px 24px;" onclick="document.querySelector(\'.fab\').click()">+ Добавить объект</button>'}</div>`;
     return;
   }
 
   const showFinance = !session || session.isAdmin;
 
   list.innerHTML = projects.map(p=>{
-    const price = Number(p.price)||0;
     const st = findStatus(p.status_id);
-
-    // Расходы из накладных — идентично renderObjectSummary
-    const projInvoices = state.invoices.filter(inv=>inv.project_id===p.id);
-    const matTotal = projInvoices
-      .filter(i=>['Материал','Инструмент','Расходник','Доставка'].includes(i.item_type))
-      .reduce((s,i)=>s+Number(i.amount),0);
-    const workTotal = projInvoices
-      .filter(i=>i.item_type==='Работа')
-      .reduce((s,i)=>s+Number(i.amount),0);
-    const expenses = matTotal + workTotal;
-    const directPaid = getProjectDirectClientPaid(p);
-    const f = calcConstrFee({...p, expenses});
-    const pct = price > 0 ? Math.min(100, Math.round((expenses/price)*100)) : 0;
-    const budgetLeft = price + directPaid - expenses;
-    const isOverspent = budgetLeft < 0;
+    const fin = getConstructionFinancials(p);
+    const f = calcConstrFee({...p, expenses: fin.expenses});
+    const {received, directPaid, matTotal, workTotal, expenses, balance, pct, isOverspent} = fin;
 
     if(!showFinance){
       return `<div class="obj-card" onclick="openObjectView('${p.id}')">
-        <div class="obj-head">
-          <div>
-            <div class="obj-title">${escapeHtml(p.name)}</div>
-            <div class="obj-sub">${escapeHtml(p.address||'Нажмите для просмотра')}</div>
-          </div>
-          <div class="obj-chevron">›</div>
-        </div>
+        <div class="obj-head"><div><div class="obj-title">${escapeHtml(p.name)}</div><div class="obj-sub">${escapeHtml(p.address||'Нажмите для просмотра')}</div></div><div class="obj-chevron">›</div></div>
         ${st ? `<div class="status-chip" data-status="${escapeHtml(st.name)}" style="margin-top:8px; display:inline-block;">${escapeHtml(st.name)}</div>` : ''}
         <div class="obj-bar" style="margin-top:10px;"><i style="width:${pct}%"></i></div>
-        <div class="obj-bar-lbl"><span>Израсходовано ${pct}%</span><span>${projInvoices.length} записей</span></div>
+        <div class="obj-bar-lbl"><span>Израсходовано ${pct}%</span><span>${(state.invoices||[]).filter(i=>i.project_id===p.id).length} записей</span></div>
       </div>`;
     }
 
     return `<div class="obj-card" onclick="openObjectView('${p.id}')">
-      <div class="obj-head">
-        <div>
-          <div class="obj-title">${escapeHtml(p.name)}</div>
-          <div class="obj-sub">${escapeHtml(p.address||'')}</div>
-        </div>
-        <div style="display:flex; align-items:center; gap:6px;">
-          ${st ? `<span class="status-chip" data-status="${escapeHtml(st.name)}">${escapeHtml(st.name)}</span>` : ''}
-          <div class="obj-chevron">›</div>
-        </div>
-      </div>
-
+      <div class="obj-head"><div><div class="obj-title">${escapeHtml(p.name)}</div><div class="obj-sub">${escapeHtml(p.address||'')}</div></div><div style="display:flex; align-items:center; gap:6px;">${st ? `<span class="status-chip" data-status="${escapeHtml(st.name)}">${escapeHtml(st.name)}</span>` : ''}<div class="obj-chevron">›</div></div></div>
       <div class="obj-bar" style="margin-bottom:4px;"><i style="width:${pct}%; background:${pct>90?'var(--red)':pct>70?'var(--gold)':'var(--blue)'};"></i></div>
-      <div class="obj-bar-lbl"><span>Израсходовано ${pct}% бюджета</span><span style="color:${isOverspent?'var(--red)':''}">${isOverspent ? '⚠ Перерасход: '+fmtMoney(Math.abs(budgetLeft)) : 'Остаток: '+fmtMoney(budgetLeft)}</span></div>
-
+      <div class="obj-bar-lbl"><span>Израсходовано ${pct}% от полученного</span><span style="color:${isOverspent?'var(--red)':''}">${isOverspent ? '⚠ Перерасход: '+fmtMoney(Math.abs(balance)) : 'Остаток: '+fmtMoney(balance)}</span></div>
       <div style="margin-top:12px;">
-        <div class="fee-row" style="padding:5px 0;">
-          <div class="fl">💰 Бюджет (приход)</div>
-          <div class="fv" style="color:var(--green);">${fmtMoney(price)}</div>
-        </div>
-        <div class="fee-row" style="padding:5px 0;">
-          <div class="fl">📦 Материалы</div>
-          <div class="fv">${fmtMoney(matTotal)}</div>
-        </div>
-        <div class="fee-row" style="padding:5px 0;">
-          <div class="fl">🔨 Работы</div>
-          <div class="fv">${fmtMoney(workTotal)}</div>
-        </div>
-        ${directPaid > 0 ? `<div class="fee-row" style="padding:5px 0;">
-          <div class="fl">🤝 Оплачено заказчиком напрямую</div>
-          <div class="fv" style="color:var(--text-dim);">${fmtMoney(directPaid)}</div>
-        </div>` : ''}
-        <div class="fee-row" style="padding:5px 0; border-top:1px solid var(--line); margin-top:2px;">
-          <div class="fl">Итого расход</div>
-          <div class="fv" style="color:var(--red);">${fmtMoney(expenses)}</div>
-        </div>
-        ${f.feeAmount > 0 ? `<div class="fee-row" style="padding:5px 0;">
-          <div class="fl">Гонорар ARHITTEK (${f.feePercent}%)</div>
-          <div class="fv" style="color:var(--blue);">${fmtMoney(f.feeAmount)}</div>
-        </div>` : ''}
+        <div class="fee-row" style="padding:5px 0;"><div class="fl">💰 Приход от заказчика</div><div class="fv" style="color:var(--green);">${fmtMoney(received)}</div></div>
+        <div class="fee-row" style="padding:5px 0;"><div class="fl">📦 Материалы</div><div class="fv">${fmtMoney(matTotal)}</div></div>
+        <div class="fee-row" style="padding:5px 0;"><div class="fl">🔨 Работы</div><div class="fv">${fmtMoney(workTotal)}</div></div>
+        ${directPaid > 0 ? `<div class="fee-row" style="padding:5px 0;"><div class="fl">🤝 Оплачено заказчиком напрямую</div><div class="fv" style="color:var(--text-dim);">${fmtMoney(directPaid)}</div></div>` : ''}
+        <div class="fee-row" style="padding:5px 0; border-top:1px solid var(--line); margin-top:2px;"><div class="fl">Итого расход</div><div class="fv" style="color:var(--red);">${fmtMoney(expenses)}</div></div>
+        ${f.feeAmount > 0 ? `<div class="fee-row" style="padding:5px 0;"><div class="fl">Гонорар ARHITTEK (${f.feePercent}%)</div><div class="fv" style="color:var(--blue);">${fmtMoney(f.feeAmount)}</div></div>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -5408,25 +5385,11 @@ function renderObjectSummary(p){
   }
 
   const price = Number(p.price)||0;
-  const projInvoices = state.invoices.filter(inv=>inv.project_id===p.id);
-  const matTotal = projInvoices.filter(i=>['Материал','Инструмент','Расходник','Доставка'].includes(i.item_type)).reduce((s,i)=>s+Number(i.amount),0);
-  const workTotal = projInvoices.filter(i=>i.item_type==='Работа').reduce((s,i)=>s+Number(i.amount),0);
-  const expenses = matTotal + workTotal;
-
-  // Фактический приход по объекту берём из журнала поступлений.
-  // p.price остаётся плановым/договорным бюджетом и не подменяет фактический приход.
-  const incomeTypes = ['advance','final_payment','materials_budget','construction_budget','income'];
-  const received = (state.ledger || [])
-    .filter(l=>l.project_id===p.id && incomeTypes.includes(l.type) && !l.deleted_at)
-    .reduce((s,l)=>s+Number(l.amount||0),0);
-
-  const directPaid = getProjectDirectClientPaid(p);
-  const balance = received + directPaid - expenses;
-  const isOverspent = balance < 0;
+  const {received, directPaid, matTotal, workTotal, expenses, balance, isOverspent} = getConstructionFinancials(p);
   const f = calcConstrFee({...p, expenses});
 
   const noBudgetWarning = received === 0 && expenses > 0
-    ? `<div style="background:rgba(232,163,61,0.12); border:1px solid rgba(232,163,61,0.3); border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:12px; color:var(--gold);">⚠ Приход от заказчика не зарегистрирован — добавьте сумму прихода для корректного расчёта остатка.</div>`
+    ? `<div style="background:rgba(232,163,61,0.12); border:1px solid rgba(232,163,61,0.3); border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:12px; color:var(--gold);">⚠ Приход от заказчика не зарегистрирован — добавьте поступление для корректного расчёта остатка.</div>`
     : '';
   const overspentWarning = isOverspent
     ? `<div style="background:rgba(224,82,82,0.12); border:1px solid rgba(224,82,82,0.3); border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:12px; color:var(--red);">🔴 Перерасход бюджета: ${fmtMoney(Math.abs(balance))} — расходы превышают приход от заказчика!</div>`
@@ -5958,13 +5921,15 @@ async function exportConstrPdf(projectId){
   // Summary block — расходы всегда пересчитываются из накладных (см. getProjectExpenses),
   // чтобы отчёт клиенту совпадал с тем, что видно на экране «Стройка».
   const price = Number(p.price)||0;
-  const expenses = getProjectExpenses(p);
+  const constrFin = getConstructionFinancials(p);
+  const expenses = constrFin.expenses;
   const f = calcConstrFee({...p, expenses});
-  const balance = Number(p.balance)||0;
+  const balance = constrFin.balance;
+  const received = constrFin.received;
 
   doc.setFont('Roboto','normal'); doc.setFontSize(9);
   const summaryRows = [
-    ['Приход от заказчика:', `${fmt(price)} руб.`],
+    ['Приход от заказчика:', `${fmt(received)} руб.`],
     ['Расход (материалы + работы):', `${fmt(expenses)} руб.`],
     ['Остаток на объекте:', `${fmt(balance)} руб.`],
     [`Гонорар ARHITTEK (${f.feePercent}% от расходов):`, `${fmt(f.feeAmount)} руб.`],
