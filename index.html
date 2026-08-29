@@ -731,12 +731,13 @@
   <!-- ===================== ЕЩЁ (команда, категории, история, корзина, экспорт) ===================== -->
   <div class="view" id="view-more">
 
-    <!-- Сетка 2×2 из 4 кнопок -->
+    <!-- Сетка кнопок -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
       <button class="btn btn-primary" id="openKpBtn" style="padding:18px 8px;font-size:13px;line-height:1.3;height:auto;">📋<br>КП</button>
       <button class="btn btn-primary" id="openContractsBtn" style="padding:18px 8px;font-size:13px;line-height:1.3;height:auto;">📄<br>Договор</button>
       <button class="btn btn-secondary" id="openCompanyBtn" style="padding:18px 8px;font-size:13px;line-height:1.3;height:auto;">🏢<br>Реквизиты</button>
       <button class="btn btn-primary" id="exportXlsxBtn" style="padding:18px 8px;font-size:13px;line-height:1.3;height:auto;">📊<br>Excel</button>
+      <button class="btn btn-secondary" id="openTimesheetBtn" style="padding:18px 8px;font-size:13px;line-height:1.3;height:auto;grid-column:1/-1;">🗓<br>Табель заработка сотрудников</button>
     </div>
 
     <div id="more-admin-sections">
@@ -793,6 +794,12 @@
         <div class='loading-state'>Загрузка…</div>
       </div>
       <button class='btn btn-secondary' id='addCategoryBtn'>+ Добавить категорию</button>
+
+      <div class='section-label'><span class='lbl-text'>Тарифы услуг (КП) — по направлениям</span><span class='section-label-line'></span></div>
+      <div class='card' id='tariffsCard'>
+        <div class='loading-state'>Загрузка…</div>
+      </div>
+      <button class='btn btn-secondary' id='addTariffBtn'>+ Добавить тариф</button>
 
       <div class='section-label'><span class='lbl-text'>Уведомления</span><span class='section-label-line'></span></div>
       <div class='card' id='notifSettingsCard'>
@@ -1029,6 +1036,32 @@
           </div>
         </div>
         <button class='btn btn-secondary' id='companyExportBtn'>⬇ Скачать реквизиты</button>
+
+  </div>
+
+  <!-- ===================== ТАБЕЛЬ ЗАРАБОТКА ===================== -->
+  <div class="view" id="view-timesheet">
+
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+      <button class="icon-btn" id="timesheetBack" style="font-size:20px;">←</button>
+      <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:16px;">Табель заработка</div>
+    </div>
+
+    <div class="card">
+      <div class="field" style="margin-bottom:0;">
+        <label>Месяц (с 1-го по последнее число)</label>
+        <input type="month" id="ts-month">
+      </div>
+    </div>
+
+    <div class="note" style="margin:10px 0;">
+      Считается по фактически выплаченному гонорару (записи «Гонорар ARHITTEK») за выбранный месяц, по проектам, в которых участвует сотрудник. Если у проекта есть соисполнитель — сумма делится пропорционально их долям гонорара.
+    </div>
+
+    <div class="section-label"><span class="lbl-text">Заработок по сотрудникам</span><span class="section-label-line"></span></div>
+    <div class="card" id="timesheetCard">
+      <div class="loading-state">Загрузка…</div>
+    </div>
 
   </div>
 
@@ -1899,6 +1932,47 @@
   </div>
 </div>
 
+<!-- ===================== СЛАЙДЕР ТАРИФА (КП) ===================== -->
+<div class="sheet-overlay" id="tariffSheetOverlay">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">
+      <span id="tariffSheetTitle">Тариф</span>
+      <button class="sheet-close" id="tariffSheetClose">✕</button>
+    </div>
+    <div class="field">
+      <label>Направление</label>
+      <input type="text" id="tf-group" placeholder="например: Архитектурное проектирование">
+    </div>
+    <div class="field">
+      <label>Название услуги</label>
+      <input type="text" id="tf-name" placeholder="например: Архитектурное решение">
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Единица</label>
+        <select id="tf-unit">
+          <option value="м²">м²</option>
+          <option value="шт">шт</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Ставка, ₽</label>
+        <input type="number" id="tf-rate" placeholder="0">
+      </div>
+    </div>
+    <div class="field">
+      <label>Что входит (описание для КП)</label>
+      <textarea id="tf-desc" placeholder="что входит в услугу, сроки..."></textarea>
+    </div>
+    <button class="btn btn-primary" id="tf-save">Сохранить</button>
+    <div class="btn-row">
+      <button class="btn btn-danger" id="tf-delete">Удалить</button>
+      <button class="btn btn-secondary" id="tf-cancel">Отмена</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===================== ПРОСМОТР ОТВЕТОВ ТЗ ===================== -->
 <div class="sheet-overlay" id="tzSheetOverlay">
   <div class="sheet">
@@ -1965,7 +2039,9 @@ let state = {
   tzReferences: [],
   companyInfo: null,
   kpForms: [],
+  kpCatalog: [],
   projectStages: [],
+  projectMembers: [],
   trash: {projects:[], employees:[], categories:[], ledger:[]},
 };
 window.state = state; // экспорт для enhancement-блока (бэкфилл этапов и пр.)
@@ -2793,7 +2869,7 @@ async function loadAll(){
   // придёт без заголовка и вернёт пусто.
   if(!session) session = getSession();
   try{
-    const [proj, emp, cat, st, dept, led, photos, invs, tzForms, tzRefs, company, kpForms, stages, members] = await Promise.all([
+    const [proj, emp, cat, st, dept, led, photos, invs, tzForms, tzRefs, company, kpForms, stages, members, kpCat] = await Promise.all([
       sb.from('projects').select('*').is('deleted_at', null).order('created_at', {ascending:true}),
       sb.from('employees').select('id,name,role,is_admin,active,can_edit_cards,can_see_projects,can_see_construction,deleted_at,created_at').is('deleted_at', null).order('name'),
       sb.from('categories').select('*').is('deleted_at', null).order('sort_order'),
@@ -2808,6 +2884,7 @@ async function loadAll(){
       sb.from('kp_forms').select('*').order('created_at', {ascending:false}),
       sb.from('project_stages').select('*').order('sort_order', {ascending:true}),
       sb.from('project_members').select('*'),
+      sb.from('kp_catalog').select('*').is('deleted_at', null).order('sort_order', {ascending:true}),
     ]);
 
     // kpForms and stages are optional — may not exist until migrations run
@@ -2816,6 +2893,7 @@ async function loadAll(){
     state.kpForms = kpForms.error ? [] : (kpForms.data || []);
     state.projectStages = stages.error ? [] : (stages.data || []);
     state.projectMembers = members.error ? [] : (members.data || []);
+    state.kpCatalog = kpCat.error ? [] : (kpCat.data || []);
 
     state.projects = proj.data || [];
     state.employees = emp.data || [];
@@ -2940,6 +3018,7 @@ function renderAll(){
   // renderLedger убран — раздел Финансы удалён
   renderEmployees();
   renderCategories();
+  renderTariffs();
   renderStatuses();
   renderHistory();
   renderTrash();
@@ -4422,6 +4501,81 @@ function renderEmployeeFeeSummary(){
   `).join('');
 }
 
+// ============================================================
+// ТАБЕЛЬ ЗАРАБОТКА — не время, а сколько сотрудник заработал за месяц
+// по фактически выплаченному гонорару за проекты, в которых он участвует
+// ============================================================
+function timesheetMonthRange(monthStr){
+  const [y, m] = monthStr.split('-').map(Number);
+  const from = `${y}-${String(m).padStart(2,'0')}-01`;
+  const lastDay = new Date(y, m, 0).getDate();
+  const to = `${y}-${String(m).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+  return {from, to};
+}
+
+function renderTimesheet(){
+  const monthInput = document.getElementById('ts-month');
+  if(!monthInput) return;
+  if(!monthInput.value){
+    const now = new Date();
+    monthInput.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  }
+  const {from, to} = timesheetMonthRange(monthInput.value);
+
+  const feeEntries = (state.ledger||[]).filter(e =>
+    e.type === 'fee_payment' && e.entry_date && e.entry_date >= from && e.entry_date <= to
+  );
+
+  const totals = {}; // employeeId -> {paid, projectIds:Set}
+  function addEarn(empId, amount, projectId){
+    if(!empId) return;
+    if(!totals[empId]) totals[empId] = {paid:0, projectIds:new Set()};
+    totals[empId].paid += amount;
+    totals[empId].projectIds.add(projectId);
+  }
+
+  feeEntries.forEach(e=>{
+    const p = state.projects.find(x=>x.id===e.project_id);
+    if(!p) return;
+    const amt = Number(e.amount) || 0;
+    if(p.co_employee_id){
+      const f = getProjectFee(p);
+      const totalFee = (f.mainFeeAmount||0) + (f.coFeeAmount||0);
+      const mainShare = totalFee > 0 ? (f.mainFeeAmount||0) / totalFee : 1;
+      addEarn(p.employee_id, amt * mainShare, p.id);
+      addEarn(p.co_employee_id, amt * (1 - mainShare), p.id);
+    } else {
+      addEarn(p.employee_id, amt, p.id);
+    }
+  });
+
+  const card = document.getElementById('timesheetCard');
+  if(!card) return;
+  const empIds = Object.keys(totals);
+  if(!empIds.length){
+    card.innerHTML = '<div class="empty-state">За выбранный месяц выплат гонорара не зафиксировано</div>';
+    return;
+  }
+
+  const rows = empIds.map(id=>{
+    const emp = findEmployee(id);
+    const t = totals[id];
+    return {name: emp ? emp.name : '—', paid: t.paid, count: t.projectIds.size};
+  }).sort((a,b)=>b.paid-a.paid);
+
+  const totalAll = rows.reduce((s,r)=>s+r.paid, 0);
+
+  card.innerHTML = rows.map(r=>`
+    <div class="list-item">
+      <div><div class="li-name">${escapeHtml(r.name)}</div><div class="li-meta">${r.count} проект(ов)</div></div>
+      <div class="proj-sum">${fmtMoney(r.paid)}</div>
+    </div>`).join('') +
+    `<div class="list-item" style="border-top:1px solid var(--line-strong);">
+      <div class="li-name" style="font-weight:700;">Итого за месяц</div>
+      <div class="proj-sum" style="font-weight:700;">${fmtMoney(totalAll)}</div>
+    </div>`;
+}
+
 function renderFeeCalc(){
   const list = document.getElementById('feeCalcList');
   if(!list) return;
@@ -5162,6 +5316,113 @@ async function deleteCategory(){
 }
 
 // ============================================================
+// ТАРИФЫ УСЛУГ (КП) — управление ставками по направлениям
+// ============================================================
+let editingTariffId = null;
+
+function renderTariffs(){
+  const card = document.getElementById('tariffsCard');
+  if(!card) return;
+  const groups = kpCatalogGrouped();
+  const isDb = (state.kpCatalog||[]).length > 0;
+  if(!groups.length){ card.innerHTML = '<div class="empty-state">Нет тарифов</div>'; return; }
+  let html = '';
+  if(!isDb){
+    html += `<div class="note" style="margin-bottom:10px;color:var(--gold);">Показаны встроенные тарифы по умолчанию. Отредактируйте или добавьте любой тариф — с этого момента список станет полностью вашим.</div>`;
+  }
+  groups.forEach(g=>{
+    html += `<div style="font-size:11px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:0.06em;margin:12px 0 6px;">${escapeHtml(g.group)}</div>`;
+    g.items.forEach(it=>{
+      const editable = !!it.id;
+      html += `<div class="list-item">
+        <div>
+          <div class="li-name">${escapeHtml(it.name)}</div>
+          <div class="li-meta">${fmt(it.rate)} ₽ / ${escapeHtml(it.unit)}</div>
+        </div>
+        <div class="li-actions">
+          ${editable
+            ? `<button class="icon-btn" onclick="openTariffSheet('${it.id}')">✎</button>`
+            : `<button class="icon-btn" title="Сохраните, чтобы отредактировать" onclick="openTariffSheet(null,'${escapeHtml(g.group)}','${escapeHtml(it.name)}',${it.rate},'${escapeHtml(it.unit)}','${escapeHtml((it.desc||'').replace(/'/g,"\\'"))}')">✎</button>`}
+        </div>
+      </div>`;
+    });
+  });
+  card.innerHTML = html;
+}
+
+function openTariffSheet(id, presetGroup, presetName, presetRate, presetUnit, presetDesc){
+  editingTariffId = id || null;
+  const overlay = document.getElementById('tariffSheetOverlay');
+  const title = document.getElementById('tariffSheetTitle');
+  const deleteBtn = document.getElementById('tf-delete');
+  if(id){
+    const it = (state.kpCatalog||[]).find(x=>x.id===id);
+    if(!it) return;
+    title.textContent = 'Редактировать тариф';
+    deleteBtn.style.display = '';
+    document.getElementById('tf-group').value = it.group_name || '';
+    document.getElementById('tf-name').value = it.name || '';
+    document.getElementById('tf-unit').value = it.unit || 'м²';
+    document.getElementById('tf-rate').value = it.rate ?? '';
+    document.getElementById('tf-desc').value = it.description || '';
+  }else{
+    title.textContent = presetName ? 'Редактировать тариф' : 'Новый тариф';
+    deleteBtn.style.display = 'none';
+    document.getElementById('tf-group').value = presetGroup || '';
+    document.getElementById('tf-name').value = presetName || '';
+    document.getElementById('tf-unit').value = presetUnit || 'м²';
+    document.getElementById('tf-rate').value = (presetRate !== undefined && presetRate !== null) ? presetRate : '';
+    document.getElementById('tf-desc').value = presetDesc || '';
+  }
+  overlay.classList.add('active');
+}
+
+function closeTariffSheet(){
+  document.getElementById('tariffSheetOverlay').classList.remove('active');
+  editingTariffId = null;
+}
+
+async function saveTariff(){
+  const group_name = document.getElementById('tf-group').value.trim();
+  const name = document.getElementById('tf-name').value.trim();
+  const unit = document.getElementById('tf-unit').value;
+  const rate = parseFloat(document.getElementById('tf-rate').value) || 0;
+  const description = document.getElementById('tf-desc').value.trim();
+  if(!group_name || !name){ showToast('Укажите направление и название услуги'); return; }
+  try{
+    if(editingTariffId){
+      const {error} = await sb.from('kp_catalog').update({group_name, name, unit, rate, description, updated_at: new Date().toISOString()}).eq('id', editingTariffId);
+      if(error) throw error;
+    }else{
+      const sort_order = (state.kpCatalog||[]).length;
+      const {error} = await sb.from('kp_catalog').insert({group_name, name, unit, rate, description, sort_order});
+      if(error) throw error;
+    }
+    showToast('Тариф сохранён');
+    closeTariffSheet();
+    await loadAll();
+  }catch(e){
+    console.error(e);
+    showToast('Ошибка сохранения тарифа — проверьте, что миграция kp_catalog выполнена в Supabase');
+  }
+}
+
+async function deleteTariff(){
+  if(!editingTariffId) return;
+  if(!confirm('Удалить этот тариф?')) return;
+  try{
+    const {error} = await sb.from('kp_catalog').update({deleted_at: new Date().toISOString()}).eq('id', editingTariffId);
+    if(error) throw error;
+    showToast('Тариф удалён');
+    closeTariffSheet();
+    await loadAll();
+  }catch(e){
+    console.error(e);
+    showToast('Ошибка удаления');
+  }
+}
+
+// ============================================================
 // STATUSES (view only + reorder not needed, simple list)
 // ============================================================
 function renderStatuses(){
@@ -5524,6 +5785,7 @@ function renderObjTabs(){
     {id:'works', label:'🔨 Работы'},
     {id:'add', label:'+ Добавить'},
     {id:'photos', label:'📷 Фото'},
+    {id:'audit', label:'🔍 Сверка'},
   ];
   el.innerHTML = tabs.map(t=>`<div class="filter-chip ${activeObjTab===t.id?'active':''}" onclick="switchObjTab('${t.id}')">${t.label}</div>`).join('');
 }
@@ -5671,6 +5933,71 @@ function renderObjTabContent(){
       </div>
     </div>`;
   }
+  else if(activeObjTab === 'audit'){
+    el.innerHTML = buildObjectAuditHtml(currentObjectId);
+  }
+}
+
+// ============================================================
+// СВЕРКА ОБЪЕКТА — проверка накладных на пропуски/дубли/аномалии
+// (инструмент для самостоятельной проверки объекта, например Митаева 21)
+// ============================================================
+function buildObjectAuditHtml(projectId){
+  const invs = state.invoices.filter(inv=>inv.project_id===projectId);
+  const p = state.projects.find(x=>x.id===projectId);
+
+  const matTotal = invs.filter(i=>['Материал','Инструмент','Расходник','Доставка'].includes(i.item_type)).reduce((s,i)=>s+Number(i.amount||0),0);
+  const workTotal = invs.filter(i=>i.item_type==='Работа').reduce((s,i)=>s+Number(i.amount||0),0);
+  const noDate = invs.filter(i=>!i.invoice_date);
+  const zeroAmt = invs.filter(i=>!i.amount || Number(i.amount)<=0);
+  const noDesc = invs.filter(i=>!i.number && !i.description);
+
+  // Похожие дубликаты: совпадают номер+сумма+дата (частая причина "куда-то делась накладная" —
+  // на самом деле задвоение, а не пропажа)
+  const seen = {};
+  const dups = [];
+  invs.forEach(i=>{
+    const key = (i.number||'').trim().toLowerCase()+'|'+i.amount+'|'+(i.invoice_date||'');
+    if(seen[key]) dups.push(i); else seen[key]=i;
+  });
+
+  const expectedExpenses = matTotal + workTotal;
+  const storedExpenses = Number(p?.expenses) || 0;
+  const mismatch = Math.abs(expectedExpenses - storedExpenses) > 1;
+
+  let html = `<div class="card">
+    <div class="fee-row"><div class="fl">Всего накладных</div><div class="fv">${invs.length}</div></div>
+    <div class="fee-row"><div class="fl">Материалы (сумма)</div><div class="fv">${fmtMoney(matTotal)}</div></div>
+    <div class="fee-row"><div class="fl">Работы (сумма)</div><div class="fv">${fmtMoney(workTotal)}</div></div>
+    <div class="fee-row total"><div class="fl">Итого по накладным</div><div class="fv">${fmtMoney(expectedExpenses)}</div></div>
+    ${mismatch ? `<div class="fee-row"><div class="fl" style="color:var(--red);">⚠ Расход в проекте</div><div class="fv" style="color:var(--red);">${fmtMoney(storedExpenses)} (не совпадает)</div></div>` : ''}
+  </div>`;
+
+  const issues = [];
+  if(noDate.length) issues.push({label:'Без даты', items:noDate, color:'var(--red)'});
+  if(zeroAmt.length) issues.push({label:'Нулевая / пустая сумма', items:zeroAmt, color:'var(--red)'});
+  if(noDesc.length) issues.push({label:'Нет номера и описания', items:noDesc, color:'var(--gold)'});
+  if(dups.length) issues.push({label:'Похожие дубликаты (номер+сумма+дата совпадают)', items:dups, color:'var(--red)'});
+
+  if(!issues.length && !mismatch){
+    html += `<div class="empty-state" style="margin-top:10px;">Явных нестыковок в накладных не найдено. Если сумма всё равно кажется неверной — сверьте вручную с бумажными накладными: возможно, часть расходов ещё не занесена в приложение.</div>`;
+    return html;
+  }
+
+  issues.forEach(group=>{
+    html += `<div class="section-label" style="margin-top:14px;"><span class="lbl-text" style="color:${group.color};">${group.label} (${group.items.length})</span><span class="section-label-line"></span></div><div class="card">`;
+    group.items.forEach(inv=>{
+      html += `<div class="list-item" onclick="openInvoiceSheet('${inv.id}')" style="cursor:pointer;">
+        <div>
+          <div class="li-name">${escapeHtml(inv.number||inv.description||'—')}</div>
+          <div class="li-meta">${inv.invoice_date ? fmtDate(inv.invoice_date) : 'нет даты'} · ${fmtMoney(inv.amount)} · ${escapeHtml(inv.item_type||'')}</div>
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+  });
+
+  return html;
 }
 
 // Фото накладной выбрано из галереи — просто показываем имя файла
@@ -6790,9 +7117,25 @@ const KP_CATALOG = [
   ]},
 ];
 
+// Тарифы КП теперь редактируются в Настройках (таблица kp_catalog) и хранятся
+// в state.kpCatalog. Пока миграция не выполнена или таблица пуста — используем
+// встроенный KP_CATALOG как запасной вариант, чтобы КП не ломалось.
+function kpCatalogGrouped(){
+  const rows = state.kpCatalog || [];
+  if(!rows.length) return KP_CATALOG;
+  const groups = {};
+  const order = [];
+  rows.forEach(r=>{
+    const g = r.group_name || 'Без направления';
+    if(!groups[g]){ groups[g] = []; order.push(g); }
+    groups[g].push({ id: r.id, name: r.name, unit: r.unit || 'м²', rate: Number(r.rate)||0, desc: r.description || '' });
+  });
+  return order.map(g=>({ group: g, items: groups[g] }));
+}
+
 function kpFlatCatalog(){
   const flat = [];
-  KP_CATALOG.forEach(g=>g.items.forEach(it=>flat.push(it)));
+  kpCatalogGrouped().forEach(g=>g.items.forEach(it=>flat.push(it)));
   return flat;
 }
 
@@ -6818,7 +7161,7 @@ function renderKpServices(){
     const sum = effectiveRate * (Number(s.qty)||0);
     const isCustom = effectiveRate !== item.rate;
     let optionsHtml = '';
-    KP_CATALOG.forEach(g=>{
+    kpCatalogGrouped().forEach(g=>{
       optionsHtml += `<optgroup label="${escapeHtml(g.group)}">`;
       g.items.forEach(it=>{
         const flatIdx = flat.indexOf(it);
@@ -8118,6 +8461,17 @@ document.getElementById('catSheetOverlay').addEventListener('click', (e)=>{
   if(e.target.id === 'catSheetOverlay') closeCategorySheet();
 });
 
+document.getElementById('addTariffBtn').addEventListener('click', ()=>openTariffSheet(null));
+document.getElementById('tariffSheetClose').addEventListener('click', closeTariffSheet);
+document.getElementById('tf-cancel').addEventListener('click', closeTariffSheet);
+document.getElementById('tf-save').addEventListener('click', saveTariff);
+document.getElementById('tf-delete').addEventListener('click', ()=>{
+  if(confirm('Удалить этот тариф?')) deleteTariff();
+});
+document.getElementById('tariffSheetOverlay').addEventListener('click', (e)=>{
+  if(e.target.id === 'tariffSheetOverlay') closeTariffSheet();
+});
+
 // ledgerAdd listener removed
 
 function setupSearchBox(inputId, setQuery, renderFn){
@@ -8149,6 +8503,22 @@ setupSearchBox('historySearch', v=>historySearchQuery=v, renderHistory);
 setupSearchBox('constrSearch', v=>{ constrSearchQuery=v; renderConstruction(); });
 
 document.getElementById('exportXlsxBtn').addEventListener('click', exportToXlsx);
+
+document.getElementById('openTimesheetBtn').addEventListener('click', ()=>{
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('view-timesheet').classList.add('active');
+  renderTimesheet();
+  window.scrollTo(0,0);
+});
+document.getElementById('timesheetBack').addEventListener('click', ()=>{
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('view-more').classList.add('active');
+  document.querySelector('.nav-btn[data-view="view-more"]').classList.add('active');
+  window.scrollTo(0,0);
+});
+document.getElementById('ts-month').addEventListener('change', renderTimesheet);
 
 document.getElementById('openKpBtn').addEventListener('click', openKpView);
 document.getElementById('kpBack').addEventListener('click', ()=>{
