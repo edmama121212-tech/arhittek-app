@@ -2040,6 +2040,7 @@ let state = {
   companyInfo: null,
   kpForms: [],
   kpCatalog: [],
+  timesheetPayments: [],
   projectStages: [],
   projectMembers: [],
   trash: {projects:[], employees:[], categories:[], ledger:[]},
@@ -2869,7 +2870,7 @@ async function loadAll(){
   // придёт без заголовка и вернёт пусто.
   if(!session) session = getSession();
   try{
-    const [proj, emp, cat, st, dept, led, photos, invs, tzForms, tzRefs, company, kpForms, stages, members, kpCat] = await Promise.all([
+    const [proj, emp, cat, st, dept, led, photos, invs, tzForms, tzRefs, company, kpForms, stages, members, kpCat, tsPay] = await Promise.all([
       sb.from('projects').select('*').is('deleted_at', null).order('created_at', {ascending:true}),
       sb.from('employees').select('id,name,role,is_admin,active,can_edit_cards,can_see_projects,can_see_construction,deleted_at,created_at').is('deleted_at', null).order('name'),
       sb.from('categories').select('*').is('deleted_at', null).order('sort_order'),
@@ -2885,6 +2886,7 @@ async function loadAll(){
       sb.from('project_stages').select('*').order('sort_order', {ascending:true}),
       sb.from('project_members').select('*'),
       sb.from('kp_catalog').select('*').is('deleted_at', null).order('sort_order', {ascending:true}),
+      sb.from('timesheet_payments').select('*'),
     ]);
 
     // kpForms and stages are optional — may not exist until migrations run
@@ -2894,6 +2896,7 @@ async function loadAll(){
     state.projectStages = stages.error ? [] : (stages.data || []);
     state.projectMembers = members.error ? [] : (members.data || []);
     state.kpCatalog = kpCat.error ? [] : (kpCat.data || []);
+    state.timesheetPayments = tsPay.error ? [] : (tsPay.data || []);
 
     state.projects = proj.data || [];
     state.employees = emp.data || [];
@@ -4505,12 +4508,74 @@ function renderEmployeeFeeSummary(){
 // ТАБЕЛЬ ЗАРАБОТКА — не время, а сколько сотрудник заработал за месяц
 // по фактически выплаченному гонорару за проекты, в которых он участвует
 // ============================================================
+// ============================================================
+// ТАБЕЛЬ ЗАРАБОТКА — не время, а сколько сотрудник заработал за месяц
+// исходя из проектов, в которых он участвует (по дате сдачи проекта).
+// Отметка «Оплачено» — отдельная ручная пометка на сотрудника за месяц,
+// хранится в таблице timesheet_payments и не зависит от способа расчёта.
+// ============================================================
 function timesheetMonthRange(monthStr){
   const [y, m] = monthStr.split('-').map(Number);
   const from = `${y}-${String(m).padStart(2,'0')}-01`;
   const lastDay = new Date(y, m, 0).getDate();
   const to = `${y}-${String(m).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
   return {from, to};
+}
+
+// Дата, к которой относим заработок по проекту: дата сдачи (end_date).
+// Если её нет — дата создания проекта. Это позволяет привязать разовый
+// гонорар к конкретному месяцу без отдельного поля «дата завершения».
+function timesheetProjectRefDate(p){
+  return p.end_date || (p.created_at ? p.created_at.slice(0,10) : null);
+}
+
+function timesheetEarningsFor(monthStr){
+  const {from, to} = timesheetMonthRange(monthStr);
+  const totals = {}; // employeeId -> {earned, projectIds:Set}
+  function addEarn(empId, amount, projectId){
+    if(!empId) return;
+    if(!totals[empId]) totals[empId] = {earned:0, projectIds:new Set()};
+    totals[empId].earned += amount;
+    totals[empId].projectIds.add(projectId);
+  }
+  state.projects.forEach(p=>{
+    if(!p.employee_id && !p.co_employee_id) return;
+    const refDate = timesheetProjectRefDate(p);
+    if(!refDate || refDate < from || refDate > to) return;
+    const f = getProjectFee(p);
+    if(p.co_employee_id){
+      addEarn(p.employee_id, f.mainFeeAmount||0, p.id);
+      addEarn(p.co_employee_id, f.coFeeAmount||0, p.id);
+    } else {
+      addEarn(p.employee_id, (f.mainFeeAmount||0)+(f.coFeeAmount||0), p.id);
+    }
+  });
+  return totals;
+}
+
+function isTimesheetPaid(employeeId, monthStr){
+  return (state.timesheetPayments||[]).some(t=>t.employee_id===employeeId && t.month===monthStr && t.paid);
+}
+
+async function toggleTimesheetPaid(employeeId, monthStr, checked){
+  try{
+    const existing = (state.timesheetPayments||[]).find(t=>t.employee_id===employeeId && t.month===monthStr);
+    if(existing){
+      const {error} = await sb.from('timesheet_payments').update({paid: checked, paid_at: checked ? new Date().toISOString() : null}).eq('id', existing.id);
+      if(error) throw error;
+      existing.paid = checked;
+    }else{
+      const {data, error} = await sb.from('timesheet_payments').insert({employee_id: employeeId, month: monthStr, paid: checked, paid_at: checked ? new Date().toISOString() : null}).select().single();
+      if(error) throw error;
+      state.timesheetPayments = state.timesheetPayments || [];
+      state.timesheetPayments.push(data);
+    }
+    showToast(checked ? 'Отмечено как оплачено' : 'Отметка снята');
+  }catch(e){
+    console.error(e);
+    showToast('Ошибка сохранения — проверьте, что миграция timesheet_payments выполнена в Supabase');
+    renderTimesheet();
+  }
 }
 
 function renderTimesheet(){
@@ -4520,55 +4585,36 @@ function renderTimesheet(){
     const now = new Date();
     monthInput.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   }
-  const {from, to} = timesheetMonthRange(monthInput.value);
-
-  const feeEntries = (state.ledger||[]).filter(e =>
-    e.type === 'fee_payment' && e.entry_date && e.entry_date >= from && e.entry_date <= to
-  );
-
-  const totals = {}; // employeeId -> {paid, projectIds:Set}
-  function addEarn(empId, amount, projectId){
-    if(!empId) return;
-    if(!totals[empId]) totals[empId] = {paid:0, projectIds:new Set()};
-    totals[empId].paid += amount;
-    totals[empId].projectIds.add(projectId);
-  }
-
-  feeEntries.forEach(e=>{
-    const p = state.projects.find(x=>x.id===e.project_id);
-    if(!p) return;
-    const amt = Number(e.amount) || 0;
-    if(p.co_employee_id){
-      const f = getProjectFee(p);
-      const totalFee = (f.mainFeeAmount||0) + (f.coFeeAmount||0);
-      const mainShare = totalFee > 0 ? (f.mainFeeAmount||0) / totalFee : 1;
-      addEarn(p.employee_id, amt * mainShare, p.id);
-      addEarn(p.co_employee_id, amt * (1 - mainShare), p.id);
-    } else {
-      addEarn(p.employee_id, amt, p.id);
-    }
-  });
+  const monthStr = monthInput.value;
+  const totals = timesheetEarningsFor(monthStr);
 
   const card = document.getElementById('timesheetCard');
   if(!card) return;
-  const empIds = Object.keys(totals);
-  if(!empIds.length){
-    card.innerHTML = '<div class="empty-state">За выбранный месяц выплат гонорара не зафиксировано</div>';
-    return;
-  }
 
-  const rows = empIds.map(id=>{
-    const emp = findEmployee(id);
-    const t = totals[id];
-    return {name: emp ? emp.name : '—', paid: t.paid, count: t.projectIds.size};
-  }).sort((a,b)=>b.paid-a.paid);
+  const rows = state.employees.filter(e=>e.active!==false).map(emp=>{
+    const t = totals[emp.id];
+    return {
+      id: emp.id,
+      name: emp.name,
+      earned: t ? t.earned : 0,
+      count: t ? t.projectIds.size : 0,
+      paid: isTimesheetPaid(emp.id, monthStr),
+    };
+  }).sort((a,b)=>b.earned-a.earned);
 
-  const totalAll = rows.reduce((s,r)=>s+r.paid, 0);
+  const totalAll = rows.reduce((s,r)=>s+r.earned, 0);
 
   card.innerHTML = rows.map(r=>`
     <div class="list-item">
-      <div><div class="li-name">${escapeHtml(r.name)}</div><div class="li-meta">${r.count} проект(ов)</div></div>
-      <div class="proj-sum">${fmtMoney(r.paid)}</div>
+      <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:0;">
+        <input type="checkbox" ${r.paid?'checked':''} style="width:20px;height:20px;flex-shrink:0;cursor:pointer;"
+          onchange="toggleTimesheetPaid('${r.id}','${monthStr}', this.checked)">
+        <div style="min-width:0;">
+          <div class="li-name">${escapeHtml(r.name)}</div>
+          <div class="li-meta">${r.count} проект(ов)${r.paid?' · оплачено':''}</div>
+        </div>
+      </div>
+      <div class="proj-sum" style="${r.paid?'color:var(--green);':''}">${fmtMoney(r.earned)}</div>
     </div>`).join('') +
     `<div class="list-item" style="border-top:1px solid var(--line-strong);">
       <div class="li-name" style="font-weight:700;">Итого за месяц</div>
