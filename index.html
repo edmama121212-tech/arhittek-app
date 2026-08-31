@@ -4503,11 +4503,12 @@ function financeDeptOf(p){
 //               revenue, projectCosts, byDeptProfit: {dept: profit} }
 function completedProjectEarningsForRange(from, to){
   const employees = {};
-  function addEarn(empId, amount, projectId, projectName){
-    if(!empId || !amount) return;
+  function addEarn(empId, amount, projectId, projectName, role){
+    if(!empId) return;
+    amount = amount || 0;
     if(!employees[empId]) employees[empId] = {earned:0, items:[]};
     employees[empId].earned += amount;
-    employees[empId].items.push({projectId, name: projectName, amount});
+    employees[empId].items.push({projectId, name: projectName, amount, role});
   }
 
   let revenue = 0, projectCosts = 0;
@@ -4533,10 +4534,10 @@ function completedProjectEarningsForRange(from, to){
 
     const f = getProjectFee(p);
     if(p.co_employee_id){
-      addEarn(p.employee_id, f.mainFeeAmount||0, p.id, p.name);
-      addEarn(p.co_employee_id, f.coFeeAmount||0, p.id, p.name);
+      addEarn(p.employee_id, f.mainFeeAmount||0, p.id, p.name, 'исполнитель');
+      addEarn(p.co_employee_id, f.coFeeAmount||0, p.id, p.name, 'соисполнитель');
     } else if(p.employee_id){
-      addEarn(p.employee_id, (f.mainFeeAmount||0)+(f.coFeeAmount||0), p.id, p.name);
+      addEarn(p.employee_id, (f.mainFeeAmount||0)+(f.coFeeAmount||0), p.id, p.name, 'исполнитель');
     }
   });
 
@@ -4643,8 +4644,8 @@ function renderTimesheet(){
     const expanded = !!timesheetExpanded[r.id];
     const itemsHtml = r.items.length ? r.items.map(it=>`
       <div class="list-item" style="padding-left:34px;" onclick="openProjectSheet('${it.projectId}')">
-        <div class="li-name" style="font-size:12.5px;">${escapeHtml(it.name)}</div>
-        <div class="proj-sum" style="font-size:12.5px;">${fmtMoney(it.amount)}</div>
+        <div class="li-name" style="font-size:12.5px;">${escapeHtml(it.name)}${it.role==='соисполнитель'?' <span style="color:var(--text-dim); font-weight:400;">(соисполнитель)</span>':''}</div>
+        <div class="proj-sum" style="font-size:12.5px; ${it.amount===0?'color:var(--text-dim);':''}">${fmtMoney(it.amount)}${it.amount===0 && it.role==='соисполнитель' ? ' · нет %' : ''}</div>
       </div>`).join('') : '<div class="empty-state" style="padding:8px 0 8px 34px;">Нет законченных проектов за месяц</div>';
     return `
     <div class="list-item" style="cursor:pointer;" onclick="toggleTimesheetRow('${r.id}')">
@@ -7360,7 +7361,9 @@ function removeKpService(id){
 
 function renderKpServices(){
   const list = document.getElementById('kpServicesList');
-  const flat = kpFlatCatalog();
+  const groups = kpCatalogGrouped();
+  const flat = [];
+  groups.forEach(g=>g.items.forEach(it=>flat.push(it)));
 
   list.innerHTML = kpServices.map((s, idx)=>{
     const item = flat[s.catalogIndex] || flat[0];
@@ -7368,11 +7371,12 @@ function renderKpServices(){
     const sum = effectiveRate * (Number(s.qty)||0);
     const isCustom = effectiveRate !== item.rate;
     let optionsHtml = '';
-    kpCatalogGrouped().forEach(g=>{
+    let flatIdx = 0;
+    groups.forEach(g=>{
       optionsHtml += `<optgroup label="${escapeHtml(g.group)}">`;
       g.items.forEach(it=>{
-        const flatIdx = flat.indexOf(it);
         optionsHtml += `<option value="${flatIdx}" ${flatIdx===s.catalogIndex?'selected':''}>${escapeHtml(it.name)} (${fmt(it.rate)} ₽/${it.unit})</option>`;
+        flatIdx++;
       });
       optionsHtml += `</optgroup>`;
     });
