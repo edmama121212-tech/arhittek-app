@@ -586,8 +586,8 @@
       <div class="section-label"><span class="lbl-text">Активные проекты · по направлениям</span><span class="section-label-line"></span></div>
       <div id="plBlock"></div>
 
-      <div class="section-label"><span class="lbl-text">Аналитика по месяцам</span><span class="section-label-line"></span></div>
-      <div class="card" id="analyticsBlock" style="padding:14px 10px 10px;"></div>
+      <div class="section-label"><span class="lbl-text">Финансы компании</span><span class="section-label-line"></span></div>
+      <div class="card" id="analyticsBlock" style="padding:14px;"></div>
 
       <div class="section-label"><span class="lbl-text">Долги и выручка по проектам</span><span class="section-label-line"></span></div>
       <div class="card" id="debtCard" style="padding:0;"></div>
@@ -1887,6 +1887,17 @@
         <span>Стройка (только свои объекты)</span>
       </label>
     </div>
+    <div class="field" id="ef-salary-field" style="display:none;">
+      <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:8px;">
+        <input type="checkbox" id="ef-is-salaried" style="width:18px;height:18px;cursor:pointer;" onchange="document.getElementById('ef-fixed-salary-row').style.display=this.checked?'':'none';">
+        <span>Фиксированная ЗП вместо % от проектов (например, Ген. директор)</span>
+      </label>
+      <div id="ef-fixed-salary-row" style="display:none;">
+        <label>Сумма фиксированной ЗП в месяц, ₽</label>
+        <input type="number" id="ef-fixed-salary" placeholder="50000">
+        <div class="hint" style="margin-top:4px;">Сотрудник будет получать эту сумму из заработанного по своим проектам за месяц (не более фактически заработанного), а остаток идёт в прибыль компании.</div>
+      </div>
+    </div>
     <button class="btn btn-primary" id="ef-save">Сохранить</button>
     <div class="btn-row">
       <button class="btn btn-danger" id="ef-delete">Удалить</button>
@@ -1973,6 +1984,34 @@
   </div>
 </div>
 
+<!-- ===================== СЛАЙДЕР РАСХОДА КОМПАНИИ ===================== -->
+<div class="sheet-overlay" id="companyExpenseSheetOverlay">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">
+      <span id="companyExpenseSheetTitle">Расход</span>
+      <button class="sheet-close" id="companyExpenseSheetClose">✕</button>
+    </div>
+    <div class="field">
+      <label>Категория</label>
+      <select id="cex-category"></select>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Сумма, ₽</label><input type="number" id="cex-amount" placeholder="0"></div>
+      <div class="field"><label>Дата</label><input type="date" id="cex-date"></div>
+    </div>
+    <div class="field">
+      <label>Комментарий</label>
+      <input type="text" id="cex-desc" placeholder="например: аренда офиса за август">
+    </div>
+    <button class="btn btn-primary" id="cex-save">Сохранить</button>
+    <div class="btn-row">
+      <button class="btn btn-danger" id="cex-delete">Удалить</button>
+      <button class="btn btn-secondary" id="cex-cancel">Отмена</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===================== ПРОСМОТР ОТВЕТОВ ТЗ ===================== -->
 <div class="sheet-overlay" id="tzSheetOverlay">
   <div class="sheet">
@@ -2041,6 +2080,7 @@ let state = {
   kpForms: [],
   kpCatalog: [],
   timesheetPayments: [],
+  companyExpenses: [],
   projectStages: [],
   projectMembers: [],
   trash: {projects:[], employees:[], categories:[], ledger:[]},
@@ -2870,9 +2910,9 @@ async function loadAll(){
   // придёт без заголовка и вернёт пусто.
   if(!session) session = getSession();
   try{
-    const [proj, emp, cat, st, dept, led, photos, invs, tzForms, tzRefs, company, kpForms, stages, members, kpCat, tsPay] = await Promise.all([
+    const [proj, emp, cat, st, dept, led, photos, invs, tzForms, tzRefs, company, kpForms, stages, members, kpCat, tsPay, compExp] = await Promise.all([
       sb.from('projects').select('*').is('deleted_at', null).order('created_at', {ascending:true}),
-      sb.from('employees').select('id,name,role,is_admin,active,can_edit_cards,can_see_projects,can_see_construction,deleted_at,created_at').is('deleted_at', null).order('name'),
+      sb.from('employees').select('id,name,role,is_admin,active,can_edit_cards,can_see_projects,can_see_construction,is_salaried,fixed_salary,deleted_at,created_at').is('deleted_at', null).order('name'),
       sb.from('categories').select('*').is('deleted_at', null).order('sort_order'),
       sb.from('statuses').select('*').order('sort_order'),
       sb.from('departments').select('*').order('sort_order'),
@@ -2887,6 +2927,7 @@ async function loadAll(){
       sb.from('project_members').select('*'),
       sb.from('kp_catalog').select('*').is('deleted_at', null).order('sort_order', {ascending:true}),
       sb.from('timesheet_payments').select('*'),
+      sb.from('company_expenses').select('*').is('deleted_at', null),
     ]);
 
     // kpForms and stages are optional — may not exist until migrations run
@@ -2897,6 +2938,7 @@ async function loadAll(){
     state.projectMembers = members.error ? [] : (members.data || []);
     state.kpCatalog = kpCat.error ? [] : (kpCat.data || []);
     state.timesheetPayments = tsPay.error ? [] : (tsPay.data || []);
+    state.companyExpenses = compExp.error ? [] : (compExp.data || []);
 
     state.projects = proj.data || [];
     state.employees = emp.data || [];
@@ -2989,7 +3031,7 @@ async function loadDeferredData(){
     const [hist, trashProj, trashEmp, trashCat, trashLed] = await Promise.all([
       sb.from('audit_log').select('*').order('created_at', {ascending:false}).limit(5000),
       sb.from('projects').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
-      sb.from('employees').select('id,name,role,is_admin,active,can_edit_cards,can_see_projects,can_see_construction,deleted_at,created_at').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
+      sb.from('employees').select('id,name,role,is_admin,active,can_edit_cards,can_see_projects,can_see_construction,is_salaried,fixed_salary,deleted_at,created_at').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
       sb.from('categories').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
       sb.from('ledger_entries').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
     ]);
@@ -3376,234 +3418,153 @@ function renderActiveDeptSplit(){
 // ============================================================
 // АНАЛИТИКА — График P&L по месяцам (SVG)
 // ============================================================
-let analyticsMode = 'combined'; // 'combined' | 'project' | 'constr'
+// ============================================================
+// ФИНАНСЫ КОМПАНИИ (Обзор) — приход/расход/прибыль за период с разбивкой
+// по направлениям и статьям расходов. Заменяет прежний график по месяцам.
+// ============================================================
+let financePeriodMode = 'month'; // 'month' | 'quarter' | 'year' | 'range'
+let financeMonthValue = null;    // 'YYYY-MM'
+let financeRangeFrom = null;
+let financeRangeTo = null;
+let financeExpanded = false;
+
+function financeCurrentRange(){
+  const today = new Date();
+  if(financePeriodMode === 'range' && financeRangeFrom && financeRangeTo){
+    return {from: financeRangeFrom, to: financeRangeTo};
+  }
+  if(financePeriodMode === 'quarter'){
+    const q = Math.floor(today.getMonth()/3);
+    const from = `${today.getFullYear()}-${String(q*3+1).padStart(2,'0')}-01`;
+    const toMonth = q*3+3;
+    const lastDay = new Date(today.getFullYear(), toMonth, 0).getDate();
+    const to = `${today.getFullYear()}-${String(toMonth).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+    return {from, to};
+  }
+  if(financePeriodMode === 'year'){
+    return {from: `${today.getFullYear()}-01-01`, to: `${today.getFullYear()}-12-31`};
+  }
+  // month (по умолчанию)
+  if(!financeMonthValue) financeMonthValue = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}`;
+  return timesheetMonthRange(financeMonthValue);
+}
+
+function computeFinancePeriod(from, to){
+  const {employees: earnedMap, revenue, projectCosts, byDeptProfit} = completedProjectEarningsForRange(from, to);
+  const {payrollPaidOut, companyRetained} = splitPayrollByEmployee(earnedMap);
+
+  let overhead = 0;
+  const overheadByCat = {};
+  (state.companyExpenses||[]).forEach(ex=>{
+    if(ex.deleted_at) return;
+    if(!ex.expense_date || ex.expense_date < from || ex.expense_date > to) return;
+    overhead += Number(ex.amount) || 0;
+    overheadByCat[ex.category] = (overheadByCat[ex.category]||0) + (Number(ex.amount)||0);
+  });
+
+  const totalExpenses = projectCosts + payrollPaidOut + overhead;
+  const netProfit = revenue - totalExpenses;
+
+  return {revenue, projectCosts, byDeptProfit, payrollPaidOut, companyRetained, overhead, overheadByCat, totalExpenses, netProfit};
+}
+
+function financePeriodLabel(from, to){
+  if(financePeriodMode === 'month') return ruMonthLabel(financeMonthValue);
+  return `${fmtDate(from)} — ${fmtDate(to)}`;
+}
+
+function ruMonthLabel(monthStr){
+  if(!monthStr) return '';
+  const [y,m] = monthStr.split('-').map(Number);
+  const names = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+  return `${names[m-1]} ${y}`;
+}
+
+function setFinancePeriodMode(mode){
+  financePeriodMode = mode;
+  renderAnalytics();
+}
 
 function renderAnalytics(){
   const el = document.getElementById('analyticsBlock');
   if(!el) return;
 
-  // Определяем строительный отдел
-  const constrDept = state.departments.find(d=>d.name==='Строительный отдел');
-  const constrIds = new Set(
-    state.projects
-      .filter(p=> constrDept && p.department_id === constrDept.id)
-      .map(p=>p.id)
-  );
+  const {from, to} = financeCurrentRange();
+  const f = computeFinancePeriod(from, to);
+  const profitColor = f.netProfit >= 0 ? 'var(--green)' : 'var(--red)';
 
-  // Последние 12 месяцев
-  const now = new Date();
-  const months = [];
-  for(let i=11; i>=0; i--){
-    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
-    months.push({
-      key: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`,
-      label: d.toLocaleDateString('ru-RU',{month:'short', year:'2-digit'}),
-      income: 0,
-      expense: 0,
-    });
-  }
-  const monthMap = {};
-  months.forEach(m=>{ monthMap[m.key] = m; });
-
-  // Доходы из ledger
-  state.ledger.forEach(e=>{
-    if(!e.entry_date) return;
-    const key = e.entry_date.slice(0,7);
-    if(!monthMap[key]) return;
-    const isConstr = constrIds.has(e.project_id);
-    if(analyticsMode === 'project' && isConstr) return;
-    if(analyticsMode === 'constr' && !isConstr) return;
-    const incomeTypesForAnalytics = isConstr ? CONSTRUCTION_INCOME_TYPES : ['advance','final_payment','income'];
-    if(incomeTypesForAnalytics.includes(e.type)){
-      monthMap[key].income += Number(e.amount)||0;
-    }
-    if(['expense','payment','withdrawal'].includes(e.type)){
-      monthMap[key].expense += Number(e.amount)||0;
-    }
-  });
-
-  // Расходы стройки из накладных
-  if(analyticsMode !== 'project'){
-    state.invoices.forEach(inv=>{
-      if(!inv.invoice_date || !constrIds.has(inv.project_id)) return;
-      const key = inv.invoice_date.slice(0,7);
-      if(!monthMap[key]) return;
-      monthMap[key].expense += Number(inv.amount)||0;
-    });
-  }
-
-  // Размеры SVG
-  const W = 700, H = 130, PAD = {top:12, right:50, bottom:28, left:48};
-  const chartW = W - PAD.left - PAD.right;
-  const chartH = H - PAD.top - PAD.bottom;
-  const n = months.length;
-
-  const maxVal = Math.max(...months.map(m=>Math.max(m.income, m.expense)), 1);
-  const scaleY = v => chartH - (v/maxVal)*chartH;
-  const scaleX = i => (i/(n-1))*chartW;
-
-  // Форматирование оси Y
-  const fmtK = v => v >= 1000000 ? (v/1000000).toFixed(1)+'M' : v>=1000 ? Math.round(v/1000)+'K' : v;
-
-  // Считаем сколько месяцев с данными
-  const activeMonths = months.filter(m=>m.income>0||m.expense>0).length;
-  const useBars = activeMonths <= 3; // мало точек — рисуем столбцы
-
-  // Точки линий (только для polyline, всегда все 12 точек)
-  const incomePts = months.map((m,i)=>`${scaleX(i).toFixed(1)},${scaleY(m.income).toFixed(1)}`).join(' ');
-  const expensePts = months.map((m,i)=>`${scaleX(i).toFixed(1)},${scaleY(m.expense).toFixed(1)}`).join(' ');
-
-  // Area под доходом
-  const incomeArea = `M${scaleX(0).toFixed(1)},${chartH} ` +
-    months.map((m,i)=>`L${scaleX(i).toFixed(1)},${scaleY(m.income).toFixed(1)}`).join(' ') +
-    ` L${scaleX(n-1).toFixed(1)},${chartH} Z`;
-
-  // Ширина столбца для bar-режима
-  const barW = Math.max(4, (chartW / n) * 0.35);
-
-  // Оси Y — 4 деления
-  const yTicks = [0, 0.5, 1].map(t=>({
-    v: Math.round(maxVal*t),
-    y: scaleY(maxVal*t),
-  }));
-
-  // Прибыль по месяцам
-  const profitMonths = months.map(m=>m.income - m.expense);
-  const totalIncome = months.reduce((s,m)=>s+m.income,0);
-  const totalExpense = months.reduce((s,m)=>s+m.expense,0);
-  const totalProfit = totalIncome - totalExpense;
-  const profitColor = totalProfit>=0 ? 'var(--green)' : 'var(--red)';
-
-  // Лучший месяц
-  const bestMonth = months.reduce((best,m)=> m.income > best.income ? m : best, months[0]);
-
-  // Переключатели режима
   const modes = [
-    {id:'combined', label:'Всё'},
-    {id:'project', label:'Проектный'},
-    {id:'constr', label:'Стройка'},
+    {id:'month', label:'Месяц'},
+    {id:'quarter', label:'Квартал'},
+    {id:'year', label:'Год'},
+    {id:'range', label:'Период'},
   ];
 
+  const deptOrder = ['Дизайн интерьера','Архитектура','Ландшафт','Строительство'];
+  const deptRows = deptOrder.filter(d=>f.byDeptProfit[d]!==undefined).map(d=>
+    `<div class="fee-row"><div class="fl">${escapeHtml(d)}</div><div class="fv" style="color:${f.byDeptProfit[d]>=0?'var(--green)':'var(--red)'};">${fmtMoney(f.byDeptProfit[d])}</div></div>`
+  ).join('');
+
+  const overheadCats = Object.keys(f.overheadByCat);
+  const overheadRows = overheadCats.length ? overheadCats.map(cat=>
+    `<div class="fee-row"><div class="fl">${escapeHtml(cat)}</div><div class="fv">${fmtMoney(f.overheadByCat[cat])}</div></div>`
+  ).join('') : '<div class="note">Нет записей за период</div>';
+
   el.innerHTML = `
-    <!-- Переключатели -->
     <div style="display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap;">
       ${modes.map(m=>`
-        <div onclick="analyticsMode='${m.id}'; renderAnalytics();"
-             style="padding:5px 12px; border-radius:16px; font-size:11px; font-weight:600; cursor:pointer;
-                    background:${analyticsMode===m.id ? 'var(--blue-soft)' : 'rgba(22,35,58,0.05)'};
-                    color:${analyticsMode===m.id ? 'var(--blue)' : 'var(--text-dim)'};
-                    border:1px solid ${analyticsMode===m.id ? 'rgba(0,113,235,0.4)' : 'var(--line-strong)'};">
+        <div onclick="setFinancePeriodMode('${m.id}')"
+             style="padding:6px 12px; border-radius:16px; font-size:11px; font-weight:600; cursor:pointer;
+                    background:${financePeriodMode===m.id ? 'var(--blue-soft)' : 'rgba(22,35,58,0.05)'};
+                    color:${financePeriodMode===m.id ? 'var(--blue)' : 'var(--text-dim)'};
+                    border:1px solid ${financePeriodMode===m.id ? 'rgba(0,113,235,0.4)' : 'var(--line-strong)'};">
           ${m.label}
         </div>`).join('')}
-      <div style="margin-left:auto; font-size:10px; color:var(--text-dim); align-self:center;">последние 12 мес.</div>
+    </div>
+    ${financePeriodMode==='month' ? `
+      <div class="field" style="margin-bottom:10px;">
+        <input type="month" id="finance-month-input" value="${financeMonthValue||''}" onchange="financeMonthValue=this.value; renderAnalytics();">
+      </div>` : ''}
+    ${financePeriodMode==='range' ? `
+      <div class="field-row" style="margin-bottom:10px;">
+        <div class="field"><label>С</label><input type="date" id="finance-from-input" value="${financeRangeFrom||''}" onchange="financeRangeFrom=this.value; renderAnalytics();"></div>
+        <div class="field"><label>По</label><input type="date" id="finance-to-input" value="${financeRangeTo||''}" onchange="financeRangeTo=this.value; renderAnalytics();"></div>
+      </div>` : ''}
+
+    <div class="note" style="margin-bottom:8px;">Период: ${financePeriodLabel(from,to)} · считается по завершённым проектам, привязанным к дате сдачи</div>
+
+    <table class="constr-sum-table" style="width:100%;">
+      <tbody>
+        <tr><td style="font-weight:700;">Приход</td><td style="text-align:right; color:var(--green); font-weight:700;">${fmtMoney(f.revenue)}</td></tr>
+        <tr><td style="font-weight:700;">Расход</td><td style="text-align:right; color:var(--red); font-weight:700;">${fmtMoney(f.totalExpenses)}</td></tr>
+        <tr><td style="font-weight:700;">Прибыль</td><td style="text-align:right; color:${profitColor}; font-weight:700;">${fmtMoney(f.netProfit)}</td></tr>
+      </tbody>
+    </table>
+
+    <div onclick="financeExpanded=!financeExpanded; renderAnalytics();" style="cursor:pointer; margin-top:12px; font-size:12px; color:var(--blue); font-weight:600;">
+      ${financeExpanded ? '▾ Скрыть подробности' : '▸ Подробнее по направлениям и расходам'}
     </div>
 
-    <!-- SVG График -->
-    <div style="overflow-x:auto; -webkit-overflow-scrolling:touch;">
-      <svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block; min-width:280px; max-width:100%;">
-        <g transform="translate(${PAD.left},${PAD.top})">
+    ${financeExpanded ? `
+      <div class="section-label" style="margin-top:14px;"><span class="lbl-text">Прибыль по направлениям</span><span class="section-label-line"></span></div>
+      <div class="fee-card">${deptRows || '<div class="note">Нет завершённых проектов за период</div>'}</div>
 
-          <!-- Сетка Y -->
-          ${yTicks.map(t=>`
-            <line x1="0" y1="${t.y.toFixed(1)}" x2="${chartW}" y2="${t.y.toFixed(1)}"
-                  stroke="rgba(22,35,58,0.1)" stroke-width="1"/>
-            <text x="-6" y="${(t.y+4).toFixed(1)}" text-anchor="end"
-                  font-size="9" fill="rgba(22,35,58,0.5)">${fmtK(t.v)}</text>
-          `).join('')}
-
-          <!-- Area доход -->
-          <defs>
-            <linearGradient id="incomeGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="#52B788" stop-opacity="0.25"/>
-              <stop offset="100%" stop-color="#52B788" stop-opacity="0.02"/>
-            </linearGradient>
-          </defs>
-
-          ${useBars ? `
-            <!-- BAR режим: мало данных — рисуем столбцы -->
-            ${months.map((m,i)=>{
-              const cx = scaleX(i);
-              const profit = m.income - m.expense;
-              const tip = m.label+': доход '+fmtMoney(m.income)+', расход '+fmtMoney(m.expense)+', прибыль '+(profit>=0?'+':'')+fmtMoney(profit);
-              const incH = chartH - scaleY(m.income);
-              const expH = chartH - scaleY(m.expense);
-              return (m.income>0||m.expense>0) ? `
-                <rect x="${(cx-barW-1).toFixed(1)}" y="${scaleY(m.income).toFixed(1)}" width="${barW.toFixed(1)}" height="${incH.toFixed(1)}" fill="#52B788" opacity="0.7" rx="2">
-                  <title>${tip}</title>
-                </rect>
-                <rect x="${(cx+1).toFixed(1)}" y="${scaleY(m.expense).toFixed(1)}" width="${barW.toFixed(1)}" height="${expH.toFixed(1)}" fill="#E05252" opacity="0.7" rx="2">
-                  <title>${tip}</title>
-                </rect>
-              ` : '';
-            }).join('')}
-          ` : `
-            <!-- LINE режим: достаточно данных -->
-            <path d="${incomeArea}" fill="url(#incomeGrad)"/>
-            <polyline points="${expensePts}" fill="none" stroke="#E05252" stroke-width="1.5"
-                      stroke-dasharray="4,2" stroke-linecap="round" stroke-linejoin="round"/>
-            <polyline points="${incomePts}" fill="none" stroke="#52B788" stroke-width="2"
-                      stroke-linecap="round" stroke-linejoin="round"/>
-            ${months.map((m,i)=>{
-              const cx = scaleX(i).toFixed(1);
-              const cy = scaleY(m.income).toFixed(1);
-              const profit = m.income - m.expense;
-              return m.income > 0 || m.expense > 0 ? `
-                <circle cx="${cx}" cy="${cy}" r="3" fill="#52B788" stroke="var(--bg)" stroke-width="1.5"/>
-                <title>${m.label}: доход ${fmtMoney(m.income)}, расход ${fmtMoney(m.expense)}, прибыль ${profit>=0?'+':''}${fmtMoney(profit)}</title>
-              ` : '';
-            }).join('')}
-          `}
-
-          <!-- Метки X -->
-          ${months.map((m,i)=>{
-            if(i % 3 !== 0 && i !== n-1) return '';
-            const anchor = i === n-1 ? 'end' : 'middle';
-            const xOff = i === n-1 ? scaleX(i)+2 : scaleX(i);
-            return `<text x="${xOff.toFixed(1)}" y="${(chartH+14).toFixed(1)}"
-                         text-anchor="${anchor}" font-size="9" fill="rgba(22,35,58,0.55)">${m.label}</text>`;
-          }).join('')}
-
-          <!-- Ось X -->
-          <line x1="0" y1="${chartH}" x2="${chartW}" y2="${chartH}"
-                stroke="rgba(22,35,58,0.15)" stroke-width="1"/>
-        </g>
-      </svg>
-    </div>
-
-    <!-- Легенда -->
-    <div style="display:flex; gap:14px; margin:8px 0 12px; font-size:11px; flex-wrap:wrap;">
-      <div style="display:flex; align-items:center; gap:5px;">
-        <svg width="16" height="3"><line x1="0" y1="1.5" x2="16" y2="1.5" stroke="#52B788" stroke-width="2"/></svg>
-        <span style="color:var(--text-dim);">Приход</span>
+      <div class="section-label" style="margin-top:14px;"><span class="lbl-text">Расходы</span><span class="section-label-line"></span></div>
+      <div class="fee-card">
+        <div class="fee-row"><div class="fl">Себестоимость проектов (материалы/работы)</div><div class="fv">${fmtMoney(f.projectCosts)}</div></div>
+        <div class="fee-row"><div class="fl">ЗП и гонорары сотрудникам</div><div class="fv">${fmtMoney(f.payrollPaidOut)}</div></div>
+        ${f.companyRetained>0 ? `<div class="fee-row"><div class="fl" style="color:var(--text-dim);">— из них осталось в прибыли (сверх фикс. ЗП)</div><div class="fv" style="color:var(--gold);">${fmtMoney(f.companyRetained)}</div></div>` : ''}
+        <div class="fee-row total"><div class="fl">Прочие расходы компании</div><div class="fv">${fmtMoney(f.overhead)}</div></div>
+        ${overheadRows}
       </div>
-      <div style="display:flex; align-items:center; gap:5px;">
-        <svg width="16" height="3"><line x1="0" y1="1.5" x2="16" y2="1.5" stroke="#E05252" stroke-width="1.5" stroke-dasharray="4,2"/></svg>
-        <span style="color:var(--text-dim);">Расход</span>
-      </div>
-    </div>
 
-    <!-- Сводка за 12 месяцев -->
-    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
-      <div style="background:rgba(82,183,136,0.08); border-radius:10px; padding:10px 8px; text-align:center; border:1px solid rgba(82,183,136,0.15);">
-        <div style="font-size:11px; color:var(--text-dim); margin-bottom:4px;">Приход 12 мес.</div>
-        <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:11px; color:var(--green);">${fmtK(totalIncome)} ₽</div>
-      </div>
-      <div style="background:rgba(224,82,82,0.08); border-radius:10px; padding:10px 8px; text-align:center; border:1px solid rgba(224,82,82,0.15);">
-        <div style="font-size:11px; color:var(--text-dim); margin-bottom:4px;">Расход 12 мес.</div>
-        <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:11px; color:var(--red);">${fmtK(totalExpense)} ₽</div>
-      </div>
-      <div style="background:${totalProfit>=0 ? 'rgba(82,183,136,0.08)' : 'rgba(224,82,82,0.08)'}; border-radius:10px; padding:10px 8px; text-align:center; border:1px solid ${totalProfit>=0 ? 'rgba(82,183,136,0.15)' : 'rgba(224,82,82,0.15)'};">
-        <div style="font-size:11px; color:var(--text-dim); margin-bottom:4px;">Прибыль 12 мес.</div>
-        <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:11px; color:${profitColor};">${totalProfit>=0?'+':''}${fmtK(totalProfit)} ₽</div>
-      </div>
-    </div>
-
-    <!-- Лучший месяц -->
-    ${bestMonth.income > 0 ? `
-    <div style="margin-top:8px; font-size:11px; color:var(--text-dim); text-align:center;">
-      🏆 Лучший месяц по приходу — <b style="color:var(--text);">${bestMonth.label}</b>: ${fmtMoney(bestMonth.income)}
-    </div>` : ''}
+      <div class="section-label" style="margin-top:14px;"><span class="lbl-text">Прочие расходы компании (аренда, коммуналка и т.п.)</span><span class="section-label-line"></span></div>
+      <div class="card" id="companyExpensesList" style="margin-bottom:8px;"></div>
+      <button class="btn btn-secondary" onclick="openCompanyExpenseSheet(null)">+ Добавить расход</button>
+    ` : ''}
   `;
+
+  if(financeExpanded) renderCompanyExpensesList();
 }
 
 function escapeHtml(s){
@@ -4505,52 +4466,100 @@ function renderEmployeeFeeSummary(){
 }
 
 // ============================================================
-// ТАБЕЛЬ ЗАРАБОТКА — не время, а сколько сотрудник заработал за месяц
-// по фактически выплаченному гонорару за проекты, в которых он участвует
+// ЗАРАБОТОК ПО ЗАКОНЧЕННЫМ ПРОЕКТАМ — общий расчёт, используется и в
+// табеле по сотрудникам, и в финансовой сводке компании (Обзор).
+// Считаем только проекты со статусом «Завершён», привязывая их к периоду
+// по дате сдачи (end_date), а если её нет — по дате создания проекта.
+// Гонорар сотрудника считается как обычно (через getProjectFee), но для
+// сотрудников с фиксированной ЗП (is_salaried) реальная выплата — это
+// min(фикс. ЗП, заработано), а разница остаётся в прибыли компании.
 // ============================================================
-// ============================================================
-// ТАБЕЛЬ ЗАРАБОТКА — не время, а сколько сотрудник заработал за месяц
-// исходя из проектов, в которых он участвует (по дате сдачи проекта).
-// Отметка «Оплачено» — отдельная ручная пометка на сотрудника за месяц,
-// хранится в таблице timesheet_payments и не зависит от способа расчёта.
-// ============================================================
+function timesheetProjectRefDate(p){
+  return p.end_date || (p.created_at ? p.created_at.slice(0,10) : null);
+}
+
+function financeDeptOf(p){
+  if(isConstructionCategory(p.category_id)) return 'Строительство';
+  const cat = findCategory(p.category_id);
+  const nm = (cat && cat.name || '').toLowerCase();
+  if(nm.includes('ландшафт')) return 'Ландшафт';
+  if(nm.includes('архитект')) return 'Архитектура';
+  return 'Дизайн интерьера';
+}
+
+// Возвращает: { employees: {empId: {earned, items:[{projectId,name,amount}]}},
+//               revenue, projectCosts, byDeptProfit: {dept: profit} }
+function completedProjectEarningsForRange(from, to){
+  const employees = {};
+  function addEarn(empId, amount, projectId, projectName){
+    if(!empId || !amount) return;
+    if(!employees[empId]) employees[empId] = {earned:0, items:[]};
+    employees[empId].earned += amount;
+    employees[empId].items.push({projectId, name: projectName, amount});
+  }
+
+  let revenue = 0, projectCosts = 0;
+  const byDeptProfit = {};
+
+  state.projects.forEach(p=>{
+    const st = findStatus(p.status_id);
+    if(!st || st.name !== 'Завершён') return;
+    const refDate = timesheetProjectRefDate(p);
+    if(!refDate || refDate < from || refDate > to) return;
+
+    const isConstr = isConstructionCategory(p.category_id);
+    let rev, cost;
+    if(isConstr){
+      const fin = getConstructionFinancials(p);
+      rev = fin.received; cost = fin.expenses;
+    } else {
+      rev = Number(p.price) || 0; cost = getProjectExpenses(p);
+    }
+    revenue += rev; projectCosts += cost;
+    const dept = financeDeptOf(p);
+    byDeptProfit[dept] = (byDeptProfit[dept]||0) + (rev - cost);
+
+    const f = getProjectFee(p);
+    if(p.co_employee_id){
+      addEarn(p.employee_id, f.mainFeeAmount||0, p.id, p.name);
+      addEarn(p.co_employee_id, f.coFeeAmount||0, p.id, p.name);
+    } else if(p.employee_id){
+      addEarn(p.employee_id, (f.mainFeeAmount||0)+(f.coFeeAmount||0), p.id, p.name);
+    }
+  });
+
+  return {employees, revenue, projectCosts, byDeptProfit};
+}
+
+// Разбивает заработок сотрудников на «фактически выплачено» и «осталось
+// в прибыли компании» — для сотрудников с фиксированной ЗП (is_salaried).
+function splitPayrollByEmployee(employeesEarned){
+  const result = {}; // empId -> {earned, payout, retained, isSalaried, salary}
+  let payrollPaidOut = 0, companyRetained = 0;
+  Object.keys(employeesEarned).forEach(id=>{
+    const emp = findEmployee(id);
+    const earned = employeesEarned[id].earned;
+    if(emp && emp.is_salaried){
+      const salary = Number(emp.fixed_salary) || 0;
+      const payout = Math.min(salary, earned);
+      const retained = Math.max(0, earned - payout);
+      result[id] = {earned, payout, retained, isSalaried:true, salary};
+      payrollPaidOut += payout;
+      companyRetained += retained;
+    } else {
+      result[id] = {earned, payout: earned, retained: 0, isSalaried:false, salary:0};
+      payrollPaidOut += earned;
+    }
+  });
+  return {result, payrollPaidOut, companyRetained};
+}
+
 function timesheetMonthRange(monthStr){
   const [y, m] = monthStr.split('-').map(Number);
   const from = `${y}-${String(m).padStart(2,'0')}-01`;
   const lastDay = new Date(y, m, 0).getDate();
   const to = `${y}-${String(m).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
   return {from, to};
-}
-
-// Дата, к которой относим заработок по проекту: дата сдачи (end_date).
-// Если её нет — дата создания проекта. Это позволяет привязать разовый
-// гонорар к конкретному месяцу без отдельного поля «дата завершения».
-function timesheetProjectRefDate(p){
-  return p.end_date || (p.created_at ? p.created_at.slice(0,10) : null);
-}
-
-function timesheetEarningsFor(monthStr){
-  const {from, to} = timesheetMonthRange(monthStr);
-  const totals = {}; // employeeId -> {earned, projectIds:Set}
-  function addEarn(empId, amount, projectId){
-    if(!empId) return;
-    if(!totals[empId]) totals[empId] = {earned:0, projectIds:new Set()};
-    totals[empId].earned += amount;
-    totals[empId].projectIds.add(projectId);
-  }
-  state.projects.forEach(p=>{
-    if(!p.employee_id && !p.co_employee_id) return;
-    const refDate = timesheetProjectRefDate(p);
-    if(!refDate || refDate < from || refDate > to) return;
-    const f = getProjectFee(p);
-    if(p.co_employee_id){
-      addEarn(p.employee_id, f.mainFeeAmount||0, p.id);
-      addEarn(p.co_employee_id, f.coFeeAmount||0, p.id);
-    } else {
-      addEarn(p.employee_id, (f.mainFeeAmount||0)+(f.coFeeAmount||0), p.id);
-    }
-  });
-  return totals;
 }
 
 function isTimesheetPaid(employeeId, monthStr){
@@ -4578,6 +4587,13 @@ async function toggleTimesheetPaid(employeeId, monthStr, checked){
   }
 }
 
+let timesheetExpanded = {}; // employeeId -> bool
+
+function toggleTimesheetRow(employeeId){
+  timesheetExpanded[employeeId] = !timesheetExpanded[employeeId];
+  renderTimesheet();
+}
+
 function renderTimesheet(){
   const monthInput = document.getElementById('ts-month');
   if(!monthInput) return;
@@ -4586,40 +4602,161 @@ function renderTimesheet(){
     monthInput.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   }
   const monthStr = monthInput.value;
-  const totals = timesheetEarningsFor(monthStr);
+  const {from, to} = timesheetMonthRange(monthStr);
+  const {employees: earnedMap} = completedProjectEarningsForRange(from, to);
+  const {result: payrollByEmp} = splitPayrollByEmployee(earnedMap);
 
   const card = document.getElementById('timesheetCard');
   if(!card) return;
 
   const rows = state.employees.filter(e=>e.active!==false).map(emp=>{
-    const t = totals[emp.id];
+    const e = earnedMap[emp.id];
+    const p = payrollByEmp[emp.id] || {earned:0, payout:0, retained:0, isSalaried: !!emp.is_salaried, salary: Number(emp.fixed_salary)||0};
     return {
       id: emp.id,
       name: emp.name,
-      earned: t ? t.earned : 0,
-      count: t ? t.projectIds.size : 0,
+      earned: p.earned,
+      payout: p.payout,
+      retained: p.retained,
+      isSalaried: p.isSalaried,
+      items: e ? e.items : [],
       paid: isTimesheetPaid(emp.id, monthStr),
     };
-  }).sort((a,b)=>b.earned-a.earned);
+  }).sort((a,b)=>b.payout-a.payout);
 
-  const totalAll = rows.reduce((s,r)=>s+r.earned, 0);
+  const totalPayout = rows.reduce((s,r)=>s+r.payout, 0);
+  const totalRetained = rows.reduce((s,r)=>s+r.retained, 0);
 
-  card.innerHTML = rows.map(r=>`
-    <div class="list-item">
+  card.innerHTML = rows.map(r=>{
+    const expanded = !!timesheetExpanded[r.id];
+    const itemsHtml = r.items.length ? r.items.map(it=>`
+      <div class="list-item" style="padding-left:34px;" onclick="openProjectSheet('${it.projectId}')">
+        <div class="li-name" style="font-size:12.5px;">${escapeHtml(it.name)}</div>
+        <div class="proj-sum" style="font-size:12.5px;">${fmtMoney(it.amount)}</div>
+      </div>`).join('') : '<div class="empty-state" style="padding:8px 0 8px 34px;">Нет законченных проектов за месяц</div>';
+    return `
+    <div class="list-item" style="cursor:pointer;" onclick="toggleTimesheetRow('${r.id}')">
       <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:0;">
         <input type="checkbox" ${r.paid?'checked':''} style="width:20px;height:20px;flex-shrink:0;cursor:pointer;"
-          onchange="toggleTimesheetPaid('${r.id}','${monthStr}', this.checked)">
+          onclick="event.stopPropagation();" onchange="toggleTimesheetPaid('${r.id}','${monthStr}', this.checked)">
         <div style="min-width:0;">
-          <div class="li-name">${escapeHtml(r.name)}</div>
-          <div class="li-meta">${r.count} проект(ов)${r.paid?' · оплачено':''}</div>
+          <div class="li-name">${expanded?'▾':'▸'} ${escapeHtml(r.name)}${r.isSalaried?' <span style="color:var(--text-dim); font-weight:400;">(фикс. ЗП)</span>':''}</div>
+          <div class="li-meta">${r.items.length} проект(ов)${r.paid?' · оплачено':''}${r.isSalaried && r.retained>0 ? ' · в баланс компании: '+fmtMoney(r.retained) : ''}</div>
         </div>
       </div>
-      <div class="proj-sum" style="${r.paid?'color:var(--green);':''}">${fmtMoney(r.earned)}</div>
-    </div>`).join('') +
+      <div class="proj-sum" style="${r.paid?'color:var(--green);':''}">${fmtMoney(r.payout)}</div>
+    </div>
+    ${expanded ? itemsHtml : ''}`;
+  }).join('') +
     `<div class="list-item" style="border-top:1px solid var(--line-strong);">
-      <div class="li-name" style="font-weight:700;">Итого за месяц</div>
-      <div class="proj-sum" style="font-weight:700;">${fmtMoney(totalAll)}</div>
-    </div>`;
+      <div class="li-name" style="font-weight:700;">Итого к выплате за месяц</div>
+      <div class="proj-sum" style="font-weight:700;">${fmtMoney(totalPayout)}</div>
+    </div>` +
+    (totalRetained > 0 ? `<div class="list-item">
+      <div class="li-name" style="color:var(--text-dim);">Осталось в прибыли компании (сверх фикс. ЗП)</div>
+      <div class="proj-sum" style="color:var(--gold);">${fmtMoney(totalRetained)}</div>
+    </div>` : '');
+}
+// ============================================================
+// РАСХОДЫ КОМПАНИИ (аренда, коммунальные, уборка и т.п.)
+// ============================================================
+let editingCompanyExpenseId = null;
+const COMPANY_EXPENSE_CATEGORIES = ['Аренда','Коммунальные','Уборка','Связь и интернет','Реклама','Прочее'];
+
+function renderCompanyExpensesList(){
+  const el = document.getElementById('companyExpensesList');
+  if(!el) return;
+  const list = (state.companyExpenses||[]).slice().sort((a,b)=>(b.expense_date||'').localeCompare(a.expense_date||''));
+  if(!list.length){
+    el.innerHTML = '<div class="empty-state">Расходов пока нет</div>';
+    return;
+  }
+  el.innerHTML = list.map(ex=>`
+    <div class="list-item">
+      <div>
+        <div class="li-name">${escapeHtml(ex.category)}${ex.description?' — '+escapeHtml(ex.description):''}</div>
+        <div class="li-meta">${fmtDate(ex.expense_date)}</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <div class="proj-sum" style="color:var(--red);">${fmtMoney(ex.amount)}</div>
+        <button class="icon-btn" onclick="openCompanyExpenseSheet('${ex.id}')">✎</button>
+      </div>
+    </div>`).join('');
+}
+
+function openCompanyExpenseSheet(id){
+  editingCompanyExpenseId = id;
+  const overlay = document.getElementById('companyExpenseSheetOverlay');
+  const title = document.getElementById('companyExpenseSheetTitle');
+  const deleteBtn = document.getElementById('cex-delete');
+  const catSel = document.getElementById('cex-category');
+  catSel.innerHTML = COMPANY_EXPENSE_CATEGORIES.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  if(id){
+    const ex = (state.companyExpenses||[]).find(x=>x.id===id);
+    if(!ex) return;
+    title.textContent = 'Редактировать расход';
+    deleteBtn.style.display = '';
+    catSel.value = ex.category || COMPANY_EXPENSE_CATEGORIES[0];
+    document.getElementById('cex-amount').value = ex.amount ?? '';
+    document.getElementById('cex-date').value = ex.expense_date || '';
+    document.getElementById('cex-desc').value = ex.description || '';
+  }else{
+    title.textContent = 'Новый расход';
+    deleteBtn.style.display = 'none';
+    catSel.selectedIndex = 0;
+    document.getElementById('cex-amount').value = '';
+    document.getElementById('cex-date').value = new Date().toISOString().slice(0,10);
+    document.getElementById('cex-desc').value = '';
+  }
+  overlay.classList.add('active');
+}
+
+function closeCompanyExpenseSheet(){
+  document.getElementById('companyExpenseSheetOverlay').classList.remove('active');
+  editingCompanyExpenseId = null;
+}
+
+async function saveCompanyExpense(){
+  const category = document.getElementById('cex-category').value;
+  const amount = parseFloat(document.getElementById('cex-amount').value) || 0;
+  const expense_date = document.getElementById('cex-date').value;
+  const description = document.getElementById('cex-desc').value.trim();
+  if(!amount || amount <= 0){ showToast('Укажите сумму'); return; }
+  if(!expense_date){ showToast('Укажите дату'); return; }
+  try{
+    if(editingCompanyExpenseId){
+      const {error} = await sb.from('company_expenses').update({category, amount, expense_date, description}).eq('id', editingCompanyExpenseId);
+      if(error) throw error;
+    }else{
+      const {error} = await sb.from('company_expenses').insert({category, amount, expense_date, description});
+      if(error) throw error;
+    }
+    showToast('Расход сохранён');
+    closeCompanyExpenseSheet();
+    await loadAll();
+    financeExpanded = true;
+    renderAnalytics();
+  }catch(e){
+    console.error(e);
+    showToast('Ошибка сохранения — проверьте, что миграция company_expenses выполнена в Supabase');
+  }
+}
+
+async function deleteCompanyExpense(){
+  if(!editingCompanyExpenseId) return;
+  if(!confirm('Удалить этот расход?')) return;
+  try{
+    const {error} = await sb.from('company_expenses').update({deleted_at: new Date().toISOString()}).eq('id', editingCompanyExpenseId);
+    if(error) throw error;
+    showToast('Расход удалён');
+    closeCompanyExpenseSheet();
+    await loadAll();
+    financeExpanded = true;
+    renderAnalytics();
+  }catch(e){
+    console.error(e);
+    showToast('Ошибка удаления');
+  }
 }
 
 function renderFeeCalc(){
@@ -5162,10 +5299,15 @@ function openEmployeeSheet(id){
     // Если поля can_see_* ещё не заданы явно (null) — подставляем текущее фактическое поведение по роли, как отправную точку
     document.getElementById('ef-see-projects').checked = (e.can_see_projects === null || e.can_see_projects === undefined) ? canSeeProjectsForRole(e.role) : !!e.can_see_projects;
     document.getElementById('ef-see-construction').checked = (e.can_see_construction === null || e.can_see_construction === undefined) ? canSeeConstructionForRole(e.role) : !!e.can_see_construction;
+    document.getElementById('ef-is-salaried').checked = !!e.is_salaried;
+    document.getElementById('ef-fixed-salary').value = e.fixed_salary ?? '';
+    document.getElementById('ef-fixed-salary-row').style.display = e.is_salaried ? '' : 'none';
     pinField.style.display = isAdmin ? '' : 'none';
     if(cardEditField) cardEditField.style.display = isAdmin ? '' : 'none';
     const sectionsField = document.getElementById('ef-sections-field');
     if(sectionsField) sectionsField.style.display = isAdmin ? '' : 'none';
+    const salaryField = document.getElementById('ef-salary-field');
+    if(salaryField) salaryField.style.display = isAdmin ? '' : 'none';
   }else{
     title.textContent = 'Новый сотрудник';
     deleteBtn.style.display = 'none';
@@ -5176,10 +5318,15 @@ function openEmployeeSheet(id){
     document.getElementById('ef-can-edit-cards').checked = false;
     document.getElementById('ef-see-projects').checked = true;
     document.getElementById('ef-see-construction').checked = false;
+    document.getElementById('ef-is-salaried').checked = false;
+    document.getElementById('ef-fixed-salary').value = '';
+    document.getElementById('ef-fixed-salary-row').style.display = 'none';
     pinField.style.display = isAdmin ? '' : 'none';
     if(cardEditField) cardEditField.style.display = isAdmin ? '' : 'none';
     const sectionsField2 = document.getElementById('ef-sections-field');
     if(sectionsField2) sectionsField2.style.display = isAdmin ? '' : 'none';
+    const salaryField2 = document.getElementById('ef-salary-field');
+    if(salaryField2) salaryField2.style.display = isAdmin ? '' : 'none';
   }
   overlay.classList.add('active');
 }
@@ -5210,6 +5357,8 @@ async function saveEmployee(){
     payload.can_edit_cards = document.getElementById('ef-can-edit-cards').checked;
     payload.can_see_projects = document.getElementById('ef-see-projects').checked;
     payload.can_see_construction = document.getElementById('ef-see-construction').checked;
+    payload.is_salaried = document.getElementById('ef-is-salaried').checked;
+    payload.fixed_salary = payload.is_salaried ? (parseFloat(document.getElementById('ef-fixed-salary').value) || 0) : 0;
   }
   try{
     if(editingEmployeeId){
@@ -8516,6 +8665,14 @@ document.getElementById('tf-delete').addEventListener('click', ()=>{
 });
 document.getElementById('tariffSheetOverlay').addEventListener('click', (e)=>{
   if(e.target.id === 'tariffSheetOverlay') closeTariffSheet();
+});
+
+document.getElementById('companyExpenseSheetClose').addEventListener('click', closeCompanyExpenseSheet);
+document.getElementById('cex-cancel').addEventListener('click', closeCompanyExpenseSheet);
+document.getElementById('cex-save').addEventListener('click', saveCompanyExpense);
+document.getElementById('cex-delete').addEventListener('click', deleteCompanyExpense);
+document.getElementById('companyExpenseSheetOverlay').addEventListener('click', (e)=>{
+  if(e.target.id === 'companyExpenseSheetOverlay') closeCompanyExpenseSheet();
 });
 
 // ledgerAdd listener removed
