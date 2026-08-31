@@ -2901,6 +2901,18 @@ function markTzSeen(){
   updateTzBadge();
 }
 
+// Отказоустойчивая загрузка сотрудников: пытаемся получить новые поля
+// is_salaried/fixed_salary (миграция 14), но если их ещё нет в базе —
+// не рушим всю загрузку приложения, а откатываемся к базовому набору полей.
+async function fetchEmployeesResilient(filterFn){
+  let res = await filterFn(sb.from('employees').select('id,name,role,is_admin,active,can_edit_cards,can_see_projects,can_see_construction,is_salaried,fixed_salary,deleted_at,created_at'));
+  if(res.error){
+    console.warn('Поля is_salaried/fixed_salary недоступны (миграция 14 не выполнена?), загружаю сотрудников без них:', res.error.message);
+    res = await filterFn(sb.from('employees').select('id,name,role,is_admin,active,can_edit_cards,can_see_projects,can_see_construction,deleted_at,created_at'));
+  }
+  return res;
+}
+
 async function loadAll(){
   if(loadAllInFlight) return;
   loadAllInFlight = true;
@@ -2912,7 +2924,7 @@ async function loadAll(){
   try{
     const [proj, emp, cat, st, dept, led, photos, invs, tzForms, tzRefs, company, kpForms, stages, members, kpCat, tsPay, compExp] = await Promise.all([
       sb.from('projects').select('*').is('deleted_at', null).order('created_at', {ascending:true}),
-      sb.from('employees').select('id,name,role,is_admin,active,can_edit_cards,can_see_projects,can_see_construction,is_salaried,fixed_salary,deleted_at,created_at').is('deleted_at', null).order('name'),
+      fetchEmployeesResilient(q => q.is('deleted_at', null).order('name')),
       sb.from('categories').select('*').is('deleted_at', null).order('sort_order'),
       sb.from('statuses').select('*').order('sort_order'),
       sb.from('departments').select('*').order('sort_order'),
@@ -3031,7 +3043,7 @@ async function loadDeferredData(){
     const [hist, trashProj, trashEmp, trashCat, trashLed] = await Promise.all([
       sb.from('audit_log').select('*').order('created_at', {ascending:false}).limit(5000),
       sb.from('projects').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
-      sb.from('employees').select('id,name,role,is_admin,active,can_edit_cards,can_see_projects,can_see_construction,is_salaried,fixed_salary,deleted_at,created_at').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
+      fetchEmployeesResilient(q => q.not('deleted_at', 'is', null).order('deleted_at', {ascending:false})),
       sb.from('categories').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
       sb.from('ledger_entries').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
     ]);
