@@ -37,8 +37,11 @@
     --blue:#0071EB;
     --blue-soft:rgba(0,113,235,0.10);
     --red:#C0522F;
+    --red-soft:rgba(192,82,47,0.08);
     --green:#2E7D5B;
+    --green-soft:rgba(46,125,91,0.08);
     --gold:#A6690F;
+    --gold-soft:rgba(166,105,15,0.09);
     --white:#FFFFFF;
     --radius:12px;
     --radius-sm:8px;
@@ -128,6 +131,12 @@
   }
   .section-label .lbl-text{display:flex; align-items:center; gap:8px;}
   .section-label-line{flex:1; height:1px; background:var(--line); margin-left:10px; opacity:0.6;}
+  .accent-block{border-radius:var(--radius-sm); padding:14px; margin-bottom:14px; border:1px solid var(--line-strong);}
+  .accent-block.ab-blue{background:var(--blue-soft); border-left:3px solid var(--blue);}
+  .accent-block.ab-green{background:var(--green-soft); border-left:3px solid var(--green);}
+  .accent-block.ab-gold{background:var(--gold-soft); border-left:3px solid var(--gold);}
+  .accent-block.ab-red{background:var(--red-soft); border-left:3px solid var(--red);}
+  .accent-block .accent-title{font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; margin-bottom:10px; opacity:0.75;}
 
   /* KPI cards */
   .kpi-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
@@ -586,9 +595,6 @@
       <div class="section-label"><span class="lbl-text">Активные проекты · по направлениям</span><span class="section-label-line"></span></div>
       <div id="plBlock"></div>
 
-      <div class="section-label"><span class="lbl-text">Финансы компании</span><span class="section-label-line"></span></div>
-      <div class="card" id="analyticsBlock" style="padding:14px;"></div>
-
       <div class="section-label"><span class="lbl-text">Долги и выручка по проектам</span><span class="section-label-line"></span></div>
       <div class="card" id="debtCard" style="padding:0;"></div>
 
@@ -670,9 +676,6 @@
 
   </div>
 
-  <!-- ===================== ФИНАНСЫ / ГОНОРАРЫ ===================== -->
-  <!-- view-finance удалён -->
-
   <!-- ===================== КАРТОЧКИ ПРОЕКТОВ ===================== -->
   <div class="view" id="view-cards" style="padding-top:0;">
 
@@ -738,6 +741,7 @@
       <button class="btn btn-secondary" id="openCompanyBtn" style="padding:18px 8px;font-size:13px;line-height:1.3;height:auto;">🏢<br>Реквизиты</button>
       <button class="btn btn-primary" id="exportXlsxBtn" style="padding:18px 8px;font-size:13px;line-height:1.3;height:auto;">📊<br>Excel</button>
       <button class="btn btn-secondary" id="openTimesheetBtn" style="padding:18px 8px;font-size:13px;line-height:1.3;height:auto;grid-column:1/-1;">🗓<br>Табель заработка сотрудников</button>
+      <button class="btn btn-primary" id="openFinanceBtn" style="padding:18px 8px;font-size:13px;line-height:1.3;height:auto;grid-column:1/-1;display:none;">💹<br>Финансы компании</button>
     </div>
 
     <div id="more-admin-sections">
@@ -1062,6 +1066,24 @@
     <div class="card" id="timesheetCard">
       <div class="loading-state">Загрузка…</div>
     </div>
+
+  </div>
+
+  <!-- ===================== ФИНАНСЫ КОМПАНИИ ===================== -->
+  <div class="view" id="view-finance">
+
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+      <button class="icon-btn" id="financeBack" style="font-size:20px;">←</button>
+      <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:16px;">Финансы компании</div>
+    </div>
+
+    <div class="section-label"><span class="lbl-text">Оклады</span><span class="section-label-line"></span></div>
+    <div class="card" id="finSalariesCard">
+      <div class="loading-state">Загрузка…</div>
+    </div>
+
+    <div class="section-label"><span class="lbl-text">Приход, расход, прибыль</span><span class="section-label-line"></span></div>
+    <div class="card" id="analyticsBlock" style="padding:14px;"></div>
 
   </div>
 
@@ -1424,7 +1446,7 @@
       <label class="form-label">Название ссылки (для себя)</label>
       <input class="form-input" id="sl-name" placeholder="Клиент Ахмад, июль 2026"/>
     </div>
-    <div style="margin-bottom:14px;">
+    <div style="margin-bottom:14px;" id="sl-filter-row">
       <label class="form-label">Фильтр карточек</label>
       <select class="form-input" id="sl-filter">
         <option value="all">Все карточки</option>
@@ -1433,6 +1455,7 @@
         <option value="3">3+ этажа</option>
       </select>
     </div>
+    <div id="sl-single-note" style="display:none;margin-bottom:14px;font-size:12px;color:var(--text-dim);background:var(--blue-soft);border-radius:8px;padding:8px 10px;">Ссылка ведёт только на этот конкретный проект.</div>
     <div style="margin-bottom:16px;">
       <label class="form-label">Срок действия ссылки</label>
       <select class="form-input" id="sl-expires">
@@ -1564,6 +1587,8 @@
     </div>
 
     <div id="pf-financial-section">
+    <div class="accent-block ab-blue">
+    <div class="accent-title">Цена и оплата</div>
     <div class="field-row3">
       <div class="field">
         <label>Цена, ₽</label>
@@ -1578,12 +1603,51 @@
         <input type="number" id="pf-balance" placeholder="0" readonly title="Рассчитывается автоматически: Цена − Получено">
       </div>
     </div>
-    <div class="hint" style="margin:-6px 0 10px;">«Получено» и «Остаток» обновляются автоматически после платежей (кнопка «Принять платёж» ниже).</div>
+    <div class="hint" style="margin:-6px 0 0;">«Получено» и «Остаток» обновляются автоматически после платежей (кнопка «Принять платёж» ниже).</div>
+    </div>
 
+    <div class="accent-block ab-gold">
+    <div class="accent-title">Площадь и распределение бюджета по м²</div>
+    <div class="field-row">
+      <div class="field">
+        <label>Площадь, м²</label>
+        <input type="number" id="pf-area" placeholder="напр. 120" oninput="renderProjectRolePayouts(editingProjectId)">
+      </div>
+      <div class="field">
+        <label>Остаток компании, ₽</label>
+        <input type="number" id="pf-company-remainder" placeholder="0" readonly title="Цена минус все расходы, включая выплаты исполнителям">
+      </div>
+    </div>
+    <div id="pf-role-payouts-list"></div>
+    <div id="pf-role-payout-add-row" style="display:flex; gap:6px; align-items:end; flex-wrap:wrap; margin-top:6px;">
+      <div class="field" style="margin-bottom:0; flex:1; min-width:130px;">
+        <label>Роль</label>
+        <select id="pf-rp-role">
+          <option value="Визуализатор">Визуализатор</option>
+          <option value="Чертёжник">Чертёжник</option>
+          <option value="Ведущий дизайнер">Ведущий дизайнер</option>
+          <option value="Другое">Другое роль</option>
+        </select>
+      </div>
+      <div class="field" style="margin-bottom:0; flex:1; min-width:130px;">
+        <label>Исполнитель</label>
+        <select id="pf-rp-employee"></select>
+      </div>
+      <div class="field" style="margin-bottom:0; flex:1; min-width:90px;">
+        <label>Ставка, ₽/м²</label>
+        <input type="number" id="pf-rp-rate" placeholder="400">
+      </div>
+      <button class="btn btn-secondary" type="button" id="pf-rp-add-btn" style="width:auto; white-space:nowrap; margin-bottom:0; padding:11px 16px;">+ Начислить</button>
+    </div>
+    <div class="hint" style="margin:8px 0 0;">Сумма = площадь × ставка. Начисление уходит в расходы проекта и попадает в табель исполнителя за текущий месяц.</div>
+    </div>
+
+    <div class="accent-block ab-red">
+    <div class="accent-title">Расходы по проекту</div>
     <div class="field-row">
       <div class="field">
         <label>Расходы по проекту, ₽ (сумма)</label>
-        <input type="number" id="pf-expenses" placeholder="0" readonly title="Складывается из списка расходов ниже">
+        <input type="number" id="pf-expenses" placeholder="0" readonly title="Складывается из списка расходов и начислений исполнителям ниже">
       </div>
       <div class="field">
         <label>Выплачено гонорара исполнителю, ₽</label>
@@ -1592,7 +1656,7 @@
     </div>
 
     <!-- Список расходов проекта -->
-    <div id="pf-expenses-block" style="margin:-2px 0 12px;">
+    <div id="pf-expenses-block" style="margin:-2px 0 0;">
       <div id="pf-expenses-list"></div>
       <div id="pf-expense-add-row" style="display:flex; gap:6px; align-items:end; flex-wrap:wrap; margin-top:6px;">
         <div class="field" style="margin-bottom:0; flex:2; min-width:120px;">
@@ -1610,7 +1674,10 @@
         <button class="btn btn-secondary" type="button" id="pf-expense-add-btn" style="width:auto; white-space:nowrap; margin-bottom:0; padding:11px 16px;">+ Расход</button>
       </div>
     </div>
+    </div>
 
+    <div class="accent-block ab-green">
+    <div class="accent-title">Гонорар</div>
     <div class="field-row">
       <div class="field">
         <label>% гонорара исполнителя (своё, иначе из категории)</label>
@@ -1636,7 +1703,8 @@
       </div>
     </div>
 
-    <div id="pf-fee-summary" class="fee-card" style="margin-bottom:12px;"></div>
+    <div id="pf-fee-summary" class="fee-card" style="margin-bottom:0;"></div>
+    </div>
 
     <div style="display:flex;gap:8px;flex-wrap:nowrap;">
       <button class="btn btn-secondary" id="pf-add-payment" type="button" style="flex:1;min-width:0;">💰 Принять платёж</button>
@@ -2441,7 +2509,6 @@ function applyRole(){
   // Bottom nav — скрываем по ролям
   const navConstr = document.querySelector('.nav-btn[data-view="view-construction"]');
   const navProj = document.querySelector('.nav-btn[data-view="view-projects"]');
-  const navFinance = null; // view-finance удалён
   const navOverview = document.querySelector('.nav-btn[data-view="view-overview"]');
   if(navConstr) navConstr.style.display = seeConstr ? '' : 'none';
   if(navProj) navProj.style.display = seeProj ? '' : 'none';
@@ -2458,10 +2525,15 @@ function applyRole(){
   const moreAdminSections = document.getElementById('more-admin-sections');
   if(moreAdminSections) moreAdminSections.style.display = isAdmin ? '' : 'none';
 
+  // Финансы компании — только администратору (Мансур)
+  const financeBtn = document.getElementById('openFinanceBtn');
+  if(financeBtn) financeBtn.style.display = isAdmin ? '' : 'none';
+
   // Редиректим если текущий раздел недоступен
   const activeView = document.querySelector('.view.active');
   if(activeView){
     const hidden = (activeView.id==='view-overview' && !isAdmin)
+      || (activeView.id==='view-finance' && !isAdmin)
       || (activeView.id==='view-construction' && !seeConstr)
       || (activeView.id==='view-projects' && !seeProj)
       || (activeView.id==='view-cards' && !canEditCards());
@@ -3584,6 +3656,30 @@ function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+// Раздел «Финансы компании» → «Оклады»: сотрудники с фиксированной ЗП
+// (Мансур, менеджер и т.п.) — показывает сам оклад независимо от того,
+// участвует ли сотрудник в проектах (в отличие от «Табеля», где расчёт
+// идёт от заработанного по проектам/начислениям).
+function renderFinanceSalaries(){
+  const el = document.getElementById('finSalariesCard');
+  if(!el) return;
+  const rows = state.employees.filter(e=>e.active!==false && e.is_salaried);
+  if(!rows.length){
+    el.innerHTML = '<div class="empty-state" style="padding:10px;">Нет сотрудников с фиксированной ЗП — включите «Фиксированная ЗП» в карточке сотрудника (Настройки → Сотрудники).</div>';
+    return;
+  }
+  const total = rows.reduce((s,e)=>s+(Number(e.fixed_salary)||0),0);
+  el.innerHTML = rows.map(e=>`
+    <div class="list-item">
+      <div class="li-name">${escapeHtml(e.name)}${e.role?' <span style="color:var(--text-dim);font-weight:400;">· '+escapeHtml(e.role)+'</span>':''}</div>
+      <div class="proj-sum">${fmtMoney(Number(e.fixed_salary)||0)}</div>
+    </div>`).join('') +
+    `<div class="list-item" style="border-top:1px solid var(--line-strong);">
+      <div class="li-name" style="font-weight:700;">Итого окладов в месяц</div>
+      <div class="li-name" style="font-weight:700;">${fmtMoney(total)}</div>
+    </div>`;
+}
+
 // ============================================================
 // P&L — Финансы компании
 // ============================================================
@@ -4111,6 +4207,7 @@ function openProjectSheet(id){
     document.getElementById('pf-price').value = p.price ?? '';
     document.getElementById('pf-advance').value = p.advance ?? '';
     document.getElementById('pf-balance').value = p.balance ?? '';
+    document.getElementById('pf-area').value = p.area ?? '';
     document.getElementById('pf-expenses').value = p.expenses ?? '';
     document.getElementById('pf-feepaid').value = p.fee_paid ?? '';
     document.getElementById('pf-feepercent').value = p.fee_percent ?? '';
@@ -4127,6 +4224,7 @@ function openProjectSheet(id){
     document.getElementById('pf-create-kp').style.display = '';
     renderPaymentHistory(id);
     renderProjectExpenses(id);
+    renderProjectRolePayouts(id);
     const expAddRow = document.getElementById('pf-expense-add-row'); if(expAddRow) expAddRow.style.display = 'flex';
     renderFeeSummaryForProject(p);
     renderStagesList(id);
@@ -4186,7 +4284,10 @@ function openProjectSheet(id){
     document.getElementById('pf-price').value = '';
     document.getElementById('pf-advance').value = '';
     document.getElementById('pf-balance').value = '';
+    document.getElementById('pf-area').value = '';
     document.getElementById('pf-expenses').value = '';
+    document.getElementById('pf-role-payouts-list').innerHTML = '<div class="empty-state" style="padding:10px;">Сохраните проект, чтобы начислять исполнителям</div>';
+    document.getElementById('pf-company-remainder').value = '';
     document.getElementById('pf-feepaid').value = '';
     document.getElementById('pf-feepercent').value = '';
     document.getElementById('pf-feebase').value = '';
@@ -4256,6 +4357,7 @@ async function saveProject(){
     price: price,
     advance: advance,
     balance: Math.max(0, price - advance),
+    area: document.getElementById('pf-area').value === '' ? null : parseFloat(document.getElementById('pf-area').value),
     expenses: parseFloat(document.getElementById('pf-expenses').value) || 0,
     fee_paid: parseFloat(document.getElementById('pf-feepaid').value) || 0,
     fee_percent: document.getElementById('pf-feepercent').value === '' ? null : parseFloat(document.getElementById('pf-feepercent').value),
@@ -4541,6 +4643,15 @@ function completedProjectEarningsForRange(from, to){
     }
   });
 
+  // Начисления по м² (визуализатор/чертёжник/ведущий дизайнер и т.п.) — попадают
+  // в табель по дате самого начисления, независимо от статуса проекта.
+  (state.ledger||[]).forEach(l=>{
+    if(l.type !== 'role_payout' || l.deleted_at) return;
+    if(!l.entry_date || l.entry_date < from || l.entry_date > to) return;
+    const proj = state.projects.find(p=>p.id===l.project_id);
+    addEarn(l.payee_employee_id, Number(l.amount)||0, l.project_id, (proj?proj.name:'') + ' — ' + (l.description||'начисление по м²'), 'начисление по м²');
+  });
+
   return {employees, revenue, projectCosts, byDeptProfit};
 }
 
@@ -4657,7 +4768,10 @@ function renderTimesheet(){
           <div class="li-meta">${r.items.length} проект(ов)${r.paid?' · оплачено':''}${r.isSalaried && r.retained>0 ? ' · в баланс компании: '+fmtMoney(r.retained) : ''}</div>
         </div>
       </div>
-      <div class="proj-sum" style="${r.paid?'color:var(--green);':''}">${fmtMoney(r.payout)}</div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <div class="proj-sum" style="${r.paid?'color:var(--green);':''}">${fmtMoney(r.payout)}</div>
+        <button class="icon-btn" title="Скачать табель этого сотрудника за месяц (PDF)" onclick="event.stopPropagation(); exportTimesheetToPdf('${r.id}','${monthStr}')" style="font-size:15px;">📄</button>
+      </div>
     </div>
     ${expanded ? itemsHtml : ''}`;
   }).join('') +
@@ -4669,6 +4783,125 @@ function renderTimesheet(){
       <div class="li-name" style="color:var(--text-dim);">Осталось в прибыли компании (сверх фикс. ЗП)</div>
       <div class="proj-sum" style="color:var(--gold);">${fmtMoney(totalRetained)}</div>
     </div>` : '');
+}
+
+// ============================================================
+// ТАБЕЛЬ КАК ОТДЕЛЬНЫЙ ДОКУМЕНТ — PDF на одного сотрудника за один месяц
+// ============================================================
+function exportTimesheetToPdf(employeeId, monthStr){
+  const emp = findEmployee(employeeId);
+  if(!emp){ showToast('Сотрудник не найден'); return; }
+  const {from, to} = timesheetMonthRange(monthStr);
+  const {employees: earnedMap} = completedProjectEarningsForRange(from, to);
+  const {result: payrollByEmp} = splitPayrollByEmployee(earnedMap);
+  const e = earnedMap[employeeId];
+  const p = payrollByEmp[employeeId] || {earned:0, payout:0, retained:0, isSalaried: !!emp.is_salaried, salary: Number(emp.fixed_salary)||0};
+  const items = e ? e.items : [];
+  const paid = isTimesheetPaid(employeeId, monthStr);
+  const c = state.companyInfo || {};
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit:'mm', format:'a4'});
+  registerPdfFonts(doc);
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 18;
+  const contentWidth = pageWidth - margin*2;
+  const BLUE = [69,134,236];
+  let y = 15;
+
+  function newPage(){ doc.addPage(); y = 24; }
+
+  // ---- Брендированная шапка ----
+  const logoSize = 14;
+  doc.addImage(ARHITTEK_LOGO_B64, 'PNG', margin, 12, logoSize, logoSize*(87/100));
+  doc.setFont('Roboto','bold'); doc.setFontSize(17); doc.setTextColor(0);
+  doc.text('ARHIT', margin+logoSize+4, 21);
+  const arhitW = doc.getTextWidth('ARHIT');
+  doc.setTextColor(BLUE[0],BLUE[1],BLUE[2]);
+  doc.text('TEK', margin+logoSize+4+arhitW, 21);
+  doc.setTextColor(120); doc.setFont('Roboto','normal'); doc.setFontSize(8);
+  doc.text(c.short_name || c.full_name || '', pageWidth-margin, 15, {align:'right'});
+  doc.setDrawColor(BLUE[0],BLUE[1],BLUE[2]); doc.setLineWidth(0.6);
+  doc.line(margin, 28, pageWidth-margin, 28);
+  doc.setLineWidth(0.2); doc.setDrawColor(0); doc.setTextColor(0);
+  y = 38;
+
+  doc.setFont('Roboto','bold'); doc.setFontSize(15);
+  doc.text('ТАБЕЛЬ НАЧИСЛЕНИЙ', margin, y);
+  y += 8;
+  doc.setFont('Roboto','normal'); doc.setFontSize(10); doc.setTextColor(90);
+  doc.text('за ' + ruMonthLabel(monthStr), margin, y);
+  doc.setTextColor(0);
+  y += 10;
+
+  doc.setFont('Roboto','bold'); doc.setFontSize(11);
+  doc.text('Сотрудник: ' + (emp.name||''), margin, y); y += 6;
+  doc.setFont('Roboto','normal'); doc.setFontSize(10);
+  if(emp.role){ doc.text('Должность: ' + emp.role, margin, y); y += 6; }
+  if(p.isSalaried){ doc.text('Фиксированный оклад: ' + fmtMoney(p.salary), margin, y); y += 6; }
+  y += 4;
+
+  // ---- Таблица начислений ----
+  doc.setFillColor(BLUE[0],BLUE[1],BLUE[2]);
+  doc.rect(margin, y-4.5, contentWidth, 7.5, 'F');
+  doc.setFont('Roboto','bold'); doc.setFontSize(9); doc.setTextColor(255);
+  doc.text('Проект / начисление', margin+3, y);
+  doc.text('Сумма, ₽', margin+contentWidth-3, y, {align:'right'});
+  doc.setTextColor(0);
+  y += 8;
+
+  doc.setFont('Roboto','normal'); doc.setFontSize(9.5);
+  if(!items.length){
+    doc.setTextColor(140);
+    doc.text('Нет начислений за этот месяц', margin+3, y);
+    doc.setTextColor(0);
+    y += 7;
+  } else {
+    items.forEach((it, i)=>{
+      if(y > 265){ newPage(); }
+      if(i%2===1){ doc.setFillColor(246,248,251); doc.rect(margin, y-4.5, contentWidth, 7, 'F'); }
+      const label = (it.role==='соисполнитель'?'(соисп.) ':'') + (it.name||'');
+      const lines = doc.splitTextToSize(label, contentWidth-40);
+      doc.text(lines, margin+3, y);
+      doc.text(fmtMoney(it.amount), margin+contentWidth-3, y, {align:'right'});
+      y += 7*Math.max(1,lines.length);
+    });
+  }
+
+  y += 3;
+  if(y > 265) newPage();
+  doc.setDrawColor(200); doc.line(margin, y, margin+contentWidth, y); y += 7;
+
+  doc.setFont('Roboto','bold'); doc.setFontSize(11);
+  doc.text('Заработано за месяц:', margin, y);
+  doc.text(fmtMoney(p.earned), margin+contentWidth, y, {align:'right'});
+  y += 7;
+  if(p.isSalaried && p.retained > 0){
+    doc.setFont('Roboto','normal'); doc.setFontSize(9.5); doc.setTextColor(90);
+    doc.text('осталось в прибыли компании (сверх оклада):', margin, y);
+    doc.text(fmtMoney(p.retained), margin+contentWidth, y, {align:'right'});
+    doc.setTextColor(0);
+    y += 7;
+  }
+  y += 3;
+  doc.setFont('Roboto','bold'); doc.setFontSize(13); doc.setTextColor(BLUE[0],BLUE[1],BLUE[2]);
+  doc.text('К ВЫПЛАТЕ: ' + fmtMoney(p.payout), margin, y);
+  doc.setTextColor(0);
+  y += 7;
+  doc.setFont('Roboto','normal'); doc.setFontSize(9.5);
+  doc.setTextColor(paid ? 46 : 192, paid ? 125 : 82, paid ? 91 : 47);
+  doc.text(paid ? '✓ Оплачено' : '✗ Не оплачено', margin, y);
+  doc.setTextColor(0);
+
+  y += 20;
+  if(y > 270) newPage();
+  doc.setFont('Roboto','normal'); doc.setFontSize(9.5);
+  doc.text('Составил: _________________________', margin, y);
+  doc.text('Дата: __________', margin+contentWidth-45, y);
+  y += 14;
+  doc.text('Подпись сотрудника: _________________________', margin, y);
+
+  doc.save('Табель — ' + (emp.name||'сотрудник') + ' — ' + monthStr + '.pdf');
 }
 // ============================================================
 // РАСХОДЫ КОМПАНИИ (аренда, коммунальные, уборка и т.п.)
@@ -4814,6 +5047,7 @@ const ledgerTypeLabels = {
   fee_payment: {label:'Гонорар ARHITTEK', cls:'var(--blue)', sign:'+'},
   withdrawal: {label:'Вывод средств', cls:'var(--red)', sign:'−'},
   project_expense: {label:'Расход по проекту', cls:'var(--red)', sign:'−'},
+  role_payout: {label:'Начисление исполнителю (м²)', cls:'var(--gold)', sign:'−'},
 };
 
 function renderFeeSummaryForProject(p){
@@ -4892,14 +5126,120 @@ function renderProjectExpenses(projectId){
     </div></div>`;
 }
 
-// Пересчёт суммы расходов проекта и синхронизация p.expenses (используется в расчёте гонорара)
+// Пересчёт суммы расходов проекта и синхронизация p.expenses (используется в расчёте гонорара).
+// Считаем и обычные расходы (project_expense), и начисления исполнителям по м² (role_payout) —
+// последние тоже уменьшают прибыль/остаток компании по проекту.
 async function syncProjectExpensesTotal(projectId){
-  const {data, error} = await sb.from('ledger_entries').select('amount').eq('project_id', projectId).eq('type','project_expense');
+  const {data, error} = await sb.from('ledger_entries').select('amount').eq('project_id', projectId).in('type', ['project_expense','role_payout']);
   if(error) throw error;
   const total = (data||[]).reduce((s,r)=>s+Number(r.amount||0),0);
   await sb.from('projects').update({expenses: total}).eq('id', projectId);
   return total;
 }
+
+// ============================================================
+// РАСПРЕДЕЛЕНИЕ БЮДЖЕТА ПО М² МЕЖДУ ИСПОЛНИТЕЛЯМИ
+// Начисление = площадь проекта × ставка за м² конкретному исполнителю.
+// Хранится как ledger_entries(type='role_payout', payee_employee_id=...),
+// уменьшает прибыль/остаток компании по проекту (через syncProjectExpensesTotal)
+// и попадает в табель исполнителя за месяц даты начисления (см. renderTimesheet).
+// ============================================================
+function projectRolePayoutEntries(projectId){
+  return (state.ledger||[]).filter(l=>l.project_id===projectId && l.type==='role_payout')
+    .sort((a,b)=> new Date(b.entry_date) - new Date(a.entry_date) || new Date(b.created_at) - new Date(a.created_at));
+}
+
+function updateCompanyRemainderField(projectId){
+  const remEl = document.getElementById('pf-company-remainder');
+  if(!remEl) return;
+  const price = parseFloat(document.getElementById('pf-price').value) || 0;
+  const expenses = parseFloat(document.getElementById('pf-expenses').value) || 0;
+  remEl.value = projectId ? (price - expenses) : '';
+}
+
+function renderProjectRolePayouts(projectId){
+  const sel = document.getElementById('pf-rp-employee');
+  if(sel && !sel.dataset.filled){
+    sel.innerHTML = '<option value="">— выберите —</option>' + state.employees.filter(e=>e.active!==false)
+      .map(e=>`<option value="${e.id}">${escapeHtml(e.name)}</option>`).join('');
+    sel.dataset.filled = '1';
+  }
+  const el = document.getElementById('pf-role-payouts-list');
+  if(!el) return;
+  if(!projectId){ el.innerHTML = ''; return; }
+  const items = projectRolePayoutEntries(projectId);
+  if(!items.length){
+    el.innerHTML = '<div class="empty-state" style="padding:10px;">Начислений пока нет</div>';
+  } else {
+    const total = items.reduce((s,e)=>s+Number(e.amount||0),0);
+    el.innerHTML = `<div class="card" style="margin-bottom:0;">` + items.map(e=>{
+      const emp = findEmployee(e.payee_employee_id);
+      return `<div class="list-item">
+        <div style="min-width:0;">
+          <div class="li-name">${escapeHtml(e.description||'Начисление')}</div>
+          <div class="li-meta">${emp?escapeHtml(emp.name)+' · ':''}${fmtDate(e.entry_date)} · <span style="color:var(--gold);">−${fmtMoney(e.amount)}</span></div>
+        </div>
+        <div class="li-actions">
+          <button class="icon-btn danger" title="Удалить начисление" onclick="deleteProjectRolePayout('${e.id}','${projectId}')">🗑</button>
+        </div>
+      </div>`;
+    }).join('') +
+      `<div class="list-item" style="border-top:1px solid var(--line-strong);">
+        <div class="li-name" style="font-weight:700;">Итого начислено исполнителям</div>
+        <div class="li-name" style="font-weight:700;color:var(--gold);">−${fmtMoney(total)}</div>
+      </div></div>`;
+  }
+  updateCompanyRemainderField(projectId);
+}
+
+async function addProjectRolePayout(){
+  const projectId = editingProjectId;
+  if(!projectId){ showToast('Сначала сохраните проект'); return; }
+  const role = document.getElementById('pf-rp-role').value;
+  const employeeId = document.getElementById('pf-rp-employee').value;
+  const rate = parseFloat(document.getElementById('pf-rp-rate').value);
+  const area = parseFloat(document.getElementById('pf-area').value);
+  if(!employeeId){ showToast('Выберите исполнителя'); return; }
+  if(!rate || rate <= 0){ showToast('Укажите ставку за м²'); return; }
+  if(!area || area <= 0){ showToast('Укажите площадь проекта, м²'); return; }
+  const amount = Math.round(area * rate);
+  const emp = findEmployee(employeeId);
+  const p = state.projects.find(x=>x.id===projectId);
+  try{
+    const {error} = await sb.from('ledger_entries').insert({
+      type:'role_payout', project_id:projectId, payee_employee_id: employeeId,
+      description:`${role} — ${emp?emp.name:''} (${area} м² × ${fmtMoney(rate)}/м²)`,
+      amount, entry_date: new Date().toISOString().slice(0,10),
+      received_by: session ? session.employeeId : null,
+    });
+    if(error) throw error;
+    const total = await syncProjectExpensesTotal(projectId);
+    await logAudit('project', projectId, p?p.name:'', 'update', {role_payout_added:{old:null, new:`${role} — ${emp?emp.name:''} — ${fmtMoney(amount)}`}});
+    document.getElementById('pf-rp-rate').value = '';
+    await loadAll();
+    renderProjectRolePayouts(projectId);
+    const expEl = document.getElementById('pf-expenses'); if(expEl) expEl.value = total;
+    updateCompanyRemainderField(projectId);
+    const up = state.projects.find(x=>x.id===projectId); if(up) renderFeeSummaryForProject(up);
+    showToast('Начисление добавлено — попадёт в табель за текущий месяц');
+  }catch(e){ console.error(e); showToast('Ошибка добавления начисления — проверьте, что миграция выполнена в Supabase'); }
+}
+
+async function deleteProjectRolePayout(entryId, projectId){
+  if(!confirm('Удалить это начисление?')) return;
+  try{
+    await sb.from('ledger_entries').delete().eq('id', entryId);
+    const total = await syncProjectExpensesTotal(projectId);
+    await loadAll();
+    renderProjectRolePayouts(projectId);
+    const expEl = document.getElementById('pf-expenses'); if(expEl) expEl.value = total;
+    updateCompanyRemainderField(projectId);
+    const up = state.projects.find(x=>x.id===projectId); if(up) renderFeeSummaryForProject(up);
+    showToast('Начисление удалено');
+  }catch(e){ console.error(e); showToast('Ошибка удаления'); }
+}
+
+document.getElementById('pf-rp-add-btn').addEventListener('click', addProjectRolePayout);
 
 async function addProjectExpense(){
   const projectId = editingProjectId;
@@ -4935,6 +5275,7 @@ async function addProjectExpense(){
     await loadAll();
     renderProjectExpenses(projectId);
     const expEl = document.getElementById('pf-expenses'); if(expEl) expEl.value = total;
+    updateCompanyRemainderField(projectId);
     const up = state.projects.find(x=>x.id===projectId); if(up) renderFeeSummaryForProject(up);
     showToast('Расход добавлен');
   }catch(e){ console.error(e); showToast('Ошибка добавления расхода'); }
@@ -4948,6 +5289,7 @@ async function deleteProjectExpense(entryId, projectId){
     await loadAll();
     renderProjectExpenses(projectId);
     const expEl = document.getElementById('pf-expenses'); if(expEl) expEl.value = total;
+    updateCompanyRemainderField(projectId);
     const up = state.projects.find(x=>x.id===projectId); if(up) renderFeeSummaryForProject(up);
     showToast('Расход удалён');
   }catch(e){ console.error(e); showToast('Ошибка удаления'); }
@@ -8739,6 +9081,22 @@ document.getElementById('timesheetBack').addEventListener('click', ()=>{
 });
 document.getElementById('ts-month').addEventListener('change', renderTimesheet);
 
+document.getElementById('openFinanceBtn').addEventListener('click', ()=>{
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('view-finance').classList.add('active');
+  renderFinanceSalaries();
+  renderAnalytics();
+  window.scrollTo(0,0);
+});
+document.getElementById('financeBack').addEventListener('click', ()=>{
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('view-more').classList.add('active');
+  document.querySelector('.nav-btn[data-view="view-more"]').classList.add('active');
+  window.scrollTo(0,0);
+});
+
 document.getElementById('openKpBtn').addEventListener('click', openKpView);
 document.getElementById('kpBack').addEventListener('click', ()=>{
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
@@ -9040,6 +9398,7 @@ function renderCardsList(){
   container.innerHTML = filtered.map(card => `
     <div class="card" style="margin-bottom:10px;cursor:pointer;position:relative;"
          onclick="viewCard('${card.id}')">
+      ${canEditCards() ? `<button class="icon-btn" title="Получить ссылку на этот проект" onclick="event.stopPropagation(); createShareLinkForProject('${card.id}','${escapeHtml((card.title||'Проект').replace(/'/g,'')) }')" style="position:absolute;top:8px;right:8px;font-size:15px;background:var(--card-solid);border:1px solid var(--line-strong);border-radius:8px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;z-index:2;">🔗</button>` : ''}
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:700;line-height:1.35;margin-bottom:3px;">${escapeHtml(card.title||'Без названия')}</div>
@@ -9756,6 +10115,7 @@ document.addEventListener('keydown', (e)=>{
 
 // ── Ссылки для клиентов ──
 let shareLinksData = [];
+let shareLinkProjectId = null; // если задан — ссылка ведёт на один конкретный проект каталога
 
 async function renderShareLinks(){
   if(!canEditCards()) return;
@@ -9788,9 +10148,9 @@ async function renderShareLinks(){
 
     return `<div style="padding:10px 0;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;${isExpired?'opacity:0.55;':''}">
       <div style="flex:1;min-width:0;">
-        <div style="font-size:13px;font-weight:600;">${escapeHtml(link.label||'Ссылка')}</div>
+        <div style="font-size:13px;font-weight:600;">${escapeHtml(link.label||'Ссылка')}${link.project_id ? ' <span style="color:var(--gold);font-weight:600;">· один проект</span>' : ''}</div>
         <div style="font-size:11px;color:var(--text-dim);margin-top:2px;">
-          ${link.floors_filter==='all' ? 'Все карточки' : link.floors_filter+'-этажные'}
+          ${link.project_id ? 'Ссылка на один проект' : (link.floors_filter==='all' ? 'Все карточки' : link.floors_filter+'-этажные')}
           · создана ${new Date(link.created_at).toLocaleDateString('ru')}
         </div>
         <div style="font-size:11px;margin-top:2px;">${expiresText}</div>
@@ -9811,14 +10171,30 @@ async function renderShareLinks(){
 }
 
 function createShareLink(){
+  shareLinkProjectId = null;
   document.getElementById('sl-name').value = '';
   document.getElementById('sl-result').style.display = 'none';
+  document.getElementById('sl-filter-row').style.display = '';
+  document.getElementById('sl-single-note').style.display = 'none';
+  document.getElementById('shareLinkOverlay').classList.add('active');
+}
+
+// Ссылка на один конкретный проект каталога — видна только тем, у кого есть
+// доступ к разделу «Каталог» (canEditCards): администратору и сотрудникам
+// с правом видеть готовые проекты.
+function createShareLinkForProject(cardId, cardTitle){
+  if(!canEditCards()) return;
+  shareLinkProjectId = cardId;
+  document.getElementById('sl-name').value = cardTitle || 'Проект';
+  document.getElementById('sl-result').style.display = 'none';
+  document.getElementById('sl-filter-row').style.display = 'none';
+  document.getElementById('sl-single-note').style.display = '';
   document.getElementById('shareLinkOverlay').classList.add('active');
 }
 
 async function generateShareLink(){
   const label = document.getElementById('sl-name').value.trim() || 'Ссылка';
-  const filter = document.getElementById('sl-filter').value;
+  const filter = shareLinkProjectId ? 'all' : document.getElementById('sl-filter').value;
   const expiresDays = parseInt(document.getElementById('sl-expires').value);
   const token = (window.crypto && crypto.randomUUID)
     ? crypto.randomUUID().replace(/-/g,'')
@@ -9829,7 +10205,7 @@ async function generateShareLink(){
 
   try{
     const { error } = await sb.from('share_links').insert({
-      label, floors_filter: filter, token,
+      label, floors_filter: filter, token, project_id: shareLinkProjectId || null,
       created_at: new Date().toISOString(),
       expires_at,
     });
