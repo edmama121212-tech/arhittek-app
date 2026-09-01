@@ -5716,9 +5716,16 @@ async function saveEmployee(){
     payload.fixed_salary = payload.is_salaried ? (parseFloat(document.getElementById('ef-fixed-salary').value) || 0) : 0;
   }
   try{
+    let migrationFallback = false;
     if(editingEmployeeId){
       const before = state.employees.find(x=>x.id===editingEmployeeId);
-      const {error} = await sb.from('employees').update(payload).eq('id', editingEmployeeId);
+      let {error} = await sb.from('employees').update(payload).eq('id', editingEmployeeId);
+      if(error && /is_salaried|fixed_salary/.test(error.message||'')){
+        // Миграция 14 (оклад) не выполнена — сохраняем остальное, оклад пропускаем
+        const {is_salaried, fixed_salary, ...rest} = payload;
+        ({error} = await sb.from('employees').update(rest).eq('id', editingEmployeeId));
+        migrationFallback = !error;
+      }
       if(error) throw error;
       // PIN никогда не попадает в историю изменений — только факт смены, без значений
       const auditKeys = Object.keys(payload).filter(k => k !== 'pin_code');
@@ -5726,16 +5733,21 @@ async function saveEmployee(){
       if(payload.pin_code) changes.pin_code = { from: '••••••', to: '••••••' };
       if(Object.keys(changes).length) await logAudit('employee', editingEmployeeId, name, 'update', changes);
     }else{
-      const {data, error} = await sb.from('employees').insert(payload).select().single();
+      let {data, error} = await sb.from('employees').insert(payload).select().single();
+      if(error && /is_salaried|fixed_salary/.test(error.message||'')){
+        const {is_salaried, fixed_salary, ...rest} = payload;
+        ({data, error} = await sb.from('employees').insert(rest).select().single());
+        migrationFallback = !error;
+      }
       if(error) throw error;
       await logAudit('employee', data.id, name, 'create', {});
     }
-    showToast('Сохранено');
+    showToast(migrationFallback ? 'Сохранено (без оклада — выполните migration14 в Supabase)' : 'Сохранено');
     closeEmployeeSheet();
     await loadAll();
   }catch(e){
     console.error(e);
-    showToast('Ошибка сохранения');
+    showToast('Ошибка сохранения: ' + (e.message || e.hint || 'см. консоль'));
   }
 }
 
