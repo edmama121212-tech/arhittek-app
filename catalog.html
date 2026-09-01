@@ -173,9 +173,9 @@ async function init(){
 
     linkMeta = linkData;
 
-    // Скрыть фильтры если ссылка с фиксированным фильтром
-    if(linkMeta.floors_filter && linkMeta.floors_filter !== 'all'){
-      floorFilter = linkMeta.floors_filter;
+    // Скрыть фильтры если ссылка с фиксированным фильтром или на один проект
+    if((linkMeta.floors_filter && linkMeta.floors_filter !== 'all') || linkMeta.project_id){
+      floorFilter = linkMeta.floors_filter || 'all';
       document.getElementById('catFilters').style.display = 'none';
     }
   } catch(e){
@@ -183,12 +183,21 @@ async function init(){
     return;
   }
 
-  // Загрузить карточки
+  // Загрузить карточки: если ссылка на один конкретный проект — грузим только его
   try{
-    let query = sb.from('project_cards').select('*').is('deleted_at', null).order('created_at', { ascending: false });
-    const { data, error } = await query;
-    if(error) throw error;
-    allCards = data || [];
+    if(linkMeta.project_id){
+      const { data, error } = await sb.from('project_cards').select('*').eq('id', linkMeta.project_id).is('deleted_at', null).maybeSingle();
+      if(error) throw error;
+      if(!data){
+        feed.innerHTML = '<div class="state-msg"><div class="big">🚫</div>Этот проект больше не доступен.<br>Обратитесь к менеджеру ARHITTEK.</div>';
+        return;
+      }
+      allCards = [data];
+    } else {
+      const { data, error } = await sb.from('project_cards').select('*').is('deleted_at', null).order('created_at', { ascending: false });
+      if(error) throw error;
+      allCards = data || [];
+    }
     renderFeed();
   } catch(e){
     feed.innerHTML = '<div class="state-msg"><div class="big">⚠️</div>Ошибка загрузки карточек.</div>';
