@@ -2281,14 +2281,24 @@ function findStatus(id){ return state.statuses.find(s=>s.id===id); }
 // Расходы объекта: для строительных объектов — всегда свежая сумма из накладных
 // (ручное поле p.expenses для них не источник истины, см. renderConstrSummary).
 // Для остальных проектов — ручное поле p.expenses как и раньше.
+// Единый источник прямых расходов проекта. Начисления сотрудникам (role_payout)
+// не смешиваются с себестоимостью проекта: это отдельная статья ФОТ.
 function getProjectExpenses(p){
-  if(isConstructionCategory(p.category_id)){
-    const projInv = state.invoices.filter(inv => inv.project_id === p.id);
-    const matTotal = projInv.filter(i => ['Материал','Инструмент','Расходник','Доставка'].includes(i.item_type)).reduce((s,i)=>s+Number(i.amount),0);
-    const workTotal = projInv.filter(i => i.item_type==='Работа').reduce((s,i)=>s+Number(i.amount),0);
-    return matTotal + workTotal;
+  if(!p) return 0;
+  const manual = (state.ledger||[])
+    .filter(e => e.project_id===p.id && e.type==='project_expense' && !e.deleted_at)
+    .reduce((sum,e)=>sum + Number(e.amount||0),0);
+
+  if(isConstructionProject(p)){
+    const invoiceTotal = (state.invoices||[])
+      .filter(inv => inv.project_id===p.id && !inv.deleted_at)
+      .filter(i => ['Материал','Инструмент','Расходник','Доставка','Работа'].includes(i.item_type))
+      .reduce((sum,i)=>sum + Number(i.amount||0),0);
+    return invoiceTotal + manual;
   }
-  return Number(p.expenses) || 0;
+
+  // Старые проекты могли хранить расходы только в projects.expenses.
+  return manual > 0 ? manual : Math.max(0, Number(p.expenses)||0);
 }
 
 // Накладные, отмеченные «оплачено заказчиком напрямую» (заказчик оплатил
@@ -2296,8 +2306,8 @@ function getProjectExpenses(p){
 // (getProjectExpenses), но не должна считаться перерасходом компании —
 // компания эти деньги не тратила и не получала.
 function getProjectDirectClientPaid(p){
-  return state.invoices
-    .filter(inv => inv.project_id === p.id && inv.paid_by_client)
+  return (state.invoices||[])
+    .filter(inv => inv.project_id === p.id && !inv.deleted_at && inv.paid_by_client)
     .reduce((s,i)=>s+Number(i.amount||0), 0);
 }
 
@@ -2307,7 +2317,7 @@ function getProjectDirectClientPaid(p){
 // один и тот же объект показывал разные суммы гонорара на разных экранах.
 function getProjectFee(p){
   const withFreshExpenses = {...p, expenses: getProjectExpenses(p)};
-  return isConstructionCategory(p.category_id) ? calcConstrFee(withFreshExpenses) : calcFee(withFreshExpenses);
+  return isConstructionProject(p) ? calcConstrFee(withFreshExpenses) : calcFee(withFreshExpenses);
 }
 
 // Канонические этапы по типу проекта (встроенный чек-лист).
@@ -3595,6 +3605,29 @@ function computeFinancePeriod(from, to){
   return {revenue, projectCosts, byDeptProfit, payrollPaidOut, companyRetained, overhead, overheadByCat, totalExpenses, netProfit};
 }
 
+// Быстрая проверка финансовой целостности данных. Не изменяет БД — только
+// сообщает о потенциальных расхождениях, чтобы их можно было исправить вручную.
+function auditFinancialIntegrity(){
+  const issues=[];
+  (state.projects||[]).filter(p=>!p.deleted_at).forEach(p=>{
+    const direct=getProjectExpenses(p);
+    if(Number(p.expenses||0) < 0) issues.push(`Проект «${p.name}»: отрицательные расходы`);
+    if(Number(p.price||0) < 0) issues.push(`Проект «${p.name}»: отрицательная цена`);
+    if(Number(p.advance||0) > Number(p.price||0) && !isConstructionProject(p)) issues.push(`Проект «${p.name}»: аванс больше цены`);
+    if(isConstructionProject(p)){
+      const f=getConstructionFinancials(p);
+      if(Math.abs(Number(p.expenses||0)-Number(f.directCosts||0))>0.01) issues.push(`Проект «${p.name}»: сохранённые расходы не совпадают с прямыми расходами`);
+    } else if(Math.abs(Number(p.expenses||0)-Number(direct||0))>0.01 && (state.ledger||[]).some(e=>e.project_id===p.id && e.type==='project_expense' && !e.deleted_at)){
+      issues.push(`Проект «${p.name}»: projects.expenses не совпадает с журналом расходов`);
+    }
+  });
+  (state.ledger||[]).filter(e=>!e.deleted_at && e.type==='role_payout').forEach(e=>{
+    if(!e.payee_employee_id) issues.push(`Начисление ${e.id}: не указан сотрудник`);
+    if(Number(e.amount||0)<=0) issues.push(`Начисление ${e.id}: сумма должна быть больше нуля`);
+  });
+  return issues;
+}
+
 function financePeriodLabel(from, to){
   if(financePeriodMode === 'month') return ruMonthLabel(financeMonthValue);
   return `${fmtDate(from)} — ${fmtDate(to)}`;
@@ -4300,7 +4333,7 @@ function openProjectSheet(id){
     }
     // Кнопка «Накладные, материалы, фото» — только для строительных объектов.
     // Для Архитектуры и Дизайна интерьера она не нужна.
-    const isConstr = isConstructionCategory(p.category_id);
+    const isConstr = isConstructionProject(p);
     document.getElementById('pf-open-as-object').style.display = isConstr ? '' : 'none';
     // Для строительных объектов расходы считаются из накладных (вкладка «Стройка»),
     // а не из этого списка — прячем блок, чтобы не путал устаревшим/нерелевантным числом.
@@ -4408,9 +4441,15 @@ async function saveProject(){
     }
   }
 
+  const categoryId = document.getElementById('pf-category').value || null;
+  const existingProject = editingProjectId ? state.projects.find(p=>p.id===editingProjectId) : null;
+  const draftProject = existingProject ? {...existingProject, category_id: categoryId, price} : {category_id: categoryId, price};
+  const isConstr = existingProject ? isConstructionProject(draftProject) : isConstructionCategory(categoryId);
+  const directExpensesInput = parseFloat(document.getElementById('pf-expenses').value) || 0;
+
   const payload = {
     name: document.getElementById('pf-name').value.trim(),
-    category_id: document.getElementById('pf-category').value || null,
+    category_id: categoryId,
     status_id: document.getElementById('pf-status').value || null,
     payment_status: document.getElementById('pf-payment').value || 'Ждём оплату',
     employee_id: document.getElementById('pf-employee').value || null,
@@ -4419,9 +4458,7 @@ async function saveProject(){
     address: document.getElementById('pf-address').value.trim(),
     price: price,
     advance: advance,
-    balance: Math.max(0, price - advance),
     area: document.getElementById('pf-area').value === '' ? null : parseFloat(document.getElementById('pf-area').value),
-    expenses: parseFloat(document.getElementById('pf-expenses').value) || 0,
     fee_paid: parseFloat(document.getElementById('pf-feepaid').value) || 0,
     fee_percent: document.getElementById('pf-feepercent').value === '' ? null : parseFloat(document.getElementById('pf-feepercent').value),
     fee_base: document.getElementById('pf-feebase').value || null,
@@ -4434,7 +4471,15 @@ async function saveProject(){
     updated_at: new Date().toISOString(),
   };
 
-  if(payload.expenses < 0 || payload.fee_paid < 0){
+  // Остаток проекта — производное значение. Для стройки он считается из
+  // фактических приходов/прямых оплат/расходов после сохранения и никогда
+  // не перезаписывается общей формулой price - advance.
+  if(!isConstr){
+    payload.balance = Math.max(0, price - advance);
+    payload.expenses = Math.max(0, directExpensesInput);
+  }
+
+  if((payload.expenses||0) < 0 || payload.fee_paid < 0 || payload.co_fee_paid < 0){
     showToast('Сумма не может быть отрицательной');
     return;
   }
@@ -4474,6 +4519,22 @@ async function saveProject(){
       await logAudit('project', data.id, payload.name, 'create', {});
       showToast('Проект добавлен');
     }
+    // Для строительного объекта баланс и расходы — производные значения.
+    // Пересчитываем их только после успешного сохранения основной записи.
+    if(savedProjectId && isConstr){
+      await loadAll();
+      const saved = state.projects.find(x=>x.id===savedProjectId);
+      if(saved){
+        const fin = getConstructionFinancials(saved);
+        const {error: finErr} = await sb.from('projects').update({
+          expenses: fin.directCosts,
+          balance: fin.balance,
+          updated_at: new Date().toISOString()
+        }).eq('id', savedProjectId);
+        if(finErr) throw finErr;
+      }
+    }
+
     // Сохраняем дополнительных участников
     if(savedProjectId){
       await sb.from('project_members').delete().eq('project_id', savedProjectId);
@@ -5373,10 +5434,15 @@ function renderProjectExpenses(projectId){
 // Считаем и обычные расходы (project_expense), и начисления исполнителям по м² (role_payout) —
 // последние тоже уменьшают прибыль/остаток компании по проекту.
 async function syncProjectExpensesTotal(projectId){
-  const {data, error} = await sb.from('ledger_entries').select('amount').eq('project_id', projectId).in('type', ['project_expense','role_payout']);
+  const p = state.projects.find(x=>x.id===projectId);
+  if(!p) return 0;
+  // role_payout — ФОТ, а не прямой расход проекта. Не записываем его в
+  // projects.expenses, иначе он попадает в себестоимость и затем повторно в ФОТ.
+  const total = getProjectExpenses(p);
+  const {error} = await sb.from('projects')
+    .update({expenses: total, updated_at:new Date().toISOString()})
+    .eq('id', projectId);
   if(error) throw error;
-  const total = (data||[]).reduce((s,r)=>s+Number(r.amount||0),0);
-  await sb.from('projects').update({expenses: total}).eq('id', projectId);
   return total;
 }
 
@@ -5388,7 +5454,7 @@ async function syncProjectExpensesTotal(projectId){
 // и попадает в табель исполнителя за месяц даты начисления (см. renderTimesheet).
 // ============================================================
 function projectRolePayoutEntries(projectId){
-  return (state.ledger||[]).filter(l=>l.project_id===projectId && l.type==='role_payout')
+  return (state.ledger||[]).filter(l=>l.project_id===projectId && l.type==='role_payout' && !l.deleted_at)
     .sort((a,b)=> new Date(b.entry_date) - new Date(a.entry_date) || new Date(b.created_at) - new Date(a.created_at));
 }
 
@@ -5472,8 +5538,8 @@ async function deleteProjectRolePayout(entryId, projectId){
   if(!confirm('Удалить это начисление?')) return;
   try{
     await sb.from('ledger_entries').delete().eq('id', entryId);
-    const total = await syncProjectExpensesTotal(projectId);
     await loadAll();
+    const total = await syncProjectExpensesTotal(projectId);
     renderProjectRolePayouts(projectId);
     const expEl = document.getElementById('pf-expenses'); if(expEl) expEl.value = total;
     updateCompanyRemainderField(projectId);
@@ -5528,8 +5594,8 @@ async function deleteProjectExpense(entryId, projectId){
   if(!confirm('Удалить этот расход?')) return;
   try{
     await sb.from('ledger_entries').delete().eq('id', entryId);
-    const total = await syncProjectExpensesTotal(projectId);
     await loadAll();
+    const total = await syncProjectExpensesTotal(projectId);
     renderProjectExpenses(projectId);
     const expEl = document.getElementById('pf-expenses'); if(expEl) expEl.value = total;
     updateCompanyRemainderField(projectId);
@@ -6275,23 +6341,36 @@ function getConstructionReceived(projectId, ledgerOverride=null){
 }
 
 function getConstructionExpenses(p){
-  const projInvoices = (state.invoices||[]).filter(inv=>inv.project_id===p.id);
+  const projInvoices = (state.invoices||[]).filter(inv=>inv.project_id===p.id && !inv.deleted_at);
   const matTotal = projInvoices
     .filter(i=>['Материал','Инструмент','Расходник','Доставка'].includes(i.item_type))
     .reduce((s,i)=>s+Number(i.amount||0),0);
   const workTotal = projInvoices
     .filter(i=>i.item_type==='Работа')
     .reduce((s,i)=>s+Number(i.amount||0),0);
-  return {matTotal, workTotal, expenses: matTotal + workTotal};
+  const manualTotal = (state.ledger||[])
+    .filter(e=>e.project_id===p.id && e.type==='project_expense' && !e.deleted_at)
+    .reduce((s,e)=>s+Number(e.amount||0),0);
+  return {matTotal, workTotal, manualTotal, expenses: matTotal + workTotal + manualTotal};
 }
 
 function getConstructionFinancials(p, ledgerOverride=null){
-  const {matTotal, workTotal, expenses} = getConstructionExpenses(p);
-  const received = getConstructionReceived(p.id, ledgerOverride);
+  const {matTotal, workTotal, manualTotal, expenses: directCosts} = getConstructionExpenses(p);
+  const ledger = ledgerOverride || state.ledger || [];
+  const received = getConstructionReceived(p.id, ledger);
   const directPaid = getProjectDirectClientPaid(p);
-  const balance = received + directPaid - expenses;
-  const pct = received > 0 ? Math.min(100, Math.round((expenses / received) * 100)) : (expenses > 0 ? 100 : 0);
-  return {received, directPaid, matTotal, workTotal, expenses, balance, pct, isOverspent: balance < 0};
+  const rolePayouts = ledger
+    .filter(e=>e.project_id===p.id && e.type==='role_payout' && !e.deleted_at)
+    .reduce((s,e)=>s+Number(e.amount||0),0);
+  // Остаток бюджета учитывает начисленный ФОТ. Сам ФОТ не входит в directCosts,
+  // поэтому в финансовой сводке он учитывается отдельной строкой.
+  const totalCosts = directCosts + rolePayouts;
+  const balance = received + directPaid - totalCosts;
+  const pct = received + directPaid > 0
+    ? Math.min(100, Math.round((totalCosts / (received + directPaid)) * 100))
+    : (totalCosts > 0 ? 100 : 0);
+  return {received, directPaid, matTotal, workTotal, manualTotal, rolePayouts,
+    directCosts, expenses: totalCosts, balance, pct, isOverspent: balance < 0};
 }
 
 function syncConstructionProjectBalance(p, ledgerOverride=null){
