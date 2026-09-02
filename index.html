@@ -741,7 +741,6 @@
       <button class="btn btn-secondary" id="openCompanyBtn" style="padding:18px 8px;font-size:13px;line-height:1.3;height:auto;">🏢<br>Реквизиты</button>
       <button class="btn btn-primary" id="exportXlsxBtn" style="padding:18px 8px;font-size:13px;line-height:1.3;height:auto;">📊<br>Excel</button>
       <button class="btn btn-secondary" id="openTimesheetBtn" style="padding:18px 8px;font-size:13px;line-height:1.3;height:auto;grid-column:1/-1;">🗓<br>Табель заработка сотрудников</button>
-      <button class="btn btn-primary" id="openFinanceBtn" style="padding:18px 8px;font-size:13px;line-height:1.3;height:auto;grid-column:1/-1;display:none;">💹<br>Финансы компании</button>
     </div>
 
     <div id="more-admin-sections">
@@ -1084,6 +1083,13 @@
 
     <div class="section-label"><span class="lbl-text">Приход, расход, прибыль</span><span class="section-label-line"></span></div>
     <div class="card" id="analyticsBlock" style="padding:14px;"></div>
+
+    <div class="section-label"><span class="lbl-text">Общий бюджет компании · резерв и амортизация</span><span class="section-label-line"></span></div>
+    <div class="card" id="companyBudgetBlock" style="padding:14px;"></div>
+
+    <div class="section-label"><span class="lbl-text">Доходы компании (аренда помещений и пр.)</span><span class="section-label-line"></span></div>
+    <div class="card" id="companyIncomeList" style="margin-bottom:8px;"></div>
+    <button class="btn btn-secondary" onclick="openCompanyIncomeSheet(null)">+ Добавить доход</button>
 
   </div>
 
@@ -1510,6 +1516,12 @@
       <path d="M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6"/>
     </svg>
   </div><span>Каталог</span></div>
+  <div class="nav-btn" data-view="view-finance" id="nav-finance"><div class="nav-icon">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-4px;">
+      <path d="M3 3v18h18"/>
+      <path d="M7 15l4 -6l4 3l5 -8"/>
+    </svg>
+  </div>Финансы</div>
   <div class="nav-btn" data-view="view-more"><div class="nav-icon">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-4px;">
       <path d="M4 6l16 0"/><path d="M4 12l16 0"/><path d="M4 18l16 0"/>
@@ -2080,6 +2092,34 @@
   </div>
 </div>
 
+<!-- ===================== СЛАЙДЕР ДОХОДА КОМПАНИИ (аренда помещений и пр.) ===================== -->
+<div class="sheet-overlay" id="companyIncomeSheetOverlay">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">
+      <span id="companyIncomeSheetTitle">Доход</span>
+      <button class="sheet-close" id="companyIncomeSheetClose">✕</button>
+    </div>
+    <div class="field">
+      <label>Категория</label>
+      <select id="cin-category"></select>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Сумма, ₽</label><input type="number" id="cin-amount" placeholder="0"></div>
+      <div class="field"><label>Дата</label><input type="date" id="cin-date"></div>
+    </div>
+    <div class="field">
+      <label>Комментарий</label>
+      <input type="text" id="cin-desc" placeholder="например: аренда помещения №1 за август">
+    </div>
+    <button class="btn btn-primary" id="cin-save">Сохранить</button>
+    <div class="btn-row">
+      <button class="btn btn-danger" id="cin-delete">Удалить</button>
+      <button class="btn btn-secondary" id="cin-cancel">Отмена</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===================== ПРОСМОТР ОТВЕТОВ ТЗ ===================== -->
 <div class="sheet-overlay" id="tzSheetOverlay">
   <div class="sheet">
@@ -2149,6 +2189,7 @@ let state = {
   kpCatalog: [],
   timesheetPayments: [],
   companyExpenses: [],
+  companyIncome: [],
   projectStages: [],
   projectMembers: [],
   trash: {projects:[], employees:[], categories:[], ledger:[]},
@@ -2525,9 +2566,9 @@ function applyRole(){
   const moreAdminSections = document.getElementById('more-admin-sections');
   if(moreAdminSections) moreAdminSections.style.display = isAdmin ? '' : 'none';
 
-  // Финансы компании — только администратору (Мансур)
-  const financeBtn = document.getElementById('openFinanceBtn');
-  if(financeBtn) financeBtn.style.display = isAdmin ? '' : 'none';
+  // Финансы компании — только администратору (Мансур), теперь отдельная вкладка навигации
+  const navFinance = document.getElementById('nav-finance');
+  if(navFinance) navFinance.style.display = isAdmin ? '' : 'none';
 
   // Редиректим если текущий раздел недоступен
   const activeView = document.querySelector('.view.active');
@@ -2994,7 +3035,7 @@ async function loadAll(){
   // придёт без заголовка и вернёт пусто.
   if(!session) session = getSession();
   try{
-    const [proj, emp, cat, st, dept, led, photos, invs, tzForms, tzRefs, company, kpForms, stages, members, kpCat, tsPay, compExp] = await Promise.all([
+    const [proj, emp, cat, st, dept, led, photos, invs, tzForms, tzRefs, company, kpForms, stages, members, kpCat, tsPay, compExp, compInc] = await Promise.all([
       sb.from('projects').select('*').is('deleted_at', null).order('created_at', {ascending:true}),
       fetchEmployeesResilient(q => q.is('deleted_at', null).order('name')),
       sb.from('categories').select('*').is('deleted_at', null).order('sort_order'),
@@ -3012,6 +3053,7 @@ async function loadAll(){
       sb.from('kp_catalog').select('*').is('deleted_at', null).order('sort_order', {ascending:true}),
       sb.from('timesheet_payments').select('*'),
       sb.from('company_expenses').select('*').is('deleted_at', null),
+      sb.from('company_income').select('*').is('deleted_at', null),
     ]);
 
     // kpForms and stages are optional — may not exist until migrations run
@@ -3023,6 +3065,7 @@ async function loadAll(){
     state.kpCatalog = kpCat.error ? [] : (kpCat.data || []);
     state.timesheetPayments = tsPay.error ? [] : (tsPay.data || []);
     state.companyExpenses = compExp.error ? [] : (compExp.data || []);
+    state.companyIncome = compInc.error ? [] : (compInc.data || []);
 
     state.projects = proj.data || [];
     state.employees = emp.data || [];
@@ -3649,6 +3692,7 @@ function renderAnalytics(){
   `;
 
   if(financeExpanded) renderCompanyExpensesList();
+  renderCompanyBudget(from, to);
 }
 
 function escapeHtml(s){
@@ -3989,6 +4033,25 @@ function renderProjects(){
              (p.notes||'').toLowerCase().includes(q);
     });
   }
+
+  // Сортировка: активные проекты — первыми (по ближайшей дате окончания),
+  // затем завершённые — по дате завершения (сначала недавно завершённые).
+  const doneStatusForSort = state.statuses.find(s=>s.name==='Завершён');
+  list = list.slice().sort((a,b)=>{
+    const aDone = doneStatusForSort && a.status_id === doneStatusForSort.id;
+    const bDone = doneStatusForSort && b.status_id === doneStatusForSort.id;
+    if(aDone !== bDone) return aDone ? 1 : -1; // активные выше завершённых
+    if(!aDone){
+      // среди активных — у кого раньше срок, тот выше; без срока — в конец
+      if(!a.end_date && !b.end_date) return 0;
+      if(!a.end_date) return 1;
+      if(!b.end_date) return -1;
+      return a.end_date.localeCompare(b.end_date);
+    }else{
+      // среди завершённых — недавно завершённые выше
+      return (b.end_date||'').localeCompare(a.end_date||'');
+    }
+  });
 
   const card = document.getElementById('projectsCard');
   if(!list.length){
@@ -4907,7 +4970,12 @@ function exportTimesheetToPdf(employeeId, monthStr){
 // РАСХОДЫ КОМПАНИИ (аренда, коммунальные, уборка и т.п.)
 // ============================================================
 let editingCompanyExpenseId = null;
-const COMPANY_EXPENSE_CATEGORIES = ['Аренда','Коммунальные','Уборка','Связь и интернет','Реклама','Прочее'];
+const COMPANY_EXPENSE_CATEGORIES = ['Аренда','Коммунальные','Уборка','Связь и интернет','Топливо/логистика','Питание/нужды офиса','Реклама','Форс-мажор (переделка)','Прочее'];
+// Расходы, которые НЕ входят в «прочие расходы компании» для расчёта общего бюджета —
+// форс-мажор показывается отдельной строкой (см. renderCompanyBudget), чтобы не путать
+// с обычными постоянными издержками.
+const FORCE_MAJEURE_CATEGORY = 'Форс-мажор (переделка)';
+const COMPANY_INCOME_CATEGORIES = ['Аренда помещений', 'Прочий доход'];
 
 function renderCompanyExpensesList(){
   const el = document.getElementById('companyExpensesList');
@@ -5003,6 +5071,189 @@ async function deleteCompanyExpense(){
     console.error(e);
     showToast('Ошибка удаления');
   }
+}
+
+// ============================================================
+// ДОХОДЫ КОМПАНИИ (аренда 2 помещений и пр. — не связаны с проектами)
+// ============================================================
+let editingCompanyIncomeId = null;
+
+function renderCompanyIncomeList(){
+  const el = document.getElementById('companyIncomeList');
+  if(!el) return;
+  const list = (state.companyIncome||[]).slice().sort((a,b)=>(b.income_date||'').localeCompare(a.income_date||''));
+  if(!list.length){
+    el.innerHTML = '<div class="empty-state">Доходов пока нет</div>';
+    return;
+  }
+  el.innerHTML = list.map(inc=>`
+    <div class="list-item">
+      <div>
+        <div class="li-name">${escapeHtml(inc.category)}${inc.description?' — '+escapeHtml(inc.description):''}</div>
+        <div class="li-meta">${fmtDate(inc.income_date)}</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <div class="proj-sum" style="color:var(--green);">${fmtMoney(inc.amount)}</div>
+        <button class="icon-btn" onclick="openCompanyIncomeSheet('${inc.id}')">✎</button>
+      </div>
+    </div>`).join('');
+}
+
+function openCompanyIncomeSheet(id){
+  editingCompanyIncomeId = id;
+  const overlay = document.getElementById('companyIncomeSheetOverlay');
+  const title = document.getElementById('companyIncomeSheetTitle');
+  const deleteBtn = document.getElementById('cin-delete');
+  const catSel = document.getElementById('cin-category');
+  catSel.innerHTML = COMPANY_INCOME_CATEGORIES.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  if(id){
+    const inc = (state.companyIncome||[]).find(x=>x.id===id);
+    if(!inc) return;
+    title.textContent = 'Редактировать доход';
+    deleteBtn.style.display = '';
+    catSel.value = inc.category || COMPANY_INCOME_CATEGORIES[0];
+    document.getElementById('cin-amount').value = inc.amount ?? '';
+    document.getElementById('cin-date').value = inc.income_date || '';
+    document.getElementById('cin-desc').value = inc.description || '';
+  }else{
+    title.textContent = 'Новый доход';
+    deleteBtn.style.display = 'none';
+    catSel.selectedIndex = 0;
+    document.getElementById('cin-amount').value = '';
+    document.getElementById('cin-date').value = new Date().toISOString().slice(0,10);
+    document.getElementById('cin-desc').value = '';
+  }
+  overlay.classList.add('active');
+}
+
+function closeCompanyIncomeSheet(){
+  document.getElementById('companyIncomeSheetOverlay').classList.remove('active');
+  editingCompanyIncomeId = null;
+}
+
+async function saveCompanyIncome(){
+  const category = document.getElementById('cin-category').value;
+  const amount = parseFloat(document.getElementById('cin-amount').value) || 0;
+  const income_date = document.getElementById('cin-date').value;
+  const description = document.getElementById('cin-desc').value.trim();
+  if(!amount || amount <= 0){ showToast('Укажите сумму'); return; }
+  if(!income_date){ showToast('Укажите дату'); return; }
+  try{
+    if(editingCompanyIncomeId){
+      const {error} = await sb.from('company_income').update({category, amount, income_date, description}).eq('id', editingCompanyIncomeId);
+      if(error) throw error;
+    }else{
+      const {error} = await sb.from('company_income').insert({category, amount, income_date, description});
+      if(error) throw error;
+    }
+    showToast('Доход сохранён');
+    closeCompanyIncomeSheet();
+    await loadAll();
+    financeExpanded = true;
+    renderAnalytics();
+  }catch(e){
+    console.error(e);
+    showToast('Ошибка сохранения — проверьте, что миграция company_income выполнена в Supabase');
+  }
+}
+
+async function deleteCompanyIncome(){
+  if(!editingCompanyIncomeId) return;
+  if(!confirm('Удалить эту запись о доходе?')) return;
+  try{
+    const {error} = await sb.from('company_income').update({deleted_at: new Date().toISOString()}).eq('id', editingCompanyIncomeId);
+    if(error) throw error;
+    showToast('Запись удалена');
+    closeCompanyIncomeSheet();
+    await loadAll();
+    financeExpanded = true;
+    renderAnalytics();
+  }catch(e){
+    console.error(e);
+    showToast('Ошибка удаления');
+  }
+}
+
+// ============================================================
+// ОБЩИЙ БЮДЖЕТ КОМПАНИИ («котёл») — резерв и амортизация
+// ------------------------------------------------------------
+// Модель (подтверждена пользователем, сентябрь 2026):
+//  1) Весь доход компании (проекты + стройка + аренда помещений) сначала
+//     попадает в единый бюджет — кассовый метод: считаем доход по факту
+//     получения оплаты, а не по завершению проекта (это уже так в fin. отчёте).
+//  2) Из бюджета вычитаются: постоянные издержки (company_expenses кроме
+//     форс-мажора) + фактически выплаченные ЗП/гонорары (payrollPaidOut,
+//     тоже кассовый метод — начислено ≠ выплачено) + форс-мажорные расходы,
+//     списанные на компанию (категория FORCE_MAJEURE_CATEGORY).
+//  3) Остаток за период — это то, что уходит в резерв.
+//  4) 10% от остатка за период откладывается на амортизацию (отдельная
+//     учётная строка внутри резерва, не отдельный счёт).
+// Форс-мажор, списанный на гонорар исполнителя (а не на компанию), сюда не
+// входит — это уменьшает выплату самому сотруднику, а не бюджет компании.
+function renderCompanyBudget(from, to){
+  const el = document.getElementById('companyBudgetBlock');
+  if(!el) return;
+
+  const inRange = (dateStr, f, t) => {
+    if(!dateStr) return false;
+    const d = new Date(dateStr);
+    if(f && d < f) return false;
+    if(t && d > t) return false;
+    return true;
+  };
+  const EPOCH = new Date('2000-01-01');
+
+  // Приход компании — кассовый метод, по фактической дате поступления (entry_date
+  // в ledger_entries), а не по дате завершения проекта — отдельно от блока
+  // «Приход/расход/прибыль» выше, который считает по завершённым проектам.
+  const isIncomeType = e => ['advance','final_payment','income'].includes(e.type);
+  const isConstrEntry = e => { const p = state.projects.find(pp=>pp.id===e.project_id); return p && isConstructionProject(p); };
+  const isPaymentType = e => e.type === 'payment';
+
+  function ledgerSum(filterFn, f, t){
+    return (state.ledger||[]).filter(e => !e.deleted_at && inRange(e.entry_date, f, t) && filterFn(e)).reduce((s,e)=>s+(Number(e.amount)||0),0);
+  }
+  function calcFor(f, t){
+    const projectIncome = ledgerSum(e => isIncomeType(e) && !isConstrEntry(e), f, t);
+    const constrIncome = ledgerSum(e => isIncomeType(e) && isConstrEntry(e), f, t);
+    const workerPayments = ledgerSum(e => isPaymentType(e), f, t);
+    const rentalIncome = (state.companyIncome||[]).filter(i=>!i.deleted_at && inRange(i.income_date, f, t)).reduce((s,i)=>s+(Number(i.amount)||0),0);
+    const overhead = (state.companyExpenses||[]).filter(e=>!e.deleted_at && e.category!==FORCE_MAJEURE_CATEGORY && inRange(e.expense_date, f, t)).reduce((s,e)=>s+(Number(e.amount)||0),0);
+    const forceMajeure = (state.companyExpenses||[]).filter(e=>!e.deleted_at && e.category===FORCE_MAJEURE_CATEGORY && inRange(e.expense_date, f, t)).reduce((s,e)=>s+(Number(e.amount)||0),0);
+    const totalIncome = projectIncome + constrIncome + rentalIncome;
+    const leftover = totalIncome - overhead - forceMajeure - workerPayments;
+    return {projectIncome, constrIncome, rentalIncome, workerPayments, overhead, forceMajeure, totalIncome, leftover};
+  }
+
+  const period = calcFor(from, to);
+  const allTime = calcFor(EPOCH, null); // резерв копится нарастающим итогом — не зависит от выбранной вкладки периода
+
+  const amortizationPeriod = period.leftover > 0 ? period.leftover * 0.1 : 0;
+  const reserveAll = allTime.leftover;
+
+  const color = v => v >= 0 ? 'var(--green)' : 'var(--red)';
+  const sign = v => v >= 0 ? '+' : '';
+
+  el.innerHTML = `
+    <div class="fee-row"><div class="fl">Доход компании за период (проекты + стройка + аренда)</div><div class="fv" style="color:var(--green);">+${fmtMoney(period.totalIncome)}</div></div>
+    <div class="fee-row"><div class="fl">− Постоянные издержки</div><div class="fv" style="color:var(--red);">−${fmtMoney(period.overhead)}</div></div>
+    ${period.forceMajeure > 0 ? `<div class="fee-row"><div class="fl">− Форс-мажор (на компанию)</div><div class="fv" style="color:var(--red);">−${fmtMoney(period.forceMajeure)}</div></div>` : ''}
+    <div class="fee-row"><div class="fl">− ЗП и гонорары, выплаченные за период</div><div class="fv" style="color:var(--red);">−${fmtMoney(period.workerPayments)}</div></div>
+    <div class="fee-row total" style="border-top:1px solid var(--line-strong); margin-top:4px; padding-top:8px;">
+      <div class="fl">Остаток за период → в резерв</div>
+      <div class="fv" style="color:${color(period.leftover)};">${sign(period.leftover)}${fmtMoney(period.leftover)}</div>
+    </div>
+    <div class="fee-row"><div class="fl" style="color:var(--text-dim);">— из них 10% на амортизацию</div><div class="fv" style="color:var(--gold);">${fmtMoney(amortizationPeriod)}</div></div>
+    <div style="border-top:2px solid var(--line-strong); margin-top:10px; padding-top:10px;">
+      <div class="fee-row total">
+        <div class="fl" style="font-weight:700;">Резерв компании (накоплено за всё время)</div>
+        <div class="fv" style="color:${color(reserveAll)}; font-size:15px;">${sign(reserveAll)}${fmtMoney(reserveAll)}</div>
+      </div>
+    </div>
+    <div class="note" style="margin-top:8px;">Кассовый метод: доход считается по факту получения оплаты, ЗП/гонорары — по факту выплаты (не по начислению) — отдельно от блока «Приход/расход/прибыль» выше, который считает по завершённым проектам.</div>
+  `;
+
+  renderCompanyIncomeList();
 }
 
 function renderFeeCalc(){
@@ -8952,6 +9203,8 @@ document.querySelectorAll('.nav-btn').forEach(btn=>{
     }
     // В Готовые проекты — загружаем карточки
     if(btn.dataset.view === 'view-cards') loadCards();
+    // В Финансы — рендерим зарплаты и P&L (раньше это делал отдельный openFinanceBtn)
+    if(btn.dataset.view === 'view-finance'){ renderFinanceSalaries(); renderAnalytics(); }
   });
 });
 
@@ -9045,6 +9298,14 @@ document.getElementById('companyExpenseSheetOverlay').addEventListener('click', 
   if(e.target.id === 'companyExpenseSheetOverlay') closeCompanyExpenseSheet();
 });
 
+document.getElementById('companyIncomeSheetClose').addEventListener('click', closeCompanyIncomeSheet);
+document.getElementById('cin-cancel').addEventListener('click', closeCompanyIncomeSheet);
+document.getElementById('cin-save').addEventListener('click', saveCompanyIncome);
+document.getElementById('cin-delete').addEventListener('click', deleteCompanyIncome);
+document.getElementById('companyIncomeSheetOverlay').addEventListener('click', (e)=>{
+  if(e.target.id === 'companyIncomeSheetOverlay') closeCompanyIncomeSheet();
+});
+
 // ledgerAdd listener removed
 
 function setupSearchBox(inputId, setQuery, renderFn){
@@ -9093,19 +9354,11 @@ document.getElementById('timesheetBack').addEventListener('click', ()=>{
 });
 document.getElementById('ts-month').addEventListener('change', renderTimesheet);
 
-document.getElementById('openFinanceBtn').addEventListener('click', ()=>{
-  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
-  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
-  document.getElementById('view-finance').classList.add('active');
-  renderFinanceSalaries();
-  renderAnalytics();
-  window.scrollTo(0,0);
-});
 document.getElementById('financeBack').addEventListener('click', ()=>{
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
-  document.getElementById('view-more').classList.add('active');
-  document.querySelector('.nav-btn[data-view="view-more"]').classList.add('active');
+  document.getElementById('view-overview').classList.add('active');
+  document.querySelector('.nav-btn[data-view="view-overview"]').classList.add('active');
   window.scrollTo(0,0);
 });
 
@@ -10736,6 +10989,22 @@ function checkOverdueNotifications(){
     if(overdueStages.length) body += `Просроченных этапов: ${overdueStages.length}.`;
     sendLocalNotification('⚠ ARHITTEK — просрочки', body.trim(), 'overdue');
     localStorage.setItem(lastNotifKey, today);
+  }
+
+  // Напоминание про аренду 2 помещений — в последний день месяца, если за этот
+  // месяц ещё нет ни одной записи дохода с категорией «Аренда помещений».
+  const rentNotifKey = 'arhittek_last_rent_notif';
+  const lastRentDay = now.getDate();
+  const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
+  if(lastRentDay === lastDayOfMonth && localStorage.getItem(rentNotifKey) !== today){
+    const monthPrefix = today.slice(0,7); // YYYY-MM
+    const hasRentThisMonth = (state.companyIncome||[]).some(i =>
+      i.category === 'Аренда помещений' && !i.deleted_at && (i.income_date||'').slice(0,7) === monthPrefix
+    );
+    if(!hasRentThisMonth){
+      sendLocalNotification('💹 ARHITTEK — аренда помещений', 'Сегодня последний день месяца — не забудьте внести доход по аренде 2 помещений в Финансы.', 'rent-reminder');
+    }
+    localStorage.setItem(rentNotifKey, today);
   }
 }
 
