@@ -5177,56 +5177,49 @@ async function deleteCompanyIncome(){
 // ============================================================
 // ОБЩИЙ БЮДЖЕТ КОМПАНИИ («котёл») — резерв и амортизация
 // ------------------------------------------------------------
-// Модель (подтверждена пользователем, сентябрь 2026):
-//  1) Весь доход компании (проекты + стройка + аренда помещений) сначала
-//     попадает в единый бюджет — кассовый метод: считаем доход по факту
-//     получения оплаты, а не по завершению проекта (это уже так в fin. отчёте).
-//  2) Из бюджета вычитаются: постоянные издержки (company_expenses кроме
-//     форс-мажора) + фактически выплаченные ЗП/гонорары (payrollPaidOut,
-//     тоже кассовый метод — начислено ≠ выплачено) + форс-мажорные расходы,
-//     списанные на компанию (категория FORCE_MAJEURE_CATEGORY).
-//  3) Остаток за период — это то, что уходит в резерв.
-//  4) 10% от остатка за период откладывается на амортизацию (отдельная
-//     учётная строка внутри резерва, не отдельный счёт).
-// Форс-мажор, списанный на гонорар исполнителя (а не на компанию), сюда не
-// входит — это уменьшает выплату самому сотруднику, а не бюджет компании.
+// ИСПРАВЛЕНО (сентябрь 2026, после замечания пользователя): раньше здесь
+// суммировался ВЕСЬ денежный поток объекта стройки (аванс/оплата остатка/
+// бюджет материалов) как будто это доход компании — это неверно: в бюджет
+// стройки заходят деньги клиента на материалы/работы, это отражается только
+// в карточке объекта, компании реально остаётся только прибыль (после вычета
+// расходов объекта и гонорара исполнителя). То же для проектов — цена
+// проекта не равна прибыли компании, пока не вычтены расходы и гонорар.
+//
+// Поэтому здесь используется computeFinancePeriod() — та же функция, что
+// считает уже проверенный блок «Приход/расход/прибыль» выше (revenue минус
+// расходы проектов/стройки минус реально выплаченные ЗП/гонорары минус
+// постоянные издержки = netProfit). К netProfit добавляется доход от аренды
+// помещений (не завязан на проекты).
+//
+// Пока считается по той же базе, что и «Приход/расход/прибыль» — по
+// завершённым проектам/дате сдачи, а не по кассовому методу (по факту
+// оплаты). Строгий кассовый метод по датам платежей — отдельная, более
+// аккуратная переделка, чтобы не наступить на те же грабли ещё раз.
 function renderCompanyBudget(from, to){
   const el = document.getElementById('companyBudgetBlock');
   if(!el) return;
 
   const inRange = (dateStr, f, t) => {
     if(!dateStr) return false;
-    const d = new Date(dateStr);
-    if(f && d < f) return false;
-    if(t && d > t) return false;
+    if(f && dateStr < f) return false;
+    if(t && dateStr > t) return false;
     return true;
   };
-  const EPOCH = new Date('2000-01-01');
+  const fromStr = from instanceof Date ? from.toISOString().slice(0,10) : from;
+  const toStr = to instanceof Date ? to.toISOString().slice(0,10) : to;
 
-  // Приход компании — кассовый метод, по фактической дате поступления (entry_date
-  // в ledger_entries), а не по дате завершения проекта — отдельно от блока
-  // «Приход/расход/прибыль» выше, который считает по завершённым проектам.
-  const isIncomeType = e => ['advance','final_payment','income'].includes(e.type);
-  const isConstrEntry = e => { const p = state.projects.find(pp=>pp.id===e.project_id); return p && isConstructionProject(p); };
-  const isPaymentType = e => e.type === 'payment';
-
-  function ledgerSum(filterFn, f, t){
-    return (state.ledger||[]).filter(e => !e.deleted_at && inRange(e.entry_date, f, t) && filterFn(e)).reduce((s,e)=>s+(Number(e.amount)||0),0);
-  }
-  function calcFor(f, t){
-    const projectIncome = ledgerSum(e => isIncomeType(e) && !isConstrEntry(e), f, t);
-    const constrIncome = ledgerSum(e => isIncomeType(e) && isConstrEntry(e), f, t);
-    const workerPayments = ledgerSum(e => isPaymentType(e), f, t);
-    const rentalIncome = (state.companyIncome||[]).filter(i=>!i.deleted_at && inRange(i.income_date, f, t)).reduce((s,i)=>s+(Number(i.amount)||0),0);
-    const overhead = (state.companyExpenses||[]).filter(e=>!e.deleted_at && e.category!==FORCE_MAJEURE_CATEGORY && inRange(e.expense_date, f, t)).reduce((s,e)=>s+(Number(e.amount)||0),0);
-    const forceMajeure = (state.companyExpenses||[]).filter(e=>!e.deleted_at && e.category===FORCE_MAJEURE_CATEGORY && inRange(e.expense_date, f, t)).reduce((s,e)=>s+(Number(e.amount)||0),0);
-    const totalIncome = projectIncome + constrIncome + rentalIncome;
-    const leftover = totalIncome - overhead - forceMajeure - workerPayments;
-    return {projectIncome, constrIncome, rentalIncome, workerPayments, overhead, forceMajeure, totalIncome, leftover};
+  function calcFor(fStr, tStr){
+    const fin = computeFinancePeriod(fStr, tStr);
+    // Форс-мажор уже включён в fin.overhead (постоянные издержки) — вытаскиваем
+    // его отдельной информационной строкой, а не вычитаем повторно.
+    const forceMajeure = fin.overheadByCat[FORCE_MAJEURE_CATEGORY] || 0;
+    const rentalIncome = (state.companyIncome||[]).filter(i=>!i.deleted_at && inRange(i.income_date, fStr, tStr)).reduce((s,i)=>s+(Number(i.amount)||0),0);
+    const leftover = fin.netProfit + rentalIncome;
+    return {netProfit: fin.netProfit, overhead: fin.overhead, forceMajeure, payrollPaidOut: fin.payrollPaidOut, rentalIncome, leftover};
   }
 
-  const period = calcFor(from, to);
-  const allTime = calcFor(EPOCH, null); // резерв копится нарастающим итогом — не зависит от выбранной вкладки периода
+  const period = calcFor(fromStr, toStr);
+  const allTime = calcFor('2000-01-01', toStr); // резерв копится нарастающим итогом — не зависит от вкладки периода
 
   const amortizationPeriod = period.leftover > 0 ? period.leftover * 0.1 : 0;
   const reserveAll = allTime.leftover;
@@ -5235,10 +5228,9 @@ function renderCompanyBudget(from, to){
   const sign = v => v >= 0 ? '+' : '';
 
   el.innerHTML = `
-    <div class="fee-row"><div class="fl">Доход компании за период (проекты + стройка + аренда)</div><div class="fv" style="color:var(--green);">+${fmtMoney(period.totalIncome)}</div></div>
-    <div class="fee-row"><div class="fl">− Постоянные издержки</div><div class="fv" style="color:var(--red);">−${fmtMoney(period.overhead)}</div></div>
-    ${period.forceMajeure > 0 ? `<div class="fee-row"><div class="fl">− Форс-мажор (на компанию)</div><div class="fv" style="color:var(--red);">−${fmtMoney(period.forceMajeure)}</div></div>` : ''}
-    <div class="fee-row"><div class="fl">− ЗП и гонорары, выплаченные за период</div><div class="fv" style="color:var(--red);">−${fmtMoney(period.workerPayments)}</div></div>
+    <div class="fee-row"><div class="fl">Прибыль компании за период (проекты + стройка, за вычетом расходов и гонораров исполнителям)</div><div class="fv" style="color:${color(period.netProfit)};">${sign(period.netProfit)}${fmtMoney(period.netProfit)}</div></div>
+    <div class="fee-row"><div class="fl">+ Доход от аренды помещений</div><div class="fv" style="color:var(--green);">+${fmtMoney(period.rentalIncome)}</div></div>
+    ${period.forceMajeure > 0 ? `<div class="fee-row"><div class="fl" style="color:var(--text-dim);">из них форс-мажор (на компанию, уже внутри издержек выше)</div><div class="fv" style="color:var(--text-dim);">${fmtMoney(period.forceMajeure)}</div></div>` : ''}
     <div class="fee-row total" style="border-top:1px solid var(--line-strong); margin-top:4px; padding-top:8px;">
       <div class="fl">Остаток за период → в резерв</div>
       <div class="fv" style="color:${color(period.leftover)};">${sign(period.leftover)}${fmtMoney(period.leftover)}</div>
@@ -5250,7 +5242,7 @@ function renderCompanyBudget(from, to){
         <div class="fv" style="color:${color(reserveAll)}; font-size:15px;">${sign(reserveAll)}${fmtMoney(reserveAll)}</div>
       </div>
     </div>
-    <div class="note" style="margin-top:8px;">Кассовый метод: доход считается по факту получения оплаты, ЗП/гонорары — по факту выплаты (не по начислению) — отдельно от блока «Приход/расход/прибыль» выше, который считает по завершённым проектам.</div>
+    <div class="note" style="margin-top:8px;">Считается на той же базе, что и «Приход/расход/прибыль» выше (по завершённым проектам/дате сдачи) — сюда идёт только то, что реально остаётся компании, а не весь денежный поток объекта.</div>
   `;
 
   renderCompanyIncomeList();
