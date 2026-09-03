@@ -531,6 +531,11 @@
     .nav-btn{ padding:6px 16px; }
     .fab{ left:auto !important; right:calc(50% - 540px + 24px) !important; bottom:20px !important; }
   }
+
+  /* Unified employee compensation */
+  #pf-compensation-block .method-pill{display:flex;gap:6px;}
+  #pf-compensation-summary .comp-total{font-family:'Space Grotesk',sans-serif;font-weight:700;color:var(--gold);}
+  .payroll-note{font-size:10px;color:var(--text-dim);line-height:1.45;}
 </style>
 </head>
 <body>
@@ -632,7 +637,7 @@
   <!-- ===================== СТРОИТЕЛЬНЫЙ ОТДЕЛ ===================== -->
   <div class="view" id="view-construction">
 
-    <div class="section-label"><span class="lbl-text">Объекты строительства</span><span class="section-label-line"></span></div>
+    <div class="section-label"><span class="lbl-text">Объекты строительства · активные</span><span class="section-label-line"></span></div>
 
     <!-- Поиск -->
     <div class="search-box" style="margin-bottom:8px;">
@@ -1058,7 +1063,7 @@
     </div>
 
     <div class="note" style="margin:10px 0;">
-      Табель показывает гарантированный оклад за полный месяц + отдельные проектные начисления: процент от выручки и выплаты по м². Отметка «Оплачено» фиксирует факт выплаты всей суммы за месяц.
+      Считается по фактически выплаченному гонорару (записи «Гонорар ARHITTEK») за выбранный месяц, по проектам, в которых участвует сотрудник. Если у проекта есть соисполнитель — сумма делится пропорционально их долям гонорара.
     </div>
 
     <div class="section-label"><span class="lbl-text">Заработок по сотрудникам</span><span class="section-label-line"></span></div>
@@ -1599,71 +1604,133 @@
     </div>
 
     <div id="pf-financial-section">
-      <div class="accent-block ab-blue">
-        <div class="accent-title">1. Выручка и деньги от клиента</div>
-        <div class="field-row3">
-          <div class="field"><label>Цена проекта, ₽</label><input type="number" id="pf-price" placeholder="0"></div>
-          <div class="field"><label>Получено, ₽</label><input type="number" id="pf-advance" placeholder="0" readonly title="Меняется только через платежи"></div>
-          <div class="field"><label>Остаток к получению, ₽</label><input type="number" id="pf-balance" placeholder="0" readonly></div>
-        </div>
-        <div class="hint">Цена — договорная выручка. «Получено» — фактические деньги от клиента. Остаток — сколько клиент ещё должен компании.</div>
-      </div>
+    <div class="accent-block ab-blue">
+    <div class="accent-title">Экономика проекта</div>
+    <div class="hint">Сначала фиксируем выручку и оплату клиента. Затем отдельно учитываем прямые расходы и вознаграждение исполнителей. Прибыль компании считается последней строкой.</div>
+    </div>
 
-      <div class="accent-block ab-green">
-        <div class="accent-title">2. Вознаграждение команды</div>
-        <div class="hint" style="margin-bottom:8px;">Используй только тот способ, который предусмотрен для конкретного проекта: процент от выручки или оплата по м².</div>
-        <div class="fee-row"><div class="fl">Основной исполнитель</div><div class="fv">% от выручки проекта</div></div>
+    <div class="accent-block ab-blue">
+    <div class="accent-title">Цена и оплата</div>
+    <div class="field-row3">
+      <div class="field">
+        <label>Цена, ₽</label>
+        <input type="number" id="pf-price" placeholder="0">
+      </div>
+      <div class="field">
+        <label>Получено, ₽</label>
+        <input type="number" id="pf-advance" placeholder="0" readonly title="Изменяется только через «Принять платёж»">
+      </div>
+      <div class="field">
+        <label>Остаток, ₽</label>
+        <input type="number" id="pf-balance" placeholder="0" readonly title="Рассчитывается автоматически: Цена − Получено">
+      </div>
+    </div>
+    <div class="hint" style="margin:-6px 0 0;">«Получено» и «Остаток» обновляются автоматически после платежей (кнопка «Принять платёж» ниже).</div>
+    </div>
+
+    <div class="accent-block ab-gold" id="pf-compensation-block">
+      <div class="accent-title">Начисление исполнителям</div>
+      <div class="field">
+        <label>Метод начисления</label>
+        <select id="pf-compensation-method">
+          <option value="percent_price">Процент от выручки проекта</option>
+          <option value="percent_profit">Процент от прибыли проекта</option>
+          <option value="m2">Фиксированная ставка за м²</option>
+        </select>
+      </div>
+      <div class="hint" style="margin:-4px 0 10px;">Сначала выбираете метод. После этого ниже появляется только нужный способ начисления.</div>
+
+      <div id="pf-percent-method-fields">
         <div class="field-row">
-          <div class="field"><label>Процент исполнителя, %</label><input type="number" id="pf-feepercent" placeholder="например: 30"></div>
-          <div class="field"><label>Выплачено исполнителю, ₽</label><input type="number" id="pf-feepaid" placeholder="0"></div>
-        </div>
-        <div class="field-row" id="pf-cofee-row">
-          <div class="field"><label>Процент соисполнителя, %</label><input type="number" id="pf-co-feepercent" placeholder="например: 10"></div>
-          <div class="field"><label>Выплачено соисполнителю, ₽</label><input type="number" id="pf-co-feepaid" placeholder="0"></div>
-        </div>
-        <input type="hidden" id="pf-feebase" value="price">
-        <div id="pf-fee-summary" class="fee-card" style="margin-bottom:10px;"></div>
-
-        <div style="border-top:1px solid var(--line);padding-top:10px;margin-top:8px;">
-          <div style="font-weight:700;font-size:13px;margin-bottom:5px;">Оплата по м²</div>
-          <div class="field-row">
-            <div class="field"><label>Площадь, м²</label><input type="number" id="pf-area" placeholder="например: 100" oninput="renderProjectRolePayouts(editingProjectId)"></div>
-            <div class="field"><label>Остаток компании после прямых расходов и начислений</label><input type="number" id="pf-company-remainder" placeholder="0" readonly></div>
+          <div class="field">
+            <label>% исполнителя</label>
+            <input type="number" id="pf-feepercent" placeholder="например: 30" min="0" max="100" step="0.01">
           </div>
-          <div id="pf-role-payouts-list"></div>
-          <div id="pf-role-payout-add-row" style="display:flex;gap:6px;align-items:end;flex-wrap:wrap;margin-top:6px;">
-            <div class="field" style="margin-bottom:0;flex:1;min-width:120px;"><label>Роль</label><select id="pf-rp-role"><option value="Визуализатор">Визуализатор</option><option value="Чертёжник">Чертёжник</option><option value="Ведущий дизайнер">Ведущий дизайнер</option><option value="Другое">Другая роль</option></select></div>
-            <div class="field" style="margin-bottom:0;flex:1;min-width:120px;"><label>Исполнитель</label><select id="pf-rp-employee"></select></div>
-            <div class="field" style="margin-bottom:0;flex:1;min-width:90px;"><label>Ставка, ₽/м²</label><input type="number" id="pf-rp-rate" placeholder="400"></div><div class="field" style="margin-bottom:0;flex:1;min-width:120px;"><label>Дата начисления</label><input type="date" id="pf-rp-date"></div>
-            <button class="btn btn-secondary" type="button" id="pf-rp-add-btn" style="width:auto;white-space:nowrap;margin-bottom:0;padding:11px 16px;">+ Начислить</button>
+          <div class="field" id="pf-co-percent-field">
+            <label>% соисполнителя</label>
+            <input type="number" id="pf-co-feepercent" placeholder="например: 20" min="0" max="100" step="0.01">
           </div>
-          <div class="hint" style="margin-top:8px;">Например: квартира 100 м² → визуализатор 400 ₽/м² = 40 000 ₽; чертёжник 500 ₽/м² = 50 000 ₽.</div>
         </div>
-      </div>
-
-      <div class="accent-block ab-red">
-        <div class="accent-title">3. Прямые расходы проекта</div>
-        <div class="field"><label>Прямые расходы, ₽</label><input type="number" id="pf-expenses" placeholder="0" readonly title="Считается из списка расходов проекта или накладных стройки"></div>
-        <div id="pf-expenses-block" style="margin:-2px 0 0;">
-          <div id="pf-expenses-list"></div>
-          <div id="pf-expense-add-row" style="display:flex;gap:6px;align-items:end;flex-wrap:wrap;margin-top:6px;">
-            <div class="field" style="margin-bottom:0;flex:2;min-width:120px;"><label>На что расход</label><input type="text" id="pf-expense-desc" placeholder="например: печать альбома"></div>
-            <div class="field" style="margin-bottom:0;flex:1;min-width:80px;"><label>Сумма, ₽</label><input type="number" id="pf-expense-amount" placeholder="0"></div>
-            <div class="field" style="margin-bottom:0;flex:1;min-width:120px;"><label>Дата</label><input type="date" id="pf-expense-date"></div>
-            <button class="btn btn-secondary" type="button" id="pf-expense-add-btn" style="width:auto;white-space:nowrap;margin-bottom:0;padding:11px 16px;">+ Расход</button>
+        <div class="field-row">
+          <div class="field">
+            <label>Исполнитель</label>
+            <select id="pf-employee-fee"><option value="">—</option></select>
+          </div>
+          <div class="field">
+            <label>Соисполнитель</label>
+            <select id="pf-co-employee-fee"><option value="">—</option></select>
           </div>
         </div>
       </div>
 
-      <div class="accent-block ab-gold">
-        <div class="accent-title">4. Итог экономики проекта</div>
-        <div id="pf-project-economics" class="fee-card" style="margin-bottom:10px;"></div>
-        <div style="display:flex;gap:8px;flex-wrap:nowrap;">
-          <button class="btn btn-secondary" id="pf-add-payment" type="button" style="flex:1;min-width:0;">💰 Принять платёж</button>
-          <button class="btn btn-secondary" type="button" style="flex:1;min-width:0;" onclick="(function(){var el=document.getElementById('pf-payment-history');if(el){el.scrollIntoView({behavior:'smooth',block:'start'});}})()">📋 История платежей</button>
+      <div id="pf-m2-method-fields" style="display:none;">
+        <div class="field">
+          <label>Площадь проекта, м²</label>
+          <input type="number" id="pf-area" placeholder="например: 100" min="0" step="0.01">
         </div>
-        <div id="pf-payment-history" style="margin-top:10px;"></div>
+        <div id="pf-m2-payouts-list"></div>
+        <div id="pf-m2-add-row" style="display:flex; gap:6px; align-items:end; flex-wrap:wrap; margin-top:6px;">
+          <div class="field" style="margin-bottom:0; flex:1; min-width:125px;">
+            <label>Роль</label>
+            <select id="pf-rp-role">
+              <option value="Визуализатор">Визуализатор</option>
+              <option value="Чертёжник">Чертёжник</option>
+              <option value="Ведущий дизайнер">Ведущий дизайнер</option>
+              <option value="Другое">Другое</option>
+            </select>
+          </div>
+          <div class="field" style="margin-bottom:0; flex:1; min-width:125px;">
+            <label>Исполнитель</label>
+            <select id="pf-rp-employee"></select>
+          </div>
+          <div class="field" style="margin-bottom:0; flex:1; min-width:90px;">
+            <label>Ставка, ₽/м²</label>
+            <input type="number" id="pf-rp-rate" placeholder="400" min="0" step="1">
+          </div>
+          <button class="btn btn-secondary" type="button" id="pf-rp-add-btn" style="width:auto; white-space:nowrap; margin-bottom:0; padding:11px 16px;">+ Начислить</button>
+        </div>
       </div>
+
+      <input type="hidden" id="pf-feebase" value="price">
+      <input type="hidden" id="pf-feepaid" value="0">
+      <input type="hidden" id="pf-co-feepaid" value="0">
+      <div id="pf-fee-summary" style="display:none;"></div>
+      <div id="pf-compensation-summary" class="fee-card" style="margin-top:10px;margin-bottom:0;"></div>
+    </div>
+
+    <div class="accent-block ab-red">
+    <div class="accent-title">Расходы по проекту</div>
+    <div class="field">
+      <label>Прямые расходы проекта, ₽</label>
+      <input type="number" id="pf-expenses" placeholder="0" readonly title="Автоматически из расходов проекта">
+    </div>
+
+    <!-- Список расходов проекта -->
+    <div id="pf-expenses-block" style="margin:-2px 0 0;">
+      <div id="pf-expenses-list"></div>
+      <div id="pf-expense-add-row" style="display:flex; gap:6px; align-items:end; flex-wrap:wrap; margin-top:6px;">
+        <div class="field" style="margin-bottom:0; flex:2; min-width:120px;">
+          <label>На что расход</label>
+          <input type="text" id="pf-expense-desc" placeholder="например: печать альбома">
+        </div>
+        <div class="field" style="margin-bottom:0; flex:1; min-width:80px;">
+          <label>Сумма, ₽</label>
+          <input type="number" id="pf-expense-amount" placeholder="0">
+        </div>
+        <div class="field" style="margin-bottom:0; flex:1; min-width:120px;">
+          <label>Дата</label>
+          <input type="date" id="pf-expense-date">
+        </div>
+        <button class="btn btn-secondary" type="button" id="pf-expense-add-btn" style="width:auto; white-space:nowrap; margin-bottom:0; padding:11px 16px;">+ Расход</button>
+      </div>
+    </div>
+    </div>
+
+    <div style="display:flex;gap:8px;flex-wrap:nowrap;">
+      <button class="btn btn-secondary" id="pf-add-payment" type="button" style="flex:1;min-width:0;">💰 Принять платёж</button>
+      <button class="btn btn-secondary" type="button" style="flex:1;min-width:0;" onclick="(function(){var el=document.getElementById('pf-payment-history');if(el){el.scrollIntoView({behavior:'smooth',block:'start'});}})()">📋 История</button>
+    </div>
+    <div id="pf-payment-history" style="margin-top:10px;"></div>
     </div>
 
     <div class="field-row" style="align-items:start;">
@@ -2258,6 +2325,7 @@ function getProjectDirectClientPaid(p){
 // один и тот же объект показывал разные суммы гонорара на разных экранах.
 function getProjectFee(p){
   const withFreshExpenses = {...p, expenses: getProjectExpenses(p)};
+  if(p && p.fee_base === 'm2') return {feePercent:0, feeBase:'m2', profit:(Number(p.price)||0)-getProjectExpenses(p), feeAmount:0, paid:0, remaining:0, mainFeeAmount:0, coFeeAmount:0, mainPaid:0, coPaid:0, grossMainFee:0, companyExpenseShare:0};
   return isConstructionProject(p) ? calcConstrFee(withFreshExpenses) : calcFee(withFreshExpenses);
 }
 
@@ -3654,7 +3722,7 @@ function renderAnalytics(){
       <div class="fee-card">
         <div class="fee-row"><div class="fl">Себестоимость проектов (материалы/работы)</div><div class="fv">${fmtMoney(f.projectCosts)}</div></div>
         <div class="fee-row"><div class="fl">ЗП и гонорары сотрудникам</div><div class="fv">${fmtMoney(f.payrollPaidOut)}</div></div>
-        
+        ${f.companyRetained>0 ? `<div class="fee-row"><div class="fl" style="color:var(--text-dim);">— из них осталось в прибыли (сверх фикс. ЗП)</div><div class="fv" style="color:var(--gold);">${fmtMoney(f.companyRetained)}</div></div>` : ''}
         <div class="fee-row total"><div class="fl">Прочие расходы компании</div><div class="fv">${fmtMoney(f.overhead)}</div></div>
         ${overheadRows}
       </div>
@@ -4137,6 +4205,11 @@ function populateProjectFormSelects(){
   coEmpSel.innerHTML = empOptions;
   if(prevCoEmp && state.employees.some(e=>e.id===prevCoEmp)) coEmpSel.value = prevCoEmp;
 
+  const feeEmpSel = document.getElementById('pf-employee-fee');
+  if(feeEmpSel){ feeEmpSel.innerHTML = empOptions; feeEmpSel.value = empSel.value || ''; }
+  const feeCoEmpSel = document.getElementById('pf-co-employee-fee');
+  if(feeCoEmpSel){ feeCoEmpSel.innerHTML = empOptions; feeCoEmpSel.value = coEmpSel.value || ''; }
+
   // Заполняем список для добавления доп. участников
   const membersAdd = document.getElementById('pf-members-add');
   if(membersAdd){
@@ -4165,28 +4238,15 @@ function recalcLiveFeeSummary(){
     price: parseFloat(document.getElementById('pf-price').value) || 0,
     expenses: parseFloat(document.getElementById('pf-expenses').value) || 0,
     fee_percent: document.getElementById('pf-feepercent').value === '' ? null : parseFloat(document.getElementById('pf-feepercent').value),
-    fee_base: document.getElementById('pf-feebase').value || null,
+    fee_base: (document.getElementById('pf-compensation-method')?.value === 'm2' ? 'm2' : (document.getElementById('pf-feebase').value || 'price')),
     fee_paid: parseFloat(document.getElementById('pf-feepaid').value) || 0,
     co_employee_id: document.getElementById('pf-co-employee').value || null,
     co_fee_percent: document.getElementById('pf-co-feepercent').value === '' ? null : parseFloat(document.getElementById('pf-co-feepercent').value),
     co_fee_paid: parseFloat(document.getElementById('pf-co-feepaid').value) || 0,
   };
-  renderFeeSummaryForProject(live);
-  const eco = document.getElementById('pf-project-economics');
-  if(eco){
-    const direct = Number(document.getElementById('pf-expenses').value)||0;
-    const fee = calcFee(live);
-    const roleTotal = editingProjectId ? projectRolePayoutEntries(editingProjectId).reduce((sum,e)=>sum+Number(e.amount||0),0) : 0;
-    const company = (Number(live.price)||0) - direct - fee.feeAmount - roleTotal;
-    eco.innerHTML = `
-      <div style="font-weight:700;font-size:13px;margin-bottom:6px;">Куда уходит выручка</div>
-      <div class="fee-row"><div class="fl">Выручка проекта</div><div class="fv">${fmtMoney(live.price)}</div></div>
-      <div class="fee-row"><div class="fl">Прямые расходы</div><div class="fv">−${fmtMoney(direct)}</div></div>
-      <div class="fee-row"><div class="fl">Гонорары по %</div><div class="fv">−${fmtMoney(fee.feeAmount)}</div></div>
-      <div class="fee-row"><div class="fl">Начисления по м²</div><div class="fv">−${fmtMoney(roleTotal)}</div></div>
-      <div class="fee-row total"><div class="fl">Остаётся компании</div><div class="fv" style="color:${company>=0?'var(--green)':'var(--red)'};">${fmtMoney(company)}</div></div>`;
-  }
+  if(document.getElementById('pf-compensation-method')?.value === 'm2'){ renderM2CompensationSummary(p); } else { renderFeeSummaryForProject(live); }
 }
+
 
 document.getElementById('pf-price').addEventListener('input', ()=>{
   const price = parseFloat(document.getElementById('pf-price').value) || 0;
@@ -4259,11 +4319,13 @@ function openProjectSheet(id){
     document.getElementById('pf-advance').value = p.advance ?? '';
     document.getElementById('pf-balance').value = p.balance ?? '';
     document.getElementById('pf-area').value = p.area ?? '';
-    document.getElementById('pf-rp-date').value = new Date().toISOString().slice(0,10);
-    document.getElementById('pf-expenses').value = getProjectExpenses(p) ?? 0;
+    document.getElementById('pf-expenses').value = p.expenses ?? '';
     document.getElementById('pf-feepaid').value = p.fee_paid ?? '';
     document.getElementById('pf-feepercent').value = p.fee_percent ?? '';
     document.getElementById('pf-feebase').value = p.fee_base || '';
+    const compMethod = document.getElementById('pf-compensation-method'); if(compMethod) compMethod.value = p.fee_base === 'm2' ? 'm2' : (p.fee_base === 'profit' ? 'percent_profit' : 'percent_price');
+    const feeEmp = document.getElementById('pf-employee-fee'); if(feeEmp) feeEmp.value = p.employee_id || '';
+    const feeCoEmp = document.getElementById('pf-co-employee-fee'); if(feeCoEmp) feeCoEmp.value = p.co_employee_id || '';
     document.getElementById('pf-co-feepercent').value = p.co_fee_percent ?? '';
     document.getElementById('pf-co-feepaid').value = p.co_fee_paid ?? '';
     document.getElementById('pf-start').value = p.start_date || '';
@@ -4337,13 +4399,13 @@ function openProjectSheet(id){
     document.getElementById('pf-advance').value = '';
     document.getElementById('pf-balance').value = '';
     document.getElementById('pf-area').value = '';
-    document.getElementById('pf-rp-date').value = new Date().toISOString().slice(0,10);
     document.getElementById('pf-expenses').value = '';
-    document.getElementById('pf-role-payouts-list').innerHTML = '<div class="empty-state" style="padding:10px;">Сохраните проект, чтобы начислять исполнителям</div>';
+    document.getElementById('pf-m2-payouts-list').innerHTML = '<div class="empty-state" style="padding:10px;">Сохраните проект, чтобы начислять исполнителям</div>';
     document.getElementById('pf-company-remainder').value = '';
     document.getElementById('pf-feepaid').value = '';
     document.getElementById('pf-feepercent').value = '';
     document.getElementById('pf-feebase').value = '';
+    const compMethod0 = document.getElementById('pf-compensation-method'); if(compMethod0) compMethod0.value = 'percent';
     document.getElementById('pf-co-feepercent').value = '';
     document.getElementById('pf-co-feepaid').value = '';
     document.getElementById('pf-start').value = '';
@@ -4358,7 +4420,6 @@ function openProjectSheet(id){
     document.getElementById('pf-expenses-list').innerHTML = '';
     { const r = document.getElementById('pf-expense-add-row'); if(r) r.style.display = 'none'; }
     document.getElementById('pf-fee-summary').innerHTML = '';
-    const eco0=document.getElementById('pf-project-economics'); if(eco0) eco0.innerHTML='';
     renderStagesList(null);
     renderTasksList(null);
     document.getElementById('pf-open-as-object').style.display = 'none';
@@ -4368,7 +4429,10 @@ function openProjectSheet(id){
 
   overlay.classList.add('active');
   applyRole();
+  bindCompensationUI();
+  renderCompensationMethodUI();
 }
+
 
 function closeProjectSheet(){
   document.getElementById('projectSheetOverlay').classList.remove('active');
@@ -4410,8 +4474,8 @@ async function saveProject(){
     category_id: categoryId,
     status_id: document.getElementById('pf-status').value || null,
     payment_status: document.getElementById('pf-payment').value || 'Ждём оплату',
-    employee_id: document.getElementById('pf-employee').value || null,
-    co_employee_id: document.getElementById('pf-co-employee').value || null,
+    employee_id: (document.getElementById('pf-employee-fee')?.value || document.getElementById('pf-employee').value || null),
+    co_employee_id: (document.getElementById('pf-co-employee-fee')?.value || document.getElementById('pf-co-employee').value || null),
     phone: document.getElementById('pf-phone').value.trim(),
     address: document.getElementById('pf-address').value.trim(),
     price: price,
@@ -4419,7 +4483,7 @@ async function saveProject(){
     area: document.getElementById('pf-area').value === '' ? null : parseFloat(document.getElementById('pf-area').value),
     fee_paid: parseFloat(document.getElementById('pf-feepaid').value) || 0,
     fee_percent: document.getElementById('pf-feepercent').value === '' ? null : parseFloat(document.getElementById('pf-feepercent').value),
-    fee_base: document.getElementById('pf-feebase').value || null,
+    fee_base: (document.getElementById('pf-compensation-method')?.value === 'm2' ? 'm2' : (document.getElementById('pf-compensation-method')?.value === 'percent_profit' ? 'profit' : 'price')),
     co_fee_percent: document.getElementById('pf-co-feepercent').value === '' ? null : parseFloat(document.getElementById('pf-co-feepercent').value),
     co_fee_paid: parseFloat(document.getElementById('pf-co-feepaid').value) || 0,
     start_date: document.getElementById('pf-start').value || null,
@@ -4585,30 +4649,44 @@ async function markPaid(id){
 // ============================================================
 // FEE CALCULATOR
 // ============================================================
+// Порог для правила «кто несёт расходы» (только проектный отдел — не Стройка):
+// гонорар исполнителя от полной цены > 30 000₽ — расходы вычитаются из его гонорара;
+// иначе расходы ложатся на доход компании, а исполнитель получает гонорар целиком.
+const EXECUTOR_FEE_EXPENSE_THRESHOLD = 30000;
+
 function calcFee(p){
   const cat = findCategory(p.category_id);
   const feePercent = (p.fee_percent !== null && p.fee_percent !== undefined) ? Number(p.fee_percent) : (cat ? Number(cat.fee_percent) : 0);
-  const feeBase = p.fee_base || (cat ? cat.fee_base : 'price');
+  const feeBase = p.fee_base || (cat ? cat.fee_base : 'profit');
   const coFeePercent = Number(p.co_fee_percent) || 0;
-  const price = Math.max(0, Number(p.price) || 0);
-  const expenses = Math.max(0, Number(p.expenses) || 0);
 
-  // Для архитектуры и других процентных проектов правило простое:
-  // исполнитель получает процент от выручки проекта. Расходы компании
-  // не уменьшают его процент, а вычитаются после начисления гонорара.
-  const grossMainFee = Math.max(0, price * feePercent / 100);
-  const mainFeeAmount = grossMainFee;
-  const coFeeAmount = p.co_employee_id ? Math.max(0, price * coFeePercent / 100) : 0;
+  const price = Number(p.price) || 0;
+  const expenses = Number(p.expenses) || 0;
+  const profit = price - expenses;
+
+  let grossMainFee = price * feePercent / 100;
+  if(grossMainFee < 0) grossMainFee = 0;
+
+  let mainFeeAmount, companyExpenseShare;
+  if(grossMainFee > EXECUTOR_FEE_EXPENSE_THRESHOLD){
+    mainFeeAmount = Math.max(0, grossMainFee - expenses);
+    companyExpenseShare = 0;
+  }else{
+    mainFeeAmount = grossMainFee;
+    companyExpenseShare = expenses;
+  }
+
+  // Соисполнитель — свой % от полной цены, правило порога/расходов на него не распространяется.
+  let coFeeAmount = p.co_employee_id ? price * coFeePercent / 100 : 0;
+  if(coFeeAmount < 0) coFeeAmount = 0;
+
   const feeAmount = mainFeeAmount + coFeeAmount;
-  const mainPaid = Math.max(0, Number(p.fee_paid) || 0);
-  const coPaid = Math.max(0, Number(p.co_fee_paid) || 0);
+  const mainPaid = Number(p.fee_paid) || 0;
+  const coPaid = Number(p.co_fee_paid) || 0;
   const paid = mainPaid + coPaid;
-  const remaining = Math.max(0, feeAmount - paid);
-  const companyProfitBeforeOverhead = Math.max(0, price - expenses - feeAmount);
+  const remaining = feeAmount - paid;
 
-  return {feePercent, feeBase:'price', coFeePercent, profit:price-expenses, feeAmount, paid, remaining,
-    mainFeeAmount, coFeeAmount, mainPaid, coPaid, grossMainFee,
-    companyExpenseShare: expenses, companyProfitBeforeOverhead};
+  return {feePercent, feeBase, coFeePercent, profit, feeAmount, paid, remaining, mainFeeAmount, coFeeAmount, mainPaid, coPaid, grossMainFee, companyExpenseShare};
 }
 
 function renderEmployeeFeeSummary(){
@@ -4675,46 +4753,64 @@ function completedProjectEarningsForRange(from, to){
   const employees = {};
   function addEarn(empId, amount, projectId, projectName, role){
     if(!empId) return;
-    amount = Math.max(0, Number(amount)||0);
+    amount = amount || 0;
     if(!employees[empId]) employees[empId] = {earned:0, items:[]};
     employees[empId].earned += amount;
-    employees[empId].items.push({projectId, name:projectName, amount, role});
+    employees[empId].items.push({projectId, name: projectName, amount, role});
   }
 
   let revenue = 0, projectCosts = 0;
   const byDeptProfit = {};
 
-  (state.projects||[]).filter(p=>!p.deleted_at).forEach(p=>{
+  state.projects.forEach(p=>{
     const st = findStatus(p.status_id);
     if(!st || st.name !== 'Завершён') return;
     const refDate = timesheetProjectRefDate(p);
     if(!refDate || refDate < from || refDate > to) return;
 
-    const directCosts = getProjectExpenses(p);
-    const rev = Math.max(0, Number(p.price)||0);
-    const f = getProjectFee(p);
-    const rolePayouts = projectRolePayoutEntries(p.id).reduce((sum,e)=>sum + Math.max(0,Number(e.amount)||0),0);
-
-    revenue += rev;
-    projectCosts += directCosts;
-    const dept = financeDeptOf(p);
-    byDeptProfit[dept] = (byDeptProfit[dept]||0) + (rev - directCosts - f.feeAmount - rolePayouts);
-
-    if(p.employee_id){
-      addEarn(p.employee_id, f.mainFeeAmount||0, p.id, p.name, 'процент от выручки');
+    const isConstr = isConstructionCategory(p.category_id);
+    let rev, cost;
+    if(isConstr){
+      const fin = getConstructionFinancials(p);
+      rev = fin.received; cost = fin.expenses;
+    } else {
+      rev = Number(p.price) || 0; cost = getProjectExpenses(p);
     }
-    if(p.co_employee_id){
-      addEarn(p.co_employee_id, f.coFeeAmount||0, p.id, p.name, 'соисполнитель · процент');
+    revenue += rev; projectCosts += cost;
+    const dept = financeDeptOf(p);
+    byDeptProfit[dept] = (byDeptProfit[dept]||0) + (rev - cost);
+
+    const method = p.fee_base === 'm2' ? 'm2' : 'percent';
+    if(method === 'percent'){
+      const f = getProjectFee(p);
+      if(p.co_employee_id){
+        addEarn(p.employee_id, f.mainFeeAmount||0, p.id, p.name, 'исполнитель');
+        addEarn(p.co_employee_id, f.coFeeAmount||0, p.id, p.name, 'соисполнитель');
+      } else if(p.employee_id){
+        addEarn(p.employee_id, (f.mainFeeAmount||0)+(f.coFeeAmount||0), p.id, p.name, 'исполнитель');
+      }
     }
   });
 
-  // Начисления по м² — отдельная форма вознаграждения. Они привязаны к дате
-  // начисления и поэтому попадают в табель именно того месяца, когда начислены.
-  (state.ledger||[]).filter(l=>l.type==='role_payout' && !l.deleted_at).forEach(l=>{
-    if(!l.entry_date || l.entry_date < from || l.entry_date > to) return;
+  // Начисления по м² учитываются в табеле только после завершения проекта и относятся
+  // к месяцу сдачи проекта, а не к дате, когда бухгалтер/руководитель создал запись.
+  (state.ledger||[]).forEach(l=>{
+    if(l.type !== 'role_payout' || l.deleted_at) return;
     const proj = state.projects.find(p=>p.id===l.project_id);
-    addEarn(l.payee_employee_id, l.amount, l.project_id,
-      (proj?proj.name:'Без проекта') + ' — ' + (l.description||'начисление по м²'), 'начисление по м²');
+    if(!proj) return;
+    const st = findStatus(proj.status_id);
+    if(!st || st.name !== 'Завершён') return;
+    if(proj.fee_base !== 'm2') return;
+    const refDate = timesheetProjectRefDate(proj);
+    if(!refDate || refDate < from || refDate > to) return;
+    addEarn(l.payee_employee_id, Number(l.amount)||0, l.project_id, (proj.name||'') + ' — ' + (l.description||'начисление по м²'), 'начисление по м²');
+  });
+
+  // Гарантированный оклад всегда присутствует в табеле текущего месяца,
+  // даже если сотрудник не участвовал ни в одном завершённом проекте.
+  state.employees.filter(e=>e.active!==false && e.is_salaried).forEach(emp=>{
+    if(!employees[emp.id]) employees[emp.id] = {earned:0, items:[]};
+    employees[emp.id].salary = Number(emp.fixed_salary)||0;
   });
 
   return {employees, revenue, projectCosts, byDeptProfit};
@@ -4723,29 +4819,15 @@ function completedProjectEarningsForRange(from, to){
 // Разбивает заработок сотрудников на «фактически выплачено» и «осталось
 // в прибыли компании» — для сотрудников с фиксированной ЗП (is_salaried).
 function splitPayrollByEmployee(employeesEarned){
-  // Важное правило: фиксированная ЗП гарантирована и начисляется каждый месяц,
-  // даже если сотрудник не участвовал ни в одном завершённом проекте.
-  // Проектные гонорары/начисления показываются отдельно и не уменьшают оклад.
-  const result = {};
+  const result = {}; // empId -> {earned, payout, retained, isSalaried, salary}
   let payrollPaidOut = 0, companyRetained = 0;
-  const activeEmployees = (state.employees||[]).filter(e=>e.active!==false);
-
-  activeEmployees.forEach(emp=>{
-    const id = emp.id;
-    const earned = Number(employeesEarned[id]?.earned) || 0;
-    const items = employeesEarned[id]?.items || [];
-    const salary = emp.is_salaried ? Math.max(0, Number(emp.fixed_salary)||0) : 0;
-    const variable = earned;
-    const payout = salary + variable;
-    result[id] = {
-      earned: variable,
-      variable,
-      salary,
-      payout,
-      retained: 0,
-      isSalaried: !!emp.is_salaried,
-      items
-    };
+  // Гарантированный оклад выплачивается независимо от количества завершённых проектов.
+  // Проектные начисления добавляются сверху, если они есть.
+  state.employees.filter(e=>e.active!==false).forEach(emp=>{
+    const earned = employeesEarned[emp.id]?.earned || 0;
+    const salary = emp.is_salaried ? (Number(emp.fixed_salary)||0) : 0;
+    const payout = salary + earned;
+    result[emp.id] = {earned, payout, retained:0, isSalaried:!!emp.is_salaried, salary};
     payrollPaidOut += payout;
   });
   return {result, payrollPaidOut, companyRetained};
@@ -4802,38 +4884,61 @@ function renderTimesheet(){
   const {from, to} = timesheetMonthRange(monthStr);
   const {employees: earnedMap} = completedProjectEarningsForRange(from, to);
   const {result: payrollByEmp} = splitPayrollByEmployee(earnedMap);
+
   const card = document.getElementById('timesheetCard');
   if(!card) return;
 
   const rows = state.employees.filter(e=>e.active!==false).map(emp=>{
-    const p = payrollByEmp[emp.id] || {earned:0,variable:0,salary:emp.is_salaried?Number(emp.fixed_salary)||0:0,payout:0,retained:0,isSalaried:!!emp.is_salaried,items:[]};
-    return {id:emp.id,name:emp.name,earned:p.earned,variable:p.variable||p.earned,salary:p.salary||0,payout:p.payout,retained:0,isSalaried:p.isSalaried,items:p.items||[],paid:isTimesheetPaid(emp.id,monthStr)};
+    const e = earnedMap[emp.id];
+    const p = payrollByEmp[emp.id] || {earned:0, payout:0, retained:0, isSalaried: !!emp.is_salaried, salary: Number(emp.fixed_salary)||0};
+    return {
+      id: emp.id,
+      name: emp.name,
+      earned: p.earned,
+      payout: p.payout,
+      retained: p.retained,
+      isSalaried: p.isSalaried,
+      salary: p.salary || 0,
+      items: e ? e.items : [],
+      paid: isTimesheetPaid(emp.id, monthStr),
+    };
   }).sort((a,b)=>b.payout-a.payout);
 
-  const totalSalary = rows.reduce((s,r)=>s+r.salary,0);
-  const totalVariable = rows.reduce((s,r)=>s+r.variable,0);
-  const totalPayout = rows.reduce((s,r)=>s+r.payout,0);
+  const totalPayout = rows.reduce((s,r)=>s+r.payout, 0);
+  const totalRetained = rows.reduce((s,r)=>s+r.retained, 0);
 
-  card.innerHTML = `
-    <div class="list-item" style="background:var(--bg2);border-radius:10px;margin-bottom:6px;">
-      <div><div class="li-name">ФОТ за ${escapeHtml(ruMonthLabel(monthStr))}</div><div class="li-meta">Оклад гарантирован всем сотрудникам с фиксированной ЗП</div></div>
-      <div class="proj-sum">${fmtMoney(totalPayout)}</div>
-    </div>
-    ${rows.map(r=>{
-      const expanded=!!timesheetExpanded[r.id];
-      const itemsHtml=r.items.length ? r.items.map(it=>`<div class="list-item" style="padding-left:34px;" onclick="openProjectSheet('${it.projectId}')"><div class="li-name" style="font-size:12.5px;">${escapeHtml(it.name)} <span style="color:var(--text-dim);font-weight:400;">· ${escapeHtml(it.role||'гонорар')}</span></div><div class="proj-sum" style="font-size:12.5px;">${fmtMoney(it.amount)}</div></div>`).join('') : '';
-      return `<div class="list-item" style="cursor:pointer;" onclick="toggleTimesheetRow('${r.id}')">
-        <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
-          <input type="checkbox" ${r.paid?'checked':''} style="width:20px;height:20px;flex-shrink:0;cursor:pointer;" onclick="event.stopPropagation();" onchange="toggleTimesheetPaid('${r.id}','${monthStr}',this.checked)">
-          <div style="min-width:0;"><div class="li-name">${expanded?'▾':'▸'} ${escapeHtml(r.name)}${r.isSalaried?' <span style="color:var(--text-dim);font-weight:400;">· фикс. ЗП</span>':''}</div>
-          <div class="li-meta">${r.isSalaried?'Гарантированный оклад: '+fmtMoney(r.salary):'Без фиксированного оклада'}${r.variable>0?' · проектные начисления: '+fmtMoney(r.variable):''}${r.paid?' · выплачено':''}</div></div>
+  card.innerHTML = rows.map(r=>{
+    const expanded = !!timesheetExpanded[r.id];
+    const itemsHtml = r.items.length ? r.items.map(it=>`
+      <div class="list-item" style="padding-left:34px;" onclick="openProjectSheet('${it.projectId}')">
+        <div class="li-name" style="font-size:12.5px;">${escapeHtml(it.name)}${it.role==='соисполнитель'?' <span style="color:var(--text-dim); font-weight:400;">(соисполнитель)</span>':''}</div>
+        <div class="proj-sum" style="font-size:12.5px; ${it.amount===0?'color:var(--text-dim);':''}">${fmtMoney(it.amount)}${it.amount===0 && it.role==='соисполнитель' ? ' · нет %' : ''}</div>
+      </div>`).join('') : '<div class="empty-state" style="padding:8px 0 8px 34px;">Нет законченных проектов за месяц</div>';
+    return `
+    <div class="list-item" style="cursor:pointer;" onclick="toggleTimesheetRow('${r.id}')">
+      <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:0;">
+        <input type="checkbox" ${r.paid?'checked':''} style="width:20px;height:20px;flex-shrink:0;cursor:pointer;"
+          onclick="event.stopPropagation();" onchange="toggleTimesheetPaid('${r.id}','${monthStr}', this.checked)">
+        <div style="min-width:0;">
+          <div class="li-name">${expanded?'▾':'▸'} ${escapeHtml(r.name)}${r.isSalaried?' <span style="color:var(--text-dim); font-weight:400;">(фикс. ЗП)</span>':''}</div>
+          <div class="li-meta">${r.isSalaried ? 'Гарантированный оклад '+fmtMoney(r.salary) : ''}${r.items.length ? (r.isSalaried ? ' · ' : '') + r.items.length + ' проект(ов)' : (!r.isSalaried ? 'Нет завершённых проектов' : '')}${r.paid?' · оплачено':''}</div>
         </div>
-        <div style="display:flex;align-items:center;gap:6px;"><div class="proj-sum" style="${r.paid?'color:var(--green);':''}">${fmtMoney(r.payout)}</div><button class="icon-btn" title="Скачать табель этого сотрудника за месяц (PDF)" onclick="event.stopPropagation();exportTimesheetToPdf('${r.id}','${monthStr}')">📄</button></div>
-      </div>${expanded?itemsHtml:''}`;
-    }).join('')}
-    <div class="list-item" style="border-top:1px solid var(--line-strong);"><div class="li-name" style="font-weight:700;">Гарантированные оклады</div><div class="proj-sum" style="font-weight:700;">${fmtMoney(totalSalary)}</div></div>
-    <div class="list-item"><div class="li-name" style="font-weight:700;">Проектные гонорары / м²</div><div class="proj-sum" style="font-weight:700;">${fmtMoney(totalVariable)}</div></div>
-    <div class="list-item"><div class="li-name" style="font-weight:700;">Итого к выплате</div><div class="proj-sum" style="font-weight:700;">${fmtMoney(totalPayout)}</div></div>`;
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <div class="proj-sum" style="${r.paid?'color:var(--green);':''}">${fmtMoney(r.payout)}</div>
+        <button class="icon-btn" title="Скачать табель этого сотрудника за месяц (PDF)" onclick="event.stopPropagation(); exportTimesheetToPdf('${r.id}','${monthStr}')" style="font-size:15px;">📄</button>
+      </div>
+    </div>
+    ${expanded ? itemsHtml : ''}`;
+  }).join('') +
+    `<div class="list-item" style="border-top:1px solid var(--line-strong);">
+      <div class="li-name" style="font-weight:700;">Итого к выплате за месяц</div>
+      <div class="proj-sum" style="font-weight:700;">${fmtMoney(totalPayout)}</div>
+    </div>` +
+    (totalRetained > 0 ? `<div class="list-item">
+      <div class="li-name" style="color:var(--text-dim);">Осталось в прибыли компании (сверх фикс. ЗП)</div>
+      <div class="proj-sum" style="color:var(--gold);">${fmtMoney(totalRetained)}</div>
+    </div>` : '');
 }
 
 // ============================================================
@@ -4924,18 +5029,16 @@ function exportTimesheetToPdf(employeeId, monthStr){
   doc.setDrawColor(200); doc.line(margin, y, margin+contentWidth, y); y += 7;
 
   doc.setFont('Roboto','bold'); doc.setFontSize(11);
-  if(p.isSalaried){
-    doc.text('Гарантированный оклад:', margin, y);
-    doc.text(fmtMoney(p.salary), margin+contentWidth, y, {align:'right'});
+  doc.text('Заработано за месяц:', margin, y);
+  doc.text(fmtMoney(p.earned), margin+contentWidth, y, {align:'right'});
+  y += 7;
+  if(p.isSalaried && p.retained > 0){
+    doc.setFont('Roboto','normal'); doc.setFontSize(9.5); doc.setTextColor(90);
+    doc.text('осталось в прибыли компании (сверх оклада):', margin, y);
+    doc.text(fmtMoney(p.retained), margin+contentWidth, y, {align:'right'});
+    doc.setTextColor(0);
     y += 7;
   }
-  doc.text('Проектные начисления:', margin, y);
-  doc.text(fmtMoney(p.variable || p.earned || 0), margin+contentWidth, y, {align:'right'});
-  y += 7;
-  doc.setFont('Roboto','bold'); doc.setFontSize(11);
-  doc.text('Итого начислено:', margin, y);
-  doc.text(fmtMoney(p.payout), margin+contentWidth, y, {align:'right'});
-  y += 7;
   y += 3;
   doc.setFont('Roboto','bold'); doc.setFontSize(13); doc.setTextColor(BLUE[0],BLUE[1],BLUE[2]);
   doc.text('К ВЫПЛАТЕ: ' + fmtMoney(p.payout), margin, y);
@@ -5284,18 +5387,24 @@ const ledgerTypeLabels = {
 };
 
 function renderFeeSummaryForProject(p){
-  const el=document.getElementById('pf-fee-summary');
+  const el = document.getElementById('pf-fee-summary');
   if(!el) return;
-  const f=getProjectFee({...p,expenses:getProjectExpenses(p)});
-  const hasCo=!!p.co_employee_id;
-  el.innerHTML=`
-    <div style="font-weight:700;font-size:13px;margin-bottom:6px;">Процентное вознаграждение</div>
-    <div class="fee-row"><div class="fl">Исполнитель — ${f.feePercent}% от выручки</div><div class="fv">${fmtMoney(f.mainFeeAmount)}</div></div>
-    ${hasCo?`<div class="fee-row"><div class="fl">Соисполнитель — ${f.coFeePercent}%</div><div class="fv">${fmtMoney(f.coFeeAmount)}</div></div>`:''}
-    <div class="fee-row"><div class="fl">Всего начислено по %</div><div class="fv">${fmtMoney(f.feeAmount)}</div></div>
-    <div class="fee-row"><div class="fl">Уже отмечено выплаченным</div><div class="fv">${fmtMoney(f.paid)}</div></div>
-    <div class="fee-row remaining"><div class="fl">Осталось выплатить</div><div class="fv">${fmtMoney(f.remaining)}</div></div>`;
-  renderProjectEconomics(p);
+  const f = getProjectFee(p);
+  const baseLabel = f.feeBase === 'expenses' ? '% от расходов' : '% от цены';
+  const hasCoExec = !!p.co_employee_id;
+  const expenses = Number(p.expenses) || 0;
+  const expensesNote = (f.feeBase !== 'expenses' && expenses > 0)
+    ? `<div class="fee-row" style="color:var(--text-dim); font-size:11.5px;"><div class="fl">Расходы ${fmtMoney(expenses)} (порог ${fmtMoney(EXECUTOR_FEE_EXPENSE_THRESHOLD)})</div><div class="fv">${f.companyExpenseShare > 0 ? 'с дохода компании' : 'с гонорара исполнителя'}</div></div>`
+    : '';
+  el.innerHTML = `
+    <div style="font-weight:700; font-size:13px; margin-bottom:6px;">Гонорар (${baseLabel})</div>
+    <div class="fee-row"><div class="fl">Исполнитель — ${f.feePercent}%</div><div class="fv">${fmtMoney(f.mainFeeAmount)}</div></div>
+    ${hasCoExec ? `<div class="fee-row"><div class="fl">Соисполнитель — ${f.coFeePercent}%</div><div class="fv">${fmtMoney(f.coFeeAmount)}</div></div>` : ''}
+    ${expensesNote}
+    <div class="fee-row"><div class="fl">Начислено всего</div><div class="fv">${fmtMoney(f.feeAmount)}</div></div>
+    <div class="fee-row"><div class="fl">Выплачено всего</div><div class="fv">${fmtMoney(f.paid)}</div></div>
+    <div class="fee-row remaining"><div class="fl">Осталось выплатить</div><div class="fv">${fmtMoney(Math.max(0,f.remaining))}</div></div>
+  `;
 }
 
 function renderPaymentHistory(projectId){
@@ -5382,32 +5491,70 @@ function projectRolePayoutEntries(projectId){
 }
 
 function updateCompanyRemainderField(projectId){
-  const remEl=document.getElementById('pf-company-remainder');
+  const remEl = document.getElementById('pf-company-remainder');
   if(!remEl) return;
-  const p=projectId ? state.projects.find(x=>x.id===projectId) : null;
-  if(!p){ remEl.value=''; return; }
-  const price=Number(document.getElementById('pf-price')?.value || p.price || 0);
-  const direct=getProjectExpenses(p);
-  const fee=getProjectFee({...p, price});
-  const roleTotal=projectRolePayoutEntries(projectId).reduce((s,e)=>s+Number(e.amount||0),0);
-  remEl.value=Math.round(price-direct-fee.feeAmount-roleTotal);
+  const price = parseFloat(document.getElementById('pf-price').value) || 0;
+  const expenses = parseFloat(document.getElementById('pf-expenses').value) || 0;
+  remEl.value = projectId ? (price - expenses) : '';
 }
 
-function renderProjectEconomics(p){
-  const el=document.getElementById('pf-project-economics');
-  if(!el || !p) return;
-  const price=Number(p.price)||0;
-  const direct=getProjectExpenses(p);
-  const fee=getProjectFee({...p,expenses:direct});
-  const roleTotal=projectRolePayoutEntries(p.id).reduce((s,e)=>s+Number(e.amount||0),0);
-  const company=price-direct-fee.feeAmount-roleTotal;
-  el.innerHTML=`
-    <div style="font-weight:700;font-size:13px;margin-bottom:6px;">Куда уходит выручка</div>
-    <div class="fee-row"><div class="fl">Выручка проекта</div><div class="fv">${fmtMoney(price)}</div></div>
-    <div class="fee-row"><div class="fl">Прямые расходы</div><div class="fv">−${fmtMoney(direct)}</div></div>
-    <div class="fee-row"><div class="fl">Гонорары по %</div><div class="fv">−${fmtMoney(fee.feeAmount)}</div></div>
-    <div class="fee-row"><div class="fl">Начисления по м²</div><div class="fv">−${fmtMoney(roleTotal)}</div></div>
-    <div class="fee-row total"><div class="fl">Остаётся компании</div><div class="fv" style="color:${company>=0?'var(--green)':'var(--red)'};">${fmtMoney(company)}</div></div>`;
+function renderM2CompensationSummary(p){
+  const el=document.getElementById('pf-compensation-summary');
+  if(!el) return;
+  const area=Number(document.getElementById('pf-area')?.value || p?.area || 0);
+  const items=projectRolePayoutEntries(p?.id).filter(x=>!x.deleted_at);
+  const total=items.reduce((s,x)=>s+Number(x.amount||0),0);
+  el.innerHTML=`<div class="fee-row total"><div class="fl">Начислено по м²</div><div class="fv">${fmtMoney(total)}</div></div><div class="payroll-note">Начисления появятся в табеле только после статуса «Завершён» и попадут в месяц даты сдачи проекта.</div>`;
+}
+
+function getProjectCompensationMethod(p){
+  const raw = p?.fee_base || '';
+  if(raw === 'm2') return 'm2';
+  return 'percent';
+}
+
+function renderCompensationMethodUI(){
+  const methodEl = document.getElementById('pf-compensation-method');
+  const percentBox = document.getElementById('pf-percent-method-fields');
+  const m2Box = document.getElementById('pf-m2-method-fields');
+  if(!methodEl || !percentBox || !m2Box) return;
+  const method = methodEl.value === 'm2' ? 'm2' : 'percent';
+  if(method === 'percent') document.getElementById('pf-feebase').value = methodEl.value === 'percent_profit' ? 'profit' : 'price';
+  percentBox.style.display = method === 'percent' ? '' : 'none';
+  m2Box.style.display = method === 'm2' ? '' : 'none';
+  const empFee = document.getElementById('pf-employee-fee');
+  const coFee = document.getElementById('pf-co-employee-fee');
+  const main = document.getElementById('pf-employee');
+  const co = document.getElementById('pf-co-employee');
+  if(empFee && main) empFee.value = main.value || '';
+  if(coFee && co) coFee.value = co.value || '';
+  const summary = document.getElementById('pf-compensation-summary');
+  if(summary && editingProjectId){
+    const p = state.projects.find(x=>x.id===editingProjectId);
+    if(p){ if(method==='m2') renderM2CompensationSummary(p); else renderFeeSummaryForProject({...p, fee_base:(methodEl.value==='percent_profit'?'profit':'price')}); }
+  }
+}
+
+function bindCompensationUI(){
+  const method = document.getElementById('pf-compensation-method');
+  if(method && !method.dataset.bound){
+    method.dataset.bound='1';
+    method.addEventListener('change', ()=>{
+      if(method.value==='m2') document.getElementById('pf-feebase').value='m2';
+      else document.getElementById('pf-feebase').value='price';
+      renderCompensationMethodUI();
+    });
+  }
+  ['pf-employee-fee','pf-co-employee-fee'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el && !el.dataset.bound){
+      el.dataset.bound='1';
+      el.addEventListener('change', ()=>{
+        if(id==='pf-employee-fee') document.getElementById('pf-employee').value=el.value;
+        if(id==='pf-co-employee-fee') document.getElementById('pf-co-employee').value=el.value;
+      });
+    }
+  });
 }
 
 function renderProjectRolePayouts(projectId){
@@ -5417,9 +5564,11 @@ function renderProjectRolePayouts(projectId){
       .map(e=>`<option value="${e.id}">${escapeHtml(e.name)}</option>`).join('');
     sel.dataset.filled = '1';
   }
-  const el = document.getElementById('pf-role-payouts-list');
+  const el = document.getElementById('pf-m2-payouts-list');
   if(!el) return;
   if(!projectId){ el.innerHTML = ''; return; }
+  const project = state.projects.find(x=>x.id===projectId);
+  const status = project ? findStatus(project.status_id) : null;
   const items = projectRolePayoutEntries(projectId);
   if(!items.length){
     el.innerHTML = '<div class="empty-state" style="padding:10px;">Начислений пока нет</div>';
@@ -5442,44 +5591,41 @@ function renderProjectRolePayouts(projectId){
         <div class="li-name" style="font-weight:700;color:var(--gold);">−${fmtMoney(total)}</div>
       </div></div>`;
   }
+  if(status && status.name !== 'Завершён'){ el.insertAdjacentHTML('afterbegin','<div class="payroll-note" style="padding:8px 0;color:var(--gold);">Начисления сохранены, но в табеле появятся только после завершения проекта — в месяц даты сдачи.</div>'); }
   updateCompanyRemainderField(projectId);
-  const p = projectId ? state.projects.find(x=>x.id===projectId) : null;
-  if(p) renderProjectEconomics(p);
 }
 
 async function addProjectRolePayout(){
   const projectId = editingProjectId;
   if(!projectId){ showToast('Сначала сохраните проект'); return; }
+  const p = state.projects.find(x=>x.id===projectId);
+  if(!p){ showToast('Проект не найден'); return; }
   const role = document.getElementById('pf-rp-role').value;
   const employeeId = document.getElementById('pf-rp-employee').value;
   const rate = parseFloat(document.getElementById('pf-rp-rate').value);
   const area = parseFloat(document.getElementById('pf-area').value);
-  const entry_date = document.getElementById('pf-rp-date').value || new Date().toISOString().slice(0,10);
   if(!employeeId){ showToast('Выберите исполнителя'); return; }
   if(!rate || rate <= 0){ showToast('Укажите ставку за м²'); return; }
   if(!area || area <= 0){ showToast('Укажите площадь проекта, м²'); return; }
-  if(!entry_date){ showToast('Укажите дату начисления'); return; }
   const amount = Math.round(area * rate);
   const emp = findEmployee(employeeId);
-  const p = state.projects.find(x=>x.id===projectId);
   try{
     const {error} = await sb.from('ledger_entries').insert({
       type:'role_payout', project_id:projectId, payee_employee_id: employeeId,
       description:`${role} — ${emp?emp.name:''} (${area} м² × ${fmtMoney(rate)}/м²)`,
-      amount, entry_date,
+      amount, entry_date: new Date().toISOString().slice(0,10),
       received_by: session ? session.employeeId : null,
     });
     if(error) throw error;
     const total = await syncProjectExpensesTotal(projectId);
     await logAudit('project', projectId, p?p.name:'', 'update', {role_payout_added:{old:null, new:`${role} — ${emp?emp.name:''} — ${fmtMoney(amount)}`}});
     document.getElementById('pf-rp-rate').value = '';
-    document.getElementById('pf-rp-date').value = new Date().toISOString().slice(0,10);
     await loadAll();
     renderProjectRolePayouts(projectId);
     const expEl = document.getElementById('pf-expenses'); if(expEl) expEl.value = total;
     updateCompanyRemainderField(projectId);
-    const up = state.projects.find(x=>x.id===projectId); if(up) renderFeeSummaryForProject(up);
-    showToast('Начисление добавлено — попадёт в табель за текущий месяц');
+    const up = state.projects.find(x=>x.id===projectId); if(up) renderM2CompensationSummary(up);
+    showToast('Начисление добавлено. В табель попадёт после завершения проекта — в месяц сдачи.');
   }catch(e){ console.error(e); showToast('Ошибка добавления начисления — проверьте, что миграция выполнена в Supabase'); }
 }
 
@@ -6388,7 +6534,9 @@ function renderConstruction(){
   let projects = getConstrProjects();
 
   if(session && !session.isAdmin) projects = projects.filter(p=>isProjectMember(p.id));
+  const completedStatus = state.statuses.find(s=>s.name==='Завершён');
   if(activeConstrStatusFilter !== 'all') projects = projects.filter(p=>p.status_id === activeConstrStatusFilter);
+  else if(completedStatus) projects = projects.filter(p=>p.status_id !== completedStatus.id);
   if(constrSearchQuery.trim()){
     const q = constrSearchQuery.trim().toLowerCase();
     projects = projects.filter(p=>(p.name||'').toLowerCase().includes(q) || (p.address||'').toLowerCase().includes(q));
