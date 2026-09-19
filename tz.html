@@ -176,6 +176,7 @@
   }
   .toast.show{opacity:1; transform:translateX(-50%) translateY(-6px);}
 </style>
+<link rel="stylesheet" href="client.css">
 </head>
 <body>
 
@@ -819,9 +820,10 @@ function updateProgressBar(){
 let saveInFlight = false;
 let saveTimer = null;
 
+let saveQueued=false;
 async function autoSave(){
   if(!tzForm) return;
-  if(saveInFlight) return;
+  if(saveInFlight){saveQueued=true;return;}
   saveInFlight = true;
   const status = document.getElementById('saveStatus');
   if(status) status.textContent = 'Сохранение…';
@@ -839,6 +841,7 @@ async function autoSave(){
     if(status) status.textContent = 'Ошибка сохранения';
   }finally{
     saveInFlight = false;
+    if(saveQueued){saveQueued=false;await autoSave();}
   }
 }
 

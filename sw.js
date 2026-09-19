@@ -1,6 +1,6 @@
 // ARHITTEK Service Worker v1.5 (bypass HTTP disk cache — fixes stale iOS PWA content)
-const CACHE = 'arhittek-v1.5';
-const ASSETS = ['./index.html', './manifest.json'];
+const CACHE = 'arhittek-v2.0';
+const ASSETS = ['./index.html','./premium.css','./premium.js','./client.css','./catalog.html','./tz.html','./manifest.json','./icon-192.png'];
 // CDN-библиотеки — кэшируем отдельно от основных ASSETS: если jsdelivr на
 // момент установки недоступен, это не должно валить весь install (addAll — all-or-nothing).
 const CDN_ASSETS = [
@@ -33,6 +33,7 @@ self.addEventListener('activate', e=>{
 });
 
 self.addEventListener('fetch', e=>{
+  if(e.request.method !== 'GET') return;
   // Сеть первая — для API запросов; кэш для assets
   if(e.request.url.includes('supabase.co')){
     e.respondWith(fetch(e.request).catch(()=>new Response('', {status:503})));
@@ -52,7 +53,7 @@ self.addEventListener('fetch', e=>{
         }
         return res;
       })
-      .catch(()=>caches.match(e.request))
+      .catch(async()=>await caches.match(e.request) || new Response('Нет подключения. Откройте приложение после восстановления связи.',{status:503,headers:{'Content-Type':'text/plain; charset=utf-8'}}))
   );
 });
 

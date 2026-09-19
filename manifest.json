@@ -1,13 +1,13 @@
 {
-  "name": "ARHITTEK — Пульт управления",
+  "name": "ARHITTEK — Пространство студии",
   "short_name": "ARHITTEK",
   "description": "Внутренний пульт управления ARHITTEK: проекты, объекты строительства, финансы, КП, ТЗ и договоры.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait",
-  "background_color": "#0B1929",
-  "theme_color": "#0B1929",
+  "orientation": "any",
+  "background_color": "#f5f6f8",
+  "theme_color": "#f5f6f8",
   "lang": "ru",
   "icons": [
     {

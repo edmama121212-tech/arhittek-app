@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
 <title>ARHITTEK · Пульт управления</title>
 
 <!-- PWA / Add to Home Screen -->
@@ -116,7 +116,7 @@
     header{padding:14px 12px 10px;}
     #syncLabel{display:none;}
     .sync-pill{padding:5px 8px;}
-    #userPill{display:none !important;}
+    #userPill{max-width:75px;overflow:hidden;}
   }
 
   main{padding: 14px 16px 0; overflow-x:hidden; max-width:100%;}
@@ -537,6 +537,7 @@
   #pf-compensation-summary .comp-total{font-family:'Space Grotesk',sans-serif;font-weight:700;color:var(--gold);}
   .payroll-note{font-size:10px;color:var(--text-dim);line-height:1.45;}
 </style>
+<link rel="stylesheet" href="premium.css">
 </head>
 <body>
 
@@ -770,7 +771,7 @@
           </div>
 
     <div class="section-label"><span class="lbl-text">Корзина</span><span class="section-label-line"></span></div>
-    <div class="note" style="margin-bottom:10px;">Удалённые проекты, сотрудники и записи. Можно восстановить или удалить навсегда. Элементы старше 2 месяцев удаляются автоматически.</div>
+    <div class="note" style="margin-bottom:10px;">Удалённые проекты, сотрудники и записи. Можно восстановить или удалить навсегда. Данные остаются в корзине до явного удаления.</div>
     <div class="card" id="trashCard">
       <div class="loading-state">Загрузка…</div>
     </div>
@@ -1063,7 +1064,7 @@
     </div>
 
     <div class="note" style="margin:10px 0;">
-      Считается по фактически выплаченному гонорару (записи «Гонорар ARHITTEK») за выбранный месяц, по проектам, в которых участвует сотрудник. Если у проекта есть соисполнитель — сумма делится пропорционально их долям гонорара.
+      Гарантированный оклад и начисления по завершённым проектам за месяц даты сдачи. Отметка «Выплачено» относится ко всей сумме сотрудника за выбранный месяц. После изменения начислений проверьте отметку повторно.
     </div>
 
     <div class="section-label"><span class="lbl-text">Заработок по сотрудникам</span><span class="section-label-line"></span></div>
@@ -2325,7 +2326,12 @@ function getProjectDirectClientPaid(p){
 // один и тот же объект показывал разные суммы гонорара на разных экранах.
 function getProjectFee(p){
   const withFreshExpenses = {...p, expenses: getProjectExpenses(p)};
-  if(p && p.fee_base === 'm2') return {feePercent:0, feeBase:'m2', profit:(Number(p.price)||0)-getProjectExpenses(p), feeAmount:0, paid:0, remaining:0, mainFeeAmount:0, coFeeAmount:0, mainPaid:0, coPaid:0, grossMainFee:0, companyExpenseShare:0};
+  if(p && p.fee_base === 'm2'){
+    const rows=projectRolePayoutEntries(p.id), feeAmount=rows.reduce((sum,e)=>sum+(Number(e.amount)||0),0);
+    const forEmp=id=>id?rows.filter(e=>e.payee_employee_id===id).reduce((sum,e)=>sum+(Number(e.amount)||0),0):0;
+    return {feePercent:0,feeBase:'m2',profit:(Number(p.price)||0)-getProjectExpenses(p),feeAmount,paid:0,remaining:feeAmount,
+      mainFeeAmount:forEmp(p.employee_id),coFeeAmount:forEmp(p.co_employee_id),mainPaid:0,coPaid:0,grossMainFee:feeAmount,companyExpenseShare:0};
+  }
   return isConstructionProject(p) ? calcConstrFee(withFreshExpenses) : calcFee(withFreshExpenses);
 }
 
@@ -2560,12 +2566,14 @@ function applyRole(){
 
   userPill.style.display = 'flex';
   const roleLabel = getEmployeeRole() ? ` · ${getEmployeeRole()}` : (session.isAdmin ? '' : ' · исполнитель');
-  userPill.innerHTML = `<span style="font-weight:600;">${escapeHtml(session.name)}</span><span style="opacity:0.6;">${roleLabel}</span>`;
+  userPill.innerHTML = `<span style="font-weight:600;">${escapeHtml(session.name)}</span><span style="opacity:0.6;">${escapeHtml(roleLabel)}</span>`;
 
   const isAdmin = session.isAdmin;
   const seeConstr = canSeeConstruction();
   const seeProj = canSeeProjects();
 
+  document.getElementById('settingsBtn').style.display=isAdmin?'':'none';
+  document.getElementById('exportXlsxBtn').style.display=isAdmin?'':'none';
   // Bottom nav — скрываем по ролям
   const navConstr = document.querySelector('.nav-btn[data-view="view-construction"]');
   const navProj = document.querySelector('.nav-btn[data-view="view-projects"]');
@@ -2594,6 +2602,7 @@ function applyRole(){
   if(activeView){
     const hidden = (activeView.id==='view-overview' && !isAdmin)
       || (activeView.id==='view-finance' && !isAdmin)
+      || (activeView.id==='view-settings' && !isAdmin)
       || (activeView.id==='view-construction' && !seeConstr)
       || (activeView.id==='view-projects' && !seeProj)
       || (activeView.id==='view-cards' && !canEditCards());
@@ -3076,7 +3085,7 @@ async function loadAll(){
     ]);
 
     // kpForms and stages are optional — may not exist until migrations run
-    const errs = [proj,emp,cat,st,dept,led,photos,invs,tzForms,tzRefs,company].map(r=>r.error).filter(Boolean);
+    const errs = [proj,emp,cat,st,dept,led,photos,invs,tzForms,tzRefs,company,tsPay,compExp,compInc].map(r=>r.error).filter(Boolean);
     if(errs.length) throw errs[0];
     state.kpForms = kpForms.error ? [] : (kpForms.data || []);
     state.projectStages = stages.error ? [] : (stages.data || []);
@@ -3091,7 +3100,7 @@ async function loadAll(){
     state.categories = cat.data || [];
     state.statuses = st.data || [];
     // Автосоздание статуса «Заморожен», если его ещё нет в БД (self-install, одна попытка за сессию)
-    if(!state.statuses.some(s=>s.name==='Заморожен') && !sessionStorage.getItem('arhittek_frozen_tried')){
+    if(session?.isAdmin && !state.statuses.some(s=>s.name==='Заморожен') && !sessionStorage.getItem('arhittek_frozen_tried')){
       sessionStorage.setItem('arhittek_frozen_tried','1');
       try{
         const {data: frozenData, error: frErr} = await sb.from('statuses').insert({name:'Заморожен'}).select('*').single();
@@ -3101,7 +3110,7 @@ async function loadAll(){
     }
     state.departments = dept.data || [];
     // Автосоздание категории «Ландшафтный дизайн» в проектном отделе (self-install, одна попытка за сессию)
-    if(!state.categories.some(c=>(c.name||'').toLowerCase().includes('ландшафт')) && !sessionStorage.getItem('arhittek_landscape_tried')){
+    if(session?.isAdmin && !state.categories.some(c=>(c.name||'').toLowerCase().includes('ландшафт')) && !sessionStorage.getItem('arhittek_landscape_tried')){
       sessionStorage.setItem('arhittek_landscape_tried','1');
       try{
         // Берём отдел не строительный (проектный) — как у Архитектуры/Дизайна
@@ -3147,6 +3156,8 @@ async function loadAll(){
         clearSession();
         return;
       }
+      session.isAdmin=!!emp.is_admin;
+      session.name=emp.name;
       document.getElementById('loginOverlay').style.display = 'none';
       applyRole();
       if(!window._pushSubscribeAttempted && 'Notification' in window && Notification.permission === 'granted'){
@@ -3188,7 +3199,7 @@ async function loadDeferredData(){
       categories: trashCat.error ? [] : (trashCat.data || []),
       ledger: trashLed.error ? [] : (trashLed.data || []),
     };
-    purgeOldTrash();
+    // Loading must not trigger irreversible deletions from trash.
     renderHistory();
     renderTrash();
   }catch(e){ console.error('loadDeferredData error', e); }
@@ -3213,8 +3224,9 @@ function renderAll(){
   renderStatuses();
   renderHistory();
   renderTrash();
-  populateProjectFormSelects();
+  if(!document.getElementById('projectSheetOverlay').classList.contains('active')) populateProjectFormSelects();
   populateEmployeeFormSelects();
+  if(document.getElementById('view-timesheet').classList.contains('active')) renderTimesheet();
 }
 
 // ============================================================
@@ -3227,7 +3239,7 @@ function renderConstrSummary(){
   const el = document.getElementById('constrSummaryBlock');
   if(!el) return;
 
-  const projects = getConstrProjects();
+  const projects = getConstrProjects().filter(p=>findStatus(p.status_id)?.name!=='Завершён' && !isFrozen(p));
   if(!projects.length){
     el.innerHTML = '<div class="empty-state" style="padding:16px;">Нет строительных объектов</div>';
     return;
@@ -3235,7 +3247,7 @@ function renderConstrSummary(){
 
   const rows = projects.map(p => {
     const fin = getConstructionFinancials(p);
-    const f = calcConstrFee({...p, expenses: fin.expenses});
+    const f = getProjectFee(p);
     const st = findStatus(p.status_id);
     return {p, ...fin, f, st};
   });
@@ -3300,7 +3312,7 @@ function renderOverview(){
   const overdue = state.projects.filter(p=>{
     if(!p.end_date) return false;
     if(isFrozen(p)) return false;
-    if(doneStatus && p.status_id === doneStatus.id && Number(p.balance) === 0) return false;
+    if(doneStatus && p.status_id === doneStatus.id) return false;
     const d = daysUntil(p.end_date);
     return d !== null && d < 0;
   });
@@ -3347,13 +3359,9 @@ function renderOverview(){
       const balance = Number(p.balance) || 0;
       const expenses = getProjectExpenses(p);
       const f = getProjectFee(p);
-      const feeRemaining = Math.max(0, f.remaining);
-      // Если гонорар исполнителя ≤ 30 000₽, расходы легли на компанию — они ещё не
-      // учтены в остатке гонорара (companyExpenseShare), поэтому вычитаем отдельно.
-      const net = balance - feeRemaining - (f.companyExpenseShare || 0);
-      const mainRemaining = Math.max(0, (f.mainFeeAmount||0) - (f.mainPaid||0));
-      const coRemaining = Math.max(0, (f.coFeeAmount||0) - (f.coPaid||0));
-      const feeTotal = mainRemaining + coRemaining;
+      // Contract margin is independent of the client's outstanding debt.
+      const feeTotal=f.feeAmount||0;
+      const net=(Number(p.price)||0)-expenses-feeTotal;
       const isMismatch = p.payment_status === 'Оплачен';
       return {p, balance, expenses, net, feeTotal, isMismatch};
     }).sort((a,b)=>b.balance-a.balance);
@@ -3384,8 +3392,8 @@ function renderOverview(){
           <tr>
             <th>Проект</th>
             <th>Долг</th>
-            <th>Заработок компании</th>
-            <th>Заработок исполнителя</th>
+            <th>Маржа проекта</th>
+            <th>Начисления команде</th>
             <th>Затраты</th>
           </tr>
         </thead>
@@ -3402,7 +3410,7 @@ function renderOverview(){
           </tr>
         </tfoot>
       </table>
-      </div>`;
+      </div><div class="note" style="padding:12px 18px">Маржа = цена проекта − прямые расходы − начисления команде. Оклады и общие издержки — в финансах компании.</div>`;
   }
 
   // Active projects with deadlines, sorted by days left
@@ -3448,7 +3456,7 @@ function renderOverview(){
     const overdueStages = state.projectStages.filter(s=>{
       if(s.done || !s.due_date || daysUntil(s.due_date) >= 0) return false;
       const pr = state.projects.find(x=>x.id===s.project_id);
-      if(isFrozen(pr)) return false; // замороженные проекты не порождают просрочки
+      if(!pr || isFrozen(pr) || findStatus(pr.status_id)?.name==='Завершён') return false;
       return true;
     });
     if(!overdueStages.length){
@@ -3700,7 +3708,7 @@ function renderAnalytics(){
         <div class="field"><label>По</label><input type="date" id="finance-to-input" value="${financeRangeTo||''}" onchange="financeRangeTo=this.value; renderAnalytics();"></div>
       </div>` : ''}
 
-    <div class="note" style="margin-bottom:8px;">Период: ${financePeriodLabel(from,to)} · считается по завершённым проектам, привязанным к дате сдачи</div>
+    <div class="note" style="margin-bottom:8px;">Период: ${financePeriodLabel(from,to)} · по завершённым проектам и дате сдачи. Оклады — по текущим ставкам с даты создания сотрудника; неполные месяцы — пропорционально календарным дням.</div>
 
     <table class="constr-sum-table" style="width:100%;">
       <tbody>
@@ -4229,6 +4237,16 @@ document.addEventListener('change', (e)=>{
 });
 
 // Recalculate "Остаток" and fee summary live when relevant fields change
+document.getElementById('pf-category').addEventListener('change', ()=>{
+  if(editingProjectId) return;
+  const cat=findCategory(document.getElementById('pf-category').value),name=(cat?.name||'').toLowerCase();
+  const arch=name.includes('архитект')||name.includes('ландшафт');
+  document.getElementById('pf-compensation-method').value=name.includes('интерьер')?'m2':arch?'percent_profit':(cat?.fee_base==='profit'?'percent_profit':'percent_price');
+  document.getElementById('pf-feepercent').value=cat?.fee_percent??(arch?40:'');
+  document.getElementById('pf-department').value=cat?.department_id||'';
+  renderCompensationMethodUI();
+});
+
 function recalcLiveFeeSummary(){
   if(!editingProjectId) return;
   const p = state.projects.find(x=>x.id===editingProjectId);
@@ -4401,11 +4419,11 @@ function openProjectSheet(id){
     document.getElementById('pf-area').value = '';
     document.getElementById('pf-expenses').value = '';
     document.getElementById('pf-m2-payouts-list').innerHTML = '<div class="empty-state" style="padding:10px;">Сохраните проект, чтобы начислять исполнителям</div>';
-    document.getElementById('pf-company-remainder').value = '';
+    updateCompanyRemainderField(null);
     document.getElementById('pf-feepaid').value = '';
-    document.getElementById('pf-feepercent').value = '';
+    document.getElementById('pf-feepercent').value = firstCat?.fee_percent ?? '';
     document.getElementById('pf-feebase').value = '';
-    const compMethod0 = document.getElementById('pf-compensation-method'); if(compMethod0) compMethod0.value = 'percent';
+    const compMethod0 = document.getElementById('pf-compensation-method'); if(compMethod0) compMethod0.value = firstCat?.fee_base === 'm2' ? 'm2' : (firstCat?.fee_base === 'profit' ? 'percent_profit' : 'percent_price');
     document.getElementById('pf-co-feepercent').value = '';
     document.getElementById('pf-co-feepaid').value = '';
     document.getElementById('pf-start').value = '';
@@ -4506,6 +4524,8 @@ async function saveProject(){
     return;
   }
 
+  if([payload.fee_percent,payload.co_fee_percent].some(v=>v!==null&&(!Number.isFinite(v)||v<0||v>100))||(Number(payload.fee_percent)||0)+(Number(payload.co_fee_percent)||0)>100){showToast('Сумма долей должна быть от 0 до 100%');return;}
+  if(payload.area!==null&&(!Number.isFinite(payload.area)||payload.area<0)){showToast('Площадь не может быть отрицательной');return;}
   if(!payload.name){
     showToast('Введите название проекта');
     return;
@@ -4559,11 +4579,13 @@ async function saveProject(){
 
     // Сохраняем дополнительных участников
     if(savedProjectId){
-      await sb.from('project_members').delete().eq('project_id', savedProjectId);
+      const {error: memberDeleteError}=await sb.from('project_members').delete().eq('project_id', savedProjectId);
+      if(memberDeleteError) throw memberDeleteError;
       if(currentProjectMembers.length > 0){
-        await sb.from('project_members').insert(
+        const {error: memberInsertError}=await sb.from('project_members').insert(
           currentProjectMembers.map(m=>({project_id: savedProjectId, employee_id: m.employee_id}))
         );
+        if(memberInsertError) throw memberInsertError;
       }
     }
     closeProjectSheet();
@@ -4664,21 +4686,12 @@ function calcFee(p){
   const expenses = Number(p.expenses) || 0;
   const profit = price - expenses;
 
-  let grossMainFee = price * feePercent / 100;
-  if(grossMainFee < 0) grossMainFee = 0;
-
-  let mainFeeAmount, companyExpenseShare;
-  if(grossMainFee > EXECUTOR_FEE_EXPENSE_THRESHOLD){
-    mainFeeAmount = Math.max(0, grossMainFee - expenses);
-    companyExpenseShare = 0;
-  }else{
-    mainFeeAmount = grossMainFee;
-    companyExpenseShare = expenses;
-  }
-
-  // Соисполнитель — свой % от полной цены, правило порога/расходов на него не распространяется.
-  let coFeeAmount = p.co_employee_id ? price * coFeePercent / 100 : 0;
-  if(coFeeAmount < 0) coFeeAmount = 0;
+  // Direct costs are deducted from the base once, only in profit mode.
+  const base = feeBase === 'profit' ? Math.max(0, profit) : Math.max(0, price);
+  const grossMainFee = base * Math.max(0, feePercent) / 100;
+  const mainFeeAmount = grossMainFee;
+  const companyExpenseShare = expenses;
+  const coFeeAmount = p.co_employee_id ? base * Math.max(0, coFeePercent) / 100 : 0;
 
   const feeAmount = mainFeeAmount + coFeeAmount;
   const mainPaid = Number(p.fee_paid) || 0;
@@ -4749,6 +4762,23 @@ function financeDeptOf(p){
 
 // Возвращает: { employees: {empId: {earned, items:[{projectId,name,amount}]}},
 //               revenue, projectCosts, byDeptProfit: {dept: profit} }
+// Current salary rates; partial months use calendar days from employee creation.
+function salaryForRange(emp, from, to){
+  const rate=Math.max(0,Number(emp.fixed_salary)||0);
+  if(!rate || !from || !to || from>to) return 0;
+  const hired=(emp.created_at||'').slice(0,10), start=hired&&hired>from?hired:from;
+  if(start>to) return 0;
+  const [sy,sm]=start.split('-').map(Number),[ey,em]=to.split('-').map(Number);
+  let total=0;
+  for(let i=sy*12+sm-1;i<=ey*12+em-1;i++){
+    const y=Math.floor(i/12),m=i%12+1,month=`${y}-${String(m).padStart(2,'0')}`,days=new Date(y,m,0).getDate();
+    const first=month===start.slice(0,7)?Number(start.slice(8,10)):1;
+    const last=month===to.slice(0,7)?Number(to.slice(8,10)):days;
+    total+=rate*Math.max(0,last-first+1)/days;
+  }
+  return Math.round(total*100)/100;
+}
+
 function completedProjectEarningsForRange(from, to){
   const employees = {};
   function addEarn(empId, amount, projectId, projectName, role){
@@ -4772,7 +4802,7 @@ function completedProjectEarningsForRange(from, to){
     let rev, cost;
     if(isConstr){
       const fin = getConstructionFinancials(p);
-      rev = fin.received; cost = fin.expenses;
+      rev = fin.received + fin.directPaid; cost = fin.directCosts;
     } else {
       rev = Number(p.price) || 0; cost = getProjectExpenses(p);
     }
@@ -4783,6 +4813,7 @@ function completedProjectEarningsForRange(from, to){
     const method = p.fee_base === 'm2' ? 'm2' : 'percent';
     if(method === 'percent'){
       const f = getProjectFee(p);
+      byDeptProfit[dept] -= (p.employee_id ? f.mainFeeAmount : 0) + (p.co_employee_id ? f.coFeeAmount : 0);
       if(p.co_employee_id){
         addEarn(p.employee_id, f.mainFeeAmount||0, p.id, p.name, 'исполнитель');
         addEarn(p.co_employee_id, f.coFeeAmount||0, p.id, p.name, 'соисполнитель');
@@ -4803,6 +4834,7 @@ function completedProjectEarningsForRange(from, to){
     if(proj.fee_base !== 'm2') return;
     const refDate = timesheetProjectRefDate(proj);
     if(!refDate || refDate < from || refDate > to) return;
+    if(l.payee_employee_id) byDeptProfit[financeDeptOf(proj)] -= Number(l.amount)||0;
     addEarn(l.payee_employee_id, Number(l.amount)||0, l.project_id, (proj.name||'') + ' — ' + (l.description||'начисление по м²'), 'начисление по м²');
   });
 
@@ -4810,7 +4842,7 @@ function completedProjectEarningsForRange(from, to){
   // даже если сотрудник не участвовал ни в одном завершённом проекте.
   state.employees.filter(e=>e.active!==false && e.is_salaried).forEach(emp=>{
     if(!employees[emp.id]) employees[emp.id] = {earned:0, items:[]};
-    employees[emp.id].salary = Number(emp.fixed_salary)||0;
+    employees[emp.id].salary = salaryForRange(emp, from, to);
   });
 
   return {employees, revenue, projectCosts, byDeptProfit};
@@ -4823,9 +4855,9 @@ function splitPayrollByEmployee(employeesEarned){
   let payrollPaidOut = 0, companyRetained = 0;
   // Гарантированный оклад выплачивается независимо от количества завершённых проектов.
   // Проектные начисления добавляются сверху, если они есть.
-  state.employees.filter(e=>e.active!==false).forEach(emp=>{
+  state.employees.filter(e=>e.active!==false || employeesEarned[e.id]?.earned).forEach(emp=>{
     const earned = employeesEarned[emp.id]?.earned || 0;
-    const salary = emp.is_salaried ? (Number(emp.fixed_salary)||0) : 0;
+    const salary = emp.is_salaried && emp.active!==false ? (employeesEarned[emp.id]?.salary ?? (Number(emp.fixed_salary)||0)) : 0;
     const payout = salary + earned;
     result[emp.id] = {earned, payout, retained:0, isSalaried:!!emp.is_salaried, salary};
     payrollPaidOut += payout;
@@ -4846,18 +4878,21 @@ function isTimesheetPaid(employeeId, monthStr){
 }
 
 async function toggleTimesheetPaid(employeeId, monthStr, checked){
+  if(!session?.isAdmin){showToast('Отмечать выплаты может только администратор');return;}
   try{
     const existing = (state.timesheetPayments||[]).find(t=>t.employee_id===employeeId && t.month===monthStr);
     if(existing){
       const {error} = await sb.from('timesheet_payments').update({paid: checked, paid_at: checked ? new Date().toISOString() : null}).eq('id', existing.id);
       if(error) throw error;
       existing.paid = checked;
+      existing.paid_at = checked ? new Date().toISOString() : null;
     }else{
       const {data, error} = await sb.from('timesheet_payments').insert({employee_id: employeeId, month: monthStr, paid: checked, paid_at: checked ? new Date().toISOString() : null}).select().single();
       if(error) throw error;
       state.timesheetPayments = state.timesheetPayments || [];
       state.timesheetPayments.push(data);
     }
+    renderTimesheet();
     showToast(checked ? 'Отмечено как оплачено' : 'Отметка снята');
   }catch(e){
     console.error(e);
@@ -4888,7 +4923,7 @@ function renderTimesheet(){
   const card = document.getElementById('timesheetCard');
   if(!card) return;
 
-  const rows = state.employees.filter(e=>e.active!==false).map(emp=>{
+  const rows = state.employees.filter(e=>e.active!==false || earnedMap[e.id]?.earned).filter(e=>session?.isAdmin || e.id===session?.employeeId).map(emp=>{
     const e = earnedMap[emp.id];
     const p = payrollByEmp[emp.id] || {earned:0, payout:0, retained:0, isSalaried: !!emp.is_salaried, salary: Number(emp.fixed_salary)||0};
     return {
@@ -4906,6 +4941,8 @@ function renderTimesheet(){
 
   const totalPayout = rows.reduce((s,r)=>s+r.payout, 0);
   const totalRetained = rows.reduce((s,r)=>s+r.retained, 0);
+  const totalPaid=rows.filter(r=>r.paid).reduce((s,r)=>s+r.payout,0);
+  const totalOutstanding=totalPayout-totalPaid;
 
   card.innerHTML = rows.map(r=>{
     const expanded = !!timesheetExpanded[r.id];
@@ -4917,7 +4954,7 @@ function renderTimesheet(){
     return `
     <div class="list-item" style="cursor:pointer;" onclick="toggleTimesheetRow('${r.id}')">
       <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:0;">
-        <input type="checkbox" ${r.paid?'checked':''} style="width:20px;height:20px;flex-shrink:0;cursor:pointer;"
+        <input type="checkbox" ${r.paid?'checked':''} ${session?.isAdmin?'':'disabled'} aria-label="Выплата ${escapeHtml(r.name)}" style="width:20px;height:20px;flex-shrink:0;cursor:pointer;"
           onclick="event.stopPropagation();" onchange="toggleTimesheetPaid('${r.id}','${monthStr}', this.checked)">
         <div style="min-width:0;">
           <div class="li-name">${expanded?'▾':'▸'} ${escapeHtml(r.name)}${r.isSalaried?' <span style="color:var(--text-dim); font-weight:400;">(фикс. ЗП)</span>':''}</div>
@@ -4932,9 +4969,10 @@ function renderTimesheet(){
     ${expanded ? itemsHtml : ''}`;
   }).join('') +
     `<div class="list-item" style="border-top:1px solid var(--line-strong);">
-      <div class="li-name" style="font-weight:700;">Итого к выплате за месяц</div>
+      <div class="li-name" style="font-weight:700;">Всего начислено за месяц</div>
       <div class="proj-sum" style="font-weight:700;">${fmtMoney(totalPayout)}</div>
     </div>` +
+    `<div class="list-item"><div class="li-name">Отмечено выплаченным</div><div class="proj-sum" style="color:var(--green)">${fmtMoney(totalPaid)}</div></div><div class="list-item"><div class="li-name">Осталось выплатить</div><div class="proj-sum" style="color:var(--gold)">${fmtMoney(totalOutstanding)}</div></div>` +
     (totalRetained > 0 ? `<div class="list-item">
       <div class="li-name" style="color:var(--text-dim);">Осталось в прибыли компании (сверх фикс. ЗП)</div>
       <div class="proj-sum" style="color:var(--gold);">${fmtMoney(totalRetained)}</div>
@@ -4945,6 +4983,7 @@ function renderTimesheet(){
 // ТАБЕЛЬ КАК ОТДЕЛЬНЫЙ ДОКУМЕНТ — PDF на одного сотрудника за один месяц
 // ============================================================
 function exportTimesheetToPdf(employeeId, monthStr){
+  if(!session||(!session.isAdmin&&session.employeeId!==employeeId)){showToast('Нет доступа к табелю сотрудника');return;}
   const emp = findEmployee(employeeId);
   if(!emp){ showToast('Сотрудник не найден'); return; }
   const {from, to} = timesheetMonthRange(monthStr);
@@ -5124,6 +5163,7 @@ function closeCompanyExpenseSheet(){
 }
 
 async function saveCompanyExpense(){
+  if(!session?.isAdmin){showToast("Требуются права администратора");return;}
   const category = document.getElementById('cex-category').value;
   const amount = parseFloat(document.getElementById('cex-amount').value) || 0;
   const expense_date = document.getElementById('cex-date').value;
@@ -5150,6 +5190,7 @@ async function saveCompanyExpense(){
 }
 
 async function deleteCompanyExpense(){
+  if(!session?.isAdmin){showToast("Требуются права администратора");return;}
   if(!editingCompanyExpenseId) return;
   if(!confirm('Удалить этот расход?')) return;
   try{
@@ -5225,6 +5266,7 @@ function closeCompanyIncomeSheet(){
 }
 
 async function saveCompanyIncome(){
+  if(!session?.isAdmin){showToast("Требуются права администратора");return;}
   const category = document.getElementById('cin-category').value;
   const amount = parseFloat(document.getElementById('cin-amount').value) || 0;
   const income_date = document.getElementById('cin-date').value;
@@ -5251,6 +5293,7 @@ async function saveCompanyIncome(){
 }
 
 async function deleteCompanyIncome(){
+  if(!session?.isAdmin){showToast("Требуются права администратора");return;}
   if(!editingCompanyIncomeId) return;
   if(!confirm('Удалить эту запись о доходе?')) return;
   try{
@@ -5387,15 +5430,12 @@ const ledgerTypeLabels = {
 };
 
 function renderFeeSummaryForProject(p){
-  const el = document.getElementById('pf-fee-summary');
-  if(!el) return;
+  const el = document.getElementById('pf-compensation-summary');
+  if(!el || !p) return;
   const f = getProjectFee(p);
-  const baseLabel = f.feeBase === 'expenses' ? '% от расходов' : '% от цены';
+  const baseLabel = f.feeBase === 'expenses' ? '% от прямых расходов' : f.feeBase === 'profit' ? '% после прямых расходов' : '% от выручки';
   const hasCoExec = !!p.co_employee_id;
-  const expenses = Number(p.expenses) || 0;
-  const expensesNote = (f.feeBase !== 'expenses' && expenses > 0)
-    ? `<div class="fee-row" style="color:var(--text-dim); font-size:11.5px;"><div class="fl">Расходы ${fmtMoney(expenses)} (порог ${fmtMoney(EXECUTOR_FEE_EXPENSE_THRESHOLD)})</div><div class="fv">${f.companyExpenseShare > 0 ? 'с дохода компании' : 'с гонорара исполнителя'}</div></div>`
-    : '';
+  const expensesNote = '';
   el.innerHTML = `
     <div style="font-weight:700; font-size:13px; margin-bottom:6px;">Гонорар (${baseLabel})</div>
     <div class="fee-row"><div class="fl">Исполнитель — ${f.feePercent}%</div><div class="fv">${fmtMoney(f.mainFeeAmount)}</div></div>
@@ -5559,10 +5599,11 @@ function bindCompensationUI(){
 
 function renderProjectRolePayouts(projectId){
   const sel = document.getElementById('pf-rp-employee');
-  if(sel && !sel.dataset.filled){
+  if(sel){
+    const selected=sel.value;
     sel.innerHTML = '<option value="">— выберите —</option>' + state.employees.filter(e=>e.active!==false)
       .map(e=>`<option value="${e.id}">${escapeHtml(e.name)}</option>`).join('');
-    sel.dataset.filled = '1';
+    sel.value=selected;
   }
   const el = document.getElementById('pf-m2-payouts-list');
   if(!el) return;
@@ -5600,6 +5641,7 @@ async function addProjectRolePayout(){
   if(!projectId){ showToast('Сначала сохраните проект'); return; }
   const p = state.projects.find(x=>x.id===projectId);
   if(!p){ showToast('Проект не найден'); return; }
+  if(p.fee_base!=='m2'){showToast('Сохраните проект с методом «Ставка за м²», затем добавьте начисление');return;}
   const role = document.getElementById('pf-rp-role').value;
   const employeeId = document.getElementById('pf-rp-employee').value;
   const rate = parseFloat(document.getElementById('pf-rp-rate').value);
@@ -5632,7 +5674,8 @@ async function addProjectRolePayout(){
 async function deleteProjectRolePayout(entryId, projectId){
   if(!confirm('Удалить это начисление?')) return;
   try{
-    await sb.from('ledger_entries').delete().eq('id', entryId);
+    const {error:payoutDeleteError}=await sb.from('ledger_entries').delete().eq('id', entryId);
+    if(payoutDeleteError) throw payoutDeleteError;
     await loadAll();
     const total = await syncProjectExpensesTotal(projectId);
     renderProjectRolePayouts(projectId);
@@ -5688,7 +5731,8 @@ async function addProjectExpense(){
 async function deleteProjectExpense(entryId, projectId){
   if(!confirm('Удалить этот расход?')) return;
   try{
-    await sb.from('ledger_entries').delete().eq('id', entryId);
+    const {error:payoutDeleteError}=await sb.from('ledger_entries').delete().eq('id', entryId);
+    if(payoutDeleteError) throw payoutDeleteError;
     await loadAll();
     const total = await syncProjectExpensesTotal(projectId);
     renderProjectExpenses(projectId);
@@ -5847,7 +5891,9 @@ document.querySelectorAll('#payment-type .yn-btn').forEach(btn=>{
   });
 });
 
+let paymentSaveInFlight=false;
 async function savePayment(){
+  if(paymentSaveInFlight) return;
   const projectId = paymentProjectId || editingProjectId;
   if(!projectId) return;
   const amount = parseFloat(document.getElementById('payment-amount').value);
@@ -5871,6 +5917,8 @@ async function savePayment(){
     updates.balance = Math.max(0, (Number(p.price)||0) - newAdvance);
   }
 
+  paymentSaveInFlight=true;
+  document.getElementById('payment-save').disabled=true;
   showToast('Сохранение…');
   try{
     if(Object.keys(updates).length){
@@ -5919,7 +5967,11 @@ async function savePayment(){
     }
   }catch(e){
     console.error(e);
-    showToast('Ошибка сохранения платежа');
+    showToast('Платёж не завершён. Проверьте журнал и карточку перед повтором');
+    await loadAll();
+  }finally{
+    paymentSaveInFlight=false;
+    document.getElementById('payment-save').disabled=false;
   }
 }
 
@@ -6096,6 +6148,7 @@ function closeEmployeeSheet(){
 }
 
 async function saveEmployee(){
+  if(!session?.isAdmin){showToast("Требуются права администратора");return;}
   const name = document.getElementById('ef-name').value.trim();
   if(!name){ showToast('Введите имя'); return; }
   const payload = {
@@ -6156,6 +6209,7 @@ async function saveEmployee(){
 }
 
 async function deleteEmployee(){
+  if(!session?.isAdmin){showToast("Требуются права администратора");return;}
   if(!editingEmployeeId) return;
   try{
     const emp = state.employees.find(x=>x.id===editingEmployeeId);
@@ -6230,6 +6284,7 @@ function closeCategorySheet(){
 }
 
 async function saveCategory(){
+  if(!session?.isAdmin){showToast("Требуются права администратора");return;}
   const name = document.getElementById('cf-name').value.trim();
   if(!name){ showToast('Введите название'); return; }
   const payload = {
@@ -6261,6 +6316,7 @@ async function saveCategory(){
 }
 
 async function deleteCategory(){
+  if(!session?.isAdmin){showToast("Требуются права администратора");return;}
   if(!editingCategoryId) return;
   try{
     const cat = state.categories.find(x=>x.id===editingCategoryId);
@@ -6349,12 +6405,14 @@ function closeTariffSheet(){
 }
 
 async function saveTariff(){
+  if(!session?.isAdmin){showToast("Требуются права администратора");return;}
   const group_name = document.getElementById('tf-group').value.trim();
   const name = document.getElementById('tf-name').value.trim();
   const unit = document.getElementById('tf-unit').value;
   const rate = parseFloat(document.getElementById('tf-rate').value) || 0;
   const description = document.getElementById('tf-desc').value.trim();
   if(!group_name || !name){ showToast('Укажите направление и название услуги'); return; }
+  if(!Number.isFinite(rate)||rate<0){showToast('Стоимость не может быть отрицательной');return;}
   try{
     if(editingTariffId){
       const {error} = await sb.from('kp_catalog').update({group_name, name, unit, rate, description, updated_at: new Date().toISOString()}).eq('id', editingTariffId);
@@ -6374,6 +6432,7 @@ async function saveTariff(){
 }
 
 async function deleteTariff(){
+  if(!session?.isAdmin){showToast("Требуются права администратора");return;}
   if(!editingTariffId) return;
   if(!confirm('Удалить этот тариф?')) return;
   try{
@@ -6553,7 +6612,7 @@ function renderConstruction(){
   list.innerHTML = projects.map(p=>{
     const st = findStatus(p.status_id);
     const fin = getConstructionFinancials(p);
-    const f = calcConstrFee({...p, expenses: fin.expenses});
+    const f = getProjectFee(p);
     const {received, directPaid, matTotal, workTotal, expenses, balance, pct, isOverspent} = fin;
 
     if(!showFinance){
@@ -8688,6 +8747,7 @@ function renderCatalogPriceSettings(){
 }
 
 async function saveCatalogPricePerSqm(){
+  if(!session?.isAdmin){showToast("Требуются права администратора");return;}
   const val = parseFloat(document.getElementById('catalog-price-per-sqm').value);
   if(!val || val <= 0){ showToast('Укажите положительную ставку'); return; }
   showToast('Сохранение…');
@@ -8702,6 +8762,7 @@ async function saveCatalogPricePerSqm(){
 }
 
 async function saveCompanyInfo(){
+  if(!session?.isAdmin){showToast("Требуются права администратора");return;}
   const payload = {
     full_name: document.getElementById('co-full-name').value.trim(),
     short_name: document.getElementById('co-short-name').value.trim(),
@@ -11124,7 +11185,7 @@ function sendLocalNotification(title, body, tag='arhittek'){
 // Проверка просрочек — вызывается после loadAll
 function checkOverdueNotifications(){
   if(!session) return;
-  if(Notification.permission !== 'granted') return;
+  if(!('Notification' in window) || Notification.permission !== 'granted') return;
 
   const now = new Date();
   const today = now.toISOString().slice(0,10);
@@ -11335,31 +11396,9 @@ showNotifPrompt();
     window.loadAll.__enhStages = true;
   }
 
-  if(window.saveProject && !window.saveProject.__enh){
-    var origSave=window.saveProject;
-    window.saveProject=async function(){
-      var titleEl=document.getElementById("projectSheetTitle");
-      var isNew=titleEl && titleEl.textContent.trim()==="Новый проект";
-      var catEl=document.getElementById("pf-category"); var catId=catEl?catEl.value:null;
-      var beforeIds=null;
-      if(isNew && window.sb){ try{ var res=await window.sb.from("projects").select("id"); beforeIds=new Set((res.data||[]).map(function(x){return x.id;})); }catch(e){ beforeIds=null; } }
-      var r=await origSave.apply(this,arguments);
-      if(isNew && window.sb){
-        var stages=defaultStagesFor(catId);
-        if(stages){
-          try{
-            var res2=await window.sb.from("projects").select("id, created_at").order("created_at",{ascending:false}).limit(5);
-            var newProj=(res2.data||[]).find(function(p){ return !beforeIds || !beforeIds.has(p.id); });
-            if(newProj){ await addDefaultStages(newProj.id, stages); if(window.loadAll) await window.loadAll(); else if(window.renderAll) window.renderAll(); }
-          }catch(e){ console.error("post-create stages error", e); }
-        }
-      }
-      return r;
-    };
-    window.saveProject.__enh=true;
-  }
-
   /* Страховка: если первый loadAll выполнился до установки обёртки — запустим разово сами */
   setTimeout(runBackfillOnce, 3500);
 })();
 </script>
+
+<script src="premium.js"></script>
