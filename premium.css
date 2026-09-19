@@ -35,3 +35,29 @@ html{background:var(--bg)!important}body{max-width:none!important;margin:0!impor
 #pf-m2-payouts-list{display:none!important}.project-person-actions{display:flex;align-items:center;gap:8px;white-space:nowrap}
 
 .project-team-line{display:grid;grid-template-columns:minmax(0,2fr) minmax(85px,1fr);gap:12px;align-items:end}.project-team-line .field{min-width:0}.project-team-line label{min-height:16px}
+
+/* Team editor: choose a method, then edit one row per person. */
+#project-panel-team [hidden]{display:none!important}
+#project-panel-team #pf-compensation-block{border:0!important;padding:0;background:transparent!important}
+#project-panel-team .accent-title{display:none}
+#project-panel-team h3{font-size:23px;margin-top:0}
+.team-methods{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:18px 0}
+.team-methods button{border:1px solid #dce4ee;border-radius:12px;background:#fff;color:#53647c;text-align:left;padding:15px 18px;cursor:pointer;font-family:inherit}
+.team-methods button[aria-pressed="true"]{border-color:#3568b5;background:#edf4ff;box-shadow:inset 0 0 0 1px #3568b5;color:#204f94}
+.team-methods strong{display:block;font-size:16px;margin-bottom:5px}.team-methods span{font-size:11px;line-height:1.4;display:block}
+.team-base{display:flex;align-items:center;gap:10px;font-size:12px;color:#52657d;line-height:1.5;margin:18px 0 7px}.team-base input{width:17px;height:17px;flex:none;accent-color:#285eae}
+.team-base-note{font-size:12px;color:#7c8b9e;margin:0 0 22px 27px}
+#project-panel-team .project-team-line{grid-template-columns:minmax(0,1.6fr) minmax(75px,.7fr) minmax(90px,1fr);gap:14px;padding:18px 0;border-top:1px solid #e7edf4;align-items:center}
+#project-panel-team .project-team-line .field{margin:0}.team-line-result span{display:block;color:#7b8a9e;font-size:11px;margin-bottom:12px}.team-line-result strong{display:block;font-size:15px;white-space:nowrap}.team-line-result{text-align:right}
+.team-second{position:relative}.team-remove-link,.team-add-link{border:0;background:none;color:#3066ae;font:600 12px inherit;cursor:pointer;padding:12px 0}.team-remove-link{color:#8a6570;padding:0 0 12px}.team-add-link{margin-bottom:12px}
+#project-panel-team #pf-compensation-summary{border:0;background:#f2f6fb;border-radius:12px;padding:16px 18px;margin-top:18px!important}
+#project-panel-team .project-total{border:0;padding:0;margin:0;font-size:14px}.team-total-note{font-size:11px;color:#76869d;margin:9px 0 0;line-height:1.5}
+#project-panel-team .project-person:not(.project-total){padding:10px 0 15px;margin-bottom:14px}.team-members{border-top:1px solid #e5ebf3;padding-top:18px;margin-top:22px!important}.team-members>label{font-size:12px;text-transform:none;letter-spacing:0;font-weight:600}.team-members .project-note{margin:8px 0}
+#pf-m2-add-row.team-m2-editor{display:grid!important;grid-template-columns:1fr 1fr;gap:13px!important;padding:18px;border:1px solid #dfe7f0;border-radius:14px;background:#fbfcfe}
+.team-editor-label{grid-column:1/-1;font-size:13px;font-weight:600;color:#36506e;margin-bottom:2px}
+#pf-m2-add-row.team-m2-editor .field{min-width:0!important;margin:0!important}
+.team-work-preview{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px;color:#687d97;padding:14px 0 0;margin:0;border-top:1px solid #e0e8f2}.team-work-preview strong{font-size:21px;color:#1f4f94;white-space:nowrap}.team-work-preview small{display:block;font-size:11px;margin-top:5px}
+#pf-rp-add-btn{grid-column:1/-1;width:100%!important;background:#2458a6;color:white;border:0!important;margin-top:2px}
+@media(max-width:480px){.team-methods button{padding:13px}.team-methods span{font-size:10px}#project-panel-team .project-team-line{grid-template-columns:minmax(0,1fr) 86px;gap:10px}.team-line-result{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center}.team-line-result span{margin:0}.team-line-result strong{font-size:16px}.team-base-note{font-size:11px}#pf-m2-add-row.team-m2-editor{padding:14px}.team-work-preview strong{font-size:19px}}
+
+.team-methods.team-interior{grid-template-columns:1fr}.team-methods.team-interior button[aria-pressed="true"]{box-shadow:none;border-color:#d9e5f5;background:#f2f6fc}
