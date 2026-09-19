@@ -55,6 +55,11 @@ $('pf-feepercent').closest('.field').querySelector('label').textContent='Ста�
 $('pf-members-field').querySelector('label').textContent='Участники без проектной доплаты';
 $('pf-rp-add-btn').textContent='Добавить в расчёт';
 $('pf-rp-rate').placeholder='400';
+const workAreaField=document.createElement('div');workAreaField.className='field';workAreaField.style.cssText='margin-bottom:0;flex:1;min-width:110px';
+workAreaField.innerHTML='<label for="pf-rp-area">Площадь работы, м²</label><input id="pf-rp-area" type="number" min="0.01" step="0.01" placeholder="Площадь сотрудника">';
+$('pf-rp-rate').closest('.field').before(workAreaField);
+const workPreview=document.createElement('p');workPreview.id='pf-rp-preview';workPreview.className='project-note';$('pf-m2-add-row').after(workPreview);
+
 // Area belongs to the project rather than a hidden compensation method.
 const area=$('pf-area').closest('.field');panels.overview.insertBefore(area,$('pf-phone-field'));
 const salaryHint=document.createElement('p');salaryHint.className='project-note';salaryHint.textContent='Сотрудника на окладе добавьте в участники без проектной доплаты. Оклад учитывается в месячном табеле.';$('pf-members-field').append(salaryHint);
@@ -77,6 +82,7 @@ function planRows(p){
 }
 function card(label,value){return `<div class="project-metric"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`;}
 function refresh(){
+ const a=Number($('pf-rp-area').value),r=Number($('pf-rp-rate').value);workPreview.textContent=a>0&&r>0&&Number.isFinite(a*r)?`${a} м² × ${money(r)}/м² = ${money(Math.round(a*r*100)/100)}. Общая площадь проекта не изменится.`:'Укажите площадь работы сотрудника и ставку.';
  const p=draft(),rows=planRows(p),total=rows.reduce((s,r)=>s+r.amount,0),done=findStatus(p.status_id)?.name==='Завершён',admin=!!session?.isAdmin;
  nav.querySelectorAll('button').forEach(b=>b.hidden=!admin&&['team','money'].includes(b.dataset.tab));
  if(!admin&&(!panels.team.hidden||!panels.money.hidden))selectTab('overview');
@@ -101,7 +107,7 @@ function defaults(){
  $('pf-feebase').value=$('pf-compensation-method').value==='m2'?'m2':$('pf-compensation-method').value==='percent_profit'?'profit':'price';
  renderCompensationMethodUI();
 }
-const oldOpen=openProjectSheet;openProjectSheet=function(id){oldOpen(id);$('projectSheetTitle').textContent=id?'Карточка проекта':'Новый проект';coDetails.open=!!$('pf-co-employee').value;special.open=false;contactDetails.open=false;defaults();$('pf-rp-rate').value='400';$('pf-employee-fee').value=$('pf-employee').value;$('pf-co-employee-fee').value=$('pf-co-employee').value;selectTab('overview');refresh();sheet.scrollTop=0;};
+const oldOpen=openProjectSheet;openProjectSheet=function(id){oldOpen(id);$('projectSheetTitle').textContent=id?'Карточка проекта':'Новый проект';coDetails.open=!!$('pf-co-employee').value;special.open=false;contactDetails.open=false;defaults();$('pf-rp-rate').value='400';$('pf-rp-area').value=$('pf-area').value;$('pf-employee-fee').value=$('pf-employee').value;$('pf-co-employee-fee').value=$('pf-co-employee').value;selectTab('overview');refresh();sheet.scrollTop=0;};
 const oldRole=applyRole;applyRole=function(){oldRole();refresh();};
 const oldRecalc=recalcLiveFeeSummary;recalcLiveFeeSummary=function(){oldRecalc();refresh();};
 const oldRenderRoles=renderProjectRolePayouts;renderProjectRolePayouts=function(id){oldRenderRoles(id);refresh();};
@@ -133,7 +139,24 @@ addProjectRolePayout=async function(){
  if(emp?.is_salaried){showToast('Сотрудник на окладе: добавьте его в участники без проектной доплаты');return;}
  if(p&&Number(p.area)!==Number($('pf-area').value)){showToast('Сначала сохраните новую площадь проекта');return;}
  if(projectRolePayoutEntries(editingProjectId).some(e=>e.payee_employee_id===emp?.id&&e.description?.startsWith(role+' —'))){showToast('Этот сотрудник уже добавлен на выбранную роль');return;}
- adding=true;$('pf-rp-add-btn').disabled=true;try{await oldAdd();$('pf-rp-rate').value='400';refresh();}finally{adding=false;$('pf-rp-add-btn').disabled=false;}
+ if(!p){showToast('Сначала сохраните проект');return;}
+ if(p.fee_base!=='m2'){showToast('Сохраните проект с методом «Ставка за м²»');return;}
+ if(!emp||emp.active===false){showToast('Выберите сотрудника');return;}
+ const area=Number($('pf-rp-area').value),rate=Number($('pf-rp-rate').value),amount=Math.round(area*rate*100)/100;
+ if(!Number.isFinite(area)||area<=0||area>Number(p.area||0)){showToast('Площадь работы должна быть больше нуля и не превышать площадь проекта');return;}
+ if(!Number.isFinite(rate)||rate<=0||!Number.isFinite(amount)||amount<=0){showToast('Укажите корректную положительную ставку');return;}
+ const projectId=p.id,description=`${role} — ${emp.name} (${area} м² × ${fmtMoney(rate)}/м²)`;
+ adding=true;$('pf-rp-add-btn').disabled=true;
+ try{
+  const {data,error}=await sb.from('ledger_entries').insert({type:'role_payout',project_id:projectId,payee_employee_id:emp.id,description,amount,entry_date:new Date().toISOString().slice(0,10),received_by:session.employeeId}).select().single();
+  if(error)throw error;
+  if(data){state.ledger=state.ledger||[];state.ledger.push(data);}
+  await logAudit('project',projectId,p.name,'update',{role_payout_added:{old:null,new:description+' — '+fmtMoney(amount)}});
+  await loadAll();
+  if(editingProjectId===projectId){renderProjectRolePayouts(projectId);$('pf-rp-rate').value='400';$('pf-rp-area').value=p.area;refresh();}
+  showToast('В расчёт добавлено '+fmtMoney(amount)+'. В табель — после завершения проекта.');
+ }catch(e){console.error(e);showToast('Не удалось завершить сохранение. Обновите расчёт перед повторной попыткой.');}
+ finally{adding=false;$('pf-rp-add-btn').disabled=false;}
 };
 $('pf-rp-add-btn').removeEventListener('click',oldAdd);$('pf-rp-add-btn').addEventListener('click',()=>addProjectRolePayout());
 // Make the existing monthly flag explicit: it is not a partial-payment ledger.
