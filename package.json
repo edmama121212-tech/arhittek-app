@@ -1,0 +1,8 @@
+{
+  "name": "arhittek-workspace",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Static ARHITTEK application with isolated browser regression checks",
+  "scripts": {"test": "node tests/regression.cjs"},
+  "devDependencies": {"playwright": "1.62.1", "xlsx": "0.18.5", "jspdf": "2.5.1", "jspdf-autotable": "3.8.2"}
+}
