@@ -31,7 +31,7 @@ await test('team tab isolates controls',()=>!document.getElementById('project-pa
 await test('single visible employee selector for percent',()=>getComputedStyle(document.getElementById('pf-employee-field')).display,'none');
 await test('m2 plan is transparent',()=>document.getElementById('pf-compensation-summary').textContent.replace(/\s/g,'').includes('40000'),true);
 await test('duplicate role blocked',async()=>{document.getElementById('pf-rp-employee').value='visual';const n=__db.ledger_entries.length;document.getElementById('pf-rp-rate').value='400';await addProjectRolePayout();return __db.ledger_entries.length===n},true);
-await test('salary employee has no automatic m2 bonus',async()=>{const n=__db.ledger_entries.length;document.getElementById('pf-rp-employee').value='designer';await addProjectRolePayout();return __db.ledger_entries.length===n},true);
+await test('salary employee has no automatic m2 bonus',async()=>{const n=__db.ledger_entries.length;document.getElementById('pf-rp-employee').value='designer';await addProjectRolePayout();return __db.ledger_entries.length===n&&currentProjectMembers.some(m=>m.employee_id==='designer')},true);
 await test('unsaved area blocked',async()=>{const n=__db.ledger_entries.length;document.getElementById('pf-rp-employee').value='architect';document.getElementById('pf-area').value='120';await addProjectRolePayout();document.getElementById('pf-area').value='100';return __db.ledger_entries.length===n},true);
 await test('method change cannot hide existing earnings',async()=>{document.getElementById('pf-compensation-method').value='percent_profit';await saveProject();const result=__db.projects[0].fee_base;document.getElementById('pf-compensation-method').value='m2';renderCompensationMethodUI();return result},'m2');
 await p.locator('#project-tab-money').click();
@@ -39,7 +39,7 @@ await test('economy separates common costs',()=>document.getElementById('project
 await p.locator('#project-tab-files').click();
 await test('documents accessible',()=>!document.getElementById('project-panel-files').hidden&&document.getElementById('project-panel-files').contains(document.getElementById('pf-tz-list')),true);
 await test('interior only m2 choice',()=>document.querySelector('[data-method="percent"]').hidden&&!document.querySelector('[data-method="m2"]').hidden,true);
-await test('salaried staff excluded from m2',()=>![...document.getElementById('pf-rp-employee').options].some(o=>o.value==='admin'||o.value==='designer'),true);
+await test('all active staff visible in m2 selector',()=>['admin','designer','visual','architect'].every(id=>[...document.getElementById('pf-rp-employee').options].some(o=>o.value===id)),true);
 await test('architecture template',()=>{openProjectSheet(null);document.getElementById('pf-category').value='arch';document.getElementById('pf-category').dispatchEvent(new Event('change',{bubbles:true}));return [document.getElementById('pf-compensation-method').value,document.getElementById('pf-feepercent').value]},['percent_profit','40']);
 await p.locator('#project-tab-team').click();
 await test('architecture only percentage after costs',()=>document.querySelector('[data-method="m2"]').hidden&&document.getElementById('team-deduct-costs').checked,true);
