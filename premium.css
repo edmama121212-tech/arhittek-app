@@ -206,3 +206,26 @@ html{background:var(--bg)!important}body{max-width:none!important;margin:0!impor
   .finance-team-row{grid-template-columns:34px minmax(0,1fr)}.finance-team-money{grid-column:2;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:10px}.finance-team-money small{margin:0}
   .finance-reserve-cards{grid-template-columns:1fr}
 }
+
+
+/* Finance controls V3 */
+.finance-management-actions{display:flex;gap:9px;flex-wrap:wrap;margin:12px 0}
+.finance-management-actions .btn{width:auto;min-width:160px;flex:1}
+.finance-management-block{margin-top:12px}
+.finance-quick-actions{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px}
+.finance-quick-actions button{border:1px solid #dfe7f1;background:#fff;color:#315b93;border-radius:10px;padding:9px 12px;font:600 10px Inter,sans-serif;cursor:pointer}
+.finance-management-list{padding:0 2px}
+.finance-management-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid #edf1f5}
+.finance-management-row:last-child{border-bottom:0}
+.finance-management-row>div:first-child{min-width:0}
+.finance-management-row strong{display:block;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.finance-management-row small{display:block;font-size:9px;color:#8a97aa;margin-top:4px;line-height:1.4}
+.finance-management-row>div:last-child{display:flex;align-items:center;gap:7px;flex-shrink:0}
+.finance-management-row b{font:700 12px 'Space Grotesk',sans-serif;color:var(--fin-gold)}
+.finance-management-row b.negative{color:var(--fin-red)}
+.finance-bonus-history{margin-top:10px}
+.finance-control-sheet{max-width:560px!important}
+.finance-control-danger{margin-top:9px}
+.finance-current-balance{display:flex;align-items:flex-end;justify-content:space-between;gap:15px;padding:15px 16px;margin-bottom:14px;border:1px solid #eadfca;background:#fffaf0;border-radius:14px}
+.finance-current-balance span{font-size:11px;color:#7d705c}.finance-current-balance strong{font:700 23px 'Space Grotesk',sans-serif;color:#b57e16}
+@media(max-width:480px){.finance-management-actions{flex-direction:column}.finance-management-actions .btn{width:100%}.finance-management-row{align-items:flex-start}.finance-current-balance strong{font-size:20px}}
