@@ -3627,7 +3627,7 @@ function computeFinancePeriod(from, to){
   let overhead = 0;
   const overheadByCat = {};
   (state.companyExpenses||[]).forEach(ex=>{
-    if(ex.deleted_at) return;
+    if(!isOperationalCompanyExpense(ex)) return;
     if(!ex.expense_date || ex.expense_date < from || ex.expense_date > to) return;
     overhead += Number(ex.amount) || 0;
     overheadByCat[ex.category] = (overheadByCat[ex.category]||0) + (Number(ex.amount)||0);
@@ -3686,7 +3686,7 @@ function renderAnalytics(){
   const {from, to} = financeCurrentRange();
   const f = computeFinancePeriod(from, to);
   const extraIncome = (state.companyIncome||[])
-    .filter(i=>!i.deleted_at && i.income_date && i.income_date>=from && i.income_date<=to)
+    .filter(i=>isOperationalCompanyIncome(i) && i.income_date && i.income_date>=from && i.income_date<=to)
     .reduce((s,i)=>s+(Number(i.amount)||0),0);
   const totalIncome = f.revenue + extraIncome;
   const companyResult = f.netProfit + extraIncome;
@@ -5144,17 +5144,69 @@ function exportTimesheetToPdf(employeeId, monthStr){
 // РАСХОДЫ КОМПАНИИ (аренда, коммунальные, уборка и т.п.)
 // ============================================================
 let editingCompanyExpenseId = null;
-const COMPANY_EXPENSE_CATEGORIES = ['Аренда','Коммунальные','Уборка','Связь и интернет','Топливо/логистика','Питание/нужды офиса','Реклама','Форс-мажор (переделка)','Прочее'];
-// Расходы, которые НЕ входят в «прочие расходы компании» для расчёта общего бюджета —
-// форс-мажор показывается отдельной строкой (см. renderCompanyBudget), чтобы не путать
-// с обычными постоянными издержками.
+const COMPANY_WITHDRAWAL_CATEGORY = 'Вывод средств';
+const RESERVE_INCREASE_CATEGORY = 'Корректировка резерва (+)';
+const RESERVE_DECREASE_CATEGORY = 'Корректировка резерва (−)';
+const RESERVE_OPENING_BALANCE = 190000;
+const RESERVE_OPENING_DATE = '23.09.2026';
+
+const COMPANY_EXPENSE_CATEGORIES = [
+  'Аренда',
+  'Коммунальные',
+  'Уборка',
+  'Связь и интернет',
+  'Кофе / вода / офис',
+  'Топливо / авто',
+  'Такси / логистика',
+  'Хозтовары',
+  'Техника / подписки',
+  'Реклама / продвижение',
+  'Питание/нужды офиса',
+  'Топливо/логистика',
+  'Форс-мажор (переделка)',
+  'Прочее',
+  COMPANY_WITHDRAWAL_CATEGORY
+];
 const FORCE_MAJEURE_CATEGORY = 'Форс-мажор (переделка)';
 const COMPANY_INCOME_CATEGORIES = ['Аренда помещений', 'Прочий доход'];
+
+function isReserveSystemIncome(row){
+  return !!row && row.category === RESERVE_INCREASE_CATEGORY;
+}
+function isReserveSystemExpense(row){
+  return !!row && (row.category === RESERVE_DECREASE_CATEGORY || row.category === COMPANY_WITHDRAWAL_CATEGORY);
+}
+function isOperationalCompanyIncome(row){
+  return !!row && !row.deleted_at && !isReserveSystemIncome(row);
+}
+function isOperationalCompanyExpense(row){
+  return !!row && !row.deleted_at && !isReserveSystemExpense(row);
+}
+function getCompanyReserveBalance(){
+  const added = (state.companyIncome||[])
+    .filter(i=>!i.deleted_at && i.category===RESERVE_INCREASE_CATEGORY)
+    .reduce((s,i)=>s+(Number(i.amount)||0),0);
+  const correctedDown = (state.companyExpenses||[])
+    .filter(i=>!i.deleted_at && i.category===RESERVE_DECREASE_CATEGORY)
+    .reduce((s,i)=>s+(Number(i.amount)||0),0);
+  const withdrawn = (state.companyExpenses||[])
+    .filter(i=>!i.deleted_at && i.category===COMPANY_WITHDRAWAL_CATEGORY)
+    .reduce((s,i)=>s+(Number(i.amount)||0),0);
+  return Math.max(0, RESERVE_OPENING_BALANCE + added - correctedDown - withdrawn);
+}
+function getCompanyWithdrawals(from, to){
+  return (state.companyExpenses||[]).filter(i=>
+    !i.deleted_at &&
+    i.category===COMPANY_WITHDRAWAL_CATEGORY &&
+    (!from || (i.expense_date||'')>=from) &&
+    (!to || (i.expense_date||'')<=to)
+  );
+}
 
 function renderCompanyExpensesList(){
   const el = document.getElementById('companyExpensesList');
   if(!el) return;
-  const list = (state.companyExpenses||[]).slice().sort((a,b)=>(b.expense_date||'').localeCompare(a.expense_date||''));
+  const list = (state.companyExpenses||[]).filter(isOperationalCompanyExpense).slice().sort((a,b)=>(b.expense_date||'').localeCompare(a.expense_date||''));
   if(!list.length){
     el.innerHTML = '<div class="empty-state">Расходов пока нет</div>';
     return;
@@ -5172,7 +5224,7 @@ function renderCompanyExpensesList(){
     </div>`).join('');
 }
 
-function openCompanyExpenseSheet(id){
+function openCompanyExpenseSheet(id, presetCategory){
   editingCompanyExpenseId = id;
   const overlay = document.getElementById('companyExpenseSheetOverlay');
   const title = document.getElementById('companyExpenseSheetTitle');
@@ -5191,7 +5243,8 @@ function openCompanyExpenseSheet(id){
   }else{
     title.textContent = 'Новый расход';
     deleteBtn.style.display = 'none';
-    catSel.selectedIndex = 0;
+    catSel.value = (presetCategory && COMPANY_EXPENSE_CATEGORIES.includes(presetCategory)) ? presetCategory : COMPANY_EXPENSE_CATEGORIES[0];
+    title.textContent = presetCategory===COMPANY_WITHDRAWAL_CATEGORY ? 'Вывод денег' : 'Новый расход';
     document.getElementById('cex-amount').value = '';
     document.getElementById('cex-date').value = new Date().toISOString().slice(0,10);
     document.getElementById('cex-desc').value = '';
@@ -5257,7 +5310,7 @@ let editingCompanyIncomeId = null;
 function renderCompanyIncomeList(){
   const el = document.getElementById('companyIncomeList');
   if(!el) return;
-  const list = (state.companyIncome||[]).slice().sort((a,b)=>(b.income_date||'').localeCompare(a.income_date||''));
+  const list = (state.companyIncome||[]).filter(isOperationalCompanyIncome).slice().sort((a,b)=>(b.income_date||'').localeCompare(a.income_date||''));
   if(!list.length){
     el.innerHTML = '<div class="empty-state">Доходов пока нет</div>';
     return;
@@ -5377,55 +5430,44 @@ function renderCompanyBudget(from, to){
   const el = document.getElementById('companyBudgetBlock');
   if(!el) return;
 
-  const inRange = (dateStr, f, t) => {
-    if(!dateStr) return false;
-    if(f && dateStr < f) return false;
-    if(t && dateStr > t) return false;
-    return true;
-  };
   const fromStr = from instanceof Date ? from.toISOString().slice(0,10) : from;
   const toStr = to instanceof Date ? to.toISOString().slice(0,10) : to;
-
-  function calcFor(fStr, tStr){
-    const fin = computeFinancePeriod(fStr, tStr);
-    // Форс-мажор уже включён в fin.overhead (постоянные издержки) — вытаскиваем
-    // его отдельной информационной строкой, а не вычитаем повторно.
-    const forceMajeure = fin.overheadByCat[FORCE_MAJEURE_CATEGORY] || 0;
-    const rentalIncome = (state.companyIncome||[]).filter(i=>!i.deleted_at && inRange(i.income_date, fStr, tStr)).reduce((s,i)=>s+(Number(i.amount)||0),0);
-    const leftover = fin.netProfit + rentalIncome;
-    return {netProfit: fin.netProfit, overhead: fin.overhead, forceMajeure, payrollPaidOut: fin.payrollPaidOut, rentalIncome, leftover};
-  }
-
-  const period = calcFor(fromStr, toStr);
-  const allTime = calcFor('2000-01-01', toStr); // резерв копится нарастающим итогом — не зависит от вкладки периода
-
-  const amortizationPeriod = period.leftover > 0 ? period.leftover * 0.1 : 0;
-  const reserveAll = allTime.leftover;
-
+  const fin = computeFinancePeriod(fromStr, toStr);
+  const extraIncome = (state.companyIncome||[])
+    .filter(i=>isOperationalCompanyIncome(i) && i.income_date && (!fromStr||i.income_date>=fromStr) && (!toStr||i.income_date<=toStr))
+    .reduce((s,i)=>s+(Number(i.amount)||0),0);
+  const periodResult = fin.netProfit + extraIncome;
+  const amortizationReference = periodResult > 0 ? periodResult * 0.1 : 0;
+  const reserve = getCompanyReserveBalance();
+  const withdrawals = getCompanyWithdrawals(fromStr,toStr);
+  const withdrawnPeriod = withdrawals.reduce((s,i)=>s+(Number(i.amount)||0),0);
   const color = v => v >= 0 ? 'var(--green)' : 'var(--red)';
-  const sign = v => v >= 0 ? '+' : '';
 
   el.innerHTML = `
-    <div class="fee-row"><div class="fl">Прибыль компании за период (проекты + стройка, за вычетом расходов и гонораров исполнителям)</div><div class="fv" style="color:${color(period.netProfit)};">${sign(period.netProfit)}${fmtMoney(period.netProfit)}</div></div>
-    <div class="fee-row"><div class="fl">+ Доход от аренды помещений</div><div class="fv" style="color:var(--green);">+${fmtMoney(period.rentalIncome)}</div></div>
-    ${period.forceMajeure > 0 ? `<div class="fee-row"><div class="fl" style="color:var(--text-dim);">из них форс-мажор (на компанию, уже внутри издержек выше)</div><div class="fv" style="color:var(--text-dim);">${fmtMoney(period.forceMajeure)}</div></div>` : ''}
-    <div class="fee-row total" style="border-top:1px solid var(--line-strong); margin-top:4px; padding-top:8px;">
-      <div class="fl">Остаток за период → в резерв</div>
-      <div class="fv" style="color:${color(period.leftover)};">${sign(period.leftover)}${fmtMoney(period.leftover)}</div>
+    <div class="fee-row total">
+      <div class="fl">Фактический резерв компании</div>
+      <div class="fv" style="color:var(--gold);font-size:17px;">${fmtMoney(reserve)}</div>
     </div>
-    <div class="fee-row"><div class="fl" style="color:var(--text-dim);">— из них 10% на амортизацию</div><div class="fv" style="color:var(--gold);">${fmtMoney(amortizationPeriod)}</div></div>
-    <div style="border-top:2px solid var(--line-strong); margin-top:10px; padding-top:10px;">
-      <div class="fee-row total">
-        <div class="fl" style="font-weight:700;">Резерв компании (накоплено за всё время)</div>
-        <div class="fv" style="color:${color(reserveAll)}; font-size:15px;">${sign(reserveAll)}${fmtMoney(reserveAll)}</div>
-      </div>
+    <div class="fee-row">
+      <div class="fl">Результат компании за выбранный период</div>
+      <div class="fv" style="color:${color(periodResult)};">${periodResult>=0?'+':''}${fmtMoney(periodResult)}</div>
     </div>
-    <div class="note" style="margin-top:8px;">Резерв — накопленный результат компании по завершённым проектам и прочим доходам. 10% положительного результата периода показываем отдельно как амортизацию.</div>
+    <div class="fee-row">
+      <div class="fl">Ориентир 10% на амортизацию</div>
+      <div class="fv" style="color:var(--gold);">${fmtMoney(amortizationReference)}</div>
+    </div>
+    <div class="fee-row">
+      <div class="fl">Выведено денег за период</div>
+      <div class="fv" style="color:var(--red);">−${fmtMoney(withdrawnPeriod)}</div>
+    </div>
+    <div class="note" style="margin-top:10px;">
+      Стартовый фактический резерв: ${fmtMoney(RESERVE_OPENING_BALANCE)} на ${RESERVE_OPENING_DATE}.
+      Резерв можно корректировать по фактическому остатку. Вывод денег уменьшает резерв, но не искажает операционные расходы компании.
+    </div>
   `;
 
   renderCompanyIncomeList();
 }
-
 function renderFeeCalc(){
   const list = document.getElementById('feeCalcList');
   if(!list) return;
