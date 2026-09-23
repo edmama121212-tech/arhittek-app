@@ -24,6 +24,9 @@ html{background:var(--bg)!important}body{max-width:none!important;margin:0!impor
 .project-special[open] summary{margin-bottom:15px}
 .project-person{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:15px 0;border-bottom:1px solid #e7edf5;font-size:14px}
 .project-person>div{min-width:0}.project-person small{display:block;font-size:11px;color:#708099;margin-top:5px;overflow-wrap:anywhere}.project-person>strong{white-space:nowrap}
+.project-person:not(.project-total)>div:first-child{flex:1;min-width:0}
+.project-person:not(.project-total)>div:first-child>strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.project-person-actions{flex-shrink:0}
 .project-total{font-weight:700;color:#244d86!important;border-top:1px solid #dce5f0;padding-top:16px}
 .project-equation{background:#f7f9fc;border-radius:16px;padding:20px;margin:15px 0}
 .project-equation>span{display:flex;justify-content:space-between;gap:14px;font-size:13px;margin:0 0 14px}.project-equation b{white-space:nowrap}

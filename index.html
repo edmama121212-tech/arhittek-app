@@ -244,6 +244,8 @@
   .proj-row:last-child{border-bottom:none;}
   .proj-row:active{opacity:0.6;}
   .proj-name{font-size:13.5px; font-weight:600; line-height:1.35;}
+  .proj-row > :first-child{flex:1; min-width:0;}
+  .proj-name{display:block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .proj-meta{font-size:11px; color:var(--text-dim); margin-top:3px;}
   .status-chip{
     display:inline-block; font-size:10px; font-weight:600; padding:3px 9px; border-radius:20px;
@@ -346,6 +348,9 @@
   @keyframes cardRise{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);}}
   .list-item:last-child{border-bottom:none;}
   .li-name{font-size:13.5px; font-weight:600;}
+  .list-item > :first-child,.trash-item > :first-child{flex:1; min-width:0;}
+  .list-item > :last-child,.trash-item > :last-child{flex-shrink:0;}
+  .li-name{display:block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .li-meta{font-size:11px; color:var(--text-dim); margin-top:2px;}
   .li-actions{display:flex; gap:8px; flex-shrink:0;}
   .icon-btn{background:none; border:none; color:var(--text-dim); font-size:16px; cursor:pointer; padding:4px;}
@@ -400,6 +405,8 @@
   .obj-card:hover{border-color:rgba(0,113,235,0.35);}
   .obj-head{display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;}
   .obj-title{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:16px;}
+  .obj-head > :first-child{flex:1; min-width:0;}
+  .obj-title{display:block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .obj-sub{font-size:11px; color:var(--text-dim); margin-top:3px;}
   .obj-margin{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:16px; text-align:right; white-space:nowrap;}
   .obj-margin.pos{color:var(--green);}
@@ -420,6 +427,7 @@
   .constr-sum-row:hover{background:rgba(22,35,58,0.04);}
   .constr-sum-row:active{background:rgba(0,113,235,0.07);}
   .constr-sum-table th:first-child,.constr-sum-table td:first-child{font-family:'Inter',sans-serif;}
+  .constr-sum-table .entity-name{display:block; width:clamp(120px, 28vw, 180px); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 
   /* Object summary in detail view */
   .obj-summary-grid{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:10px;}
@@ -461,6 +469,7 @@
   .history-item .h-action.restore{color:var(--green);}
   .history-item .h-time{color:var(--text-dim); font-size:11px; white-space:nowrap;}
   .history-item .h-entity{margin-top:2px; font-weight:600;}
+  .history-item .h-entity{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .history-item .h-changes{margin-top:4px; color:var(--text-dim); font-size:11.5px; line-height:1.6;}
 
   /* ===== Trash ===== */
@@ -476,6 +485,8 @@
   .inv-row:last-child{border-bottom:none;}
   .inv-num{font-weight:600; color:var(--text); flex:1; min-width:0;}
   .inv-desc{color:var(--text-dim); font-size:11px; margin-top:2px; line-height:1.35;}
+  .inv-row > :first-child{flex:1; min-width:0;}
+  .inv-num,.inv-desc{display:block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .inv-right{text-align:right; flex-shrink:0;}
   .inv-amount{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:13px;}
   .inv-amount.work{color:var(--red);}
@@ -3261,7 +3272,7 @@ function renderConstrSummary(){
   const rowsHtml = rows.map(({p, received, expenses, directPaid, balance, isOverspent, f, st}) => `
     <tr onclick="openObjectView('${p.id}')" style="cursor:pointer;" class="constr-sum-row">
       <td>
-        <div style="font-weight:600; font-size:13px; color:var(--text);">${escapeHtml(p.name)}</div>
+        <div class="entity-name" title="${escapeHtml(p.name)}" style="font-weight:600; font-size:13px; color:var(--text);">${escapeHtml(p.name)}</div>
         ${st ? `<div style="font-size:10px; color:var(--text-dim); margin-top:2px;">${escapeHtml(st.name)}</div>` : ''}
       </td>
       <td style="color:${isOverspent ? 'var(--red)' : 'var(--text)'}; font-weight:${isOverspent ? '700' : '400'};" title="${directPaid > 0 ? 'Из них '+fmtMoney(directPaid)+' оплачено заказчиком напрямую' : ''}">${isOverspent ? '⚠ ' : ''}${fmtMoney(balance)}${directPaid > 0 ? ' 🤝' : ''}</td>
@@ -3375,7 +3386,7 @@ function renderOverview(){
       const netColor = net < 0 ? 'var(--red)' : 'var(--green)';
       return `<tr onclick="openProjectSheet('${p.id}')" style="cursor:pointer;" class="constr-sum-row">
         <td>
-          <div style="font-weight:600; font-size:12px; color:var(--text); white-space:normal; max-width:140px;">${escapeHtml(p.name)}</div>
+          <div class="entity-name" title="${escapeHtml(p.name)}" style="font-weight:600; font-size:12px; color:var(--text);">${escapeHtml(p.name)}</div>
           ${isMismatch ? `<div style="font-size:9px; color:var(--gold); margin-top:1px;">⚠ статус «Оплачен»</div>` : ''}
         </td>
         <td style="color:var(--gold);">${fmtMoney(balance)}</td>
@@ -4172,7 +4183,7 @@ function renderProjectRow(p){
 
     return `<div class="proj-row" onclick="openProjectSheet('${p.id}')" style="${rowStyle}">
       <div>
-        <div class="proj-name">${donePrefix}${escapeHtml(p.name)}</div>
+        <div class="proj-name" title="${escapeHtml(p.name)}">${donePrefix}${escapeHtml(p.name)}</div>
         <div class="proj-meta">${metaParts.join(' · ')}</div>
         ${statusChips}
       </div>
