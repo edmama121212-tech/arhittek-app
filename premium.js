@@ -96,15 +96,27 @@ function planRows(p){
 }
 function card(label,value){return `<div class="project-metric"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`;}
 function refresh(){
- const a=Number($('pf-rp-area').value),r=Number($('pf-rp-rate').value);workPreview.innerHTML=a>0&&r>0&&Number.isFinite(a*r)?`<span>Гонорар сотрудника<small>${esc(a)} м² × ${esc(r.toLocaleString('ru-RU',{maximumFractionDigits:2}))} ₽</small></span><strong>${esc(money(Math.round(a*r*100)/100))}</strong>`:'Укажите площадь и ставку';
+ const selectedTeamEmployee=findEmployee($('pf-rp-employee').value);
+ const salariedTeamEmployee=!!selectedTeamEmployee?.is_salaried;
+ $('pf-rp-area').disabled=salariedTeamEmployee;
+ $('pf-rp-rate').disabled=salariedTeamEmployee;
+ $('pf-rp-add-btn').textContent=salariedTeamEmployee?'Добавить в проект':'Добавить сотрудника';
+ const a=Number($('pf-rp-area').value),r=Number($('pf-rp-rate').value);
+ workPreview.innerHTML=salariedTeamEmployee
+   ? '<span>Сотрудник на окладе<small>Будет участником проекта без дополнительного начисления</small></span><strong>Без доплаты</strong>'
+   : (a>0&&r>0&&Number.isFinite(a*r)?`<span>Гонорар сотрудника<small>${esc(a)} м² × ${esc(r.toLocaleString('ru-RU',{maximumFractionDigits:2}))} ₽</small></span><strong>${esc(money(Math.round(a*r*100)/100))}</strong>`:'Укажите площадь и ставку');
  const p=draft(),rows=planRows(p),total=rows.reduce((s,r)=>s+r.amount,0),done=findStatus(p.status_id)?.name==='Завершён',admin=!!session?.isAdmin;
  nav.querySelectorAll('button').forEach(b=>b.hidden=!admin&&['team','money'].includes(b.dataset.tab));
  if(!admin&&(!panels.team.hidden||!panels.money.hidden))selectTab('overview');
  const isM2=p.fee_base==='m2',interior=isInterior(p.category_id),architecture=isArchitecture(p.category_id);
  methods.hidden=(interior&&isM2)||(architecture&&p.fee_base==='profit');
  methods.querySelector('[data-method="percent"]').hidden=interior;methods.classList.toggle('team-interior',interior||architecture);methods.querySelector('[data-method="m2"]').hidden=architecture;methods.querySelector('[data-method="percent"] strong').textContent=architecture?'Процент после расходов':'Процент';methods.querySelector('[data-method="percent"] span').textContent=architecture?'(Стоимость − прямые расходы) × ставка':'Доля от стоимости проекта';
- methods.querySelector('[data-method="m2"] span').textContent=interior?'Дизайн интерьера · сотрудники без оклада':'Площадь работы × ставка';
- for(const option of [...$('pf-rp-employee').options]){if(option.value&&findEmployee(option.value)?.is_salaried)option.remove();}
+ methods.querySelector('[data-method="m2"] span').textContent=interior?'Площадь работы × ставка; сотрудники на окладе — без доплаты':'Площадь работы × ставка';
+ for(const option of [...$('pf-rp-employee').options]){
+   if(!option.value) continue;
+   const emp=findEmployee(option.value);
+   if(emp) option.textContent=emp.name+(emp.is_salaried?' · на окладе':'');
+ }
 
  methods.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String((b.dataset.method==='m2')===isM2)));
  baseField.hidden=isM2||interior||architecture;baseNote.hidden=isM2;$('team-deduct-costs').checked=p.fee_base==='profit';
@@ -164,7 +176,16 @@ addProjectRolePayout=async function(){
  if(!session?.isAdmin){showToast('Расчёт команды изменяет администратор');return;}
  if(adding)return;
  const emp=findEmployee($('pf-rp-employee').value),role=$('pf-rp-role').value,p=state.projects.find(x=>x.id===editingProjectId);
- if(emp?.is_salaried){showToast('Сотрудник на окладе: добавьте его в участники без проектной доплаты');return;}
+ if(emp?.is_salaried){
+   if(!currentProjectMembers.some(m=>m.employee_id===emp.id)){
+     currentProjectMembers.push({employee_id:emp.id});
+     renderProjectMemberChips();
+   }
+   $('pf-rp-employee').value='';
+   refresh();
+   showToast('Сотрудник добавлен в проект без доплаты. Нажмите «Сохранить проект».');
+   return;
+ }
  if(p&&Number(p.area)!==Number($('pf-area').value)){showToast('Сначала сохраните новую площадь проекта');return;}
  if(projectRolePayoutEntries(editingProjectId).some(e=>e.payee_employee_id===emp?.id&&e.description?.startsWith(role+' —'))){showToast('Этот сотрудник уже добавлен на выбранную роль');return;}
  if(!p){showToast('Сначала сохраните проект');return;}
@@ -228,12 +249,15 @@ document.head.append(style);
 const wrap=document.createElement('section');
 wrap.className='forecast-wrap';
 wrap.innerHTML=`
-  <div class="section-label" style="margin-top:4px"><span class="lbl-text">Прогноз месяца</span><span class="section-label-line"></span></div>
+  <div class="section-label" style="margin-top:4px"><span class="lbl-text">Прогноз</span><span class="section-label-line"></span></div>
   <div id="forecastMain"></div>
-  <div class="section-label"><span class="lbl-text">Из чего складывается прогноз</span><span class="section-label-line"></span></div>
-  <div class="card" id="forecastBreakdown"></div>
-  <div class="section-label"><span class="lbl-text">Проекты, которые влияют на прогноз</span><span class="section-label-line"></span></div>
-  <div class="card" id="forecastProjects"></div>
+  <details class="finance-disclosure">
+    <summary>Показать расчёт прогноза и проекты</summary>
+    <div class="section-label finance-inner-label"><span class="lbl-text">Из чего складывается прогноз</span><span class="section-label-line"></span></div>
+    <div class="card" id="forecastBreakdown"></div>
+    <div class="section-label finance-inner-label"><span class="lbl-text">Проекты в прогнозе</span><span class="section-label-line"></span></div>
+    <div class="card" id="forecastProjects"></div>
+  </details>
 `;
 const first=view.querySelector('.workspace-head')?.nextSibling || view.firstChild;
 view.insertBefore(wrap, first);
@@ -325,24 +349,23 @@ function renderForecast(){
  $('forecastMain').innerHTML=`
  <div class="forecast-hero">
    <div class="forecast-head">
-     <div><div class="forecast-title">${label}</div><div class="forecast-sub">Если новых продаж не будет и текущие проекты закроются по плану.</div></div>
+     <div><div class="forecast-title">${label}</div><div class="forecast-sub">Прогноз на месяц по текущим проектам и обязательным расходам.</div></div>
      <div style="min-width:126px"><div class="field" style="margin:0"><label>Месяц</label><input type="month" id="forecast-month" value="${key}"></div></div>
    </div>
    <div class="forecast-result ${cls}">${money(afterDebt)}</div>
-   <div class="forecast-grid">
-     <div class="forecast-metric"><span>Ожидаемые поступления</span><strong>${money(income)}</strong></div>
-     <div class="forecast-metric"><span>Все расходы до долга</span><strong>${money(fixed+direct+team)}</strong></div>
-     <div class="forecast-metric"><span>Операционный результат</span><strong>${money(operating)}</strong></div>
-     <div class="forecast-metric"><span>После погашения долга</span><strong>${money(afterDebt)}</strong></div>
+   <div class="forecast-grid forecast-grid-simple">
+     <div class="forecast-metric"><span>Поступления</span><strong>${money(income)}</strong></div>
+     <div class="forecast-metric"><span>Расходы</span><strong>${money(fixed+direct+team)}</strong></div>
+     <div class="forecast-metric"><span>До платежа по долгам</span><strong>${money(operating)}</strong></div>
    </div>
+ </div>`;
+
+ $('forecastBreakdown').innerHTML=`
    <div class="forecast-controls">
      <div class="field"><label>Платёж по долгам в этом месяце, ₽</label><input type="number" id="forecast-debt-payment" min="0" step="1000" value="${set.debtPayment}"></div>
      <div class="field"><label>Долг после этого платежа</label><input type="text" readonly value="${money(remainingDebt)}"></div>
    </div>
    <div class="forecast-note">Долги сейчас: рабочим ${money(set.debtWorkers)} + мебельщику ${money(set.debtFurniture)}. Reels: ${reelsDays} выходов × ${money(set.reelsUnit)} = ${money(reels)}.</div>
- </div>`;
-
- $('forecastBreakdown').innerHTML=`
    <div class="forecast-line"><span>Остатки оплат по проектам месяца</span><b>+${money(projectsIncome)}</b></div>
    <div class="forecast-line"><span>Прочие доходы, уже внесённые</span><b>+${money(extra.entered)}</b></div>
    <div class="forecast-line"><span>Субаренда, если ещё не внесена</span><b>+${money(extra.autoRent)}</b></div>
