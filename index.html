@@ -4880,6 +4880,20 @@ function completedProjectEarningsForRange(from, to){
     addEarn(l.payee_employee_id, Number(l.amount)||0, l.project_id, (proj.name||'') + ' — ' + (l.description||'начисление по м²'), 'начисление по м²');
   });
 
+  // Премии не привязаны к завершению проекта: они попадают в табель и ФОТ
+  // в месяц даты назначения и уменьшают финансовый результат компании этого периода.
+  (state.ledger||[]).forEach(l=>{
+    if(l.type !== 'bonus' || l.deleted_at) return;
+    if(!l.payee_employee_id || !l.entry_date || l.entry_date < from || l.entry_date > to) return;
+    addEarn(
+      l.payee_employee_id,
+      Number(l.amount)||0,
+      null,
+      'Премия' + (l.description ? ' — ' + l.description : ''),
+      'премия'
+    );
+  });
+
   // Гарантированный оклад всегда присутствует в табеле текущего месяца,
   // даже если сотрудник не участвовал ни в одном завершённом проекте.
   state.employees.filter(e=>e.active!==false && e.is_salaried).forEach(emp=>{
@@ -4988,11 +5002,13 @@ function renderTimesheet(){
 
   card.innerHTML = rows.map(r=>{
     const expanded = !!timesheetExpanded[r.id];
+    const projectItems = r.items.filter(it=>it.role!=='премия');
+    const bonusItems = r.items.filter(it=>it.role==='премия');
     const itemsHtml = r.items.length ? r.items.map(it=>`
-      <div class="list-item" style="padding-left:34px;" onclick="openProjectSheet('${it.projectId}')">
-        <div class="li-name" style="font-size:12.5px;">${escapeHtml(it.name)}${it.role==='соисполнитель'?' <span style="color:var(--text-dim); font-weight:400;">(соисполнитель)</span>':''}</div>
-        <div class="proj-sum" style="font-size:12.5px; ${it.amount===0?'color:var(--text-dim);':''}">${fmtMoney(it.amount)}${it.amount===0 && it.role==='соисполнитель' ? ' · нет %' : ''}</div>
-      </div>`).join('') : '<div class="empty-state" style="padding:8px 0 8px 34px;">Нет законченных проектов за месяц</div>';
+      <div class="list-item" style="padding-left:34px;${it.projectId?'cursor:pointer;':''}" ${it.projectId?`onclick="openProjectSheet('${it.projectId}')"`:''}>
+        <div class="li-name" style="font-size:12.5px;">${escapeHtml(it.name)}${it.role==='соисполнитель'?' <span style="color:var(--text-dim); font-weight:400;">(соисполнитель)</span>':it.role==='премия'?' <span style="color:var(--gold); font-weight:600;">(премия)</span>':''}</div>
+        <div class="proj-sum" style="font-size:12.5px; ${it.role==='премия'?'color:var(--gold);':it.amount===0?'color:var(--text-dim);':''}">${fmtMoney(it.amount)}${it.amount===0 && it.role==='соисполнитель' ? ' · нет %' : ''}</div>
+      </div>`).join('') : '<div class="empty-state" style="padding:8px 0 8px 34px;">Нет начислений за месяц</div>';
     return `
     <div class="list-item" style="cursor:pointer;" onclick="toggleTimesheetRow('${r.id}')">
       <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:0;">
@@ -5000,7 +5016,7 @@ function renderTimesheet(){
           onclick="event.stopPropagation();" onchange="toggleTimesheetPaid('${r.id}','${monthStr}', this.checked)">
         <div style="min-width:0;">
           <div class="li-name">${expanded?'▾':'▸'} ${escapeHtml(r.name)}${r.isSalaried?' <span style="color:var(--text-dim); font-weight:400;">(фикс. ЗП)</span>':''}</div>
-          <div class="li-meta">${r.isSalaried ? 'Гарантированный оклад '+fmtMoney(r.salary) : ''}${r.items.length ? (r.isSalaried ? ' · ' : '') + r.items.length + ' проект(ов)' : (!r.isSalaried ? 'Нет завершённых проектов' : '')}${r.paid?' · оплачено':''}</div>
+          <div class="li-meta">${r.isSalaried ? 'Гарантированный оклад '+fmtMoney(r.salary) : ''}${projectItems.length ? (r.isSalaried ? ' · ' : '') + projectItems.length + ' проект(ов)' : ''}${bonusItems.length ? ((r.isSalaried||projectItems.length) ? ' · ' : '') + bonusItems.length + ' прем.' : ((!r.isSalaried && !projectItems.length) ? 'Нет начислений' : '')}${r.paid?' · оплачено':''}</div>
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:6px;">
@@ -5511,6 +5527,7 @@ const ledgerTypeLabels = {
   withdrawal: {label:'Вывод средств', cls:'var(--red)', sign:'−'},
   project_expense: {label:'Расход по проекту', cls:'var(--red)', sign:'−'},
   role_payout: {label:'Начисление исполнителю (м²)', cls:'var(--gold)', sign:'−'},
+  bonus: {label:'Премия сотруднику', cls:'var(--gold)', sign:'−'},
 };
 
 function renderFeeSummaryForProject(p){
