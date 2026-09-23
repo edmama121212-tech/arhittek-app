@@ -427,7 +427,8 @@
   .constr-sum-row:hover{background:rgba(22,35,58,0.04);}
   .constr-sum-row:active{background:rgba(0,113,235,0.07);}
   .constr-sum-table th:first-child,.constr-sum-table td:first-child{font-family:'Inter',sans-serif;}
-  .constr-sum-table .entity-name{display:block; width:clamp(120px, 28vw, 180px); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .constr-sum-table .entity-name{display:block; width:max-content; max-width:none; overflow:visible; text-overflow:clip; white-space:nowrap;}
+  .constr-sum-table th:first-child,.constr-sum-table td:first-child{min-width:max-content;}
 
   /* Object summary in detail view */
   .obj-summary-grid{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:10px;}
@@ -1093,18 +1094,23 @@
       <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:16px;">Финансы компании</div>
     </div>
 
-    <div class="section-label"><span class="lbl-text">Оклады</span><span class="section-label-line"></span></div>
+    <div class="finance-intro">
+      <strong>Главная логика:</strong> сколько заработали → сколько потратили → сколько осталось компании.
+      Всё остальное спрятано в подробности.
+    </div>
+
+    <div class="section-label"><span class="lbl-text">Финансовая сводка</span><span class="section-label-line"></span></div>
+    <div class="card" id="analyticsBlock" style="padding:14px;"></div>
+
+    <div class="section-label"><span class="lbl-text">Оклады команды</span><span class="section-label-line"></span></div>
     <div class="card" id="finSalariesCard">
       <div class="loading-state">Загрузка…</div>
     </div>
 
-    <div class="section-label"><span class="lbl-text">Приход, расход, прибыль</span><span class="section-label-line"></span></div>
-    <div class="card" id="analyticsBlock" style="padding:14px;"></div>
-
-    <div class="section-label"><span class="lbl-text">Общий бюджет компании · резерв и амортизация</span><span class="section-label-line"></span></div>
+    <div class="section-label"><span class="lbl-text">Резерв и амортизация</span><span class="section-label-line"></span></div>
     <div class="card" id="companyBudgetBlock" style="padding:14px;"></div>
 
-    <div class="section-label"><span class="lbl-text">Доходы компании (аренда помещений и пр.)</span><span class="section-label-line"></span></div>
+    <div class="section-label"><span class="lbl-text">Прочие доходы компании</span><span class="section-label-line"></span></div>
     <div class="card" id="companyIncomeList" style="margin-bottom:8px;"></div>
     <button class="btn btn-secondary" onclick="openCompanyIncomeSheet(null)">+ Добавить доход</button>
 
@@ -3679,7 +3685,12 @@ function renderAnalytics(){
 
   const {from, to} = financeCurrentRange();
   const f = computeFinancePeriod(from, to);
-  const profitColor = f.netProfit >= 0 ? 'var(--green)' : 'var(--red)';
+  const extraIncome = (state.companyIncome||[])
+    .filter(i=>!i.deleted_at && i.income_date && i.income_date>=from && i.income_date<=to)
+    .reduce((s,i)=>s+(Number(i.amount)||0),0);
+  const totalIncome = f.revenue + extraIncome;
+  const companyResult = f.netProfit + extraIncome;
+  const resultColor = companyResult >= 0 ? 'var(--green)' : 'var(--red)';
 
   const modes = [
     {id:'month', label:'Месяц'},
@@ -3696,57 +3707,73 @@ function renderAnalytics(){
   const overheadCats = Object.keys(f.overheadByCat);
   const overheadRows = overheadCats.length ? overheadCats.map(cat=>
     `<div class="fee-row"><div class="fl">${escapeHtml(cat)}</div><div class="fv">${fmtMoney(f.overheadByCat[cat])}</div></div>`
-  ).join('') : '<div class="note">Нет записей за период</div>';
+  ).join('') : '<div class="note">Нет дополнительных расходов за период</div>';
 
   el.innerHTML = `
-    <div style="display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap;">
+    <div class="finance-periods">
       ${modes.map(m=>`
-        <div onclick="setFinancePeriodMode('${m.id}')"
-             style="padding:6px 12px; border-radius:16px; font-size:11px; font-weight:600; cursor:pointer;
-                    background:${financePeriodMode===m.id ? 'var(--blue-soft)' : 'rgba(22,35,58,0.05)'};
-                    color:${financePeriodMode===m.id ? 'var(--blue)' : 'var(--text-dim)'};
-                    border:1px solid ${financePeriodMode===m.id ? 'rgba(0,113,235,0.4)' : 'var(--line-strong)'};">
-          ${m.label}
-        </div>`).join('')}
+        <button type="button" class="finance-period-btn ${financePeriodMode===m.id?'active':''}" onclick="setFinancePeriodMode('${m.id}')">${m.label}</button>
+      `).join('')}
     </div>
+
     ${financePeriodMode==='month' ? `
-      <div class="field" style="margin-bottom:10px;">
+      <div class="field finance-period-input">
+        <label>Какой месяц смотрим</label>
         <input type="month" id="finance-month-input" value="${financeMonthValue||''}" onchange="financeMonthValue=this.value; renderAnalytics();">
       </div>` : ''}
     ${financePeriodMode==='range' ? `
-      <div class="field-row" style="margin-bottom:10px;">
+      <div class="field-row finance-period-input">
         <div class="field"><label>С</label><input type="date" id="finance-from-input" value="${financeRangeFrom||''}" onchange="financeRangeFrom=this.value; renderAnalytics();"></div>
         <div class="field"><label>По</label><input type="date" id="finance-to-input" value="${financeRangeTo||''}" onchange="financeRangeTo=this.value; renderAnalytics();"></div>
       </div>` : ''}
 
-    <div class="note" style="margin-bottom:8px;">Период: ${financePeriodLabel(from,to)} · по завершённым проектам и дате сдачи. Оклады — по текущим ставкам с даты создания сотрудника; неполные месяцы — пропорционально календарным дням.</div>
-
-    <table class="constr-sum-table" style="width:100%;">
-      <tbody>
-        <tr><td style="font-weight:700;">Приход</td><td style="text-align:right; color:var(--green); font-weight:700;">${fmtMoney(f.revenue)}</td></tr>
-        <tr><td style="font-weight:700;">Расход</td><td style="text-align:right; color:var(--red); font-weight:700;">${fmtMoney(f.totalExpenses)}</td></tr>
-        <tr><td style="font-weight:700;">Прибыль</td><td style="text-align:right; color:${profitColor}; font-weight:700;">${fmtMoney(f.netProfit)}</td></tr>
-      </tbody>
-    </table>
-
-    <div onclick="financeExpanded=!financeExpanded; renderAnalytics();" style="cursor:pointer; margin-top:12px; font-size:12px; color:var(--blue); font-weight:600;">
-      ${financeExpanded ? '▾ Скрыть подробности' : '▸ Подробнее по направлениям и расходам'}
+    <div class="finance-kpi-grid">
+      <div class="finance-kpi">
+        <span>Заработали</span>
+        <strong style="color:var(--green);">${fmtMoney(totalIncome)}</strong>
+        <small>проекты + прочие доходы</small>
+      </div>
+      <div class="finance-kpi">
+        <span>Потратили</span>
+        <strong style="color:var(--red);">${fmtMoney(f.totalExpenses)}</strong>
+        <small>проекты + команда + офис</small>
+      </div>
+      <div class="finance-kpi finance-kpi-main">
+        <span>Осталось компании</span>
+        <strong style="color:${resultColor};">${fmtMoney(companyResult)}</strong>
+        <small>${financePeriodLabel(from,to)}</small>
+      </div>
     </div>
 
+    <div class="finance-equation" aria-label="Расчёт результата периода">
+      <div><span>Выручка проектов</span><b>+${fmtMoney(f.revenue)}</b></div>
+      <div><span>Прочие доходы</span><b>+${fmtMoney(extraIncome)}</b></div>
+      <div><span>Прямые расходы проектов</span><b>−${fmtMoney(f.projectCosts)}</b></div>
+      <div><span>Зарплаты и гонорары</span><b>−${fmtMoney(f.payrollPaidOut)}</b></div>
+      <div><span>Офис и прочие расходы</span><b>−${fmtMoney(f.overhead)}</b></div>
+      <div class="total"><span>Итого осталось</span><b style="color:${resultColor};">${fmtMoney(companyResult)}</b></div>
+    </div>
+
+    <div class="finance-note">Факт считается по завершённым проектам выбранного периода. Будущие поступления смотрите в блоке «Прогноз».</div>
+
+    <button type="button" class="finance-details-toggle" onclick="financeExpanded=!financeExpanded; renderAnalytics();">
+      ${financeExpanded ? 'Скрыть подробности' : 'Показать подробности'}
+      <span>${financeExpanded?'▴':'▾'}</span>
+    </button>
+
     ${financeExpanded ? `
-      <div class="section-label" style="margin-top:14px;"><span class="lbl-text">Прибыль по направлениям</span><span class="section-label-line"></span></div>
+      <div class="section-label finance-inner-label"><span class="lbl-text">Результат по направлениям</span><span class="section-label-line"></span></div>
       <div class="fee-card">${deptRows || '<div class="note">Нет завершённых проектов за период</div>'}</div>
 
-      <div class="section-label" style="margin-top:14px;"><span class="lbl-text">Расходы</span><span class="section-label-line"></span></div>
+      <div class="section-label finance-inner-label"><span class="lbl-text">Расходы по статьям</span><span class="section-label-line"></span></div>
       <div class="fee-card">
-        <div class="fee-row"><div class="fl">Себестоимость проектов (материалы/работы)</div><div class="fv">${fmtMoney(f.projectCosts)}</div></div>
-        <div class="fee-row"><div class="fl">ЗП и гонорары сотрудникам</div><div class="fv">${fmtMoney(f.payrollPaidOut)}</div></div>
-        ${f.companyRetained>0 ? `<div class="fee-row"><div class="fl" style="color:var(--text-dim);">— из них осталось в прибыли (сверх фикс. ЗП)</div><div class="fv" style="color:var(--gold);">${fmtMoney(f.companyRetained)}</div></div>` : ''}
-        <div class="fee-row total"><div class="fl">Прочие расходы компании</div><div class="fv">${fmtMoney(f.overhead)}</div></div>
+        <div class="fee-row"><div class="fl">Прямые расходы проектов</div><div class="fv">${fmtMoney(f.projectCosts)}</div></div>
+        <div class="fee-row"><div class="fl">Зарплаты и гонорары</div><div class="fv">${fmtMoney(f.payrollPaidOut)}</div></div>
+        <div class="fee-row total"><div class="fl">Общие расходы компании</div><div class="fv">${fmtMoney(f.overhead)}</div></div>
         ${overheadRows}
       </div>
 
-      <div class="section-label" style="margin-top:14px;"><span class="lbl-text">Прочие расходы компании (аренда, коммуналка и т.п.)</span><span class="section-label-line"></span></div>
+      <div class="section-label finance-inner-label"><span class="lbl-text">Записи общих расходов</span><span class="section-label-line"></span></div>
       <div class="card" id="companyExpensesList" style="margin-bottom:8px;"></div>
       <button class="btn btn-secondary" onclick="openCompanyExpenseSheet(null)">+ Добавить расход</button>
     ` : ''}
@@ -4717,9 +4744,13 @@ function renderEmployeeFeeSummary(){
   const container = document.getElementById('employeeFeeSummary');
   if(!container) return;
 
-  const employees = state.employees.filter(e=>e.active!==false);
+  const employees = state.employees.filter(e=>!e.deleted_at);
   const rows = employees.map(emp=>{
-    const projects = state.projects.filter(p=>p.employee_id===emp.id || p.co_employee_id===emp.id);
+    const projectIds = new Set(
+      state.projects.filter(p=>p.employee_id===emp.id || p.co_employee_id===emp.id).map(p=>p.id)
+    );
+    (state.projectMembers||[]).filter(m=>m.employee_id===emp.id).forEach(m=>projectIds.add(m.project_id));
+    const projects = state.projects.filter(p=>projectIds.has(p.id));
     let earned = 0, paid = 0;
     projects.forEach(p=>{
       const f = getProjectFee(p);
@@ -4729,7 +4760,7 @@ function renderEmployeeFeeSummary(){
       if(p.co_employee_id === emp.id){ earned += f.coFeeAmount; paid += f.coPaid; }
     });
     return {emp, count: projects.length, earned, paid, remaining: Math.max(0, earned - paid)};
-  }).filter(r=>r.count > 0);
+  });
 
   if(!rows.length){
     container.innerHTML = '<div class="empty-state">Нет данных по сотрудникам</div>';
@@ -5389,7 +5420,7 @@ function renderCompanyBudget(from, to){
         <div class="fv" style="color:${color(reserveAll)}; font-size:15px;">${sign(reserveAll)}${fmtMoney(reserveAll)}</div>
       </div>
     </div>
-    <div class="note" style="margin-top:8px;">Считается на той же базе, что и «Приход/расход/прибыль» выше (по завершённым проектам/дате сдачи) — сюда идёт только то, что реально остаётся компании, а не весь денежный поток объекта.</div>
+    <div class="note" style="margin-top:8px;">Резерв — накопленный результат компании по завершённым проектам и прочим доходам. 10% положительного результата периода показываем отдельно как амортизацию.</div>
   `;
 
   renderCompanyIncomeList();
