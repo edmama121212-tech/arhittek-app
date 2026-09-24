@@ -355,9 +355,10 @@ function renderForecast(){
  const income=projectsIncome+extra.entered+extra.autoRent;
  const fixed=rentCost+internetCost+salaries+bonuses+reels+officeExtras;
  const operating=income-fixed-direct-team;
- const afterDebt=operating-set.debtPayment;
  const debtTotal=set.debtWorkers+set.debtFurniture;
- const remainingDebt=Math.max(0,debtTotal-set.debtPayment);
+ const plannedDebtPayment=debtTotal>0?Math.min(set.debtPayment,debtTotal):0;
+ const afterDebt=operating-plannedDebtPayment;
+ const remainingDebt=Math.max(0,debtTotal-plannedDebtPayment);
  const cls=afterDebt>=0?'pos':'neg';
  const label=afterDebt>=0?'Ожидаемый плюс':'Ожидаемый минус';
  $('forecastMain').innerHTML=`
@@ -375,11 +376,12 @@ function renderForecast(){
  </div>`;
 
  $('forecastBreakdown').innerHTML=`
-   <div class="forecast-controls">
-     <div class="field"><label>Платёж по долгам в этом месяце, ₽</label><input type="number" id="forecast-debt-payment" min="0" step="1000" value="${set.debtPayment}"></div>
+   ${debtTotal>0?`<div class="forecast-controls">
+     <div class="field"><label>Платёж по долгам в этом месяце, ₽</label><input type="number" id="forecast-debt-payment" min="0" step="1000" max="${debtTotal}" value="${plannedDebtPayment}"></div>
      <div class="field"><label>Долг после этого платежа</label><input type="text" readonly value="${money(remainingDebt)}"></div>
    </div>
-   <div class="forecast-note">Долги сейчас: рабочим ${money(set.debtWorkers)} + мебельщику ${money(set.debtFurniture)}. Reels: ${reelsDays} выходов × ${money(set.reelsUnit)} = ${money(reels)}.</div>
+   <div class="forecast-note">Текущий долг: ${money(debtTotal)}. После планового платежа останется ${money(remainingDebt)}.</div>`:`<div class="forecast-note forecast-note-ok">Долгов компании сейчас нет.</div>`}
+   <div class="forecast-note">Reels: ${reelsDays} выходов × ${money(set.reelsUnit)} = ${money(reels)}.</div>
    <div class="forecast-line"><span>Остатки оплат по проектам месяца</span><b>+${money(projectsIncome)}</b></div>
    <div class="forecast-line"><span>Прочие доходы, уже внесённые</span><b>+${money(extra.entered)}</b></div>
    <div class="forecast-line"><span>Субаренда, если ещё не внесена</span><b>+${money(extra.autoRent)}</b></div>
@@ -392,7 +394,7 @@ function renderForecast(){
    <div class="forecast-line"><span>Прямые расходы проектов</span><b>−${money(direct)}</b></div>
    <div class="forecast-line"><span>Гонорары команды по проектам</span><b>−${money(team)}</b></div>
    <div class="forecast-line total"><span>Операционный итог</span><b>${money(operating)}</b></div>
-   <div class="forecast-line total"><span>После планового платежа по долгам</span><b>${money(afterDebt)}</b></div>`;
+   ${debtTotal>0?`<div class="forecast-line total"><span>После планового платежа по долгам</span><b>${money(afterDebt)}</b></div>`:''}`;
 
  $('forecastProjects').innerHTML=rows.length?rows.map(r=>`
    <div class="forecast-project">
@@ -945,7 +947,8 @@ function renderFinanceControls(){
       ${isAdmin()?'<div class="finance-management-actions reserve-actions"><button type="button" class="btn btn-primary" onclick="openReserveCorrection()">Корректировать резерв</button><button type="button" class="btn btn-secondary" onclick="openCompanyWithdrawal()">Вывести деньги</button></div>':''}
       <div class="finance-reserve-cards"><div><span>Выводов за всё время</span><strong>${money(withdrawals.reduce((s,x)=>s+num(x.amount),0))}</strong></div><div><span>Корректировок</span><strong>${corrections.length}</strong></div></div>
       <details class="finance-visual-disclosure"><summary>История резерва и выводов</summary><div class="finance-management-list">
-        ${[...withdrawals.map(x=>({...x,_kind:'Вывод',_dir:-1,_date:x.expense_date})),...corrections].sort((a,b)=>String(b._date||'').localeCompare(String(a._date||''))).map(x=>`<div class="finance-management-row"><div><strong>${esc(x._kind||'Корректировка')}</strong><small>${esc(x._date||'')}${x.description?' · '+esc(x.description):''}</small></div><div><b class="${x._dir<0?'negative':''}">${x._dir<0?'−':'+'}${money(x.amount)}</b></div></div>`).join('')||'<div class="finance-v-empty">После стартового остатка операций пока нет.</div>'}
+        <div class="finance-management-row finance-opening-row"><div><strong>Стартовый резерв</strong><small>23.09.2026 · зафиксированный фактический остаток</small></div><div><b>+${money(190000)}</b></div></div>
+        ${[...withdrawals.map(x=>({...x,_kind:'Вывод',_dir:-1,_date:x.expense_date})),...corrections].sort((a,b)=>String(b._date||'').localeCompare(String(a._date||''))).map(x=>`<div class="finance-management-row"><div><strong>${esc(x._kind||'Корректировка')}</strong><small>${esc(x._date||'')}${x.description?' · '+esc(x.description):''}</small></div><div><b class="${x._dir<0?'negative':''}">${x._dir<0?'−':'+'}${money(x.amount)}</b>${x._kind==='Вывод'&&isAdmin()?`<button type="button" class="icon-btn" title="Редактировать вывод" onclick="openCompanyExpenseSheet('${x.id}')">✎</button>`:''}</div></div>`).join('')}
       </div></details>`;
   }
   const flowReserve=document.querySelector('.finance-flow-node.reserve');
