@@ -5281,6 +5281,18 @@ async function saveCompanyExpense(){
   const description = document.getElementById('cex-desc').value.trim();
   if(!amount || amount <= 0){ showToast('Укажите сумму'); return; }
   if(!expense_date){ showToast('Укажите дату'); return; }
+  if(category === COMPANY_WITHDRAWAL_CATEGORY){
+    let available = getCompanyReserveBalance();
+    if(editingCompanyExpenseId){
+      const old = (state.companyExpenses||[]).find(x=>x.id===editingCompanyExpenseId);
+      if(old && old.category===COMPANY_WITHDRAWAL_CATEGORY) available += Number(old.amount)||0;
+    }
+    if(amount > available){
+      showToast('Недостаточно средств в резерве. Доступно: ' + fmtMoney(available));
+      return;
+    }
+    if(!description){ showToast('Укажите назначение вывода денег'); return; }
+  }
   try{
     if(editingCompanyExpenseId){
       const {error} = await sb.from('company_expenses').update({category, amount, expense_date, description}).eq('id', editingCompanyExpenseId);
