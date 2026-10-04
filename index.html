@@ -7868,11 +7868,51 @@ const entityTypeMap = {
 
 async function restoreItem(table, id, name){
   try{
+    // Для финансовой записи запоминаем её до восстановления: после возвращения
+    // платежа нужно вернуть и зависимые суммы в карточке проекта.
+    const deletedLedger = table==='ledger_entries'
+      ? (state.trash?.ledger||[]).find(x=>x.id===id)
+      : null;
+
     const {error} = await sb.from(table).update({deleted_at: null}).eq('id', id);
     if(error) throw error;
     await logAudit(entityTypeMap[table], id, name, 'restore', {});
-    showToast('Восстановлено');
     await loadAll();
+
+    if(deletedLedger?.project_id){
+      let p=state.projects.find(x=>x.id===deletedLedger.project_id);
+      if(p){
+        const amount=Number(deletedLedger.amount)||0;
+        const updates={};
+
+        if(deletedLedger.type==='project_expense'){
+          // Прямой расход участвует в базе % после расходов.
+          await syncProjectExpensesTotal(p.id);
+        }else if(deletedLedger.type==='fee_payment'){
+          updates.fee_paid=(Number(p.fee_paid)||0)+amount;
+        }else if(['advance','final_payment','materials_budget','construction_budget','income'].includes(deletedLedger.type)){
+          if(isConstructionProject(p)){
+            // Для стройки остаток всегда пересчитываем из фактического журнала.
+            const fin=getConstructionFinancials(p);
+            updates.balance=fin.balance;
+          }else{
+            const newAdvance=(Number(p.advance)||0)+amount;
+            updates.advance=newAdvance;
+            updates.balance=Math.max(0,(Number(p.price)||0)-newAdvance);
+          }
+        }
+
+        if(Object.keys(updates).length){
+          const {error:projErr}=await sb.from('projects').update(updates).eq('id',p.id);
+          if(projErr) throw projErr;
+        }
+        if(deletedLedger.type==='project_expense' || Object.keys(updates).length){
+          await loadAll();
+        }
+      }
+    }
+
+    showToast('Восстановлено');
   }catch(e){
     console.error(e);
     showToast('Ошибка восстановления');
