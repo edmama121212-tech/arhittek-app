@@ -974,3 +974,339 @@ if(typeof oldAll==='function'){
 }
 setTimeout(()=>{try{renderFinanceControls();}catch(e){console.warn('[Finance controls init]',e);}},1050);
 })();
+
+
+// ARHITTEK document workflow v1
+(()=>{
+'use strict';
+const $=id=>document.getElementById(id);
+let editingContractId=null;
+let contractHistoryRows=[];
+
+function escDoc(v){
+  return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+function contractSnapshotFromForm(){
+  return {
+    contract_type: typeof contractType!=='undefined' ? contractType : 'ar',
+    project_id: $('ct-project')?.value || null,
+    client_name: $('ct-client-name')?.value.trim() || '',
+    passport: $('ct-passport')?.value.trim() || '',
+    birthdate: $('ct-birthdate')?.value || '',
+    passport_issuer: $('ct-passport-issuer')?.value.trim() || '',
+    passport_date: $('ct-passport-date')?.value || '',
+    address: $('ct-address')?.value.trim() || '',
+    phone: $('ct-phone')?.value.trim() || '',
+    number: $('ct-number')?.value.trim() || '',
+    date: $('ct-date')?.value || new Date().toISOString().slice(0,10),
+    object: $('ct-object')?.value.trim() || '',
+    scope: $('ct-scope')?.value || '',
+    price: Number($('ct-price')?.value)||0,
+    advance_pct: Number($('ct-advance-pct')?.value)||0,
+    start_date: $('ct-start')?.value || '',
+    end_date: $('ct-end')?.value || '',
+  };
+}
+function contractLabel(type){
+  return (typeof CONTRACT_TYPES!=='undefined' && CONTRACT_TYPES[type]?.label) || ({ar:'Архитектурный проект',di:'Дизайн интерьера',st:'Строительство'})[type] || 'Договор';
+}
+function contractProjectName(projectId){
+  const p=(typeof state!=='undefined' && state.projects||[]).find(x=>x.id===projectId);
+  return p?.name || '';
+}
+function applyContractSnapshot(s){
+  if(!s) return;
+  contractType=s.contract_type||'ar';
+  document.querySelectorAll('#contract-type .yn-btn').forEach(b=>b.classList.toggle('selected',b.dataset.value===contractType));
+  const map={
+    'ct-project':s.project_id||'','ct-client-name':s.client_name||'','ct-passport':s.passport||'',
+    'ct-birthdate':s.birthdate||'','ct-passport-issuer':s.passport_issuer||'','ct-passport-date':s.passport_date||'',
+    'ct-address':s.address||'','ct-phone':s.phone||'','ct-number':s.number||'','ct-date':s.date||'',
+    'ct-object':s.object||'','ct-scope':s.scope||'','ct-price':s.price||'','ct-advance-pct':s.advance_pct??50,
+    'ct-start':s.start_date||'','ct-end':s.end_date||''
+  };
+  Object.entries(map).forEach(([id,v])=>{const el=$(id); if(el) el.value=v;});
+}
+function contractRowSnapshot(row){ return row?.changes?.snapshot?.new || row?.changes?.snapshot || null; }
+
+async function queryContractHistory(){
+  try{
+    const {data,error}=await sb.from('audit_log').select('*').eq('entity_type','contract').order('created_at',{ascending:false}).limit(1000);
+    if(error) throw error;
+    contractHistoryRows=data||[];
+  }catch(e){
+    console.error('contract history load error',e);
+    contractHistoryRows=[];
+  }
+  return contractHistoryRows;
+}
+function latestContractRowsForProject(projectId){
+  const seen=new Set(), out=[];
+  for(const r of contractHistoryRows){
+    const s=contractRowSnapshot(r);
+    if(!s || s.project_id!==projectId || seen.has(r.entity_id)) continue;
+    seen.add(r.entity_id); out.push(r);
+  }
+  return out;
+}
+function versionOfRow(row){
+  return Number(row?.changes?.version?.new || row?.changes?.version || 1) || 1;
+}
+async function renderContractHistory(){
+  const list=$('ct-history-list'); if(!list) return;
+  await queryContractHistory();
+  if(!contractHistoryRows.length){
+    list.innerHTML='<div class="empty-state">Сохранённых договоров пока нет</div>'; return;
+  }
+  list.innerHTML=contractHistoryRows.map(r=>{
+    const s=contractRowSnapshot(r)||{}, p=contractProjectName(s.project_id), v=versionOfRow(r);
+    return `<div class="list-item">
+      <div style="cursor:pointer;flex:1" data-contract-history-id="${escDoc(r.id)}">
+        <div class="li-name">Договор № ${escDoc(s.number||'без номера')} · ${escDoc(contractLabel(s.contract_type))}</div>
+        <div class="li-meta">${p?escDoc(p)+' · ':''}${escDoc(s.client_name||'Без заказчика')} · версия ${v} · ${escDoc(typeof fmtDateTime==='function'?fmtDateTime(r.created_at):r.created_at||'')}</div>
+      </div>
+      <div class="li-actions"><button class="icon-btn" type="button" data-contract-history-id="${escDoc(r.id)}" title="Открыть и корректировать">✏️</button></div>
+    </div>`;
+  }).join('');
+}
+async function loadContractVersion(rowId){
+  let row=contractHistoryRows.find(r=>String(r.id)===String(rowId));
+  if(!row){
+    const {data}=await sb.from('audit_log').select('*').eq('id',rowId).maybeSingle();
+    row=data;
+  }
+  const s=contractRowSnapshot(row); if(!s) return;
+  editingContractId=row.entity_id;
+  applyContractSnapshot(s);
+  showToast('Версия договора открыта. После правок нажмите «Сохранить версию»');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+async function saveContractVersion(){
+  const s=contractSnapshotFromForm();
+  if(!s.client_name && !s.object && !s.number){showToast('Заполните хотя бы заказчика, объект или номер договора');return;}
+  if(!editingContractId) editingContractId=(crypto?.randomUUID?.() || ('contract-'+Date.now()+'-'+Math.random().toString(16).slice(2)));
+  const prior=contractHistoryRows.filter(r=>r.entity_id===editingContractId);
+  const nextVersion=(prior.reduce((m,r)=>Math.max(m,versionOfRow(r)),0)||0)+1;
+  const projectName=contractProjectName(s.project_id);
+  const actor=(typeof session!=='undefined'&&session?.name)?session.name:'';
+  const payloadChanges={
+    snapshot:{old:null,new:s},
+    version:{old:null,new:nextVersion},
+    project_id:{old:null,new:s.project_id||null}
+  };
+  if(actor) payloadChanges._actor=actor;
+  try{
+    const {error}=await sb.from('audit_log').insert({
+      entity_type:'contract', entity_id:editingContractId,
+      entity_name:`Договор № ${s.number||'без номера'}${projectName?' · '+projectName:''}`,
+      action: nextVersion===1?'create':'update', changes:payloadChanges
+    });
+    if(error) throw error;
+    await saveContractFields?.();
+    showToast(nextVersion===1?'Договор сохранён':'Новая версия договора сохранена');
+    await renderContractHistory();
+    if(s.project_id) await renderProjectContractList(s.project_id);
+    if(typeof currentObjectId!=='undefined' && currentObjectId===s.project_id) await renderObjectDocuments(s.project_id);
+  }catch(e){ console.error(e); showToast('Не удалось сохранить договор'); }
+}
+function newContractDraft(){
+  editingContractId=null;
+  const ids=['ct-client-name','ct-passport','ct-birthdate','ct-passport-issuer','ct-passport-date','ct-address','ct-phone','ct-number','ct-object','ct-price','ct-start','ct-end'];
+  ids.forEach(id=>{if($(id))$(id).value='';});
+  if($('ct-project')) $('ct-project').value='';
+  if($('ct-date')) $('ct-date').value=new Date().toISOString().slice(0,10);
+  if($('ct-advance-pct')) $('ct-advance-pct').value=50;
+  contractType='ar';
+  document.querySelectorAll('#contract-type .yn-btn').forEach(b=>b.classList.toggle('selected',b.dataset.value==='ar'));
+  if(typeof fillContractDefaults==='function') fillContractDefaults();
+  showToast('Новый договор');
+}
+
+function wordContractHtml(s){
+  const c=(typeof state!=='undefined'&&state.companyInfo)||{};
+  const scope=String(s.scope||'').split(/\n+/).filter(Boolean).map(x=>`<li>${escDoc(x.replace(/^[-—]\s*/,''))}</li>`).join('');
+  const price=(typeof fmtMoney==='function'?fmtMoney(s.price):s.price+' ₽');
+  const advance=Math.round((Number(s.price)||0)*(Number(s.advance_pct)||0)/100);
+  const dateFmt=v=>(typeof fmtDate==='function'?fmtDate(v):v)||'';
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Договор</title>
+  <style>body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.45;color:#111;margin:32px}h1{text-align:center;font-size:16pt}h2{font-size:12pt;margin-top:22px}table{width:100%;border-collapse:collapse;margin:10px 0}td{vertical-align:top;padding:5px;border:1px solid #bbb}.muted{color:#555}</style></head><body>
+  <h1>ДОГОВОР № ${escDoc(s.number||'____')}</h1>
+  <p style="text-align:center">${escDoc(contractLabel(s.contract_type))} · ${escDoc(dateFmt(s.date))}</p>
+  <p><b>Исполнитель:</b> ${escDoc(c.full_name||c.short_name||'ARHITTEK')}, в лице ${escDoc(c.director||'руководителя')}.</p>
+  <p><b>Заказчик:</b> ${escDoc(s.client_name||'________________')}.</p>
+  <h2>1. Предмет договора</h2>
+  <p>Исполнитель обязуется выполнить работы по объекту: <b>${escDoc(s.object||'________________')}</b>, а Заказчик обязуется принять и оплатить результат работ.</p>
+  <ul>${scope||'<li>Состав работ определяется сторонами.</li>'}</ul>
+  <h2>2. Стоимость и порядок оплаты</h2>
+  <p>Стоимость работ: <b>${escDoc(price)}</b>. Аванс: <b>${escDoc(String(s.advance_pct||0))}% (${escDoc(typeof fmtMoney==='function'?fmtMoney(advance):advance+' ₽')})</b>.</p>
+  <h2>3. Сроки</h2>
+  <p>Начало работ: ${escDoc(dateFmt(s.start_date)||'по согласованию')}. Завершение: ${escDoc(dateFmt(s.end_date)||'по согласованию')}.</p>
+  <h2>4. Права, обязанности и приёмка</h2>
+  <p>Исполнитель выполняет согласованный объём работ и передаёт результат Заказчику. Заказчик своевременно предоставляет исходные данные, согласовывает решения и производит оплату в согласованные сроки.</p>
+  <h2>5. Ответственность и изменения</h2>
+  <p>Изменения объёма, стоимости и сроков фиксируются сторонами дополнительно. Стороны несут ответственность в соответствии с условиями договора и применимым законодательством.</p>
+  <h2>6. Реквизиты и подписи</h2>
+  <table><tr><td><b>Исполнитель</b><br>${escDoc(c.full_name||c.short_name||'ARHITTEK')}<br>ИНН: ${escDoc(c.inn||'')}<br>ОГРН: ${escDoc(c.ogrn||'')}<br>${escDoc(c.legal_address||'')}<br>${escDoc(c.phone||'')}</td>
+  <td><b>Заказчик</b><br>${escDoc(s.client_name||'')}<br>Паспорт: ${escDoc(s.passport||'')}<br>Дата рождения: ${escDoc(dateFmt(s.birthdate))}<br>Выдан: ${escDoc(s.passport_issuer||'')} ${escDoc(dateFmt(s.passport_date))}<br>Адрес: ${escDoc(s.address||'')}<br>Тел.: ${escDoc(s.phone||'')}</td></tr></table>
+  <p style="margin-top:40px">Исполнитель ____________________ &nbsp;&nbsp;&nbsp; Заказчик ____________________</p>
+  <p class="muted">Документ сформирован в ARHITTEK. Файл можно редактировать в Microsoft Word.</p>
+  </body></html>`;
+}
+function exportContractToWord(){
+  const s=contractSnapshotFromForm();
+  const blob=new Blob(['\ufeff',wordContractHtml(s)],{type:'application/msword;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  const safe=(s.number||'bez-nomera').replace(/[^a-zA-Zа-яА-Я0-9_-]/g,'_');
+  a.download=`Dogovor-${safe}-${s.date||new Date().toISOString().slice(0,10)}.doc`;
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  showToast('Word-файл скачивается...');
+}
+
+async function renderProjectContractList(projectId){
+  const list=$('pf-contract-list'); if(!list) return;
+  await queryContractHistory();
+  const rows=latestContractRowsForProject(projectId);
+  if(!rows.length){list.innerHTML='<div class="empty-state">Договор пока не прикреплён</div>';return;}
+  list.innerHTML=rows.map(r=>{const s=contractRowSnapshot(r)||{};return `<div class="list-item"><div style="flex:1"><div class="li-name">Договор № ${escDoc(s.number||'без номера')}</div><div class="li-meta">${escDoc(contractLabel(s.contract_type))} · ${escDoc(s.client_name||'Без заказчика')} · версия ${versionOfRow(r)}</div></div><div class="li-actions"><button type="button" class="icon-btn" data-open-contract-id="${escDoc(r.id)}" title="Открыть">✏️</button></div></div>`;}).join('');
+}
+function openContractsForProject(projectId){
+  if(typeof closeProjectSheet==='function') closeProjectSheet();
+  openContractsView();
+  setTimeout(()=>{
+    const sel=$('ct-project'); if(sel){sel.value=projectId;sel.dispatchEvent(new Event('change',{bubbles:true}));}
+    editingContractId=null;
+  },0);
+}
+function openContractHistoryFromAnywhere(rowId){
+  openContractsView();
+  setTimeout(()=>loadContractVersion(rowId),0);
+}
+
+function refreshKpProjectSelect(){
+  const sel=$('kp-project-link'); if(!sel) return;
+  const current=(typeof editingKpProjectId!=='undefined'&&editingKpProjectId)||'';
+  sel.innerHTML='<option value="">— без привязки —</option>'+((state?.projects||[]).filter(p=>!p.deleted_at).map(p=>`<option value="${escDoc(p.id)}">${escDoc(p.name)}</option>`).join(''));
+  sel.value=current||'';
+}
+async function attachKpToCurrentProject(){
+  const select=$('pf-kp-attach-select'); if(!select||!editingProjectId||!select.value) return;
+  try{
+    const {error}=await sb.from('kp_forms').update({project_id:editingProjectId,updated_at:new Date().toISOString()}).eq('id',select.value);
+    if(error)throw error;
+    showToast('КП прикреплено к проекту');
+    await loadAll();
+    renderKpListForProject(editingProjectId);
+    refreshProjectKpAttachSelect(editingProjectId);
+  }catch(e){console.error(e);showToast('Не удалось прикрепить КП');}
+}
+function refreshProjectKpAttachSelect(projectId){
+  const sel=$('pf-kp-attach-select');if(!sel)return;
+  const free=(state?.kpForms||[]).filter(k=>!k.project_id||k.project_id!==projectId);
+  sel.innerHTML='<option value="">— выбрать сохранённое КП —</option>'+free.map(k=>`<option value="${escDoc(k.id)}">${escDoc(k.client_name||k.object||'КП')} · ${escDoc(typeof fmtDate==='function'?fmtDate(k.kp_date):k.kp_date||'')}</option>`).join('');
+}
+async function renderObjectDocuments(projectId){
+  const box=$('objDocumentsContent'); if(!box) return;
+  await queryContractHistory();
+  const contracts=latestContractRowsForProject(projectId);
+  const kps=(state?.kpForms||[]).filter(k=>k.project_id===projectId);
+  const cHtml=contracts.length?contracts.map(r=>{const s=contractRowSnapshot(r)||{};return `<div class="list-item"><div style="flex:1"><div class="li-name">Договор № ${escDoc(s.number||'без номера')}</div><div class="li-meta">${escDoc(s.client_name||'Без заказчика')} · версия ${versionOfRow(r)}</div></div><button class="icon-btn" type="button" data-object-contract-id="${escDoc(r.id)}">✏️</button></div>`;}).join(''):'<div class="empty-state">Договоров нет</div>';
+  const kHtml=kps.length?kps.map(k=>`<div class="list-item"><div style="flex:1"><div class="li-name">КП · ${escDoc(k.client_name||'Без имени')}</div><div class="li-meta">${escDoc(typeof fmtDate==='function'?fmtDate(k.kp_date):k.kp_date||'')} · ${escDoc(typeof fmtMoney==='function'?fmtMoney(kpRowSummary(k)):kpRowSummary(k))}</div></div><button class="icon-btn" type="button" data-object-kp-id="${escDoc(k.id)}">✏️</button></div>`).join(''):'<div class="empty-state">КП нет</div>';
+  box.innerHTML=`<div class="project-eyebrow">Договоры</div>${cHtml}<div class="project-eyebrow" style="margin-top:12px">Коммерческие предложения</div>${kHtml}<div class="btn-row" style="margin-top:10px"><button class="btn btn-secondary" type="button" id="objNewContractBtn">+ Договор</button><button class="btn btn-secondary" type="button" id="objNewKpBtn">+ КП</button></div>`;
+  $('objNewContractBtn')?.addEventListener('click',()=>openContractsForProject(projectId));
+  $('objNewKpBtn')?.addEventListener('click',()=>openKpViewForProject(projectId));
+}
+
+// Inject contract history/actions.
+const contractView=$('view-contracts');
+if(contractView){
+  const typeLabel=contractView.querySelector('.section-label');
+  if(typeLabel){
+    const historyLabel=document.createElement('div');historyLabel.className='section-label';historyLabel.innerHTML='<span class="lbl-text">Сохранённые договоры и версии</span><span class="section-label-line"></span>';
+    const historyCard=document.createElement('div');historyCard.id='ct-history-list';historyCard.className='card';historyCard.style.marginBottom='8px';
+    const newBtn=document.createElement('button');newBtn.type='button';newBtn.id='ct-new';newBtn.className='btn btn-secondary';newBtn.style.marginBottom='12px';newBtn.textContent='+ Новый договор';
+    contractView.insertBefore(historyLabel,typeLabel);contractView.insertBefore(historyCard,typeLabel);contractView.insertBefore(newBtn,typeLabel);
+  }
+  const pdf=$('ct-export-pdf');
+  if(pdf){
+    pdf.textContent='Скачать PDF';
+    const save=document.createElement('button');save.type='button';save.id='ct-save-history';save.className='btn btn-primary';save.style.marginBottom='8px';save.textContent='Сохранить версию договора';
+    const word=document.createElement('button');word.type='button';word.id='ct-export-word';word.className='btn btn-secondary';word.style.marginBottom='8px';word.textContent='Скачать Word';
+    pdf.parentNode.insertBefore(save,pdf);pdf.parentNode.insertBefore(word,pdf);
+  }
+  $('ct-history-list')?.addEventListener('click',e=>{const b=e.target.closest('[data-contract-history-id]');if(b)loadContractVersion(b.dataset.contractHistoryId);});
+  $('ct-new')?.addEventListener('click',newContractDraft);
+  $('ct-save-history')?.addEventListener('click',saveContractVersion);
+  $('ct-export-word')?.addEventListener('click',exportContractToWord);
+}
+
+// Inject contracts + existing-KP attachment into the project Documents tab.
+const kpList=$('pf-kp-list');
+if(kpList && !$('pf-contract-list')){
+  const kpBtn=$('pf-create-kp');
+  const attach=document.createElement('div');attach.className='card';attach.style.margin='8px 0 0';
+  attach.innerHTML='<div class="field" style="margin-bottom:8px"><label>Прикрепить сохранённое КП</label><select id="pf-kp-attach-select"><option value="">— выбрать сохранённое КП —</option></select></div><button type="button" class="btn btn-secondary" id="pf-kp-attach-btn">Прикрепить КП</button>';
+  kpBtn?.after(attach);
+  const label=document.createElement('div');label.className='section-label';label.style.margin='18px 0 10px';label.innerHTML='<span class="lbl-text">Договоры</span><span class="section-label-line"></span>';
+  const list=document.createElement('div');list.id='pf-contract-list';list.className='card';list.style.marginBottom='8px';
+  const btn=document.createElement('button');btn.type='button';btn.id='pf-create-contract';btn.className='btn btn-secondary';btn.textContent='+ Создать / прикрепить договор';
+  attach.after(label,list,btn);
+  $('pf-kp-attach-btn')?.addEventListener('click',attachKpToCurrentProject);
+  list.addEventListener('click',e=>{const b=e.target.closest('[data-open-contract-id]');if(b)openContractHistoryFromAnywhere(b.dataset.openContractId);});
+  btn.addEventListener('click',()=>{if(editingProjectId)openContractsForProject(editingProjectId);});
+}
+
+// Inject project linkage into KP editor.
+const kpNew=$('kpNewBtn');
+if(kpNew && !$('kp-project-link')){
+  const label=document.createElement('div');label.className='section-label';label.innerHTML='<span class="lbl-text">Привязка к проекту / объекту</span><span class="section-label-line"></span>';
+  const card=document.createElement('div');card.className='card';card.innerHTML='<div class="field" style="margin-bottom:0"><label>Карточка проекта или объекта</label><select id="kp-project-link"><option value="">— без привязки —</option></select><div class="hint" style="margin-top:6px">После сохранения КП появится в разделе «Документы» выбранной карточки.</div></div>';
+  kpNew.after(label,card);
+  $('kp-project-link').addEventListener('change',e=>{editingKpProjectId=e.target.value||null;});
+}
+
+// Inject documents into construction object card.
+const objSummary=$('objSummary');
+if(objSummary && !$('objDocumentsContent')){
+  const label=document.createElement('div');label.className='section-label';label.style.marginTop='14px';label.innerHTML='<span class="lbl-text">Документы</span><span class="section-label-line"></span>';
+  const box=document.createElement('div');box.id='objDocumentsContent';box.className='card';
+  objSummary.after(label,box);
+  box.addEventListener('click',e=>{
+    const c=e.target.closest('[data-object-contract-id]');if(c){openContractHistoryFromAnywhere(c.dataset.objectContractId);return;}
+    const k=e.target.closest('[data-object-kp-id]');if(k){loadKpFormById(k.dataset.objectKpId);}
+  });
+}
+
+// Wrap existing flows so the new document UI stays in sync.
+if(typeof openContractsView==='function'){
+  const old=openContractsView;
+  openContractsView=function(){old.apply(this,arguments);editingContractId=null;renderContractHistory();};
+}
+if(typeof openProjectSheet==='function'){
+  const old=openProjectSheet;
+  openProjectSheet=function(id){old.apply(this,arguments);if(id){renderProjectContractList(id);refreshProjectKpAttachSelect(id);}else{if($('pf-contract-list'))$('pf-contract-list').innerHTML='<div class="empty-state">Сохраните проект, чтобы прикреплять договоры</div>';refreshProjectKpAttachSelect('');}};
+}
+if(typeof openObjectView==='function'){
+  const old=openObjectView;
+  openObjectView=function(id){const r=old.apply(this,arguments);setTimeout(()=>renderObjectDocuments(id),0);return r;};
+}
+if(typeof openKpView==='function'){
+  const old=openKpView;
+  openKpView=function(){const r=old.apply(this,arguments);refreshKpProjectSelect();return r;};
+}
+if(typeof loadKpForm==='function'){
+  const old=loadKpForm;
+  loadKpForm=function(kp){const r=old.apply(this,arguments);refreshKpProjectSelect();if($('kp-project-link'))$('kp-project-link').value=kp?.project_id||'';return r;};
+}
+if(typeof resetKpForm==='function'){
+  const old=resetKpForm;
+  resetKpForm=function(){const r=old.apply(this,arguments);refreshKpProjectSelect();if($('kp-project-link'))$('kp-project-link').value='';return r;};
+}
+if(typeof saveKpForm==='function'){
+  const old=saveKpForm;
+  saveKpForm=async function(){if($('kp-project-link'))editingKpProjectId=$('kp-project-link').value||null;const r=await old.apply(this,arguments);if(editingKpProjectId){renderKpListForProject(editingKpProjectId);if(typeof currentObjectId!=='undefined'&&currentObjectId===editingKpProjectId)renderObjectDocuments(editingKpProjectId);}return r;};
+}
+
+window.openContractsForProject=openContractsForProject;
+window.renderProjectContractList=renderProjectContractList;
+window.exportContractToWord=exportContractToWord;
+})();
