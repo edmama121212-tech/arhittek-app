@@ -1041,16 +1041,23 @@ async function queryContractHistory(){
   return contractHistoryRows;
 }
 function latestContractRowsForProject(projectId){
-  const seen=new Set(), out=[];
-  for(const r of contractHistoryRows){
+  return latestUniqueContracts(contractHistoryRows.filter(r=>{
     const s=contractRowSnapshot(r);
-    if(!s || s.project_id!==projectId || seen.has(r.entity_id)) continue;
-    seen.add(r.entity_id); out.push(r);
+    return s && s.project_id===projectId;
+  }));
+}
+function contractIdentity(s){
+  return [s?.project_id||'', String(s?.number||'').trim().toLowerCase(), String(s?.object||'').trim().toLowerCase()].join('|');
+}
+function latestUniqueContracts(rows){
+  const seen=new Set(), out=[];
+  for(const r of rows){
+    const s=contractRowSnapshot(r)||{};
+    const key=contractIdentity(s) || r.entity_id;
+    if(seen.has(key)) continue;
+    seen.add(key); out.push(r);
   }
   return out;
-}
-function versionOfRow(row){
-  return Number(row?.changes?.version?.new || row?.changes?.version || 1) || 1;
 }
 async function renderContractHistory(){
   const list=$('ct-history-list'); if(!list) return;
@@ -1058,14 +1065,15 @@ async function renderContractHistory(){
   if(!contractHistoryRows.length){
     list.innerHTML='<div class="empty-state">Сохранённых договоров пока нет</div>'; return;
   }
-  list.innerHTML=contractHistoryRows.map(r=>{
-    const s=contractRowSnapshot(r)||{}, p=contractProjectName(s.project_id), v=versionOfRow(r);
+  const rows=latestUniqueContracts(contractHistoryRows);
+  list.innerHTML=rows.map(r=>{
+    const s=contractRowSnapshot(r)||{}, p=contractProjectName(s.project_id);
     return `<div class="list-item">
       <div style="cursor:pointer;flex:1" data-contract-history-id="${escDoc(r.id)}">
         <div class="li-name">Договор № ${escDoc(s.number||'без номера')} · ${escDoc(contractLabel(s.contract_type))}</div>
-        <div class="li-meta">${p?escDoc(p)+' · ':''}${escDoc(s.client_name||'Без заказчика')} · версия ${v} · ${escDoc(typeof fmtDateTime==='function'?fmtDateTime(r.created_at):r.created_at||'')}</div>
+        <div class="li-meta">${p?escDoc(p)+' · ':''}${escDoc(s.client_name||'Без заказчика')} · ${escDoc(typeof fmtDateTime==='function'?fmtDateTime(r.created_at):r.created_at||'')}</div>
       </div>
-      <div class="li-actions"><button class="icon-btn" type="button" data-contract-history-id="${escDoc(r.id)}" title="Открыть и корректировать">✏️</button></div>
+      <div class="li-actions"><button class="icon-btn" type="button" data-contract-history-id="${escDoc(r.id)}" title="Редактировать договор">✏️</button></div>
     </div>`;
   }).join('');
 }
@@ -1078,32 +1086,64 @@ async function loadContractVersion(rowId){
   const s=contractRowSnapshot(row); if(!s) return;
   editingContractId=row.entity_id;
   applyContractSnapshot(s);
-  showToast('Версия договора открыта. После правок нажмите «Сохранить версию»');
+  showToast('Договор открыт для редактирования');
   window.scrollTo({top:0,behavior:'smooth'});
 }
 async function saveContractVersion(){
   const s=contractSnapshotFromForm();
   if(!s.client_name && !s.object && !s.number){showToast('Заполните хотя бы заказчика, объект или номер договора');return;}
+  await queryContractHistory();
+
+  // Один номер/объект в одном проекте = один договор.
+  const same=contractHistoryRows.find(r=>contractIdentity(contractRowSnapshot(r)||{})===contractIdentity(s));
+  if(!editingContractId && same) editingContractId=same.entity_id;
   if(!editingContractId) editingContractId=(crypto?.randomUUID?.() || ('contract-'+Date.now()+'-'+Math.random().toString(16).slice(2)));
-  const prior=contractHistoryRows.filter(r=>r.entity_id===editingContractId);
-  const nextVersion=(prior.reduce((m,r)=>Math.max(m,versionOfRow(r)),0)||0)+1;
+
   const projectName=contractProjectName(s.project_id);
   const actor=(typeof session!=='undefined'&&session?.name)?session.name:'';
   const payloadChanges={
     snapshot:{old:null,new:s},
-    version:{old:null,new:nextVersion},
     project_id:{old:null,new:s.project_id||null}
   };
   if(actor) payloadChanges._actor=actor;
+
   try{
-    const {error}=await sb.from('audit_log').insert({
-      entity_type:'contract', entity_id:editingContractId,
-      entity_name:`Договор № ${s.number||'без номера'}${projectName?' · '+projectName:''}`,
-      action: nextVersion===1?'create':'update', changes:payloadChanges
-    });
-    if(error) throw error;
+    const currentRows=contractHistoryRows.filter(r=>r.entity_id===editingContractId);
+    if(currentRows.length){
+      const keep=currentRows[0];
+      const {error}=await sb.from('audit_log').update({
+        entity_name:`Договор № ${s.number||'без номера'}${projectName?' · '+projectName:''}`,
+        action:'update',
+        changes:payloadChanges,
+        created_at:new Date().toISOString()
+      }).eq('id',keep.id);
+      if(error) throw error;
+
+      // Старые версии этого же договора больше не нужны.
+      const extra=currentRows.slice(1).map(r=>r.id);
+      for(const id of extra){
+        const {error:delErr}=await sb.from('audit_log').delete().eq('id',id);
+        if(delErr) console.warn('contract duplicate cleanup',delErr);
+      }
+    }else{
+      const {error}=await sb.from('audit_log').insert({
+        entity_type:'contract', entity_id:editingContractId,
+        entity_name:`Договор № ${s.number||'без номера'}${projectName?' · '+projectName:''}`,
+        action:'create', changes:payloadChanges
+      });
+      if(error) throw error;
+    }
+
+    // Также убираем старые дубли с тем же номером/объектом.
+    await queryContractHistory();
+    const duplicates=contractHistoryRows.filter(r=>r.entity_id!==editingContractId && contractIdentity(contractRowSnapshot(r)||{})===contractIdentity(s));
+    for(const r of duplicates){
+      const {error:delErr}=await sb.from('audit_log').delete().eq('id',r.id);
+      if(delErr) console.warn('contract identity duplicate cleanup',delErr);
+    }
+
     await saveContractFields?.();
-    showToast(nextVersion===1?'Договор сохранён':'Новая версия договора сохранена');
+    showToast('Договор сохранён');
     await renderContractHistory();
     if(s.project_id) await renderProjectContractList(s.project_id);
     if(typeof currentObjectId!=='undefined' && currentObjectId===s.project_id) await renderObjectDocuments(s.project_id);
@@ -1167,7 +1207,7 @@ async function renderProjectContractList(projectId){
   await queryContractHistory();
   const rows=latestContractRowsForProject(projectId);
   if(!rows.length){list.innerHTML='<div class="empty-state">Договор пока не прикреплён</div>';return;}
-  list.innerHTML=rows.map(r=>{const s=contractRowSnapshot(r)||{};return `<div class="list-item"><div style="flex:1"><div class="li-name">Договор № ${escDoc(s.number||'без номера')}</div><div class="li-meta">${escDoc(contractLabel(s.contract_type))} · ${escDoc(s.client_name||'Без заказчика')} · версия ${versionOfRow(r)}</div></div><div class="li-actions"><button type="button" class="icon-btn" data-open-contract-id="${escDoc(r.id)}" title="Открыть">✏️</button></div></div>`;}).join('');
+  list.innerHTML=rows.map(r=>{const s=contractRowSnapshot(r)||{};return `<div class="list-item"><div style="flex:1"><div class="li-name">Договор № ${escDoc(s.number||'без номера')}</div><div class="li-meta">${escDoc(contractLabel(s.contract_type))} · ${escDoc(s.client_name||'Без заказчика')}</div></div><div class="li-actions"><button type="button" class="icon-btn" data-open-contract-id="${escDoc(r.id)}" title="Открыть">✏️</button></div></div>`;}).join('');
 }
 function openContractsForProject(projectId){
   if(typeof closeProjectSheet==='function') closeProjectSheet();
@@ -1209,7 +1249,7 @@ async function renderObjectDocuments(projectId){
   await queryContractHistory();
   const contracts=latestContractRowsForProject(projectId);
   const kps=(state?.kpForms||[]).filter(k=>k.project_id===projectId);
-  const cHtml=contracts.length?contracts.map(r=>{const s=contractRowSnapshot(r)||{};return `<div class="list-item"><div style="flex:1"><div class="li-name">Договор № ${escDoc(s.number||'без номера')}</div><div class="li-meta">${escDoc(s.client_name||'Без заказчика')} · версия ${versionOfRow(r)}</div></div><button class="icon-btn" type="button" data-object-contract-id="${escDoc(r.id)}">✏️</button></div>`;}).join(''):'<div class="empty-state">Договоров нет</div>';
+  const cHtml=contracts.length?contracts.map(r=>{const s=contractRowSnapshot(r)||{};return `<div class="list-item"><div style="flex:1"><div class="li-name">Договор № ${escDoc(s.number||'без номера')}</div><div class="li-meta">${escDoc(s.client_name||'Без заказчика')}</div></div><button class="icon-btn" type="button" data-object-contract-id="${escDoc(r.id)}">✏️</button></div>`;}).join(''):'<div class="empty-state">Договоров нет</div>';
   const kHtml=kps.length?kps.map(k=>`<div class="list-item"><div style="flex:1"><div class="li-name">КП · ${escDoc(k.client_name||'Без имени')}</div><div class="li-meta">${escDoc(typeof fmtDate==='function'?fmtDate(k.kp_date):k.kp_date||'')} · ${escDoc(typeof fmtMoney==='function'?fmtMoney(kpRowSummary(k)):kpRowSummary(k))}</div></div><button class="icon-btn" type="button" data-object-kp-id="${escDoc(k.id)}">✏️</button></div>`).join(''):'<div class="empty-state">КП нет</div>';
   box.innerHTML=`<div class="project-eyebrow">Договоры</div>${cHtml}<div class="project-eyebrow" style="margin-top:12px">Коммерческие предложения</div>${kHtml}<div class="btn-row" style="margin-top:10px"><button class="btn btn-secondary" type="button" id="objNewContractBtn">+ Договор</button><button class="btn btn-secondary" type="button" id="objNewKpBtn">+ КП</button></div>`;
   $('objNewContractBtn')?.addEventListener('click',()=>openContractsForProject(projectId));
@@ -1221,7 +1261,7 @@ const contractView=$('view-contracts');
 if(contractView){
   const typeLabel=contractView.querySelector('.section-label');
   if(typeLabel){
-    const historyLabel=document.createElement('div');historyLabel.className='section-label';historyLabel.innerHTML='<span class="lbl-text">Сохранённые договоры и версии</span><span class="section-label-line"></span>';
+    const historyLabel=document.createElement('div');historyLabel.className='section-label';historyLabel.innerHTML='<span class="lbl-text">Сохранённые договоры</span><span class="section-label-line"></span>';
     const historyCard=document.createElement('div');historyCard.id='ct-history-list';historyCard.className='card';historyCard.style.marginBottom='8px';
     const newBtn=document.createElement('button');newBtn.type='button';newBtn.id='ct-new';newBtn.className='btn btn-secondary';newBtn.style.marginBottom='12px';newBtn.textContent='+ Новый договор';
     contractView.insertBefore(historyLabel,typeLabel);contractView.insertBefore(historyCard,typeLabel);contractView.insertBefore(newBtn,typeLabel);
@@ -1229,7 +1269,7 @@ if(contractView){
   const pdf=$('ct-export-pdf');
   if(pdf){
     pdf.textContent='Скачать PDF';
-    const save=document.createElement('button');save.type='button';save.id='ct-save-history';save.className='btn btn-primary';save.style.marginBottom='8px';save.textContent='Сохранить версию договора';
+    const save=document.createElement('button');save.type='button';save.id='ct-save-history';save.className='btn btn-primary';save.style.marginBottom='8px';save.textContent='Сохранить договор';
     const word=document.createElement('button');word.type='button';word.id='ct-export-word';word.className='btn btn-secondary';word.style.marginBottom='8px';word.textContent='Скачать Word';
     pdf.parentNode.insertBefore(save,pdf);pdf.parentNode.insertBefore(word,pdf);
   }
