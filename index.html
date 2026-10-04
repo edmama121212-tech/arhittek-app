@@ -9496,7 +9496,7 @@ async function saveKpForm(){
 }
 
 async function deleteKpForm(id){
-  if(!confirm('Удалить это КП?')) return;
+  if(!confirm('Удалить это КП? Действие необратимо.')) return;
   showToast('Удаление…');
   try{
     const {error} = await sb.from('kp_forms').delete().eq('id', id);
