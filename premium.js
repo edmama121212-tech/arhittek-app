@@ -240,13 +240,46 @@ addProjectRolePayout=async function(){
 };
 $('pf-rp-add-btn').removeEventListener('click',oldAdd);$('pf-rp-add-btn').addEventListener('click',()=>addProjectRolePayout());
 // Make the existing monthly flag explicit: it is not a partial-payment ledger.
+// If the calculation changed after the "paid" mark, the mark is considered stale
+// until the administrator confirms the payment again.
+const rawIsTimesheetPaid=isTimesheetPaid;
+function paidMarkState(employeeId,monthStr){
+ const row=(state.timesheetPayments||[]).find(t=>t.employee_id===employeeId&&t.month===monthStr&&t.paid);
+ if(!row)return {paid:false,stale:false};
+ if(!row.paid_at)return {paid:true,stale:false};
+ const paidAt=new Date(row.paid_at).getTime();
+ const range=timesheetMonthRange(monthStr);
+ let latest=0;
+ const touch=v=>{const t=v?new Date(v).getTime():0;if(Number.isFinite(t)&&t>latest)latest=t;};
+ const emp=findEmployee(employeeId);touch(emp?.updated_at);
+ (state.projects||[]).forEach(p=>{
+   const involved=p.employee_id===employeeId||p.co_employee_id===employeeId||(state.projectMembers||[]).some(m=>m.project_id===p.id&&m.employee_id===employeeId);
+   if(!involved)return;
+   const st=findStatus(p.status_id),ref=timesheetProjectRefDate(p);
+   if(st?.name==='Завершён'&&ref&&ref>=range.from&&ref<=range.to){touch(p.updated_at);}
+ });
+ (state.ledger||[]).forEach(l=>{
+   if(l.deleted_at)return;
+   if(l.type==='bonus'&&l.payee_employee_id===employeeId&&l.entry_date>=range.from&&l.entry_date<=range.to){touch(l.updated_at||l.created_at);}
+   if(l.type==='role_payout'&&l.payee_employee_id===employeeId){
+     const p=(state.projects||[]).find(x=>x.id===l.project_id),ref=p?timesheetProjectRefDate(p):null;
+     if(ref&&ref>=range.from&&ref<=range.to){touch(l.updated_at||l.created_at);touch(p?.updated_at);}
+   }
+ });
+ return {paid:true,stale:latest>paidAt};
+}
+isTimesheetPaid=function(employeeId,monthStr){const s=paidMarkState(employeeId,monthStr);return s.paid&&!s.stale;};
+
 const oldTimesheet=renderTimesheet;renderTimesheet=function(){
  oldTimesheet();const card=$('timesheetCard');if(!card)return;
  const range=timesheetMonthRange($('ts-month').value),map=completedProjectEarningsForRange(range.from,range.to).employees,{result}=splitPayrollByEmployee(map);
  [...card.querySelectorAll('input[type="checkbox"]')].forEach(box=>{
   const row=box.closest('.list-item'),click=row.getAttribute('onclick')||'',id=click.match(/toggleTimesheetRow\('([^']+)'\)/)?.[1],r=result[id];if(!r)return;
-  const meta=row.querySelector('.li-meta');meta.textContent=`Оклад ${money(r.salary)} · Проекты ${money(r.earned)} · ${box.checked?'Отмечено выплаченным':'К выплате '+money(r.payout)}`;
-  box.title='Отметка о полной выплате за месяц';
+  const mark=paidMarkState(id,$('ts-month').value);
+  const meta=row.querySelector('.li-meta');
+  meta.textContent=`Оклад ${money(r.salary)} · Проекты ${money(r.earned)} · ${mark.stale?'Сумма изменилась после выплаты — подтвердите заново':box.checked?'Отмечено выплаченным':'К выплате '+money(r.payout)}`;
+  if(mark.stale){meta.style.color='var(--gold)';row.style.outline='1px solid rgba(232,163,61,.25)';}
+  box.title=mark.stale?'Расчёт изменился после отметки. Проверьте сумму и отметьте выплату снова.':'Отметка о полной выплате за месяц';
  });
  const note=document.createElement('p');note.className='project-note payroll-explanation';note.textContent='Здесь — оклад и завершённые проекты выбранного месяца. Галочка означает полную выплату по текущему расчёту; частичные выплаты и закрытие месяца пока не поддерживаются.';card.prepend(note);
 };
