@@ -19,7 +19,9 @@ await test('construction payroll once',()=>{state.projects=[{id:'b',name:'Build'
 await test('direct client costs neutral',()=>{state.ledger=state.ledger.filter(e=>e.type!=='role_payout');state.invoices=[{project_id:'b',item_type:'Материал',amount:30000,paid_by_client:true}];return computeFinancePeriod('2026-09-01','2026-09-30').netProfit},100000);
 await test('completed construction hidden',()=>{renderConstrSummary();return !document.getElementById('constrSummaryBlock').textContent.includes('Build')},true);
 await test('render all',()=>{renderAll();return true},true);
+await test('reset filters clears project search',()=>{projectSearchQuery='abc';document.getElementById('projectSearch').value='abc';activeEmployeeFilter='visual';resetAllFilters();return [projectSearchQuery,document.getElementById('projectSearch').value,activeEmployeeFilter]},['','','all']);
 for(const expr of ['openKpView()','openContractsView()','openCompanyView()','renderTimesheet()','openEmployeeSheet("visual")','closeEmployeeSheet()','openCategorySheet("arch")','closeCategorySheet()','openTariffSheet(null)','closeTariffSheet()','openCardEditor(null)','closeCardEditor()','openObjectView("b")','switchObjTab("add")','switchObjTab("materials")','switchObjTab("works")','switchObjTab("photos")'])await test(expr,`(()=>{${expr};return true})()`,true);
+await test('backdrop click keeps project sheet open',()=>{openProjectSheet(null);const o=document.getElementById('projectSheetOverlay');o.dispatchEvent(new MouseEvent('click',{bubbles:true}));const open=o.classList.contains('active');closeProjectSheet();return open},true);
 await p.reload();await p.waitForTimeout(150);
 await test('new project saves',async()=>{openProjectSheet(null);document.getElementById('pf-name').value='Тестовый интерьер';document.getElementById('pf-price').value='200000';await saveProject();return __db.projects.length},1);
 await test('default method',()=>__db.projects[0].fee_base,'m2');
@@ -75,6 +77,8 @@ await test('staff cannot mark payroll',async()=>{const n=__writes.length;await t
 await test('staff cannot edit tariffs',async()=>{const n=__writes.length;await saveTariff();return __writes.length===n},true);
 await p.reload();await p.waitForTimeout(150);
 for(const view of ['overview','projects','construction','cards','finance','more']){await p.locator(`.nav-btn[data-view="view-${view}"]`).click();await test('navigate '+view,()=>document.querySelector('.view.active').id,'view-'+view);}
+await p.locator('.nav-btn[data-view="view-more"]').click();await p.locator('#openPriceListBtn').click();await test('client price list opens',()=>document.getElementById('priceListSheetOverlay')?.classList.contains('active')||false,true);await p.locator('#priceListClose').click();
+await p.locator('.nav-btn[data-view="view-finance"]').click();await p.waitForTimeout(220);await p.reload();await p.waitForTimeout(700);await test('refresh keeps current section',()=>document.querySelector('.view.active')?.id,'view-finance');
 for(const [btn,view] of [['openKpBtn','view-kp'],['openContractsBtn','view-contracts'],['openCompanyBtn','view-company'],['openTimesheetBtn','view-timesheet']]){await p.locator('.nav-btn[data-view="view-more"]').click();await p.locator('#'+btn).click();await test('navigate '+view,()=>document.querySelector('.view.active').id,view);}
 await p.locator('#settingsBtn').click();await test('settings',()=>document.querySelector('.view.active').id,'view-settings');
 await test('PDF export',()=>{let n=0;const orig=jspdf.jsPDF.API.save;jspdf.jsPDF.API.save=function(){n++;return this};exportTimesheetToPdf('admin','2026-09');jspdf.jsPDF.API.save=orig;return n},1);
