@@ -7,7 +7,7 @@ if(nav){const brand=document.createElement('div');brand.className='studio-sideba
 const meta={overview:['Рабочий стол','Проекты, команда и финансы — в одном пространстве.'],projects:['Проектная студия','От первого эскиза до готового альбома.'],construction:['Строительство','Бюджеты, материалы и ход работ по объектам.'],cards:['Коллекция проектов','Архитектура, которую можно выбрать.'],more:['Инструменты студии','Документы и процессы ежедневной работы.'],finance:['Финансы','Понятная экономика каждого направления.'],timesheet:['Команда и выплаты','Начисления, оклады и обязательства студии.'],settings:['Настройки','Команда, услуги и параметры рабочего пространства.'],kp:['Коммерческое предложение','Точный расчёт. Достойная подача.'],contracts:['Договоры','Условия сотрудничества и документы по проекту.'],company:['Реквизиты студии','Всё необходимое для работы с клиентами.'],object:['Карточка объекта','Финансовая картина и документы строительства.']};
 Object.entries(meta).forEach(([id,[title,description]])=>{const v=document.getElementById('view-'+id);if(!v)return;const h=document.createElement('div');h.className='workspace-head';h.innerHTML=`<div><div class="workspace-eyebrow">ARHITTEK / ${id==='overview'?'Обзор студии':'Рабочее пространство'}</div><h1>${title}</h1><p class="workspace-description">${description}</p></div><div class="workspace-date">${new Date().toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'})}</div>`;v.prepend(h);});
 const overview=document.getElementById('overviewContent');if(overview){const h=document.createElement('section');h.className='studio-hero';h.innerHTML='<div><div class="hero-kicker">STUDIO / AT A GLANCE</div><h2>Большие идеи. Чёткий план.</h2><p>Всё, что важно для студии сегодня.</p></div><div class="hero-actions"><button type="button" class="btn btn-primary" id="premiumNewProject">+ Новый проект</button><button type="button" class="btn btn-secondary" id="premiumOpenPayroll">Выплаты команде ↗</button></div>';overview.prepend(h);document.getElementById('premiumNewProject').onclick=()=>openProjectSheet(null);document.getElementById('premiumOpenPayroll').onclick=()=>document.getElementById('openTimesheetBtn').click();}
-const grid=document.querySelector('#view-more > div[style*="display:grid"]');if(grid){grid.classList.add('premium-tool-grid');Object.entries({openKpBtn:'Коммерческие предложения',openContractsBtn:'Договоры',openCompanyBtn:'Реквизиты',exportXlsxBtn:'Экспорт в Excel',openTimesheetBtn:'Табель и выплаты'}).forEach(([id,text])=>{document.getElementById(id).innerHTML=svg('cards')+text;});}
+const grid=document.querySelector('#view-more > div[style*="display:grid"]');if(grid){grid.classList.add('premium-tool-grid');Object.entries({openKpBtn:'Коммерческие предложения',openContractsBtn:'Договоры',openCompanyBtn:'Реквизиты',openPriceListBtn:'Прайс для клиента',exportXlsxBtn:'Экспорт в Excel',openTimesheetBtn:'Табель и выплаты'}).forEach(([id,text])=>{document.getElementById(id).innerHTML=svg('cards')+text;});}
 const toast=document.getElementById('toast');if(toast){toast.setAttribute('role','status');toast.setAttribute('aria-live','polite');}document.querySelectorAll('.sheet-close').forEach(b=>b.setAttribute('aria-label','Закрыть'));document.querySelectorAll('.field').forEach(f=>{const l=f.querySelector('label'),i=f.querySelector('input,select,textarea');if(l&&i?.id&&!l.htmlFor)l.htmlFor=i.id;});
 const sync=()=>{const active=document.querySelector('.view.active')?.id,fab=document.getElementById('addProjectFab');if(fab)fab.style.display=['view-projects','view-construction'].includes(active)?'':'none';nav?.querySelectorAll('.nav-btn').forEach(b=>{if(b.dataset.view===active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});};const observer=new MutationObserver(sync);document.querySelectorAll('.view').forEach(v=>observer.observe(v,{attributes:true,attributeFilter:['class']}));sync();
 const user=document.getElementById('userPill');if(user){user.setAttribute('role','button');user.setAttribute('aria-label','Выйти из аккаунта');user.tabIndex=0;user.addEventListener('keydown',e=>{if(e.key==='Enter')user.click();});}const f=document.createElement('div');f.className='page-footnote';f.textContent='ARHITTEK · Сделано для точной работы';document.querySelector('main')?.append(f);document.addEventListener('keydown',e=>{if(e.key==='Escape')[...document.querySelectorAll('.sheet-overlay.active')].at(-1)?.querySelector('.sheet-close')?.click();});
@@ -1896,18 +1896,17 @@ function exportPriceXlsx(){
 
 window.openPriceListSheet=openPriceListSheet;
 
-// Settings: main entry point next to tariff management.
-const tariffBtn=$('addTariffBtn');
-if(tariffBtn && !$('downloadPriceListBtn')){
-  const btn=document.createElement('button');
-  btn.className='btn btn-primary';
-  btn.id='downloadPriceListBtn';
-  btn.type='button';
-  btn.style.marginTop='8px';
-  btn.textContent='Скачать прайс для клиента';
-  tariffBtn.after(btn);
-  btn.addEventListener('click',()=>openPriceListSheet());
+// Main entry point: Studio Tools.
+
+const studioGrid=document.querySelector('#view-more .premium-tool-grid') || document.querySelector('#view-more > div[style*="display:grid"]');
+if(studioGrid && !$('openPriceListBtn')){
+  const b=document.createElement('button');
+  b.id='openPriceListBtn';b.type='button';b.className='btn btn-primary';b.textContent='Прайс для клиента';
+  studioGrid.appendChild(b);
+  b.dataset.priceListToolFallback='1';
 }
+$('openPriceListBtn')?.addEventListener('click',()=>openPriceListSheet()); // price-list-tool-fallback
+
 
 // KP workspace: quick access while talking to a potential client.
 const kpNew=$('kpNewBtn');
