@@ -2244,10 +2244,16 @@ function resetAllFilters(){
   activeStatusFilter = 'all';
   activeEmployeeFilter = 'all';
   activePaymentFilter = 'all';
+  projectSearchQuery = '';
+  const search = document.getElementById('projectSearch');
+  if(search) search.value = '';
+  const searchBox = search?.closest('.search-box');
+  if(searchBox) searchBox.classList.remove('has-value');
   renderCategoryFilters();
   renderStatusFilters();
+  renderPaymentFilters();
   renderEmployeeFilters();
-  renderProjectList();
+  renderProjects();
   updateFilterBadge();
 }
 let loadAllInFlight = false;
@@ -4145,7 +4151,7 @@ function renderProjects(){
 
   const card = document.getElementById('projectsCard');
   if(!list.length){
-    const isFiltered = activeCategoryFilter !== 'all' || activeStatusFilter !== 'all' || activePaymentFilter !== 'all' || projectSearchQuery.trim();
+    const isFiltered = activeCategoryFilter !== 'all' || activeStatusFilter !== 'all' || activePaymentFilter !== 'all' || activeEmployeeFilter !== 'all' || projectSearchQuery.trim();
     card.innerHTML = `<div class="empty-state">
       ${isFiltered
         ? 'Нет проектов по этому фильтру'
@@ -5326,7 +5332,7 @@ async function saveCompanyExpense(){
 async function deleteCompanyExpense(){
   if(!session?.isAdmin){showToast("Требуются права администратора");return;}
   if(!editingCompanyExpenseId) return;
-  if(!confirm('Удалить этот расход?')) return;
+  if(!confirm('Удалить этот расход? Его можно будет восстановить из корзины.')) return;
   try{
     const {error} = await sb.from('company_expenses').update({deleted_at: new Date().toISOString()}).eq('id', editingCompanyExpenseId);
     if(error) throw error;
@@ -5638,6 +5644,7 @@ function renderProjectExpenses(projectId){
         <div class="li-meta">${fmtDate(e.entry_date)}</div>
       </div>
       <div class="li-actions">
+        <button class="icon-btn" title="Редактировать расход" onclick="editProjectExpense('${e.id}')">✏️</button>
         <button class="icon-btn danger" title="Удалить расход" onclick="deleteProjectExpense('${e.id}','${projectId}')">🗑</button>
       </div>
     </div>`).join('') +
@@ -5842,35 +5849,42 @@ async function addProjectExpense(){
   if(!amount || amount <= 0){ showToast('Укажите сумму расхода'); return; }
   if(!desc){ showToast('Укажите, на что расход'); return; }
   const p = state.projects.find(x=>x.id===projectId);
+  const wasEditing = !!editingProjectExpenseId;
   try{
-    // Миграция: если у проекта уже был ручной расход и нет ни одной записи — сохраняем его первой записью
-    const existing = state.ledger.filter(l=>l.project_id===projectId && l.type==='project_expense');
-    if(!existing.length && p && Number(p.expenses) > 0){
-      await sb.from('ledger_entries').insert({
-        type:'project_expense', project_id:projectId,
-        description:'Ранее внесённые расходы', amount:Number(p.expenses),
-        entry_date: (p.created_at||new Date().toISOString()).slice(0,10),
-        received_by: session ? session.employeeId : null,
+    if(editingProjectExpenseId){
+      const before=(state.ledger||[]).find(x=>x.id===editingProjectExpenseId);
+      const {error}=await sb.from('ledger_entries').update({description:desc,amount,entry_date}).eq('id',editingProjectExpenseId);
+      if(error) throw error;
+      await logAudit('project', projectId, p?p.name:'', 'update', {
+        project_expense_edited:{old:before ? ((before.description||'Расход')+' — '+fmtMoney(before.amount)) : null, new:desc+' — '+fmtMoney(amount)}
       });
+    }else{
+      const existing = state.ledger.filter(l=>l.project_id===projectId && l.type==='project_expense' && !l.deleted_at);
+      if(!existing.length && p && Number(p.expenses) > 0){
+        await sb.from('ledger_entries').insert({
+          type:'project_expense', project_id:projectId,
+          description:'Ранее внесённые расходы', amount:Number(p.expenses),
+          entry_date:(p.created_at||new Date().toISOString()).slice(0,10),
+          received_by:session ? session.employeeId : null,
+        });
+      }
+      const {error}=await sb.from('ledger_entries').insert({
+        type:'project_expense', project_id:projectId,
+        description:desc, amount, entry_date,
+        received_by:session ? session.employeeId : null,
+      });
+      if(error) throw error;
+      await logAudit('project', projectId, p?p.name:'', 'update', {project_expense_added:{old:null,new:desc+' — '+fmtMoney(amount)}});
     }
-    const {error} = await sb.from('ledger_entries').insert({
-      type:'project_expense', project_id:projectId,
-      description:desc, amount, entry_date,
-      received_by: session ? session.employeeId : null,
-    });
-    if(error) throw error;
-    const total = await syncProjectExpensesTotal(projectId);
-    await logAudit('project', projectId, p?p.name:'', 'update', {project_expense_added:{old:null, new:`${desc} — ${fmtMoney(amount)}`}});
-    document.getElementById('pf-expense-desc').value = '';
-    document.getElementById('pf-expense-amount').value = '';
-    document.getElementById('pf-expense-date').value = '';
+    resetProjectExpenseEditor();
     await loadAll();
+    const total=await syncProjectExpensesTotal(projectId);
     renderProjectExpenses(projectId);
-    const expEl = document.getElementById('pf-expenses'); if(expEl) expEl.value = total;
+    const expEl=document.getElementById('pf-expenses'); if(expEl) expEl.value=total;
     updateCompanyRemainderField(projectId);
-    const up = state.projects.find(x=>x.id===projectId); if(up) renderFeeSummaryForProject(up);
-    showToast('Расход добавлен');
-  }catch(e){ console.error(e); showToast('Ошибка добавления расхода'); }
+    const up=state.projects.find(x=>x.id===projectId); if(up) renderFeeSummaryForProject(up);
+    showToast(wasEditing ? 'Расход изменён' : 'Расход добавлен');
+  }catch(e){ console.error(e); showToast(wasEditing ? 'Ошибка изменения расхода' : 'Ошибка добавления расхода'); }
 }
 
 async function deleteProjectExpense(entryId, projectId){
