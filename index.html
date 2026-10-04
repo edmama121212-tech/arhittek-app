@@ -7895,6 +7895,8 @@ function buildExportRows(){
       'Статус': st?st.name:'',
       'Оплата': p.payment_status||'',
       'Исполнитель': emp?emp.name:'',
+      'Соисполнитель': findEmployee(p.co_employee_id)?.name||'',
+      'Команда': (state.projectMembers||[]).filter(m=>m.project_id===p.id).map(m=>findEmployee(m.employee_id)?.name).filter(Boolean).join(', '),
       'Адрес': p.address||'',
       'Телефон': p.phone||'',
       'Цена': p.price||0,
@@ -7916,7 +7918,7 @@ function buildExportRows(){
     'Имя': e.name,
     'Роль': e.role||'',
     'Активен': e.active===false?'нет':'да',
-    'Проектов': state.projects.filter(p=>p.employee_id===e.id).length,
+    'Проектов': state.projects.filter(p=>p.employee_id===e.id || p.co_employee_id===e.id || (state.projectMembers||[]).some(m=>m.project_id===p.id && m.employee_id===e.id)).length,
   }));
 
   sheets['Категории'] = state.categories.map(c=>{
