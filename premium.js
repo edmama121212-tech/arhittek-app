@@ -125,7 +125,7 @@ function refresh(){
  teamSummary.innerHTML='<h3>Гонорары команды</h3><p class="project-note">'+(interior?'Площадь работы × ставка. Сотрудники на окладе — без доплаты за проект.':architecture?'Гонорар = (стоимость − прямые расходы) × процент.':'Выберите способ расчёта и назначьте сотрудников.')+'</p>'+(interior&&!isM2?'<p class="project-warning">Здесь сохранён прежний процентный расчёт. Для новых начислений выберите «За м²». История автоматически не изменяется.</p>':'')+(architecture&&p.fee_base!=='profit'?'<p class="project-warning">Сохранены прежние условия. Для перехода выберите «Процент после расходов». Старые расчёты автоматически не изменяются.</p>':'');
  const lineResult=(id,employee,rate)=>{const el=$(id);const fees=getProjectFee(p);const row={amount:id==='team-main-result'?fees.mainFeeAmount:fees.coFeeAmount};el.innerHTML='<span>Гонорар</span><strong>'+(!employee?'—':findEmployee(employee)?.is_salaried&&rate===0?'На окладе':rate>0?esc(money(row?.amount||0)):rate===0?'Укажите %':'—')+'</strong>';};
  lineResult('team-main-result',p.employee_id,p.fee_percent);lineResult('team-co-result',p.co_employee_id,p.co_fee_percent);
- const rowsHtml=rows.length?rows.map(r=>`<div class="project-person"><div><strong>${esc(r.name)}</strong><small>${esc(r.formula)}</small></div><div class="project-person-actions"><strong>${esc(money(r.amount))}</strong>${r.entryId&&admin?`<button type="button" class="icon-btn" data-remove-payout="${esc(r.entryId)}" aria-label="Удалить из расчёта: ${esc(r.name)}">×</button>`:''}</div></div>`).join(''):'<p class="project-note">Выберите сотрудника и условия вознаграждения.</p>';
+ const rowsHtml=rows.length?rows.map(r=>`<div class="project-person"><div><strong>${esc(r.name)}</strong><small>${esc(r.formula)}</small></div><div class="project-person-actions"><strong>${esc(money(r.amount))}</strong>${r.entryId&&admin?`<button type="button" class="icon-btn" data-edit-payout="${esc(r.entryId)}" aria-label="Редактировать начисление: ${esc(r.name)}">✏️</button><button type="button" class="icon-btn" data-remove-payout="${esc(r.entryId)}" aria-label="Удалить из расчёта: ${esc(r.name)}">×</button>`:''}</div></div>`).join(''):'<p class="project-note">Выберите сотрудника и условия вознаграждения.</p>';
  const saved=state.projects.find(x=>x.id===editingProjectId), entries=projectRolePayoutEntries(editingProjectId);
  const staleArea=saved&&p.fee_base==='m2'&&entries.length&&p.area!==Number(saved.area||0);
  $('pf-compensation-summary').innerHTML=(isM2?rowsHtml:'')+`<div class="project-person project-total"><strong>${done?'Начислено команде':'Всего по проекту'}</strong><strong>${rows.some(r=>r.amount>0)?esc(money(total)):'—'}</strong></div><p class="team-total-note">${done?'В табеле за месяц даты сдачи.':'Попадёт в табель после завершения проекта.'}</p>`+(staleArea?'<p class="project-warning">Площадь изменена. Сохранённые суммы не пересчитываются автоматически — проверьте расчёт команды.</p>':'');
@@ -150,7 +150,28 @@ const oldRecalc=recalcLiveFeeSummary;recalcLiveFeeSummary=function(){oldRecalc()
 const oldRenderRoles=renderProjectRolePayouts;renderProjectRolePayouts=function(id){oldRenderRoles(id);refresh();};
 const oldSummary=renderM2CompensationSummary;renderM2CompensationSummary=function(p){oldSummary(p);refresh();};
 const oldRenderAll=renderAll;renderAll=function(){oldRenderAll();if($('projectSheetOverlay').classList.contains('active'))refresh();};
-sheet.addEventListener('click',e=>{const b=e.target.closest('[data-remove-payout]');if(b&&session?.isAdmin)deleteProjectRolePayout(b.dataset.removePayout,editingProjectId);});
+sheet.addEventListener('click',e=>{
+ const edit=e.target.closest('[data-edit-payout]');
+ if(edit&&session?.isAdmin){
+   const row=(state.ledger||[]).find(x=>x.id===edit.dataset.editPayout&&x.type==='role_payout');
+   if(row){
+     editingRolePayoutId=row.id;
+     $('pf-rp-employee').value=row.payee_employee_id||'';
+     const txt=row.description||'';
+     const role=txt.split(' — ')[0]||'Другое';
+     if([...$('pf-rp-role').options].some(o=>o.value===role)) $('pf-rp-role').value=role;
+     const area=txt.match(/([\d.,]+)\s*м²/)?.[1]?.replace(',','.');
+     const rate=txt.match(/×\s*([\d\s.,]+)\s*₽\/м²/)?.[1]?.replace(/\s/g,'')?.replace(',','.');
+     if(area) $('pf-rp-area').value=area;
+     if(rate) $('pf-rp-rate').value=rate;
+     $('pf-rp-add-btn').textContent='Сохранить изменение';
+     refresh();
+   }
+   return;
+ }
+ const b=e.target.closest('[data-remove-payout]');
+ if(b&&session?.isAdmin)deleteProjectRolePayout(b.dataset.removePayout,editingProjectId);
+});
 sheet.addEventListener('input',e=>{if(e.target.id!=='team-deduct-costs')refresh();});sheet.addEventListener('change',e=>{if(e.target.id==='pf-category')defaults();refresh();});
 // Stale duplicate selections must never restore an employee removed in the team tab.
 ['pf-employee-fee','pf-co-employee-fee'].forEach((id,i)=>$(id).addEventListener('change',()=>{$(i?'pf-co-employee':'pf-employee').value=$(id).value;}));
@@ -170,8 +191,8 @@ const oldSave=saveProject;saveProject=async function(){
  $('pf-save').disabled=true;try{await oldSave();}finally{$('pf-save').disabled=false;}
 };
 $('pf-save').removeEventListener('click',oldSave);$('pf-save').addEventListener('click',()=>saveProject());
-const oldDelete=deleteProjectRolePayout;deleteProjectRolePayout=async function(id,pid){if(!session?.isAdmin){showToast('Расчёт команды изменяет администратор');return;}await oldDelete(id,pid);refresh();};
-const oldAdd=addProjectRolePayout;let adding=false;
+const oldDelete=deleteProjectRolePayout;deleteProjectRolePayout=async function(id,pid){if(!session?.isAdmin){showToast('Расчёт команды изменяет администратор');return;}if(editingRolePayoutId===id){editingRolePayoutId=null;$('pf-rp-add-btn').textContent='Добавить сотрудника';}await oldDelete(id,pid);refresh();};
+const oldAdd=addProjectRolePayout;let adding=false,editingRolePayoutId=null;
 addProjectRolePayout=async function(){
  if(!session?.isAdmin){showToast('Расчёт команды изменяет администратор');return;}
  if(adding)return;
@@ -187,7 +208,7 @@ addProjectRolePayout=async function(){
    return;
  }
  if(p&&Number(p.area)!==Number($('pf-area').value)){showToast('Сначала сохраните новую площадь проекта');return;}
- if(projectRolePayoutEntries(editingProjectId).some(e=>e.payee_employee_id===emp?.id&&e.description?.startsWith(role+' —'))){showToast('Этот сотрудник уже добавлен на выбранную роль');return;}
+ if(projectRolePayoutEntries(editingProjectId).some(e=>e.id!==editingRolePayoutId&&e.payee_employee_id===emp?.id&&e.description?.startsWith(role+' —'))){showToast('Этот сотрудник уже добавлен на выбранную роль');return;}
  if(!p){showToast('Сначала сохраните проект');return;}
  if(isArchitecture(p.category_id)){showToast('В архитектуре и ландшафте применяется процент после расходов');return;}
  if(p.fee_base!=='m2'){showToast('Сохраните проект с методом «Ставка за м²»');return;}
@@ -198,13 +219,22 @@ addProjectRolePayout=async function(){
  const projectId=p.id,description=`${role} — ${emp.name} (${area} м² × ${rate.toLocaleString('ru-RU',{maximumFractionDigits:2})} ₽/м²)`;
  adding=true;$('pf-rp-add-btn').disabled=true;
  try{
-  const {data,error}=await sb.from('ledger_entries').insert({type:'role_payout',project_id:projectId,payee_employee_id:emp.id,description,amount,entry_date:new Date().toISOString().slice(0,10),received_by:session.employeeId}).select().single();
-  if(error)throw error;
-  if(data){state.ledger=state.ledger||[];state.ledger.push(data);}
-  await logAudit('project',projectId,p.name,'update',{role_payout_added:{old:null,new:description+' — '+fmtMoney(amount)}});
+  const wasEditing=!!editingRolePayoutId;
+  if(editingRolePayoutId){
+    const before=(state.ledger||[]).find(x=>x.id===editingRolePayoutId);
+    const {error}=await sb.from('ledger_entries').update({payee_employee_id:emp.id,description,amount,entry_date:new Date().toISOString().slice(0,10)}).eq('id',editingRolePayoutId);
+    if(error)throw error;
+    await logAudit('project',projectId,p.name,'update',{role_payout_edited:{old:before?(before.description+' — '+fmtMoney(before.amount)):null,new:description+' — '+fmtMoney(amount)}});
+  }else{
+    const {data,error}=await sb.from('ledger_entries').insert({type:'role_payout',project_id:projectId,payee_employee_id:emp.id,description,amount,entry_date:new Date().toISOString().slice(0,10),received_by:session.employeeId}).select().single();
+    if(error)throw error;
+    if(data){state.ledger=state.ledger||[];state.ledger.push(data);}
+    await logAudit('project',projectId,p.name,'update',{role_payout_added:{old:null,new:description+' — '+fmtMoney(amount)}});
+  }
+  editingRolePayoutId=null;
   await loadAll();
-  if(editingProjectId===projectId){renderProjectRolePayouts(projectId);$('pf-rp-rate').value='400';$('pf-rp-area').value=p.area;$('pf-rp-employee').value='';refresh();}
-  showToast('В расчёт добавлено '+fmtMoney(amount)+'. В табель — после завершения проекта.');
+  if(editingProjectId===projectId){renderProjectRolePayouts(projectId);$('pf-rp-rate').value='400';$('pf-rp-area').value=p.area;$('pf-rp-employee').value='';$('pf-rp-add-btn').textContent='Добавить сотрудника';refresh();}
+  showToast(wasEditing?'Начисление изменено':'В расчёт добавлено '+fmtMoney(amount)+'. В табель — после завершения проекта.');
  }catch(e){console.error(e);showToast('Не удалось завершить сохранение. Обновите расчёт перед повторной попыткой.');}
  finally{adding=false;$('pf-rp-add-btn').disabled=false;}
 };
