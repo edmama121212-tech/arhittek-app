@@ -1381,12 +1381,55 @@ function exportContractToWord(){
   showToast('Word-файл скачивается...');
 }
 
+async function detachContractFromProject(rowId,projectId){
+  let row=contractHistoryRows.find(r=>String(r.id)===String(rowId));
+  if(!row){await queryContractHistory();row=contractHistoryRows.find(r=>String(r.id)===String(rowId));}
+  if(!row)return;
+  const s=contractRowSnapshot(row)||{};
+  if(!confirm('Открепить договор № '+(s.number||'без номера')+' от проекта? Сам договор останется сохранённым.'))return;
+  try{
+    const next={...s,project_id:null};
+    const changesObj={...(row.changes||{}),snapshot:{old:s,new:next},project_id:{old:projectId||s.project_id||null,new:null}};
+    const actor=(typeof session!=='undefined'&&session?.name)?session.name:'';
+    if(actor)changesObj._actor=actor;
+    const {error}=await sb.from('audit_log').update({
+      entity_name:'Договор № '+(s.number||'без номера'),
+      action:'update',
+      changes:changesObj,
+      created_at:new Date().toISOString()
+    }).eq('id',row.id);
+    if(error)throw error;
+    showToast('Договор откреплён. Он остался в сохранённых договорах.');
+    await queryContractHistory();
+    if(projectId)await renderProjectContractList(projectId);
+    if(typeof currentObjectId!=='undefined'&&currentObjectId===projectId)await renderObjectDocuments(projectId);
+  }catch(e){console.error(e);showToast('Не удалось открепить договор');}
+}
+async function detachKpFromProject(kpId,projectId){
+  const kp=(state?.kpForms||[]).find(k=>k.id===kpId);
+  if(!kp)return;
+  if(!confirm('Открепить это КП от проекта? Само КП останется в сохранённых.'))return;
+  try{
+    const {error}=await sb.from('kp_forms').update({project_id:null,updated_at:new Date().toISOString()}).eq('id',kpId);
+    if(error)throw error;
+    showToast('КП откреплено. Оно осталось в сохранённых КП.');
+    await loadAll();
+    if(projectId){
+      renderKpListForProject(projectId);
+      refreshProjectKpAttachSelect(projectId);
+      if(typeof currentObjectId!=='undefined'&&currentObjectId===projectId)await renderObjectDocuments(projectId);
+    }
+  }catch(e){console.error(e);showToast('Не удалось открепить КП');}
+}
+window.detachKpFromProject=detachKpFromProject;
+window.detachContractFromProject=detachContractFromProject;
+
 async function renderProjectContractList(projectId){
   const list=$('pf-contract-list'); if(!list) return;
   await queryContractHistory();
   const rows=latestContractRowsForProject(projectId);
   if(!rows.length){list.innerHTML='<div class="empty-state">Договор пока не прикреплён</div>';return;}
-  list.innerHTML=rows.map(r=>{const s=contractRowSnapshot(r)||{};return `<div class="list-item"><div style="flex:1"><div class="li-name">Договор № ${escDoc(s.number||'без номера')}</div><div class="li-meta">${escDoc(contractLabel(s.contract_type))} · ${escDoc(s.client_name||'Без заказчика')}</div></div><div class="li-actions"><button type="button" class="icon-btn" data-open-contract-id="${escDoc(r.id)}" title="Открыть">✏️</button><button type="button" class="icon-btn danger" data-delete-project-contract-id="${escDoc(r.id)}" title="Удалить договор">🗑</button></div></div>`;}).join('');
+  list.innerHTML=rows.map(r=>{const s=contractRowSnapshot(r)||{};return `<div class="list-item"><div style="flex:1"><div class="li-name">Договор № ${escDoc(s.number||'без номера')}</div><div class="li-meta">${escDoc(contractLabel(s.contract_type))} · ${escDoc(s.client_name||'Без заказчика')}</div></div><div class="li-actions"><button type="button" class="icon-btn" data-open-contract-id="${escDoc(r.id)}" title="Открыть">✏️</button><button type="button" class="icon-btn" data-detach-project-contract-id="${escDoc(r.id)}" title="Открепить от проекта">🔗</button></div></div>`;}).join('');
 }
 function openContractsForProject(projectId){
   documentReturnContext=currentDocumentOrigin(projectId);
@@ -1439,8 +1482,8 @@ async function renderObjectDocuments(projectId){
   await queryContractHistory();
   const contracts=latestContractRowsForProject(projectId);
   const kps=(state?.kpForms||[]).filter(k=>k.project_id===projectId);
-  const cHtml=contracts.length?contracts.map(r=>{const s=contractRowSnapshot(r)||{};return `<div class="list-item"><div style="flex:1"><div class="li-name">Договор № ${escDoc(s.number||'без номера')}</div><div class="li-meta">${escDoc(s.client_name||'Без заказчика')}</div></div><button class="icon-btn" type="button" data-object-contract-id="${escDoc(r.id)}">✏️</button></div>`;}).join(''):'<div class="empty-state">Договоров нет</div>';
-  const kHtml=kps.length?kps.map(k=>`<div class="list-item"><div style="flex:1"><div class="li-name">КП · ${escDoc(k.client_name||'Без имени')}</div><div class="li-meta">${escDoc(typeof fmtDate==='function'?fmtDate(k.kp_date):k.kp_date||'')} · ${escDoc(typeof fmtMoney==='function'?fmtMoney(kpRowSummary(k)):kpRowSummary(k))}</div></div><button class="icon-btn" type="button" data-object-kp-id="${escDoc(k.id)}">✏️</button></div>`).join(''):'<div class="empty-state">КП нет</div>';
+  const cHtml=contracts.length?contracts.map(r=>{const s=contractRowSnapshot(r)||{};return `<div class="list-item"><div style="flex:1"><div class="li-name">Договор № ${escDoc(s.number||'без номера')}</div><div class="li-meta">${escDoc(s.client_name||'Без заказчика')}</div></div><div class="li-actions"><button class="icon-btn" type="button" data-object-contract-id="${escDoc(r.id)}" title="Открыть">✏️</button><button class="icon-btn" type="button" data-object-detach-contract-id="${escDoc(r.id)}" title="Открепить">🔗</button></div></div>`;}).join(''):'<div class="empty-state">Договоров нет</div>';
+  const kHtml=kps.length?kps.map(k=>`<div class="list-item"><div style="flex:1"><div class="li-name">КП · ${escDoc(k.client_name||'Без имени')}</div><div class="li-meta">${escDoc(typeof fmtDate==='function'?fmtDate(k.kp_date):k.kp_date||'')} · ${escDoc(typeof fmtMoney==='function'?fmtMoney(kpRowSummary(k)):kpRowSummary(k))}</div></div><div class="li-actions"><button class="icon-btn" type="button" data-object-kp-id="${escDoc(k.id)}" title="Открыть">✏️</button><button class="icon-btn" type="button" data-object-detach-kp-id="${escDoc(k.id)}" title="Открепить">🔗</button></div></div>`).join(''):'<div class="empty-state">КП нет</div>';
   box.innerHTML=`<div class="project-eyebrow">Договоры</div>${cHtml}<div class="project-eyebrow" style="margin-top:12px">Коммерческие предложения</div>${kHtml}<div class="btn-row" style="margin-top:10px"><button class="btn btn-secondary" type="button" id="objNewContractBtn">+ Договор</button><button class="btn btn-secondary" type="button" id="objNewKpBtn">+ КП</button></div><button class="btn btn-secondary" type="button" id="objDownloadPriceBtn" style="margin-top:8px">Скачать прайс по направлению</button>`;
   $('objNewContractBtn')?.addEventListener('click',()=>openContractsForProject(projectId));
   $('objNewKpBtn')?.addEventListener('click',()=>openKpViewForProject(projectId));
@@ -1501,8 +1544,8 @@ if(kpList && !$('pf-contract-list')){
   attach.after(label,list,btn);
   $('pf-kp-attach-btn')?.addEventListener('click',attachKpToCurrentProject);
   list.addEventListener('click',e=>{
-    const del=e.target.closest('[data-delete-project-contract-id]');
-    if(del){deleteSavedContract(del.dataset.deleteProjectContractId);return;}
+    const detach=e.target.closest('[data-detach-project-contract-id]');
+    if(detach){detachContractFromProject(detach.dataset.detachProjectContractId,editingProjectId);return;}
     const b=e.target.closest('[data-open-contract-id]');
     if(b)openContractHistoryFromAnywhere(b.dataset.openContractId);
   });
@@ -1542,6 +1585,10 @@ if(objSummary && !$('objDocumentsContent')){
   const box=document.createElement('div');box.id='objDocumentsContent';box.className='card';
   objSummary.after(label,box);
   box.addEventListener('click',e=>{
+    const dc=e.target.closest('[data-object-detach-contract-id]');
+    if(dc){detachContractFromProject(dc.dataset.objectDetachContractId,typeof currentObjectId!=='undefined'?currentObjectId:null);return;}
+    const dk=e.target.closest('[data-object-detach-kp-id]');
+    if(dk){detachKpFromProject(dk.dataset.objectDetachKpId,typeof currentObjectId!=='undefined'?currentObjectId:null);return;}
     const c=e.target.closest('[data-object-contract-id]');if(c){openContractHistoryFromAnywhere(c.dataset.objectContractId);return;}
     const k=e.target.closest('[data-object-kp-id]');if(k){loadKpFormById(k.dataset.objectKpId);}
   });
