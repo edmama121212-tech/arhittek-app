@@ -1073,7 +1073,10 @@ async function renderContractHistory(){
         <div class="li-name">Договор № ${escDoc(s.number||'без номера')} · ${escDoc(contractLabel(s.contract_type))}</div>
         <div class="li-meta">${p?escDoc(p)+' · ':''}${escDoc(s.client_name||'Без заказчика')} · ${escDoc(typeof fmtDateTime==='function'?fmtDateTime(r.created_at):r.created_at||'')}</div>
       </div>
-      <div class="li-actions"><button class="icon-btn" type="button" data-contract-history-id="${escDoc(r.id)}" title="Редактировать договор">✏️</button></div>
+      <div class="li-actions">
+        <button class="icon-btn" type="button" data-contract-history-id="${escDoc(r.id)}" title="Редактировать договор">✏️</button>
+        <button class="icon-btn danger" type="button" data-delete-contract-row="${escDoc(r.id)}" title="Удалить договор">🗑</button>
+      </div>
     </div>`;
   }).join('');
 }
@@ -1088,6 +1091,47 @@ async function loadContractVersion(rowId){
   applyContractSnapshot(s);
   showToast('Договор открыт для редактирования');
   window.scrollTo({top:0,behavior:'smooth'});
+}
+
+async function deleteSavedContract(rowId){
+  let row=contractHistoryRows.find(r=>String(r.id)===String(rowId));
+  if(!row){
+    const {data}=await sb.from('audit_log').select('*').eq('id',rowId).maybeSingle();
+    row=data;
+  }
+  if(!row) return;
+  const s=contractRowSnapshot(row)||{};
+  const label='Договор № '+(s.number||'без номера');
+  if(!confirm('Удалить '+label+'? Восстановить его из приложения будет нельзя.')) return;
+
+  try{
+    // Удаляем все записи этого договора, чтобы не осталось старых дублей.
+    const entityId=row.entity_id;
+    if(entityId){
+      const {error}=await sb.from('audit_log').delete().eq('entity_type','contract').eq('entity_id',entityId);
+      if(error) throw error;
+    }else{
+      const {error}=await sb.from('audit_log').delete().eq('id',row.id);
+      if(error) throw error;
+    }
+
+    editingContractId=null;
+    await queryContractHistory();
+    await renderContractHistory();
+
+    if(s.project_id){
+      await renderProjectContractList(s.project_id);
+      if(typeof currentObjectId!=='undefined' && currentObjectId===s.project_id){
+        await renderObjectDocuments(s.project_id);
+      }
+    }
+
+    showToast('Договор удалён');
+    newContractDraft();
+  }catch(e){
+    console.error(e);
+    showToast('Не удалось удалить договор');
+  }
 }
 async function saveContractVersion(){
   const s=contractSnapshotFromForm();
@@ -1207,7 +1251,7 @@ async function renderProjectContractList(projectId){
   await queryContractHistory();
   const rows=latestContractRowsForProject(projectId);
   if(!rows.length){list.innerHTML='<div class="empty-state">Договор пока не прикреплён</div>';return;}
-  list.innerHTML=rows.map(r=>{const s=contractRowSnapshot(r)||{};return `<div class="list-item"><div style="flex:1"><div class="li-name">Договор № ${escDoc(s.number||'без номера')}</div><div class="li-meta">${escDoc(contractLabel(s.contract_type))} · ${escDoc(s.client_name||'Без заказчика')}</div></div><div class="li-actions"><button type="button" class="icon-btn" data-open-contract-id="${escDoc(r.id)}" title="Открыть">✏️</button></div></div>`;}).join('');
+  list.innerHTML=rows.map(r=>{const s=contractRowSnapshot(r)||{};return `<div class="list-item"><div style="flex:1"><div class="li-name">Договор № ${escDoc(s.number||'без номера')}</div><div class="li-meta">${escDoc(contractLabel(s.contract_type))} · ${escDoc(s.client_name||'Без заказчика')}</div></div><div class="li-actions"><button type="button" class="icon-btn" data-open-contract-id="${escDoc(r.id)}" title="Открыть">✏️</button><button type="button" class="icon-btn danger" data-delete-project-contract-id="${escDoc(r.id)}" title="Удалить договор">🗑</button></div></div>`;}).join('');
 }
 function openContractsForProject(projectId){
   if(typeof closeProjectSheet==='function') closeProjectSheet();
@@ -1271,9 +1315,22 @@ if(contractView){
     pdf.textContent='Скачать PDF';
     const save=document.createElement('button');save.type='button';save.id='ct-save-history';save.className='btn btn-primary';save.style.marginBottom='8px';save.textContent='Сохранить договор';
     const word=document.createElement('button');word.type='button';word.id='ct-export-word';word.className='btn btn-secondary';word.style.marginBottom='8px';word.textContent='Скачать Word';
-    pdf.parentNode.insertBefore(save,pdf);pdf.parentNode.insertBefore(word,pdf);
+    const del=document.createElement('button');del.type='button';del.id='ct-delete-contract';del.className='btn btn-danger';del.style.marginTop='8px';del.textContent='Удалить договор';
+    pdf.parentNode.insertBefore(save,pdf);pdf.parentNode.insertBefore(word,pdf);pdf.parentNode.insertBefore(del,pdf.nextSibling);
+    del.addEventListener('click',async()=>{
+      if(!editingContractId){showToast('Сначала откройте сохранённый договор');return;}
+      await queryContractHistory();
+      const row=contractHistoryRows.find(r=>r.entity_id===editingContractId);
+      if(!row){showToast('Сохранённый договор не найден');return;}
+      deleteSavedContract(row.id);
+    });
   }
-  $('ct-history-list')?.addEventListener('click',e=>{const b=e.target.closest('[data-contract-history-id]');if(b)loadContractVersion(b.dataset.contractHistoryId);});
+  $('ct-history-list')?.addEventListener('click',e=>{
+    const del=e.target.closest('[data-delete-contract-row]');
+    if(del){ e.stopPropagation(); deleteSavedContract(del.dataset.deleteContractRow); return; }
+    const b=e.target.closest('[data-contract-history-id]');
+    if(b) loadContractVersion(b.dataset.contractHistoryId);
+  });
   $('ct-new')?.addEventListener('click',newContractDraft);
   $('ct-save-history')?.addEventListener('click',saveContractVersion);
   $('ct-export-word')?.addEventListener('click',exportContractToWord);
@@ -1291,7 +1348,12 @@ if(kpList && !$('pf-contract-list')){
   const btn=document.createElement('button');btn.type='button';btn.id='pf-create-contract';btn.className='btn btn-secondary';btn.textContent='+ Создать / прикрепить договор';
   attach.after(label,list,btn);
   $('pf-kp-attach-btn')?.addEventListener('click',attachKpToCurrentProject);
-  list.addEventListener('click',e=>{const b=e.target.closest('[data-open-contract-id]');if(b)openContractHistoryFromAnywhere(b.dataset.openContractId);});
+  list.addEventListener('click',e=>{
+    const del=e.target.closest('[data-delete-project-contract-id]');
+    if(del){deleteSavedContract(del.dataset.deleteProjectContractId);return;}
+    const b=e.target.closest('[data-open-contract-id]');
+    if(b)openContractHistoryFromAnywhere(b.dataset.openContractId);
+  });
   btn.addEventListener('click',()=>{if(editingProjectId)openContractsForProject(editingProjectId);});
 }
 
