@@ -6379,7 +6379,18 @@ async function deleteEmployee(){
   );
   if(linkedProjects.length){
     const names = linkedProjects.slice(0,3).map(p=>p.name).join(', ');
-    showToast('Нельзя удалить: сотрудник привязан к проектам' + (names ? ' — ' + names : '') + '. Сначала снимите назначения или переведите сотрудника в архив.');
+    const emp=state.employees.find(x=>x.id===editingEmployeeId);
+    const msg='Сотрудник участвует в '+linkedProjects.length+' проект(ах)'+(names?' — '+names:'')+'.\n\nУдалять его нельзя, иначе история проектов потеряет исполнителя. Перевести сотрудника в архив вместо удаления?';
+    if(confirm(msg)){
+      try{
+        const {error}=await sb.from('employees').update({active:false}).eq('id',editingEmployeeId);
+        if(error) throw error;
+        await logAudit('employee',editingEmployeeId,emp?emp.name:'','update',{active:{old:emp?.active!==false,new:false}});
+        showToast('Сотрудник переведён в архив. История проектов сохранена.');
+        closeEmployeeSheet();
+        await loadAll();
+      }catch(e){console.error(e);showToast('Не удалось перевести сотрудника в архив');}
+    }
     return;
   }
 
@@ -6816,9 +6827,12 @@ function renderConstruction(){
 // OBJECT DETAIL VIEW (separate screen)
 // ============================================================
 let currentObjectId = null;
+let constructionReturnScrollY = 0;
 let activeObjTab = 'materials';
 
 function openObjectView(id){
+  const activeView=document.querySelector('.view.active');
+  if(activeView?.id==='view-construction') constructionReturnScrollY=window.scrollY||0;
   currentObjectId = id;
   activeObjTab = 'materials';
   const p = state.projects.find(x=>x.id===id);
@@ -9588,7 +9602,8 @@ document.getElementById('objBack').addEventListener('click', ()=>{
   document.querySelector('.nav-btn[data-view="view-construction"]').classList.add('active');
   const fab = document.getElementById('addProjectFab');
   if(fab){ fab.style.display = ''; fab.title = 'Добавить объект'; }
-  window.scrollTo(0,0);
+  const y=constructionReturnScrollY||0;
+  requestAnimationFrame(()=>window.scrollTo(0,y));
 });
 
 document.querySelectorAll('.nav-btn').forEach(btn=>{
