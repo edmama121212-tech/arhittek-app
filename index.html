@@ -1138,7 +1138,7 @@
       <div class="field" style="margin-bottom:0;">
         <label>Подставить данные из проекта</label>
         <select id="ct-project"><option value="">— не выбран —</option></select>
-        <div class="hint" style="margin-top:6px;">Подставит объект, цену и даты. Данные заказчика всё равно нужно ввести вручную ниже.</div>
+        <div class="hint" style="margin-top:6px;">Подставит тип договора, заказчика, телефон, объект, цену и даты из карточки проекта.</div>
       </div>
     </div>
 
@@ -4108,8 +4108,10 @@ function renderProjects(){
   if(activeCategoryFilter !== 'all') list = list.filter(p=>p.category_id === activeCategoryFilter);
   if(activeStatusFilter !== 'all') list = list.filter(p=>p.status_id === activeStatusFilter);
   if(activePaymentFilter !== 'all') list = list.filter(p=>(p.payment_status||'Ждём оплату') === activePaymentFilter);
-  if(activeEmployeeFilter === 'none') list = list.filter(p=>!p.employee_id && !p.co_employee_id);
-  else if(activeEmployeeFilter !== 'all') list = list.filter(p=>p.employee_id === activeEmployeeFilter || p.co_employee_id === activeEmployeeFilter);
+  const hasAnyAssignedEmployee = p => !!(p.employee_id || p.co_employee_id || (state.projectMembers||[]).some(m=>m.project_id===p.id));
+  const employeeParticipates = (p, employeeId) => p.employee_id === employeeId || p.co_employee_id === employeeId || (state.projectMembers||[]).some(m=>m.project_id===p.id && m.employee_id===employeeId);
+  if(activeEmployeeFilter === 'none') list = list.filter(p=>!hasAnyAssignedEmployee(p));
+  else if(activeEmployeeFilter !== 'all') list = list.filter(p=>employeeParticipates(p, activeEmployeeFilter));
 
   if(projectSearchQuery.trim()){
     const q = projectSearchQuery.trim().toLowerCase();
@@ -4155,8 +4157,8 @@ function renderProjects(){
   // Group projects without an assigned executor into a separate section
   // (only when not already filtering by a specific employee)
   if(activeEmployeeFilter === 'all'){
-    const withEmp = list.filter(p=>p.employee_id);
-    const withoutEmp = list.filter(p=>!p.employee_id);
+    const withEmp = list.filter(p=>hasAnyAssignedEmployee(p));
+    const withoutEmp = list.filter(p=>!hasAnyAssignedEmployee(p));
     let html = withEmp.map(renderProjectRow).join('');
     if(withoutEmp.length){
       html += `<div class="section-label" style="margin:14px 0 10px;"><span class="lbl-text">Без исполнителя</span><span class="section-label-line"></span></div>`;
@@ -4560,6 +4562,15 @@ async function saveProject(){
   if((payload.expenses||0) < 0 || payload.fee_paid < 0 || payload.co_fee_paid < 0){
     showToast('Сумма не может быть отрицательной');
     return;
+  }
+
+  // Если проект переводят в «Завершён» без даты сдачи, фиксируем фактический день.
+  // Иначе начисления могли попасть в табель за месяц создания проекта.
+  const selectedStatusForSave = findStatus(payload.status_id);
+  if(selectedStatusForSave && selectedStatusForSave.name === 'Завершён' && !payload.end_date){
+    payload.end_date = new Date().toISOString().slice(0,10);
+    const endField = document.getElementById('pf-end');
+    if(endField) endField.value = payload.end_date;
   }
 
   if([payload.fee_percent,payload.co_fee_percent].some(v=>v!==null&&(!Number.isFinite(v)||v<0||v>100))||(Number(payload.fee_percent)||0)+(Number(payload.co_fee_percent)||0)>100){showToast('Сумма долей должна быть от 0 до 100%');return;}
@@ -5787,7 +5798,7 @@ async function addProjectRolePayout(){
 async function deleteProjectRolePayout(entryId, projectId){
   if(!confirm('Удалить это начисление?')) return;
   try{
-    const {error:payoutDeleteError}=await sb.from('ledger_entries').delete().eq('id', entryId);
+    const {error:payoutDeleteError}=await sb.from('ledger_entries').update({deleted_at:new Date().toISOString()}).eq('id', entryId);
     if(payoutDeleteError) throw payoutDeleteError;
     await loadAll();
     const total = await syncProjectExpensesTotal(projectId);
@@ -5844,7 +5855,7 @@ async function addProjectExpense(){
 async function deleteProjectExpense(entryId, projectId){
   if(!confirm('Удалить этот расход?')) return;
   try{
-    const {error:payoutDeleteError}=await sb.from('ledger_entries').delete().eq('id', entryId);
+    const {error:payoutDeleteError}=await sb.from('ledger_entries').update({deleted_at:new Date().toISOString()}).eq('id', entryId);
     if(payoutDeleteError) throw payoutDeleteError;
     await loadAll();
     const total = await syncProjectExpensesTotal(projectId);
@@ -6184,7 +6195,7 @@ function renderEmployees(){
     return;
   }
   card.innerHTML = list.map(e=>{
-    const count = state.projects.filter(p=>p.employee_id===e.id).length;
+    const count = state.projects.filter(p=>p.employee_id===e.id || p.co_employee_id===e.id || (state.projectMembers||[]).some(m=>m.project_id===p.id && m.employee_id===e.id)).length;
     return `<div class="list-item">
       <div>
         <div class="li-name">${escapeHtml(e.name)}${e.active===false?' <span style="color:var(--text-dim); font-weight:400;">(архив)</span>':''}</div>
@@ -6324,6 +6335,18 @@ async function saveEmployee(){
 async function deleteEmployee(){
   if(!session?.isAdmin){showToast("Требуются права администратора");return;}
   if(!editingEmployeeId) return;
+
+  const linkedProjects = state.projects.filter(p=>
+    p.employee_id===editingEmployeeId ||
+    p.co_employee_id===editingEmployeeId ||
+    (state.projectMembers||[]).some(m=>m.project_id===p.id && m.employee_id===editingEmployeeId)
+  );
+  if(linkedProjects.length){
+    const names = linkedProjects.slice(0,3).map(p=>p.name).join(', ');
+    showToast('Нельзя удалить: сотрудник привязан к проектам' + (names ? ' — ' + names : '') + '. Сначала снимите назначения или переведите сотрудника в архив.');
+    return;
+  }
+
   try{
     const emp = state.employees.find(x=>x.id===editingEmployeeId);
     const {error} = await sb.from('employees').update({deleted_at: new Date().toISOString()}).eq('id', editingEmployeeId);
@@ -8469,11 +8492,24 @@ document.querySelectorAll('#contract-type .yn-btn').forEach(btn=>{
 document.getElementById('ct-project').addEventListener('change', (e)=>{
   const p = state.projects.find(x=>x.id===e.target.value);
   if(!p) return;
+
+  // Тип договора определяем по направлению проекта.
+  const cat = findCategory(p.category_id);
+  const catName = (cat?.name||'').toLowerCase();
+  let suggestedType = 'ar';
+  if(isConstructionCategory(p.category_id)) suggestedType = 'st';
+  else if(catName.includes('дизайн') && !catName.includes('ландшафт')) suggestedType = 'di';
+  else suggestedType = 'ar';
+  contractType = suggestedType;
+  document.querySelectorAll('#contract-type .yn-btn').forEach(b=>b.classList.toggle('selected',b.dataset.value===contractType));
+
   document.getElementById('ct-object').value = p.address || p.name || '';
   if(p.price) document.getElementById('ct-price').value = p.price;
   if(p.start_date) document.getElementById('ct-start').value = p.start_date;
   if(p.end_date) document.getElementById('ct-end').value = p.end_date;
   if(p.phone) document.getElementById('ct-phone').value = p.phone;
+  if(p.client_name && !p.contract_client_name) document.getElementById('ct-client-name').value = p.client_name;
+  if(!p.contract_scope) fillContractDefaults();
   // Restore saved contract data for this project
   if(p.contract_client_name) document.getElementById('ct-client-name').value = p.contract_client_name;
   if(p.contract_passport) document.getElementById('ct-passport').value = p.contract_passport;
@@ -8505,15 +8541,9 @@ async function saveContractFields(){
   await sb.from('projects').update(fields).eq('id', projectId);
 }
 function scheduleContractSave(){
-  if(contractSaveTimer) clearTimeout(contractSaveTimer);
-  contractSaveTimer = setTimeout(saveContractFields, 1500);
+  // Намеренно отключено: договор сохраняется только по явной кнопке «Сохранить договор».
+  // Так пользователь не получает частично сохранённый документ после случайного выхода.
 }
-['ct-client-name','ct-passport','ct-birthdate','ct-passport-issuer','ct-passport-date',
- 'ct-address','ct-scope','ct-advance-pct','ct-number'].forEach(id=>{
-  const el = document.getElementById(id);
-  if(el) el.addEventListener('input', scheduleContractSave);
-  if(el) el.addEventListener('change', scheduleContractSave);
-});
 
 function numToWordsRub(n){
   return fmtMoney(n) + ' руб.';
@@ -9502,7 +9532,7 @@ function openKpViewForProject(projectId){
   editingKpProjectId = projectId;
 
   openKpView();
-  document.getElementById('kp-client-name').value = '';
+  document.getElementById('kp-client-name').value = p.client_name || '';
   document.getElementById('kp-client-phone').value = p.phone || '';
   document.getElementById('kp-object').value = p.address || p.name || '';
 }
