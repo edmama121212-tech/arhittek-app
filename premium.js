@@ -1420,9 +1420,10 @@ async function renderObjectDocuments(projectId){
   const kps=(state?.kpForms||[]).filter(k=>k.project_id===projectId);
   const cHtml=contracts.length?contracts.map(r=>{const s=contractRowSnapshot(r)||{};return `<div class="list-item"><div style="flex:1"><div class="li-name">Договор № ${escDoc(s.number||'без номера')}</div><div class="li-meta">${escDoc(s.client_name||'Без заказчика')}</div></div><button class="icon-btn" type="button" data-object-contract-id="${escDoc(r.id)}">✏️</button></div>`;}).join(''):'<div class="empty-state">Договоров нет</div>';
   const kHtml=kps.length?kps.map(k=>`<div class="list-item"><div style="flex:1"><div class="li-name">КП · ${escDoc(k.client_name||'Без имени')}</div><div class="li-meta">${escDoc(typeof fmtDate==='function'?fmtDate(k.kp_date):k.kp_date||'')} · ${escDoc(typeof fmtMoney==='function'?fmtMoney(kpRowSummary(k)):kpRowSummary(k))}</div></div><button class="icon-btn" type="button" data-object-kp-id="${escDoc(k.id)}">✏️</button></div>`).join(''):'<div class="empty-state">КП нет</div>';
-  box.innerHTML=`<div class="project-eyebrow">Договоры</div>${cHtml}<div class="project-eyebrow" style="margin-top:12px">Коммерческие предложения</div>${kHtml}<div class="btn-row" style="margin-top:10px"><button class="btn btn-secondary" type="button" id="objNewContractBtn">+ Договор</button><button class="btn btn-secondary" type="button" id="objNewKpBtn">+ КП</button></div>`;
+  box.innerHTML=`<div class="project-eyebrow">Договоры</div>${cHtml}<div class="project-eyebrow" style="margin-top:12px">Коммерческие предложения</div>${kHtml}<div class="btn-row" style="margin-top:10px"><button class="btn btn-secondary" type="button" id="objNewContractBtn">+ Договор</button><button class="btn btn-secondary" type="button" id="objNewKpBtn">+ КП</button></div><button class="btn btn-secondary" type="button" id="objDownloadPriceBtn" style="margin-top:8px">Скачать прайс по направлению</button>`;
   $('objNewContractBtn')?.addEventListener('click',()=>openContractsForProject(projectId));
   $('objNewKpBtn')?.addEventListener('click',()=>openKpViewForProject(projectId));
+  $('objDownloadPriceBtn')?.addEventListener('click',()=>window.openPriceListSheet?.(projectId));
 }
 
 // Inject contract history/actions.
