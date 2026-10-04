@@ -1306,7 +1306,13 @@ if(typeof saveKpForm==='function'){
   saveKpForm=async function(){if($('kp-project-link'))editingKpProjectId=$('kp-project-link').value||null;const r=await old.apply(this,arguments);if(editingKpProjectId){renderKpListForProject(editingKpProjectId);if(typeof currentObjectId!=='undefined'&&currentObjectId===editingKpProjectId)renderObjectDocuments(editingKpProjectId);}return r;};
 }
 
-window.openContractsForProject=openContractsForProject;
-window.renderProjectContractList=renderProjectContractList;
-window.exportContractToWord=exportContractToWord;
+// Existing addEventListener bindings in index.html keep the original function reference,
+ // so refresh the enhanced UI explicitly after those legacy handlers run.
+ $('openContractsBtn')?.addEventListener('click',()=>setTimeout(renderContractHistory,0));
+ $('kpNewBtn')?.addEventListener('click',()=>setTimeout(()=>{editingKpProjectId=null;refreshKpProjectSelect();if($('kp-project-link'))$('kp-project-link').value='';},0));
+ $('openKpBtn')?.addEventListener('click',()=>setTimeout(refreshKpProjectSelect,0));
+
+ window.openContractsForProject=openContractsForProject;
+ window.renderProjectContractList=renderProjectContractList;
+ window.exportContractToWord=exportContractToWord;
 })();
