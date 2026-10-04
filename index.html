@@ -5601,6 +5601,27 @@ function renderPaymentHistory(projectId){
 }
 
 // ---- Расходы проекта (несколько записей: на что + сумма + дата) ----
+let editingProjectExpenseId = null;
+
+function editProjectExpense(entryId){
+  const e=(state.ledger||[]).find(x=>x.id===entryId && x.type==='project_expense');
+  if(!e) return;
+  editingProjectExpenseId=entryId;
+  document.getElementById('pf-expense-desc').value=e.description||'';
+  document.getElementById('pf-expense-amount').value=e.amount||'';
+  document.getElementById('pf-expense-date').value=e.entry_date||'';
+  const btn=document.getElementById('pf-expense-add-btn');
+  if(btn) btn.textContent='Сохранить изменение';
+  document.getElementById('pf-expense-desc')?.focus();
+}
+
+function resetProjectExpenseEditor(){
+  editingProjectExpenseId=null;
+  const btn=document.getElementById('pf-expense-add-btn');
+  if(btn) btn.textContent='Добавить расход';
+  ['pf-expense-desc','pf-expense-amount','pf-expense-date'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+}
+
 function renderProjectExpenses(projectId){
   const el = document.getElementById('pf-expenses-list');
   if(!el) return;
