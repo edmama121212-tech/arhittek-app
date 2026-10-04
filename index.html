@@ -5341,9 +5341,11 @@ async function deleteCompanyExpense(){
   if(!editingCompanyExpenseId) return;
   if(!confirm('Удалить этот расход? Его можно будет восстановить из корзины.')) return;
   try{
+    const before=(state.companyExpenses||[]).find(x=>x.id===editingCompanyExpenseId);
     const {error} = await sb.from('company_expenses').update({deleted_at: new Date().toISOString()}).eq('id', editingCompanyExpenseId);
     if(error) throw error;
-    showToast('Расход удалён');
+    await logAudit('company_expense',editingCompanyExpenseId,before?((before.category||'Расход')+(before.description?' — '+before.description:'')):'Расход компании','delete',{});
+    showToast('Расход перемещён в корзину');
     closeCompanyExpenseSheet();
     await loadAll();
     financeExpanded = true;
@@ -5442,11 +5444,13 @@ async function saveCompanyIncome(){
 async function deleteCompanyIncome(){
   if(!session?.isAdmin){showToast("Требуются права администратора");return;}
   if(!editingCompanyIncomeId) return;
-  if(!confirm('Удалить эту запись о доходе?')) return;
+  if(!confirm('Удалить эту запись о доходе? Её можно будет восстановить из корзины.')) return;
   try{
+    const before=(state.companyIncome||[]).find(x=>x.id===editingCompanyIncomeId);
     const {error} = await sb.from('company_income').update({deleted_at: new Date().toISOString()}).eq('id', editingCompanyIncomeId);
     if(error) throw error;
-    showToast('Запись удалена');
+    await logAudit('company_income',editingCompanyIncomeId,before?((before.category||'Доход')+(before.description?' — '+before.description:'')):'Доход компании','delete',{});
+    showToast('Доход перемещён в корзину');
     closeCompanyIncomeSheet();
     await loadAll();
     financeExpanded = true;
