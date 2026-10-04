@@ -70,6 +70,7 @@ await test('company income goes to trash and restores',async()=>{openCompanyInco
 await test('negative tariff',async()=>{openTariffSheet(null,'Архитектура','Тест',-10,'м²','');await saveTariff();return (__db.kp_catalog||[]).length},0);
 await test('tariff saves',async()=>{document.getElementById('tf-rate').value='1500';await saveTariff();return __db.kp_catalog[0].rate},1500);
 await test('tariff feeds proposal',()=>kpFlatCatalog().some(x=>x.name==='Тест'&&x.rate===1500),true);
+await test('tariff goes to trash and restores',async()=>{openTariffSheet(__db.kp_catalog[0].id);await deleteTariff();await loadDeferredData();const row=state.trash.tariffs[0];await restoreItem('kp_catalog',row.id,'Тест');return !__db.kp_catalog[0].deleted_at&&kpFlatCatalog().some(x=>x.name==='Тест')},true);
 await test('soft delete',async()=>{openProjectSheet(__db.projects[0].id);await deleteProject();return !!__db.projects[0].deleted_at},true);
 await test('restore project',async()=>{await restoreItem('projects',__db.projects[0].id,'Тест');return !__db.projects[0].deleted_at},true);
 await test('financial load failure visible',async()=>{__fail={table:'company_expenses',op:'select'};await loadAll();const off=document.getElementById('syncDot').classList.contains('off');__fail=null;await loadAll();return off},true);
