@@ -8059,7 +8059,7 @@ function renderKpListForProject(projectId){
       </div>
       <div class="li-actions">
         <button class="icon-btn" title="Редактировать" onclick="loadKpFormById('${kp.id}')">✏️</button>
-        <button class="icon-btn danger" title="Удалить" onclick="deleteKpForm('${kp.id}')">🗑</button>
+        <button class="icon-btn" title="Открепить от проекта" onclick="detachKpFromProject('${kp.id}','${projectId}')">🔗</button>
       </div>
     </div>`;
   }).join('');
