@@ -7361,10 +7361,6 @@ async function deleteInvoiceSheet(){
   }catch(e){ console.error(e); showToast('Ошибка удаления'); }
 }
 
-// Закрытие оверлея по клику на фон
-document.getElementById('invoiceSheetOverlay').addEventListener('click', function(e){
-  if(e.target === this) closeInvoiceSheet();
-});
 
 async function exportConstrPdf(projectId){
   const p = state.projects.find(x=>x.id===projectId);
@@ -9578,21 +9574,20 @@ document.getElementById('pf-open-as-object').addEventListener('click', ()=>{
     openObjectView(editingProjectId);
   }
 });
+
+// UX rule: рабочие окна не закрываются кликом по затемнённому фону.
+// Закрытие только явной кнопкой × / Отмена / Назад, чтобы случайный клик
+// не приводил к потере введённых данных.
+
 document.getElementById('projectSheetClose').addEventListener('click', closeProjectSheet);
 document.getElementById('pf-cancel').addEventListener('click', closeProjectSheet);
 document.getElementById('pf-save').addEventListener('click', saveProject);
 document.getElementById('pf-delete').addEventListener('click', ()=>{
   if(confirm('Переместить этот проект в корзину?')) deleteProject();
 });
-document.getElementById('projectSheetOverlay').addEventListener('click', (e)=>{
-  if(e.target.id === 'projectSheetOverlay') closeProjectSheet();
-});
 document.getElementById('pf-tz-create').addEventListener('click', createTzForm);
 document.getElementById('tzSheetClose').addEventListener('click', ()=>{
   document.getElementById('tzSheetOverlay').classList.remove('active');
-});
-document.getElementById('tzSheetOverlay').addEventListener('click', (e)=>{
-  if(e.target.id === 'tzSheetOverlay') document.getElementById('tzSheetOverlay').classList.remove('active');
 });
 
 document.getElementById('addEmployeeBtn').addEventListener('click', ()=>openEmployeeSheet(null));
@@ -9606,9 +9601,6 @@ document.getElementById('ef-pin').addEventListener('input', (e)=>{
   e.target.value = e.target.value.replace(/\D/g,'').slice(0,6);
 });
 
-document.getElementById('empSheetOverlay').addEventListener('click', (e)=>{
-  if(e.target.id === 'empSheetOverlay') closeEmployeeSheet();
-});
 
 document.getElementById('addCategoryBtn').addEventListener('click', ()=>openCategorySheet(null));
 document.getElementById('catSheetClose').addEventListener('click', closeCategorySheet);
@@ -9616,9 +9608,6 @@ document.getElementById('cf-cancel').addEventListener('click', closeCategoryShee
 document.getElementById('cf-save').addEventListener('click', saveCategory);
 document.getElementById('cf-delete').addEventListener('click', ()=>{
   if(confirm('Удалить эту категорию?')) deleteCategory();
-});
-document.getElementById('catSheetOverlay').addEventListener('click', (e)=>{
-  if(e.target.id === 'catSheetOverlay') closeCategorySheet();
 });
 
 document.getElementById('addTariffBtn').addEventListener('click', ()=>openTariffSheet(null));
@@ -9628,25 +9617,16 @@ document.getElementById('tf-save').addEventListener('click', saveTariff);
 document.getElementById('tf-delete').addEventListener('click', ()=>{
   if(confirm('Удалить этот тариф?')) deleteTariff();
 });
-document.getElementById('tariffSheetOverlay').addEventListener('click', (e)=>{
-  if(e.target.id === 'tariffSheetOverlay') closeTariffSheet();
-});
 
 document.getElementById('companyExpenseSheetClose').addEventListener('click', closeCompanyExpenseSheet);
 document.getElementById('cex-cancel').addEventListener('click', closeCompanyExpenseSheet);
 document.getElementById('cex-save').addEventListener('click', saveCompanyExpense);
 document.getElementById('cex-delete').addEventListener('click', deleteCompanyExpense);
-document.getElementById('companyExpenseSheetOverlay').addEventListener('click', (e)=>{
-  if(e.target.id === 'companyExpenseSheetOverlay') closeCompanyExpenseSheet();
-});
 
 document.getElementById('companyIncomeSheetClose').addEventListener('click', closeCompanyIncomeSheet);
 document.getElementById('cin-cancel').addEventListener('click', closeCompanyIncomeSheet);
 document.getElementById('cin-save').addEventListener('click', saveCompanyIncome);
 document.getElementById('cin-delete').addEventListener('click', deleteCompanyIncome);
-document.getElementById('companyIncomeSheetOverlay').addEventListener('click', (e)=>{
-  if(e.target.id === 'companyIncomeSheetOverlay') closeCompanyIncomeSheet();
-});
 
 // ledgerAdd listener removed
 
