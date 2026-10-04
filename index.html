@@ -9766,9 +9766,7 @@ document.getElementById('addEmployeeBtn').addEventListener('click', ()=>openEmpl
 document.getElementById('empSheetClose').addEventListener('click', closeEmployeeSheet);
 document.getElementById('ef-cancel').addEventListener('click', closeEmployeeSheet);
 document.getElementById('ef-save').addEventListener('click', saveEmployee);
-document.getElementById('ef-delete').addEventListener('click', ()=>{
-  if(confirm('Удалить этого сотрудника?')) deleteEmployee();
-});
+document.getElementById('ef-delete').addEventListener('click', deleteEmployee);
 document.getElementById('ef-pin').addEventListener('input', (e)=>{
   e.target.value = e.target.value.replace(/\D/g,'').slice(0,6);
 });
@@ -9778,17 +9776,13 @@ document.getElementById('addCategoryBtn').addEventListener('click', ()=>openCate
 document.getElementById('catSheetClose').addEventListener('click', closeCategorySheet);
 document.getElementById('cf-cancel').addEventListener('click', closeCategorySheet);
 document.getElementById('cf-save').addEventListener('click', saveCategory);
-document.getElementById('cf-delete').addEventListener('click', ()=>{
-  if(confirm('Удалить эту категорию?')) deleteCategory();
-});
+document.getElementById('cf-delete').addEventListener('click', deleteCategory);
 
 document.getElementById('addTariffBtn').addEventListener('click', ()=>openTariffSheet(null));
 document.getElementById('tariffSheetClose').addEventListener('click', closeTariffSheet);
 document.getElementById('tf-cancel').addEventListener('click', closeTariffSheet);
 document.getElementById('tf-save').addEventListener('click', saveTariff);
-document.getElementById('tf-delete').addEventListener('click', ()=>{
-  if(confirm('Удалить этот тариф?')) deleteTariff();
-});
+document.getElementById('tf-delete').addEventListener('click', deleteTariff);
 
 document.getElementById('companyExpenseSheetClose').addEventListener('click', closeCompanyExpenseSheet);
 document.getElementById('cex-cancel').addEventListener('click', closeCompanyExpenseSheet);
