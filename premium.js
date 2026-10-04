@@ -165,6 +165,7 @@ sheet.addEventListener('click',e=>{
      if(area) $('pf-rp-area').value=area;
      if(rate) $('pf-rp-rate').value=rate;
      $('pf-rp-add-btn').textContent='Сохранить изменение';
+     payoutCancel.style.display='';
      refresh();
    }
    return;
@@ -191,8 +192,27 @@ const oldSave=saveProject;saveProject=async function(){
  $('pf-save').disabled=true;try{await oldSave();}finally{$('pf-save').disabled=false;}
 };
 $('pf-save').removeEventListener('click',oldSave);$('pf-save').addEventListener('click',()=>saveProject());
-const oldDelete=deleteProjectRolePayout;deleteProjectRolePayout=async function(id,pid){if(!session?.isAdmin){showToast('Расчёт команды изменяет администратор');return;}if(editingRolePayoutId===id){editingRolePayoutId=null;$('pf-rp-add-btn').textContent='Добавить сотрудника';}await oldDelete(id,pid);refresh();};
+const oldDelete=deleteProjectRolePayout;deleteProjectRolePayout=async function(id,pid){if(!session?.isAdmin){showToast('Расчёт команды изменяет администратор');return;}if(editingRolePayoutId===id){resetRolePayoutEditor();}await oldDelete(id,pid);refresh();};
 const oldAdd=addProjectRolePayout;let adding=false,editingRolePayoutId=null;
+let payoutCancel=$('pf-rp-cancel-edit');
+if(!payoutCancel){
+ payoutCancel=document.createElement('button');
+ payoutCancel.type='button';payoutCancel.id='pf-rp-cancel-edit';payoutCancel.className='btn btn-secondary';
+ payoutCancel.style.cssText='display:none;width:auto;white-space:nowrap;margin-bottom:0;padding:11px 12px;';
+ payoutCancel.textContent='Отмена';
+ $('pf-rp-add-btn').after(payoutCancel);
+}
+function resetRolePayoutEditor(){
+ editingRolePayoutId=null;
+ $('pf-rp-employee').value='';
+ $('pf-rp-rate').value='400';
+ const p=state.projects.find(x=>x.id===editingProjectId);
+ if(p)$('pf-rp-area').value=p.area||'';
+ $('pf-rp-add-btn').textContent='Добавить сотрудника';
+ payoutCancel.style.display='none';
+ refresh();
+}
+payoutCancel.addEventListener('click',resetRolePayoutEditor);
 addProjectRolePayout=async function(){
  if(!session?.isAdmin){showToast('Расчёт команды изменяет администратор');return;}
  if(adding)return;
@@ -232,6 +252,7 @@ addProjectRolePayout=async function(){
     await logAudit('project',projectId,p.name,'update',{role_payout_added:{old:null,new:description+' — '+fmtMoney(amount)}});
   }
   editingRolePayoutId=null;
+  payoutCancel.style.display='none';
   await loadAll();
   if(editingProjectId===projectId){renderProjectRolePayouts(projectId);$('pf-rp-rate').value='400';$('pf-rp-area').value=p.area;$('pf-rp-employee').value='';$('pf-rp-add-btn').textContent='Добавить сотрудника';refresh();}
   showToast(wasEditing?'Начисление изменено':'В расчёт добавлено '+fmtMoney(amount)+'. В табель — после завершения проекта.');
@@ -2162,6 +2183,16 @@ window.__arhittekClearSavedRoute=()=>{try{sessionStorage.removeItem(ROUTE_KEY);}
         e.preventDefault();e.stopImmediatePropagation();
         return;
       }
+    }
+
+    const leavesProject=e.target.closest?.('#pf-create-kp,#pf-create-contract,#pf-open-as-object');
+    const projectOverlay=document.getElementById('projectSheetOverlay');
+    if(leavesProject && projectOverlay?.classList.contains('active') && projectOverlay.dataset.dirty==='1'){
+      if(!confirm('В карточке проекта есть несохранённые изменения. Продолжить и потерять их?')){
+        e.preventDefault();e.stopImmediatePropagation();
+        return;
+      }
+      projectOverlay.dataset.dirty='0';
     }
 
     const back=e.target.closest?.('#kpBack,#contractsBack');
