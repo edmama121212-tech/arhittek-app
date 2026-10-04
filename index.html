@@ -2220,7 +2220,7 @@ let state = {
   companyIncome: [],
   projectStages: [],
   projectMembers: [],
-  trash: {projects:[], employees:[], categories:[], ledger:[], companyExpenses:[], companyIncome:[]},
+  trash: {projects:[], employees:[], categories:[], ledger:[], companyExpenses:[], companyIncome:[], tariffs:[]},
 };
 window.state = state; // экспорт для enhancement-блока (бэкфилл этапов и пр.)
 
@@ -3211,7 +3211,7 @@ async function loadAll(){
 // (обычно скрытые) секции, что и renderAll(), когда данные приходят.
 async function loadDeferredData(){
   try{
-    const [hist, trashProj, trashEmp, trashCat, trashLed, trashCompanyExpenses, trashCompanyIncome] = await Promise.all([
+    const [hist, trashProj, trashEmp, trashCat, trashLed, trashCompanyExpenses, trashCompanyIncome, trashTariffs] = await Promise.all([
       sb.from('audit_log').select('*').order('created_at', {ascending:false}).limit(5000),
       sb.from('projects').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
       fetchEmployeesResilient(q => q.not('deleted_at', 'is', null).order('deleted_at', {ascending:false})),
@@ -3219,6 +3219,7 @@ async function loadDeferredData(){
       sb.from('ledger_entries').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
       sb.from('company_expenses').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
       sb.from('company_income').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
+      sb.from('kp_catalog').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
     ]);
     state.history = hist.error ? [] : (hist.data || []);
     state.trash = {
@@ -3228,6 +3229,7 @@ async function loadDeferredData(){
       ledger: trashLed.error ? [] : (trashLed.data || []),
       companyExpenses: trashCompanyExpenses.error ? [] : (trashCompanyExpenses.data || []),
       companyIncome: trashCompanyIncome.error ? [] : (trashCompanyIncome.data || []),
+      tariffs: trashTariffs.error ? [] : (trashTariffs.data || []),
     };
     // Loading must not trigger irreversible deletions from trash.
     renderHistory();
@@ -6638,11 +6640,13 @@ async function saveTariff(){
 async function deleteTariff(){
   if(!session?.isAdmin){showToast("Требуются права администратора");return;}
   if(!editingTariffId) return;
-  if(!confirm('Удалить этот тариф?')) return;
+  if(!confirm('Переместить тариф в корзину? Его можно будет восстановить.')) return;
   try{
+    const before=(state.kpCatalog||[]).find(x=>x.id===editingTariffId);
     const {error} = await sb.from('kp_catalog').update({deleted_at: new Date().toISOString()}).eq('id', editingTariffId);
     if(error) throw error;
-    showToast('Тариф удалён');
+    await logAudit('tariff',editingTariffId,before?((before.group_name||'Прайс')+' — '+(before.name||'Тариф')):'Тариф','delete',{});
+    showToast('Тариф перемещён в корзину');
     closeTariffSheet();
     await loadAll();
   }catch(e){
@@ -7778,7 +7782,7 @@ function renderHistory(){
 // ============================================================
 function renderTrash(){
   const card = document.getElementById('trashCard');
-  const total = state.trash.projects.length + state.trash.employees.length + state.trash.categories.length + state.trash.ledger.length + (state.trash.companyExpenses||[]).length + (state.trash.companyIncome||[]).length;
+  const total = state.trash.projects.length + state.trash.employees.length + state.trash.categories.length + state.trash.ledger.length + (state.trash.companyExpenses||[]).length + (state.trash.companyIncome||[]).length + (state.trash.tariffs||[]).length;
   if(!total){
     card.innerHTML = '<div class="empty-state">Корзина пуста</div>';
     return;
@@ -7856,6 +7860,18 @@ function renderTrash(){
       </div>
     </div>`;
   });
+  (state.trash.tariffs||[]).forEach(t=>{
+    const name=(t.group_name||'Прайс')+' — '+(t.name||'Тариф');
+    html += `<div class="trash-item">
+      <div>
+        <div class="li-name">${escapeHtml(name)}</div>
+        <div class="li-meta">Тариф · ${fmtMoney(t.rate||0)} / ${escapeHtml(t.unit||'м²')} · удалён ${fmtDateTime(t.deleted_at)}</div>
+      </div>
+      <div class="li-actions">
+        <button class="icon-btn" onclick="restoreItem('kp_catalog','${t.id}','${escapeHtml(name)}')">↺ Восстановить</button>
+      </div>
+    </div>`;
+  });
   card.innerHTML = html;
 }
 
@@ -7866,6 +7882,7 @@ const entityTypeMap = {
   ledger_entries: 'ledger_entry',
   company_expenses: 'company_expense',
   company_income: 'company_income',
+  kp_catalog: 'tariff',
 };
 
 async function restoreItem(table, id, name){
