@@ -6413,6 +6413,7 @@ async function deleteEmployee(){
     return;
   }
 
+  if(!confirm('Переместить сотрудника в корзину? Его можно будет восстановить.')) return;
   try{
     const emp = state.employees.find(x=>x.id===editingEmployeeId);
     const {error} = await sb.from('employees').update({deleted_at: new Date().toISOString()}).eq('id', editingEmployeeId);
@@ -6527,6 +6528,7 @@ async function deleteCategory(){
       showToast('Нельзя удалить — есть проекты с этой категорией');
       return;
     }
+    if(!confirm('Переместить категорию в корзину? Её можно будет восстановить.')) return;
     const {error} = await sb.from('categories').update({deleted_at: new Date().toISOString()}).eq('id', editingCategoryId);
     if(error) throw error;
     await logAudit('category', editingCategoryId, cat?cat.name:'', 'delete', {});
