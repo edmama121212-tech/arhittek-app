@@ -769,7 +769,6 @@ function financeSheet(){
     </div>`;
   document.body.appendChild(o);
   $('financeControlClose').onclick=closeFinanceControl;
-  o.addEventListener('click',e=>{if(e.target===o) closeFinanceControl();});
   return o;
 }
 function closeFinanceControl(){
