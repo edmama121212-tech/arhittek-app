@@ -7780,11 +7780,6 @@ function renderTrash(){
 
   // Корзина хранит записи до явного восстановления/ручного обслуживания базы.
   let html = '';
-  if(soonDeleted.length){
-    html += `<div style="background:rgba(224,82,82,0.12); border:1px solid rgba(224,82,82,0.3); border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:12px; color:var(--red);">
-      ⚠ ${soonDeleted.length} эл. будут удалены навсегда в течение ${WARNING_DAYS} дней — восстановите если нужно.
-    </div>`;
-  }
 
   state.trash.projects.forEach(p=>{
     html += `<div class="trash-item">
