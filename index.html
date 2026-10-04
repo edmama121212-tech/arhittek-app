@@ -1741,6 +1741,7 @@
           <input type="date" id="pf-expense-date">
         </div>
         <button class="btn btn-secondary" type="button" id="pf-expense-add-btn" style="width:auto; white-space:nowrap; margin-bottom:0; padding:11px 16px;">+ Расход</button>
+            <button class="btn btn-secondary" type="button" id="pf-expense-cancel-edit" style="display:none;width:auto;white-space:nowrap;margin-bottom:0;padding:11px 12px;">Отмена</button>
       </div>
     </div>
     </div>
@@ -1997,12 +1998,12 @@
     <div class="field" id="ef-salary-field" style="display:none;">
       <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:8px;">
         <input type="checkbox" id="ef-is-salaried" style="width:18px;height:18px;cursor:pointer;" onchange="document.getElementById('ef-fixed-salary-row').style.display=this.checked?'':'none';">
-        <span>Фиксированная ЗП вместо % от проектов (например, Ген. директор)</span>
+        <span>Фиксированная ЗП без проектных доплат (например, Ген. директор)</span>
       </label>
       <div id="ef-fixed-salary-row" style="display:none;">
         <label>Сумма фиксированной ЗП в месяц, ₽</label>
         <input type="number" id="ef-fixed-salary" placeholder="50000">
-        <div class="hint" style="margin-top:4px;">Сотрудник будет получать эту сумму из заработанного по своим проектам за месяц (не более фактически заработанного), а остаток идёт в прибыль компании.</div>
+        <div class="hint" style="margin-top:4px;">Гарантированный оклад начисляется каждый месяц независимо от количества завершённых проектов. Проектные доплаты такому сотруднику не назначаются отдельно.</div>
       </div>
     </div>
     <button class="btn btn-primary" id="ef-save">Сохранить</button>
@@ -5620,6 +5621,8 @@ function editProjectExpense(entryId){
   document.getElementById('pf-expense-date').value=e.entry_date||'';
   const btn=document.getElementById('pf-expense-add-btn');
   if(btn) btn.textContent='Сохранить изменение';
+  const cancel=document.getElementById('pf-expense-cancel-edit');
+  if(cancel) cancel.style.display='';
   document.getElementById('pf-expense-desc')?.focus();
 }
 
@@ -5627,6 +5630,8 @@ function resetProjectExpenseEditor(){
   editingProjectExpenseId=null;
   const btn=document.getElementById('pf-expense-add-btn');
   if(btn) btn.textContent='Добавить расход';
+  const cancel=document.getElementById('pf-expense-cancel-edit');
+  if(cancel) cancel.style.display='none';
   ['pf-expense-desc','pf-expense-amount','pf-expense-date'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
 }
 
@@ -6138,6 +6143,7 @@ async function savePayment(){
 
 document.getElementById('pf-add-payment').addEventListener('click', ()=>openPaymentSheet());
 document.getElementById('pf-expense-add-btn').addEventListener('click', addProjectExpense);
+document.getElementById('pf-expense-cancel-edit')?.addEventListener('click', resetProjectExpenseEditor);
 document.getElementById('paymentSheetClose').addEventListener('click', ()=>{
   document.getElementById('paymentSheetOverlay').classList.remove('active');
 });
@@ -6263,6 +6269,9 @@ function openEmployeeSheet(id){
     if(!e) return;
     title.textContent = 'Редактировать сотрудника';
     deleteBtn.style.display = '';
+    const linkedCount = state.projects.filter(p=>p.employee_id===id || p.co_employee_id===id || (state.projectMembers||[]).some(m=>m.project_id===p.id && m.employee_id===id)).length;
+    deleteBtn.textContent = linkedCount ? 'В архив' : 'Удалить';
+    deleteBtn.title = linkedCount ? 'Сохранит сотрудника в истории проектов, но уберёт из активной команды' : 'Переместить сотрудника в корзину';
     document.getElementById('ef-name').value = e.name || '';
     document.getElementById('ef-role').value = e.role || '';
     document.getElementById('ef-active').value = e.active===false ? 'false' : 'true';
@@ -6283,6 +6292,7 @@ function openEmployeeSheet(id){
   }else{
     title.textContent = 'Новый сотрудник';
     deleteBtn.style.display = 'none';
+    deleteBtn.textContent = 'Удалить';
     document.getElementById('ef-name').value = '';
     document.getElementById('ef-role').value = '';
     document.getElementById('ef-active').value = 'true';
