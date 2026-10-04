@@ -784,7 +784,7 @@
           </div>
 
     <div class="section-label"><span class="lbl-text">Корзина</span><span class="section-label-line"></span></div>
-    <div class="note" style="margin-bottom:10px;">Удалённые проекты, сотрудники и записи. Можно восстановить или удалить навсегда. Данные остаются в корзине до явного удаления.</div>
+    <div class="note" style="margin-bottom:10px;">Удалённые проекты, сотрудники и финансовые записи. Их можно восстановить. Автоматически из корзины ничего не удаляется.</div>
     <div class="card" id="trashCard">
       <div class="loading-state">Загрузка…</div>
     </div>
@@ -2220,7 +2220,7 @@ let state = {
   companyIncome: [],
   projectStages: [],
   projectMembers: [],
-  trash: {projects:[], employees:[], categories:[], ledger:[]},
+  trash: {projects:[], employees:[], categories:[], ledger:[], companyExpenses:[], companyIncome:[]},
 };
 window.state = state; // экспорт для enhancement-блока (бэкфилл этапов и пр.)
 
@@ -3211,12 +3211,14 @@ async function loadAll(){
 // (обычно скрытые) секции, что и renderAll(), когда данные приходят.
 async function loadDeferredData(){
   try{
-    const [hist, trashProj, trashEmp, trashCat, trashLed] = await Promise.all([
+    const [hist, trashProj, trashEmp, trashCat, trashLed, trashCompanyExpenses, trashCompanyIncome] = await Promise.all([
       sb.from('audit_log').select('*').order('created_at', {ascending:false}).limit(5000),
       sb.from('projects').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
       fetchEmployeesResilient(q => q.not('deleted_at', 'is', null).order('deleted_at', {ascending:false})),
       sb.from('categories').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
       sb.from('ledger_entries').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
+      sb.from('company_expenses').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
+      sb.from('company_income').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
     ]);
     state.history = hist.error ? [] : (hist.data || []);
     state.trash = {
@@ -3224,6 +3226,8 @@ async function loadDeferredData(){
       employees: trashEmp.error ? [] : (trashEmp.data || []),
       categories: trashCat.error ? [] : (trashCat.data || []),
       ledger: trashLed.error ? [] : (trashLed.data || []),
+      companyExpenses: trashCompanyExpenses.error ? [] : (trashCompanyExpenses.data || []),
+      companyIncome: trashCompanyIncome.error ? [] : (trashCompanyIncome.data || []),
     };
     // Loading must not trigger irreversible deletions from trash.
     renderHistory();
@@ -7768,23 +7772,13 @@ function renderHistory(){
 // ============================================================
 function renderTrash(){
   const card = document.getElementById('trashCard');
-  const total = state.trash.projects.length + state.trash.employees.length + state.trash.categories.length + state.trash.ledger.length;
+  const total = state.trash.projects.length + state.trash.employees.length + state.trash.categories.length + state.trash.ledger.length + (state.trash.companyExpenses||[]).length + (state.trash.companyIncome||[]).length;
   if(!total){
     card.innerHTML = '<div class="empty-state">Корзина пуста</div>';
     return;
   }
 
-  // Предупреждение о скором автоудалении (7 дней)
-  const WARNING_DAYS = 7;
-  const warnCutoff = Date.now() + WARNING_DAYS * 24 * 60 * 60 * 1000;
-  const deleteCutoff = Date.now() - (TRASH_RETENTION_DAYS - WARNING_DAYS) * 24 * 60 * 60 * 1000;
-  const soonDeleted = [
-    ...state.trash.projects,
-    ...state.trash.employees,
-    ...state.trash.categories,
-    ...state.trash.ledger,
-  ].filter(item => item.deleted_at && new Date(item.deleted_at).getTime() < deleteCutoff);
-
+  // Корзина хранит записи до явного восстановления/ручного обслуживания базы.
   let html = '';
   if(soonDeleted.length){
     html += `<div style="background:rgba(224,82,82,0.12); border:1px solid rgba(224,82,82,0.3); border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:12px; color:var(--red);">
@@ -7837,6 +7831,30 @@ function renderTrash(){
       </div>
     </div>`;
   });
+  (state.trash.companyExpenses||[]).forEach(e=>{
+    const name=(e.category||'Расход')+(e.description?' — '+e.description:'');
+    html += `<div class="trash-item">
+      <div>
+        <div class="li-name">${escapeHtml(name)} · −${fmtMoney(e.amount)}</div>
+        <div class="li-meta">Расход компании · удалён ${fmtDateTime(e.deleted_at)}</div>
+      </div>
+      <div class="li-actions">
+        <button class="icon-btn" onclick="restoreItem('company_expenses','${e.id}','${escapeHtml(name)}')">↺ Восстановить</button>
+      </div>
+    </div>`;
+  });
+  (state.trash.companyIncome||[]).forEach(e=>{
+    const name=(e.category||'Доход')+(e.description?' — '+e.description:'');
+    html += `<div class="trash-item">
+      <div>
+        <div class="li-name">${escapeHtml(name)} · +${fmtMoney(e.amount)}</div>
+        <div class="li-meta">Доход компании · удалён ${fmtDateTime(e.deleted_at)}</div>
+      </div>
+      <div class="li-actions">
+        <button class="icon-btn" onclick="restoreItem('company_income','${e.id}','${escapeHtml(name)}')">↺ Восстановить</button>
+      </div>
+    </div>`;
+  });
   card.innerHTML = html;
 }
 
@@ -7845,6 +7863,8 @@ const entityTypeMap = {
   employees: 'employee',
   categories: 'category',
   ledger_entries: 'ledger_entry',
+  company_expenses: 'company_expense',
+  company_income: 'company_income',
 };
 
 async function restoreItem(table, id, name){
