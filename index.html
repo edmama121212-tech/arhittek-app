@@ -2445,6 +2445,7 @@ function clearSession(){
   const token = session && session.token;
   session = null;
   try{ localStorage.removeItem('arhittek_session'); }catch(e){}
+  try{ sessionStorage.removeItem('arhittek_ui_route_v1'); }catch(e){}
   // Best-effort: гасим токен на сервере, чтобы им нельзя было воспользоваться повторно
   if(token){ try{ sb.rpc('logout_session', {p_token: token}); }catch(e){} }
   location.reload();
