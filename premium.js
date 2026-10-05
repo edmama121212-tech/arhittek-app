@@ -586,7 +586,8 @@ tabs.innerHTML=[
   ['expense','Расходы'],
   ['team','Команда'],
   ['forecast','Прогноз'],
-  ['reserve','Резерв']
+  ['reserve','Резерв'],
+  ['amortization','Амортизация']
 ].map(([id,label])=>`<button type="button" role="tab" data-fin-tab="${id}">${label}</button>`).join('');
 
 const workspaceHead=view.querySelector('.workspace-head');
@@ -611,6 +612,7 @@ const expense=makePanel('expense');
 const team=makePanel('team');
 const forecast=makePanel('forecast');
 const reserve=makePanel('reserve');
+makePanel('amortization');
 
 const analytics=byId('analyticsBlock');
 moveWithLabelRemoved(analytics,overview);
@@ -659,7 +661,7 @@ const budget=byId('companyBudgetBlock');
 moveWithLabelRemoved(budget,reserve);
 
 function setTab(id,remember=true){
-  const valid=['overview','income','expense','team','forecast','reserve'];
+  const valid=['overview','income','expense','team','forecast','reserve','amortization'];
   if(!valid.includes(id)) id='overview';
   tabs.querySelectorAll('[data-fin-tab]').forEach(b=>{
     const on=b.dataset.finTab===id;
