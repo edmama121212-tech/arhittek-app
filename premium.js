@@ -1160,6 +1160,18 @@ function renderObligations(){
  let commitment=$('financeCommitmentStatus');
  if(!commitment){commitment=document.createElement('div');commitment.id='financeCommitmentStatus';const flow=$('financeFlowMap');flow?.insertAdjacentElement('beforebegin',commitment);}
  if(commitment)commitment.innerHTML='<div class="finance-v-hero '+(allLate>0?'expense-hero':'reserve-hero')+'"><span>Обязательства компании · '+esc(monthName(month))+'</span><strong>'+cash(allLeft)+' ещё нужно оплатить</strong><small>Зарплата '+cash(a.l)+' · офис '+cash(obligationLeft)+(allLate>0?' · просрочено '+cash(allLate):' · просрочки нет')+'</small></div>';
+ const financeNav=document.querySelector('.nav-btn[data-view="view-finance"]');
+ if(financeNav){
+   let badge=financeNav.querySelector('.finance-overdue-badge');
+   if(allLate>0){
+     if(!badge){badge=document.createElement('span');badge.className='finance-overdue-badge';badge.style.cssText='position:absolute;top:4px;right:8px;min-width:16px;height:16px;padding:0 4px;border-radius:9px;background:var(--red);color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;';financeNav.style.position='relative';financeNav.appendChild(badge);}
+     badge.textContent='!';
+     financeNav.title='Есть просроченные обязательства: '+cash(allLate);
+   }else{
+     badge?.remove();
+     financeNav.title='';
+   }
+ }
  if(box)box.innerHTML='<div class="finance-v-section-head"><strong>Обязательные платежи · '+esc(monthName(month))+'</strong><span>'+list.filter(x=>x.left>0).length+' открыто</span></div>'+list.map(o=>'<div class="obligation-row"><div class="obligation-top"><div><strong>'+esc(o.name)+'</strong><small>Срок '+fmtDate(o.due)+' · план '+cash(o.plan)+'</small></div><div>'+pill(o.left,o.due)+'<strong style="display:block">'+cash(o.left)+' осталось</strong><small>оплачено '+cash(o.paid)+'</small></div></div>'+(isAdmin()&&o.left>0?'<button class="btn btn-secondary" style="margin-top:8px" data-obligation="'+o.id+'">+ Записать оплату</button>':'')+'</div>').join('')+(isAdmin()?'<details class="finance-visual-disclosure"><summary>Сроки обязательных платежей</summary><div class="obligation-settings"><div class="field"><label>Зарплата — до числа следующего месяца</label><input id="salaryDueDay" type="number" min="1" max="28" value="'+day('finance_salary_due_day',5)+'"></div><div class="field"><label>Аренда — до числа</label><input id="rentDueDay" type="number" min="1" max="28" value="'+day('finance_rent_due_day',5)+'"></div><div class="field"><label>Интернет — до числа</label><input id="internetDueDay" type="number" min="1" max="28" value="'+day('finance_internet_due_day',10)+'"></div></div></details>':'');
  box?.querySelectorAll('[data-obligation]').forEach(b=>b.onclick=()=>{const o=list.find(x=>x.id===b.dataset.obligation);if(o)openCompanyExpenseSheet(null,o.cat);});
  [['salaryDueDay','finance_salary_due_day'],['rentDueDay','finance_rent_due_day'],['internetDueDay','finance_internet_due_day']].forEach(a=>$(a[0])?.addEventListener('change',e=>{localStorage.setItem(a[1],String(Math.max(1,Math.min(28,parseInt(e.target.value)||1))));renderObligations();}));
