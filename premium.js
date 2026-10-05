@@ -2538,7 +2538,13 @@ function currentObligationMonth(){return $('finance-obligation-month')?.value||n
 function financeTrackingStart(){
   let v=localStorage.getItem('finance_obligations_tracking_start');
   if(!v){
-    v=new Date().toISOString().slice(0,7);
+    const candidates=[new Date().toISOString().slice(0,7)];
+    (state.timesheetPayments||[]).forEach(x=>{if(/^\d{4}-\d{2}$/.test(x.month||''))candidates.push(x.month);});
+    (state.ledger||[]).filter(x=>!x.deleted_at&&x.type==='salary_payment').forEach(x=>{const m=salaryPaymentMonth(x);if(m)candidates.push(m);});
+    (state.companyExpenses||[]).filter(x=>!x.deleted_at&&/аренд|интернет|связь/i.test(String(x.category||''))).forEach(x=>{
+      const m=obligationPeriod(x);if(/^\d{4}-\d{2}$/.test(m||''))candidates.push(m);
+    });
+    v=candidates.sort()[0];
     localStorage.setItem('finance_obligations_tracking_start',v);
   }
   return v;
