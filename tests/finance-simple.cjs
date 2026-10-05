@@ -1,0 +1,18 @@
+const {JSDOM}=require('jsdom'),fs=require('fs'),assert=require('node:assert/strict');
+const dom=new JSDOM('<div id="view-finance"></div><div id="view-timesheet" class="view"></div><input id="ts-month"><input id="cex-amount"><input id="cex-desc"><input id="cex-date">',{url:'https://app.test',runScripts:'outside-only'});
+const w=dom.window;w.setTimeout=fn=>fn();w.session={isAdmin:true};w.state={employees:[{id:'e',name:'Сотрудник',is_salaried:true,fixed_salary:50000}],companyExpenses:[{id:'rent1',category:'Аренда',amount:40000,expense_date:'2026-10-05',description:'Оплата · период 2026-09'}],companyIncome:[],ledger:[{id:'p1',type:'salary_payment',payee_employee_id:'e',amount:20000,entry_date:'2026-10-05',description:'[salary:2026-09] часть'}]};
+w.escapeHtml=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;');w.fmtMoney=n=>String(n)+' ₽';w.fmtDate=d=>d;w.ruMonthLabel=m=>m;w.timesheetMonthRange=m=>({from:m+'-01',to:m+'-30'});w.completedProjectEarningsForRange=()=>({employees:{}});w.splitPayrollByEmployee=()=>({result:{e:{payout:50000}}});w.salaryPaymentState=(e,m,d)=>{const paid=w.state.ledger.filter(x=>x.payee_employee_id===e&&x.description.includes(m)).reduce((s,x)=>s+x.amount,0);return {due:d,paid,remaining:d-paid,dueDate:'2026-10-10',overdue:false}};w.getCompanyReserveBalance=()=>190000;w.findEmployee=id=>w.state.employees.find(e=>e.id===id);w.RESERVE_INCREASE_CATEGORY='up';w.RESERVE_DECREASE_CATEGORY='down';w.timesheetExpanded={};
+const calls=[];for(const name of ['openReserveCorrection','openCompanyIncomeSheet','openCompanyExpenseSheet','openCompanyWithdrawal','openEmployeeSheet','openSalaryPaymentSheet','renderTimesheet','showToast'])w[name]=(...a)=>calls.push([name,...a]);
+w.eval(fs.readFileSync('finance-simple.js','utf8'));
+const click=selector=>{const el=w.document.querySelector(selector);assert(el,selector);el.click()};
+assert(w.document.getElementById('simpleFinance').textContent.includes('190000 ₽'));
+const input=w.document.getElementById('sfMonth');input.value='2026-09';input.dispatchEvent(new w.Event('change'));
+click('[data-sf-tab="payments"]');let text=w.document.getElementById('simpleFinance').textContent;assert(text.includes('20000 ₽'));assert(text.includes('30000 ₽'));assert(text.includes('70000 ₽'));
+click('[data-sf-action="salary"]');assert.deepEqual(calls.at(-1),['openSalaryPaymentSheet','e','2026-09']);
+click('[data-sf-action="office"][data-id="rent"]');assert.equal(w.document.getElementById('cex-amount').value,'70000');assert.equal(w.document.getElementById('cex-desc').value,'Оплата · период 2026-09');
+click('[data-sf-action="edit-expense"]');assert.deepEqual(calls.at(-1),['openCompanyExpenseSheet','rent1']);
+click('[data-sf-tab="settings"]');click('[data-sf-action="employee"]');assert.deepEqual(calls.at(-1),['openEmployeeSheet','e']);
+w.document.querySelector('[data-sf-setting="forecast_rent"]').value='120000';click('[data-sf-action="save-settings"]');assert.equal(w.localStorage.getItem('forecast_rent'),'120000');
+click('[data-sf-tab="journal"]');assert(w.document.getElementById('simpleFinance').textContent.includes('Операций за этот месяц нет'));
+w.session={isAdmin:false};w.renderSimpleFinance();
+console.log('PASS: reserve, partial salary, rent month attribution, salary and rent actions, rent edit, salary edit, settings persistence, cash-month journal');
