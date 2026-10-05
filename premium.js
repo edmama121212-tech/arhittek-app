@@ -2434,12 +2434,22 @@ async function saveSalaryPayment(){
   if(!date){showToast('Укажите дату выплаты');return;}
   const description='[salary:'+salarySheetMonth+']'+(note?' '+note:'');
   try{
+    let savedId=edit?.id||null;
     if(edit){
       const r=await sb.from('ledger_entries').update({amount:amount,entry_date:date,description:description,payee_employee_id:salarySheetEmployeeId}).eq('id',edit.id);
       if(r.error)throw r.error;
+      await logAudit('salary_payment',edit.id,(findEmployee(salarySheetEmployeeId)?.name||'Сотрудник')+' · '+salarySheetMonth,'update',{
+        amount:{old:num(edit.amount),new:amount},
+        entry_date:{old:edit.entry_date||null,new:date},
+        note:{old:salaryPaymentNote(edit),new:note}
+      });
     }else{
       const r=await sb.from('ledger_entries').insert({type:'salary_payment',payee_employee_id:salarySheetEmployeeId,amount:amount,entry_date:date,description:description,received_by:session.employeeId}).select().single();
       if(r.error)throw r.error;
+      savedId=r.data?.id||null;
+      await logAudit('salary_payment',savedId,(findEmployee(salarySheetEmployeeId)?.name||'Сотрудник')+' · '+salarySheetMonth,'create',{
+        amount:{old:null,new:amount},entry_date:{old:null,new:date},note:{old:null,new:note}
+      });
     }
     editingSalaryPaymentId=null;
     await loadAll();
@@ -2454,8 +2464,12 @@ async function deleteSalaryPayment(id){
   if(!session?.isAdmin)return;
   if(!confirm('Удалить эту запись о выплате? Она будет перемещена в корзину.'))return;
   try{
+    const before=(state.ledger||[]).find(x=>x.id===id);
     const r=await sb.from('ledger_entries').update({deleted_at:new Date().toISOString()}).eq('id',id);
     if(r.error)throw r.error;
+    await logAudit('salary_payment',id,(findEmployee(before?.payee_employee_id)?.name||'Сотрудник')+' · '+(salaryPaymentMonth(before)||''),'delete',{
+      amount:{old:num(before?.amount),new:null},entry_date:{old:before?.entry_date||null,new:null}
+    });
     await loadAll();
     await syncLegacySalaryFlag(salarySheetEmployeeId,salarySheetMonth);
     renderTimesheet();renderSalaryPaymentSheet();renderFinancialObligations();
