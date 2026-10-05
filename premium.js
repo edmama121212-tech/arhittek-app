@@ -1068,7 +1068,8 @@ window.__arhittekFinanceObligationsV4=true;
 const $=id=>document.getElementById(id), n=v=>Number.isFinite(Number(v))?Number(v):0;
 const cash=v=>{try{return fmtMoney(Math.round(n(v)));}catch(e){return Math.round(n(v)).toLocaleString('ru-RU')+' ₽';}};
 const esc=v=>{try{return escapeHtml(String(v??''));}catch(e){return String(v??'');}};
-const today=()=>new Date().toISOString().slice(0,10), isAdmin=()=>!!(window.session?.isAdmin||session?.isAdmin);
+const dateISO=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const today=()=>dateISO(new Date()), isAdmin=()=>!!(window.session?.isAdmin||session?.isAdmin);
 const monthName=k=>{const a=String(k||'').split('-').map(Number);return a[0]&&a[1]?new Date(a[0],a[1]-1,1).toLocaleDateString('ru-RU',{month:'long',year:'numeric'}):k;};
 const day=(key,d)=>Math.max(1,Math.min(28,parseInt(localStorage.getItem(key)||d,10)||d));
 const salaryMonth=x=>String(x?.description||'').match(/\[salary:(\d{4}-\d{2})\]/)?.[1]||'';
@@ -1079,7 +1080,7 @@ const accrued=(emp,month)=>n(payroll(month)[emp]?.payout);
 const legacy=(emp,month)=>(state.timesheetPayments||[]).find(x=>x.employee_id===emp&&x.month===month&&x.paid);
 const paid=(emp,month,total)=>{const s=salaryRows(emp,month).reduce((a,x)=>a+n(x.amount),0);return s>0?Math.min(s,total):legacy(emp,month)?total:0;};
 const balance=(emp,month,total)=>Math.max(0,total-paid(emp,month,total));
-function salaryDue(month){const a=month.split('-').map(Number),d=day('finance_salary_due_day',5),x=new Date(a[0],a[1],d);return x.toISOString().slice(0,10);}
+function salaryDue(month){const a=month.split('-').map(Number),d=day('finance_salary_due_day',5),x=new Date(a[0],a[1],d);return dateISO(x);}
 function dueThisMonth(month,key,def){const a=month.split('-'),d=day(key,def);return a[0]+'-'+a[1]+'-'+String(d).padStart(2,'0');}
 const overdue=(sum,due)=>n(sum)>0&&today()>due;
 window.salaryPaidForMonth=paid;window.salaryBalanceForMonth=balance;window.salaryPaymentsForMonth=salaryRows;
