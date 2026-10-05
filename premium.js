@@ -778,18 +778,10 @@ function renderVisuals(){
   }
 
   if(reserveVisual){
-    let allTimeResult=0;
-    try{
-      const all=computeFinancePeriod('2000-01-01',to);
-      const allExtra=(state.companyIncome||[]).filter(i=>!i.deleted_at&&inRange(i.income_date,'2000-01-01',to)).reduce((s,i)=>s+n(i.amount),0);
-      allTimeResult=n(all.netProfit)+allExtra;
-    }catch(e){}
+    const reserveBalance=typeof getCompanyReserveBalance==='function'?getCompanyReserveBalance():190000;
     reserveVisual.innerHTML=`
-      <div class="finance-v-hero reserve-hero"><span>Резерв и амортизация</span><strong>${cash(allTimeResult)}</strong><small>Накопленный результат компании</small></div>
-      <div class="finance-reserve-cards">
-        <div><span>Результат периода</span><strong>${cash(result)}</strong></div>
-        <div><span>10% на амортизацию</span><strong>${cash(amort)}</strong></div>
-      </div>`;
+      <div class="finance-v-hero reserve-hero"><span>Резерв компании</span><strong>${cash(reserveBalance)}</strong><small>Указанный остаток средств · с учётом корректировок и выводов</small></div>`;
+    if(typeof window.renderFinanceControls==='function') window.renderFinanceControls();
   }
 }
 window.renderFinanceVisualPanels=renderVisuals;
@@ -2821,9 +2813,9 @@ function enhanceCompanyBudgetObligations(){
   const old=el.querySelector('.reserve-obligations-extra');if(old)old.remove();
   const extra=document.createElement('div');extra.className='reserve-obligations-extra';
   extra.innerHTML=
-    '<div class="fee-row" style="border-top:1px solid var(--line-strong);margin-top:8px;padding-top:8px"><div class="fl">Неоплаченные обязательства · '+escapeHtml(monthLabel(month))+'</div><div class="fv" style="color:'+(committed?'var(--gold)':'var(--green)')+'">−'+fmtMoney(committed)+'</div></div>'+
-    '<div class="fee-row total"><div class="fl">Свободно после обязательств</div><div class="fv" style="color:'+(free>=0?'var(--green)':'var(--red)')+'">'+fmtMoney(free)+'</div></div>'+
-    '<div class="note" style="margin-top:8px">Учётный резерв — не банковский баланс. Эта строка показывает, сколько останется от указанного резерва после текущих обязательств по зарплате, аренде и интернету.</div>';
+    '<div class="fee-row" style="border-top:1px solid var(--line-strong);margin-top:8px;padding-top:8px"><div class="fl">Плановые оплаты, ещё не отмеченные · '+escapeHtml(monthLabel(month))+'</div><div class="fv" style="color:'+(committed?'var(--gold)':'var(--green)')+'">−'+fmtMoney(committed)+'</div></div>'+
+    '<div class="fee-row total"><div class="fl">'+(free>=0?'Останется после плановых оплат':'Не хватает для плановых оплат')+'</div><div class="fv" style="color:'+(free>=0?'var(--green)':'var(--red)')+'">'+fmtMoney(Math.abs(free))+'</div></div>'+
+    '<div class="note" style="margin-top:8px">Это прогноз по указанному резерву: зарплата, аренда и интернет за выбранный месяц. Неотмеченная оплата не означает подтверждённый долг. Внесите уже сделанные выплаты, чтобы остатки обновились.</div>';
   el.appendChild(extra);
 }
 
