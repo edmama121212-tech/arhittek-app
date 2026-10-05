@@ -5322,11 +5322,19 @@ async function saveCompanyExpense(){
   }
   try{
     if(editingCompanyExpenseId){
+      const before=(state.companyExpenses||[]).find(x=>x.id===editingCompanyExpenseId);
       const {error} = await sb.from('company_expenses').update({category, amount, expense_date, description}).eq('id', editingCompanyExpenseId);
       if(error) throw error;
+      await logAudit('company_expense',editingCompanyExpenseId,category+(description?' — '+description:''),'update',{
+        category:{old:before?.category||null,new:category},amount:{old:Number(before?.amount)||0,new:amount},
+        expense_date:{old:before?.expense_date||null,new:expense_date},description:{old:before?.description||'',new:description}
+      });
     }else{
-      const {error} = await sb.from('company_expenses').insert({category, amount, expense_date, description});
+      const {data,error} = await sb.from('company_expenses').insert({category, amount, expense_date, description}).select().single();
       if(error) throw error;
+      await logAudit('company_expense',data?.id||null,category+(description?' — '+description:''),'create',{
+        amount:{old:null,new:amount},expense_date:{old:null,new:expense_date},description:{old:null,new:description}
+      });
     }
     showToast('Расход сохранён');
     closeCompanyExpenseSheet();
@@ -5427,11 +5435,19 @@ async function saveCompanyIncome(){
   if(!income_date){ showToast('Укажите дату'); return; }
   try{
     if(editingCompanyIncomeId){
+      const before=(state.companyIncome||[]).find(x=>x.id===editingCompanyIncomeId);
       const {error} = await sb.from('company_income').update({category, amount, income_date, description}).eq('id', editingCompanyIncomeId);
       if(error) throw error;
+      await logAudit('company_income',editingCompanyIncomeId,category+(description?' — '+description:''),'update',{
+        category:{old:before?.category||null,new:category},amount:{old:Number(before?.amount)||0,new:amount},
+        income_date:{old:before?.income_date||null,new:income_date},description:{old:before?.description||'',new:description}
+      });
     }else{
-      const {error} = await sb.from('company_income').insert({category, amount, income_date, description});
+      const {data,error} = await sb.from('company_income').insert({category, amount, income_date, description}).select().single();
       if(error) throw error;
+      await logAudit('company_income',data?.id||null,category+(description?' — '+description:''),'create',{
+        amount:{old:null,new:amount},income_date:{old:null,new:income_date},description:{old:null,new:description}
+      });
     }
     showToast('Доход сохранён');
     closeCompanyIncomeSheet();
