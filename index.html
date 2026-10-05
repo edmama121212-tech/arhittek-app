@@ -5520,7 +5520,7 @@ function renderCompanyBudget(from, to){
 
   el.innerHTML = `
     <div class="fee-row total">
-      <div class="fl">Фактический резерв компании</div>
+      <div class="fl">Учётный резерв компании</div>
       <div class="fv" style="color:var(--gold);font-size:17px;">${fmtMoney(reserve)}</div>
     </div>
     <div class="fee-row">
@@ -5536,7 +5536,7 @@ function renderCompanyBudget(from, to){
       <div class="fv" style="color:var(--red);">−${fmtMoney(withdrawnPeriod)}</div>
     </div>
     <div class="note" style="margin-top:10px;">
-      Стартовый фактический резерв: ${fmtMoney(RESERVE_OPENING_BALANCE)} на ${RESERVE_OPENING_DATE}.
+      Стартовый учётный резерв: ${fmtMoney(RESERVE_OPENING_BALANCE)} на ${RESERVE_OPENING_DATE}.
       Резерв можно корректировать по фактическому остатку. Вывод денег уменьшает резерв, но не искажает операционные расходы компании.
     </div>
   `;
