@@ -3749,9 +3749,9 @@ function renderAnalytics(){
         <small>проекты + прочие доходы</small>
       </div>
       <div class="finance-kpi">
-        <span>Потратили</span>
+        <span>Начисленные расходы</span>
         <strong style="color:var(--red);">${fmtMoney(f.totalExpenses)}</strong>
-        <small>проекты + команда + офис</small>
+        <small>проекты + начисления команде + офис</small>
       </div>
       <div class="finance-kpi finance-kpi-main">
         <span>Осталось компании</span>
@@ -3764,12 +3764,12 @@ function renderAnalytics(){
       <div><span>Выручка проектов</span><b>+${fmtMoney(f.revenue)}</b></div>
       <div><span>Прочие доходы</span><b>+${fmtMoney(extraIncome)}</b></div>
       <div><span>Прямые расходы проектов</span><b>−${fmtMoney(f.projectCosts)}</b></div>
-      <div><span>Зарплаты и гонорары</span><b>−${fmtMoney(f.payrollPaidOut)}</b></div>
+      <div><span>Начислено команде</span><b>−${fmtMoney(f.payrollPaidOut)}</b></div>
       <div><span>Офис и прочие расходы</span><b>−${fmtMoney(f.overhead)}</b></div>
       <div class="total"><span>Итого осталось</span><b style="color:${resultColor};">${fmtMoney(companyResult)}</b></div>
     </div>
 
-    <div class="finance-note">Факт считается по завершённым проектам выбранного периода. Будущие поступления смотрите в блоке «Прогноз».</div>
+    <div class="finance-note">Это управленческий результат по начислениям: сколько заработано и сколько начислено расходов. Реальные оплаты, остатки и просрочки показаны ниже в блоке «Обязательства и оплаты». Будущие поступления смотрите в «Прогнозе».</div>
 
     <button type="button" class="finance-details-toggle" onclick="financeExpanded=!financeExpanded; renderAnalytics();">
       ${financeExpanded ? 'Скрыть подробности' : 'Показать подробности'}
@@ -3783,7 +3783,7 @@ function renderAnalytics(){
       <div class="section-label finance-inner-label"><span class="lbl-text">Расходы по статьям</span><span class="section-label-line"></span></div>
       <div class="fee-card">
         <div class="fee-row"><div class="fl">Прямые расходы проектов</div><div class="fv">${fmtMoney(f.projectCosts)}</div></div>
-        <div class="fee-row"><div class="fl">Зарплаты и гонорары</div><div class="fv">${fmtMoney(f.payrollPaidOut)}</div></div>
+        <div class="fee-row"><div class="fl">Начислено команде</div><div class="fv">${fmtMoney(f.payrollPaidOut)}</div></div>
         <div class="fee-row total"><div class="fl">Общие расходы компании</div><div class="fv">${fmtMoney(f.overhead)}</div></div>
         ${overheadRows}
       </div>
