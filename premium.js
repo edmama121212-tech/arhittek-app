@@ -2546,6 +2546,19 @@ function officePaid(kind,month){
   const re=kind==='rent'?/аренд/i:/интернет|связь/i;
   return (state.companyExpenses||[]).filter(x=>!x.deleted_at&&re.test(String(x.category||''))&&obligationPeriod(x)===month).reduce((s,x)=>s+num(x.amount),0);
 }
+function officeRecordedByCashMonth(kind,month){
+  const re=kind==='rent'?/аренд/i:/интернет|связь/i;
+  return (state.companyExpenses||[]).filter(x=>!x.deleted_at&&re.test(String(x.category||''))&&String(x.expense_date||'').slice(0,7)===month).reduce((s,x)=>s+num(x.amount),0);
+}
+function adjustedMonthResult(month){
+  try{
+    const r=timesheetMonthRange(month),f=computeFinancePeriod(r.from,r.to);
+    const extraIncome=(state.companyIncome||[]).filter(i=>isOperationalCompanyIncome(i)&&i.income_date&&String(i.income_date).slice(0,7)===month).reduce((s,i)=>s+num(i.amount),0);
+    const rentGap=Math.max(0,officeExpected('rent')-officeRecordedByCashMonth('rent',month));
+    const internetGap=Math.max(0,officeExpected('internet')-officeRecordedByCashMonth('internet',month));
+    return {raw:f.netProfit+extraIncome,adjusted:f.netProfit+extraIncome-rentGap-internetGap,rentGap,internetGap};
+  }catch(e){return null;}
+}
 function officeObligation(kind,month){
   const expected=officeExpected(kind),paid=Math.min(expected,officePaid(kind,month)),remaining=Math.max(0,expected-paid),dueDate=officeDueDate(month,kind),overdue=remaining>0.009&&todayISO()>dueDate;
   return {kind,expected,paid,remaining,dueDate,overdue,full:remaining<=0.009};
@@ -2626,6 +2639,7 @@ function renderFinancialObligations(){
   const month=currentObligationMonth(),salary=salaryAggregate(month),rent=officeObligation('rent',month),internet=officeObligation('internet',month);
   const totalDue=salary.due+rent.expected+internet.expected,totalPaid=salary.paid+rent.paid+internet.paid,totalRemaining=salary.remaining+rent.remaining+internet.remaining,totalOverdue=salary.overdue+(rent.overdue?rent.remaining:0)+(internet.overdue?internet.remaining:0);
   const backlog=allOverdueObligations();
+  const adjusted=adjustedMonthResult(month);
   wrap.innerHTML=
     '<div class="section-label"><span class="lbl-text">Обязательства и оплаты</span><span class="section-label-line"></span></div>'+
     '<div class="card">'+
@@ -2639,6 +2653,7 @@ function renderFinancialObligations(){
       '<div class="list-item"><div><div class="li-name">Зарплата сотрудникам</div><div class="li-meta">Начислено '+fmtMoney(salary.due)+' · выплачено '+fmtMoney(salary.paid)+' · осталось '+fmtMoney(salary.remaining)+'</div></div><div class="li-actions">'+(salary.overdue?'<span style="color:var(--red);font-size:11px;font-weight:700">ПРОСРОЧЕНО</span>':'')+'<button class="btn btn-secondary" type="button" id="financeOpenTimesheet" style="width:auto;padding:7px 10px">Табель</button></div></div>'+
       '<div class="list-item"><div><div class="li-name">Аренда офиса · '+fmtMoney(rent.expected)+'</div><div class="li-meta">Оплачено '+fmtMoney(rent.paid)+' · осталось '+fmtMoney(rent.remaining)+' · срок до '+fmtDate(rent.dueDate)+'</div></div><div class="li-actions">'+statusBadge(rent)+(rent.remaining>0?'<button class="btn btn-secondary" type="button" data-pay-office="rent" style="width:auto;padding:7px 10px">Оплатить</button>':'')+'</div></div>'+
       '<div class="list-item"><div><div class="li-name">Интернет / связь · '+fmtMoney(internet.expected)+'</div><div class="li-meta">Оплачено '+fmtMoney(internet.paid)+' · осталось '+fmtMoney(internet.remaining)+' · срок до '+fmtDate(internet.dueDate)+'</div></div><div class="li-actions">'+statusBadge(internet)+(internet.remaining>0?'<button class="btn btn-secondary" type="button" data-pay-office="internet" style="width:auto;padding:7px 10px">Оплатить</button>':'')+'</div></div>'+
+      (adjusted?'<div class="fee-row total" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line-strong)"><div class="fl">Результат месяца после обязательных расходов</div><div class="fv" style="color:'+(adjusted.adjusted>=0?'var(--green)':'var(--red)')+'">'+fmtMoney(adjusted.adjusted)+'</div></div><div class="project-note">Если аренда или интернет ещё не внесены в расходы, здесь они всё равно зарезервированы в расчёте.</div>':'')+
       '<details style="margin-top:10px"><summary style="cursor:pointer;font-size:12px;color:var(--text-dim)">Настроить суммы и сроки</summary>'+
         '<div class="field-row" style="margin-top:10px"><div class="field"><label>Аренда в месяц, ₽</label><input type="number" id="financeRentExpected" value="'+rent.expected+'"></div><div class="field"><label>Аренда до числа</label><input type="number" min="1" max="28" id="financeRentDueDay" value="'+officeDueDay('rent')+'"></div></div>'+
         '<div class="field-row"><div class="field"><label>Интернет в месяц, ₽</label><input type="number" id="financeInternetExpected" value="'+internet.expected+'"></div><div class="field"><label>Интернет до числа</label><input type="number" min="1" max="28" id="financeInternetDueDay" value="'+officeDueDay('internet')+'"></div></div>'+
