@@ -2458,6 +2458,7 @@ async function saveSalaryPayment(){
     renderSalaryPaymentSheet();
     renderFinancialObligations();
     try{enhanceFinanceSalaryCard();}catch(_){}
+    try{enhanceCompanyBudgetObligations();}catch(_){}
     showToast(edit?'Выплата изменена':'Выплата сохранена');
   }catch(e){console.error(e);showToast('Не удалось сохранить выплату');}
 }
@@ -2473,7 +2474,7 @@ async function deleteSalaryPayment(id){
     });
     await loadAll();
     await syncLegacySalaryFlag(salarySheetEmployeeId,salarySheetMonth);
-    renderTimesheet();renderSalaryPaymentSheet();renderFinancialObligations();try{enhanceFinanceSalaryCard();}catch(_){}
+    renderTimesheet();renderSalaryPaymentSheet();renderFinancialObligations();try{enhanceFinanceSalaryCard();}catch(_){}try{enhanceCompanyBudgetObligations();}catch(_){}
     showToast('Выплата удалена');
   }catch(e){console.error(e);showToast('Не удалось удалить выплату');}
 }
@@ -2645,7 +2646,7 @@ function renderFinancialObligations(){
         '<div class="field"><label>С какого месяца учитывать просрочки</label><input type="month" id="financeTrackingStart" value="'+financeTrackingStart()+'"></div>'+
       '</details>'+
     '</div>';
-  $('finance-obligation-month')?.addEventListener('change',()=>{renderFinancialObligations();try{enhanceFinanceSalaryCard();}catch(_){}});
+  $('finance-obligation-month')?.addEventListener('change',()=>{renderFinancialObligations();try{enhanceFinanceSalaryCard();}catch(_){}try{enhanceCompanyBudgetObligations();}catch(_){}});
   wrap.querySelectorAll('[data-pay-office]').forEach(b=>b.addEventListener('click',()=>openOfficePayment(b.dataset.payOffice,month)));
   $('financeOpenTimesheet')?.addEventListener('click',()=>{
     document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
@@ -2653,9 +2654,8 @@ function renderFinancialObligations(){
     $('view-timesheet').classList.add('active');$('ts-month').value=month;renderTimesheet();window.scrollTo(0,0);
   });
   [['financeRentExpected','forecast_rent'],['financeInternetExpected','forecast_internet'],['financeRentDueDay','finance_rent_due_day'],['financeInternetDueDay','finance_internet_due_day'],['financeSalaryDueDay','finance_salary_due_day']].forEach(pair=>{
-    $(pair[0])?.addEventListener('change',e=>{localStorage.setItem(pair[1],String(Math.max(0,num(e.target.value))));renderFinancialObligations();try{renderFinancialForecast?.();}catch(_){}});
-  });
-  $('financeTrackingStart')?.addEventListener('change',e=>{if(e.target.value)localStorage.setItem('finance_obligations_tracking_start',e.target.value);renderFinancialObligations();});
+    $(pair[0])?.addEventListener('change',e=>{localStorage.setItem(pair[1],String(Math.max(0,num(e.target.value))));renderFinancialObligations();try{renderFinancialForecast?.();}catch(_){}try{enhanceCompanyBudgetObligations();}catch(_){}});  });
+  $('financeTrackingStart')?.addEventListener('change',e=>{if(e.target.value)localStorage.setItem('finance_obligations_tracking_start',e.target.value);renderFinancialObligations();try{enhanceCompanyBudgetObligations();}catch(_){}});
   const nav=document.querySelector('.nav-btn[data-view="view-finance"]');
   if(nav){
     let badge=nav.querySelector('.finance-overdue-badge');
