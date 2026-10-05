@@ -5077,6 +5077,7 @@ function exportTimesheetToPdf(employeeId, monthStr){
   const p = payrollByEmp[employeeId] || {earned:0, payout:0, retained:0, isSalaried: !!emp.is_salaried, salary: Number(emp.fixed_salary)||0};
   const items = e ? e.items : [];
   const paid = isTimesheetPaid(employeeId, monthStr);
+  const payState = (typeof salaryPaymentState==='function') ? salaryPaymentState(employeeId, monthStr, p.payout) : {paid:paid?p.payout:0,remaining:paid?0:p.payout,overdue:false};
   const c = state.companyInfo || {};
 
   const { jsPDF } = window.jspdf;
@@ -5168,8 +5169,8 @@ function exportTimesheetToPdf(employeeId, monthStr){
   doc.setTextColor(0);
   y += 7;
   doc.setFont('Roboto','normal'); doc.setFontSize(9.5);
-  doc.setTextColor(paid ? 46 : 192, paid ? 125 : 82, paid ? 91 : 47);
-  doc.text(paid ? '✓ Оплачено' : '✗ Не оплачено', margin, y);
+  doc.setTextColor(payState.remaining<=0 ? 46 : payState.overdue ? 192 : 180, payState.remaining<=0 ? 125 : payState.overdue ? 82 : 125, payState.remaining<=0 ? 91 : 47);
+  doc.text('Выплачено: ' + fmtMoney(payState.paid) + ' · Осталось: ' + fmtMoney(payState.remaining) + (payState.overdue ? ' · ПРОСРОЧЕНО' : ''), margin, y);
   doc.setTextColor(0);
 
   y += 20;
@@ -5570,6 +5571,7 @@ const ledgerTypeLabels = {
   project_expense: {label:'Расход по проекту', cls:'var(--red)', sign:'−'},
   role_payout: {label:'Начисление исполнителю (м²)', cls:'var(--gold)', sign:'−'},
   bonus: {label:'Премия сотруднику', cls:'var(--gold)', sign:'−'},
+  salary_payment: {label:'Выплата зарплаты', cls:'var(--green)', sign:'−'},
 };
 
 function renderFeeSummaryForProject(p){
