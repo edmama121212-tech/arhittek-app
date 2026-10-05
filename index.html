@@ -5524,14 +5524,6 @@ function renderCompanyBudget(from, to){
       <div class="fv" style="color:var(--gold);font-size:17px;">${fmtMoney(reserve)}</div>
     </div>
     <div class="fee-row">
-      <div class="fl">Результат компании за выбранный период</div>
-      <div class="fv" style="color:${color(periodResult)};">${periodResult>=0?'+':''}${fmtMoney(periodResult)}</div>
-    </div>
-    <div class="fee-row">
-      <div class="fl">Ориентир 10% на амортизацию</div>
-      <div class="fv" style="color:var(--gold);">${fmtMoney(amortizationReference)}</div>
-    </div>
-    <div class="fee-row">
       <div class="fl">Выведено денег за период</div>
       <div class="fv" style="color:var(--red);">−${fmtMoney(withdrawnPeriod)}</div>
     </div>
