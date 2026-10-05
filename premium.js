@@ -2667,6 +2667,34 @@ function renderFinancialObligations(){
 }
 window.renderFinancialObligations=renderFinancialObligations;
 
+function enhanceFinanceSalaryCard(){
+  const el=$('finSalariesCard');if(!el)return;
+  const month=currentObligationMonth();
+  const rows=(state.employees||[]).filter(e=>e.active!==false&&e.is_salaried);
+  if(!rows.length)return;
+  let totalDue=0,totalPaid=0,totalRemaining=0,totalOverdue=0;
+  const body=rows.map(e=>{
+    const st=salaryPaymentState(e.id,month);
+    totalDue+=st.due;totalPaid+=st.paid;totalRemaining+=st.remaining;if(st.overdue)totalOverdue+=st.remaining;
+    return '<div class="list-item">'+
+      '<div><div class="li-name">'+escapeHtml(e.name)+(e.role?' <span style="color:var(--text-dim);font-weight:400">· '+escapeHtml(e.role)+'</span>':'')+'</div>'+
+      '<div class="li-meta">'+monthLabel(month)+' · начислено '+fmtMoney(st.due)+' · выплачено '+fmtMoney(st.paid)+' · осталось '+fmtMoney(st.remaining)+(st.overdue?' · <b style="color:var(--red)">ПРОСРОЧЕНО</b>':'')+'</div></div>'+
+      '<div class="li-actions"><div class="proj-sum" style="color:'+(st.remaining?(st.overdue?'var(--red)':'var(--gold)'):'var(--green)')+'">'+(st.remaining?fmtMoney(st.remaining):'Оплачено')+'</div>'+
+      (session?.isAdmin?'<button class="btn btn-secondary" type="button" data-fin-salary-pay="'+escapeHtml(e.id)+'" style="width:auto;padding:7px 10px">'+(st.remaining?'Выплатить':'История')+'</button>':'')+'</div>'+
+    '</div>';
+  }).join('');
+  el.innerHTML='<div class="project-note" style="padding:10px 0">Фиксированный оклад — это начисление. Реальная выплата учитывается отдельно и может быть частичной.</div>'+body+
+    '<div class="list-item" style="border-top:1px solid var(--line-strong)"><div class="li-name" style="font-weight:700">Итого · '+escapeHtml(monthLabel(month))+'</div><div class="proj-sum" style="font-weight:700">'+fmtMoney(totalDue)+'</div></div>'+
+    '<div class="list-item"><div class="li-name">Фактически выплачено</div><div class="proj-sum" style="color:var(--green)">'+fmtMoney(totalPaid)+'</div></div>'+
+    '<div class="list-item"><div class="li-name">Осталось'+(totalOverdue?' · просрочено '+fmtMoney(totalOverdue):'')+'</div><div class="proj-sum" style="color:'+(totalOverdue?'var(--red)':'var(--gold)')+'">'+fmtMoney(totalRemaining)+'</div></div>';
+  el.querySelectorAll('[data-fin-salary-pay]').forEach(b=>b.addEventListener('click',()=>openSalaryPaymentSheet(b.dataset.finSalaryPay,month)));
+}
+
+const oldRenderFinanceSalariesPayroll=typeof renderFinanceSalaries==='function'?renderFinanceSalaries:null;
+if(oldRenderFinanceSalariesPayroll){
+  renderFinanceSalaries=function(){const r=oldRenderFinanceSalariesPayroll.apply(this,arguments);try{enhanceFinanceSalaryCard();}catch(e){console.warn('[Finance salaries]',e);}return r;};
+}
+
 const oldRenderAnalyticsPayroll=typeof renderAnalytics==='function'?renderAnalytics:null;
 if(oldRenderAnalyticsPayroll){
   renderAnalytics=function(){const r=oldRenderAnalyticsPayroll.apply(this,arguments);setTimeout(renderFinancialObligations,0);return r;};
