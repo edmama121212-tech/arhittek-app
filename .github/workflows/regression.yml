@@ -27,5 +27,8 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
+      - name: Check cash accounting and payroll
+        run: npm run test:finance
+
       - name: Run regression suite
         run: npm test
