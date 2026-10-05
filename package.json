@@ -5,7 +5,7 @@
   "description": "Static ARHITTEK application with isolated browser regression checks",
   "scripts": {
     "test": "node tests/regression.cjs",
-    "test:finance": "node tests/obligations.cjs && node tests/finance-simple.cjs"
+    "test:finance": "node tests/obligations.cjs && node tests/cash-finance.cjs"
   },
   "devDependencies": {
     "playwright": "1.62.1",
