@@ -2445,13 +2445,16 @@ function officeDueDay(kind){
 }
 function salaryDueDate(month){
   const p=month.split('-').map(Number),d=new Date(p[0],p[1],salaryDueDay());
-  return d.toISOString().slice(0,10);
+  return financeLocalDate(d);
 }
 function officeDueDate(month,kind){
   const p=month.split('-').map(Number),d=new Date(p[0],p[1]-1,officeDueDay(kind));
-  return d.toISOString().slice(0,10);
+  return financeLocalDate(d);
 }
-function todayISO(){return new Date().toISOString().slice(0,10);}
+function financeLocalDate(d){
+  return String(d.getFullYear())+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function todayISO(){return financeLocalDate(new Date());}
 function salaryPaymentState(employeeId,month,dueOverride){
   const due=dueOverride==null?payrollDueForEmployee(employeeId,month):Math.max(0,num(dueOverride));
   const rows=salaryPaymentRows(employeeId,month);
@@ -2687,11 +2690,11 @@ function officeObligation(kind,month){
   const expected=officeExpected(kind),paid=Math.min(expected,officePaid(kind,month)),remaining=Math.max(0,expected-paid),dueDate=officeDueDate(month,kind),overdue=remaining>0.009&&todayISO()>dueDate;
   return {kind,expected,paid,remaining,dueDate,overdue,full:remaining<=0.009};
 }
-function currentObligationMonth(){return $('finance-obligation-month')?.value||new Date().toISOString().slice(0,7);}
+function currentObligationMonth(){return $('finance-obligation-month')?.value||todayISO().slice(0,7);}
 function financeTrackingStart(){
   let v=localStorage.getItem('finance_obligations_tracking_start');
   if(!v){
-    const candidates=[new Date().toISOString().slice(0,7)];
+    const candidates=[todayISO().slice(0,7)];
     (state.timesheetPayments||[]).forEach(x=>{if(/^\d{4}-\d{2}$/.test(x.month||''))candidates.push(x.month);});
     (state.ledger||[]).filter(x=>!x.deleted_at&&x.type==='salary_payment').forEach(x=>{const m=salaryPaymentMonth(x);if(m)candidates.push(m);});
     (state.companyExpenses||[]).filter(x=>!x.deleted_at&&/аренд|интернет|связь/i.test(String(x.category||''))).forEach(x=>{
@@ -2713,7 +2716,7 @@ function monthSequence(from,to){
   return out;
 }
 function allOverdueObligations(){
-  const current=new Date().toISOString().slice(0,7),start=financeTrackingStart();
+  const current=todayISO().slice(0,7),start=financeTrackingStart();
   let salary=0,rent=0,internet=0;
   monthSequence(start,current).forEach(month=>{
     const s=salaryAggregate(month),r=officeObligation('rent',month),i=officeObligation('internet',month);
