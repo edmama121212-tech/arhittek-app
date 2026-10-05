@@ -2457,6 +2457,7 @@ async function saveSalaryPayment(){
     renderTimesheet();
     renderSalaryPaymentSheet();
     renderFinancialObligations();
+    try{enhanceFinanceSalaryCard();}catch(_){}
     showToast(edit?'Выплата изменена':'Выплата сохранена');
   }catch(e){console.error(e);showToast('Не удалось сохранить выплату');}
 }
@@ -2472,7 +2473,7 @@ async function deleteSalaryPayment(id){
     });
     await loadAll();
     await syncLegacySalaryFlag(salarySheetEmployeeId,salarySheetMonth);
-    renderTimesheet();renderSalaryPaymentSheet();renderFinancialObligations();
+    renderTimesheet();renderSalaryPaymentSheet();renderFinancialObligations();try{enhanceFinanceSalaryCard();}catch(_){}
     showToast('Выплата удалена');
   }catch(e){console.error(e);showToast('Не удалось удалить выплату');}
 }
@@ -2644,7 +2645,7 @@ function renderFinancialObligations(){
         '<div class="field"><label>С какого месяца учитывать просрочки</label><input type="month" id="financeTrackingStart" value="'+financeTrackingStart()+'"></div>'+
       '</details>'+
     '</div>';
-  $('finance-obligation-month')?.addEventListener('change',renderFinancialObligations);
+  $('finance-obligation-month')?.addEventListener('change',()=>{renderFinancialObligations();try{enhanceFinanceSalaryCard();}catch(_){}});
   wrap.querySelectorAll('[data-pay-office]').forEach(b=>b.addEventListener('click',()=>openOfficePayment(b.dataset.payOffice,month)));
   $('financeOpenTimesheet')?.addEventListener('click',()=>{
     document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
@@ -2701,7 +2702,7 @@ if(oldRenderAnalyticsPayroll){
 }
 const oldRenderAllPayroll=typeof renderAll==='function'?renderAll:null;
 if(oldRenderAllPayroll){
-  renderAll=function(){const r=oldRenderAllPayroll.apply(this,arguments);setTimeout(()=>{try{renderFinancialObligations();}catch(e){}},0);return r;};
+  renderAll=function(){const r=oldRenderAllPayroll.apply(this,arguments);setTimeout(()=>{try{renderFinancialObligations();}catch(e){}try{if($('view-finance')?.classList.contains('active'))enhanceFinanceSalaryCard();}catch(e){}},0);return r;};
 }
 setTimeout(()=>{try{renderFinancialObligations();}catch(e){console.warn('[Obligations]',e);}},900);
 })();
