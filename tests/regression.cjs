@@ -63,6 +63,23 @@ await test('cancel restored payment again',async()=>{const row=state.ledger.find
 await test('optimistic lock',async()=>{closeProjectSheet();await loadAll();openProjectSheet(__db.projects[0].id);__db.projects[0].updated_at='2099-01-01T00:00:00Z';document.getElementById('pf-name').value='Overwrite';await saveProject();closeProjectSheet();return __db.projects[0].name},'Обновлённый интерьер');
 await test('payroll paid flag',async()=>{document.getElementById('ts-month').value='2026-09';renderTimesheet();await toggleTimesheetPaid('admin','2026-09',true);return isTimesheetPaid('admin','2026-09')},true);
 await test('payroll clear flag',async()=>{await toggleTimesheetPaid('admin','2026-09',false);return isTimesheetPaid('admin','2026-09')},false);
+await test('partial salary payment state',()=>{
+  state.ledger=(state.ledger||[]).filter(x=>x.type!=='salary_payment');
+  state.ledger.push({id:'salary-part',type:'salary_payment',payee_employee_id:'admin',amount:20000,entry_date:'2026-10-05',description:'[salary:2026-09] первая часть'});
+  const s=salaryPaymentState('admin','2026-09',50000);
+  return [s.due,s.paid,s.remaining,s.full];
+},[50000,20000,30000,false]);
+await test('full salary payment state',()=>{
+  state.ledger.push({id:'salary-rest',type:'salary_payment',payee_employee_id:'admin',amount:30000,entry_date:'2026-10-06',description:'[salary:2026-09] остаток'});
+  const s=salaryPaymentState('admin','2026-09',50000);
+  return [s.paid,s.remaining,s.full];
+},[50000,0,true]);
+await test('finance obligations render',()=>{
+  localStorage.setItem('finance_obligations_tracking_start',new Date().toISOString().slice(0,7));
+  renderFinancialObligations();
+  const t=document.getElementById('financeObligationsWrap')?.textContent||'';
+  return t.includes('Обязательства и оплаты')&&t.includes('Аренда офиса')&&t.includes('Интернет / связь');
+},true);
 await test('company expense',async()=>{openCompanyExpenseSheet(null);document.getElementById('cex-amount').value='110000';await saveCompanyExpense();return __db.company_expenses[0].amount},110000);
 await test('company income',async()=>{openCompanyIncomeSheet(null);document.getElementById('cin-amount').value='20000';await saveCompanyIncome();return __db.company_income[0].amount},20000);
 await test('company expense goes to trash and restores',async()=>{openCompanyExpenseSheet(__db.company_expenses[0].id);await deleteCompanyExpense();await loadDeferredData();const deleted=state.trash.companyExpenses[0];await restoreItem('company_expenses',deleted.id,'Расход');return !__db.company_expenses[0].deleted_at},true);
