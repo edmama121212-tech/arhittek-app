@@ -2535,6 +2535,35 @@ function officeObligation(kind,month){
   return {kind,expected,paid,remaining,dueDate,overdue,full:remaining<=0.009};
 }
 function currentObligationMonth(){return $('finance-obligation-month')?.value||new Date().toISOString().slice(0,7);}
+function financeTrackingStart(){
+  let v=localStorage.getItem('finance_obligations_tracking_start');
+  if(!v){
+    v=new Date().toISOString().slice(0,7);
+    localStorage.setItem('finance_obligations_tracking_start',v);
+  }
+  return v;
+}
+function monthSequence(from,to){
+  if(!/^\d{4}-\d{2}$/.test(from||'')||!/^\d{4}-\d{2}$/.test(to||'')||from>to)return [];
+  const out=[],a=from.split('-').map(Number),b=to.split('-').map(Number);
+  let y=a[0],m=a[1],guard=0;
+  while((y<b[0]||(y===b[0]&&m<=b[1]))&&guard<36){
+    out.push(String(y)+'-'+String(m).padStart(2,'0'));
+    m++;if(m>12){m=1;y++;}guard++;
+  }
+  return out;
+}
+function allOverdueObligations(){
+  const current=new Date().toISOString().slice(0,7),start=financeTrackingStart();
+  let salary=0,rent=0,internet=0;
+  monthSequence(start,current).forEach(month=>{
+    const s=salaryAggregate(month),r=officeObligation('rent',month),i=officeObligation('internet',month);
+    salary+=s.overdue;
+    if(r.overdue)rent+=r.remaining;
+    if(i.overdue)internet+=i.remaining;
+  });
+  return {salary,rent,internet,total:salary+rent+internet,start};
+}
 function openOfficePayment(kind,month){
   const st=officeObligation(kind,month);
   if(st.remaining<=0){showToast('Обязательство уже оплачено');return;}
@@ -2574,6 +2603,7 @@ function renderFinancialObligations(){
   const wrap=ensureObligationsBlock();if(!wrap)return;
   const month=currentObligationMonth(),salary=salaryAggregate(month),rent=officeObligation('rent',month),internet=officeObligation('internet',month);
   const totalDue=salary.due+rent.expected+internet.expected,totalPaid=salary.paid+rent.paid+internet.paid,totalRemaining=salary.remaining+rent.remaining+internet.remaining,totalOverdue=salary.overdue+(rent.overdue?rent.remaining:0)+(internet.overdue?internet.remaining:0);
+  const backlog=allOverdueObligations();
   wrap.innerHTML=
     '<div class="section-label"><span class="lbl-text">Обязательства и оплаты</span><span class="section-label-line"></span></div>'+
     '<div class="card">'+
@@ -2581,8 +2611,9 @@ function renderFinancialObligations(){
       '<div class="finance-kpi-grid">'+
         '<div class="finance-kpi"><span>Начислено / план</span><strong>'+fmtMoney(totalDue)+'</strong></div>'+
         '<div class="finance-kpi"><span>Фактически оплачено</span><strong style="color:var(--green)">'+fmtMoney(totalPaid)+'</strong></div>'+
-        '<div class="finance-kpi finance-kpi-main"><span>Осталось оплатить</span><strong style="color:'+(totalOverdue?'var(--red)':'var(--gold)')+'">'+fmtMoney(totalRemaining)+'</strong><small>'+(totalOverdue?'просрочено '+fmtMoney(totalOverdue):'просрочек нет')+'</small></div>'+
+        '<div class="finance-kpi finance-kpi-main"><span>Осталось оплатить</span><strong style="color:'+(backlog.total?'var(--red)':'var(--gold)')+'">'+fmtMoney(totalRemaining)+'</strong><small>'+(backlog.total?'общая просрочка '+fmtMoney(backlog.total):'просрочек нет')+'</small></div>'+
       '</div>'+
+      (backlog.total?'<div class="note" style="margin:10px 0;border:1px solid rgba(224,82,82,.35);background:rgba(224,82,82,.08);color:var(--red)"><b>Просроченные обязательства: '+fmtMoney(backlog.total)+'</b><br>Зарплата '+fmtMoney(backlog.salary)+' · аренда '+fmtMoney(backlog.rent)+' · интернет '+fmtMoney(backlog.internet)+' · учёт с '+escapeHtml(backlog.start)+'</div>':'')+
       '<div class="list-item"><div><div class="li-name">Зарплата сотрудникам</div><div class="li-meta">Начислено '+fmtMoney(salary.due)+' · выплачено '+fmtMoney(salary.paid)+' · осталось '+fmtMoney(salary.remaining)+'</div></div><div class="li-actions">'+(salary.overdue?'<span style="color:var(--red);font-size:11px;font-weight:700">ПРОСРОЧЕНО</span>':'')+'<button class="btn btn-secondary" type="button" id="financeOpenTimesheet" style="width:auto;padding:7px 10px">Табель</button></div></div>'+
       '<div class="list-item"><div><div class="li-name">Аренда офиса · '+fmtMoney(rent.expected)+'</div><div class="li-meta">Оплачено '+fmtMoney(rent.paid)+' · осталось '+fmtMoney(rent.remaining)+' · срок до '+fmtDate(rent.dueDate)+'</div></div><div class="li-actions">'+statusBadge(rent)+(rent.remaining>0?'<button class="btn btn-secondary" type="button" data-pay-office="rent" style="width:auto;padding:7px 10px">Оплатить</button>':'')+'</div></div>'+
       '<div class="list-item"><div><div class="li-name">Интернет / связь · '+fmtMoney(internet.expected)+'</div><div class="li-meta">Оплачено '+fmtMoney(internet.paid)+' · осталось '+fmtMoney(internet.remaining)+' · срок до '+fmtDate(internet.dueDate)+'</div></div><div class="li-actions">'+statusBadge(internet)+(internet.remaining>0?'<button class="btn btn-secondary" type="button" data-pay-office="internet" style="width:auto;padding:7px 10px">Оплатить</button>':'')+'</div></div>'+
@@ -2590,6 +2621,7 @@ function renderFinancialObligations(){
         '<div class="field-row" style="margin-top:10px"><div class="field"><label>Аренда в месяц, ₽</label><input type="number" id="financeRentExpected" value="'+rent.expected+'"></div><div class="field"><label>Аренда до числа</label><input type="number" min="1" max="28" id="financeRentDueDay" value="'+officeDueDay('rent')+'"></div></div>'+
         '<div class="field-row"><div class="field"><label>Интернет в месяц, ₽</label><input type="number" id="financeInternetExpected" value="'+internet.expected+'"></div><div class="field"><label>Интернет до числа</label><input type="number" min="1" max="28" id="financeInternetDueDay" value="'+officeDueDay('internet')+'"></div></div>'+
         '<div class="field"><label>Зарплата за месяц — выплатить до числа следующего месяца</label><input type="number" min="1" max="28" id="financeSalaryDueDay" value="'+salaryDueDay()+'"></div>'+
+        '<div class="field"><label>С какого месяца учитывать просрочки</label><input type="month" id="financeTrackingStart" value="'+financeTrackingStart()+'"></div>'+
       '</details>'+
     '</div>';
   $('finance-obligation-month')?.addEventListener('change',renderFinancialObligations);
@@ -2602,13 +2634,14 @@ function renderFinancialObligations(){
   [['financeRentExpected','forecast_rent'],['financeInternetExpected','forecast_internet'],['financeRentDueDay','finance_rent_due_day'],['financeInternetDueDay','finance_internet_due_day'],['financeSalaryDueDay','finance_salary_due_day']].forEach(pair=>{
     $(pair[0])?.addEventListener('change',e=>{localStorage.setItem(pair[1],String(Math.max(0,num(e.target.value))));renderFinancialObligations();try{renderFinancialForecast?.();}catch(_){}});
   });
+  $('financeTrackingStart')?.addEventListener('change',e=>{if(e.target.value)localStorage.setItem('finance_obligations_tracking_start',e.target.value);renderFinancialObligations();});
   const nav=document.querySelector('.nav-btn[data-view="view-finance"]');
   if(nav){
     let badge=nav.querySelector('.finance-overdue-badge');
-    if(totalOverdue>0){
+    if(backlog.total>0){
       if(!badge){badge=document.createElement('span');badge.className='finance-overdue-badge';badge.style.cssText='position:absolute;top:3px;right:8px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:var(--red);color:white;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center';nav.style.position='relative';nav.appendChild(badge);}
       badge.textContent='!';
-      nav.title='Есть просроченные обязательства на '+fmtMoney(totalOverdue);
+      nav.title='Есть просроченные обязательства на '+fmtMoney(backlog.total);
     }else if(badge)badge.remove();
   }
 }
