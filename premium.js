@@ -2668,6 +2668,28 @@ function renderFinancialObligations(){
 }
 window.renderFinancialObligations=renderFinancialObligations;
 
+function enhanceCompanyBudgetObligations(){
+  const el=$('companyBudgetBlock');if(!el)return;
+  const month=currentObligationMonth();
+  const salary=salaryAggregate(month),rent=officeObligation('rent',month),internet=officeObligation('internet',month);
+  const committed=salary.remaining+rent.remaining+internet.remaining;
+  let reserve=0;
+  try{reserve=getCompanyReserveBalance();}catch(e){}
+  const free=reserve-committed;
+  const old=el.querySelector('.reserve-obligations-extra');if(old)old.remove();
+  const extra=document.createElement('div');extra.className='reserve-obligations-extra';
+  extra.innerHTML=
+    '<div class="fee-row" style="border-top:1px solid var(--line-strong);margin-top:8px;padding-top:8px"><div class="fl">Неоплаченные обязательства · '+escapeHtml(monthLabel(month))+'</div><div class="fv" style="color:'+(committed?'var(--gold)':'var(--green)')+'">−'+fmtMoney(committed)+'</div></div>'+
+    '<div class="fee-row total"><div class="fl">Свободно после обязательств</div><div class="fv" style="color:'+(free>=0?'var(--green)':'var(--red)')+'">'+fmtMoney(free)+'</div></div>'+
+    '<div class="note" style="margin-top:8px">Учётный резерв — не банковский баланс. Эта строка показывает, сколько останется от указанного резерва после текущих обязательств по зарплате, аренде и интернету.</div>';
+  el.appendChild(extra);
+}
+
+const oldRenderCompanyBudgetOb=typeof renderCompanyBudget==='function'?renderCompanyBudget:null;
+if(oldRenderCompanyBudgetOb){
+  renderCompanyBudget=function(){const r=oldRenderCompanyBudgetOb.apply(this,arguments);try{enhanceCompanyBudgetObligations();}catch(e){console.warn('[Reserve obligations]',e);}return r;};
+}
+
 function enhanceFinanceSalaryCard(){
   const el=$('finSalariesCard');if(!el)return;
   const month=currentObligationMonth();
