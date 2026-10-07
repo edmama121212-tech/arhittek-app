@@ -8464,7 +8464,7 @@ function kpFlatCatalog(){
 
 function addKpService(){
   const id = 'kpsvc-' + (++kpServiceCounter);
-  kpServices.push({ id, catalogIndex: 0, qty: 1, customRate: null });
+  kpServices.push({ id, catalogIndex: 0, qty: 1, customRate: null, preliminaryArea: false });
   renderKpServices();
 }
 
@@ -8517,7 +8517,8 @@ function renderKpServices(){
         </div>
       </div>
       ${isCustom ? `<button class="icon-btn" style="font-size:11px; color:var(--text-dim); padding:0; margin-bottom:6px;" onclick="updateKpService('${s.id}','customRate','')">↺ Вернуть цену из прайса</button>` : ''}
-      <div class="kp-service-sum">${fmtMoney(sum)}</div>
+      ${item.unit === 'м²' ? `<label style="display:flex;gap:10px;align-items:center;margin:10px 0"><input type="checkbox" ${s.preliminaryArea?'checked':''} onchange="updateKpService('${s.id}','preliminaryArea',this.checked)" style="width:auto">Предварительная площадь</label>${s.preliminaryArea?'<div class="note">Площадь и стоимость могут увеличиться или уменьшиться в ходе проектирования. Итоговый расчёт — по уточнённой площади и согласованному тарифу за м².</div>':''}` : ''}
+      <div class="kp-service-sum">${s.preliminaryArea&&item.unit==='м²'?'≈ ':''}${fmtMoney(sum)}</div>
     </div>`;
   }).join('');
 
@@ -8531,6 +8532,7 @@ function updateKpService(id, field, value){
     s.catalogIndex = parseInt(value);
     s.customRate = null;
   }
+  else if(field === 'preliminaryArea') s.preliminaryArea = value === true;
   else if(field === 'qty') s.qty = parseFloat(value) || 0;
   else if(field === 'customRate') s.customRate = value === '' ? null : (parseFloat(value) || 0);
   renderKpServices();
@@ -8556,11 +8558,12 @@ function updateKpTotals(){
   const advance = total * 0.5;
   const remainder = total - advance;
 
-  document.getElementById('kp-subtotal').textContent = fmtMoney(subtotal);
+  const prefix = kpServices.some(s=>s.preliminaryArea&&flat[s.catalogIndex]?.unit==='м²')?'≈ ':'';
+  document.getElementById('kp-subtotal').textContent = prefix+fmtMoney(subtotal);
   document.getElementById('kp-discount-amount').textContent = fmtMoney(discountAmount);
-  document.getElementById('kp-total').textContent = fmtMoney(total);
-  document.getElementById('kp-advance').textContent = fmtMoney(advance);
-  document.getElementById('kp-remainder').textContent = fmtMoney(remainder);
+  document.getElementById('kp-total').textContent = prefix+fmtMoney(total);
+  document.getElementById('kp-advance').textContent = prefix+fmtMoney(advance);
+  document.getElementById('kp-remainder').textContent = prefix+fmtMoney(remainder);
 
   return {subtotal, discountAmount, total, advance, remainder};
 }
@@ -9229,6 +9232,7 @@ function getKpData(){
       return {
         name: item.name,
         unit: item.unit,
+        preliminaryArea: item.unit === 'м²' && s.preliminaryArea === true,
         rate: rate,
         listRate: item.rate,
         desc: item.desc || '',
@@ -9310,10 +9314,11 @@ function exportKpToPdf(){
   const rows = data.services.map((s,i)=>[
     String(i+1),
     s.name,
-    `${s.qty} ${s.unit}`,
+    `${s.qty} ${s.unit}${s.preliminaryArea?' (предв.)':''}`,
     s.rate !== s.listRate ? `${pdfMoney(s.rate)}*` : `${pdfMoney(s.rate)}`,
-    `${pdfMoney(s.sum)}`,
+    `${pdfMoney(s.sum)}${s.preliminaryArea?' (предв.)':''}`,
   ]);
+  const preliminary = data.services.some(s=>s.preliminaryArea);
   const hasCustomRates = data.services.some(s=>s.rate !== s.listRate);
 
   doc.autoTable({
@@ -9335,6 +9340,14 @@ function exportKpToPdf(){
     doc.text('* индивидуальная договорная цена', margin, finalY);
     doc.setTextColor(0);
     finalY += 6;
+  }
+
+  if(preliminary){
+    doc.setFont('Roboto','normal');doc.setFontSize(9);doc.setTextColor(70);
+    const note = 'Предварительная площадь: отмеченные позиции могут увеличиться или уменьшиться в ходе проектирования. Итоговая стоимость рассчитывается по уточнённой площади по согласованному тарифу за м² и изменяется пропорционально — как в большую, так и в меньшую сторону.';
+    const lines = doc.splitTextToSize(note,pageWidth-margin*2);
+    if(finalY+lines.length*4.5+6>270){doc.addPage();finalY=20;}
+    doc.text(lines,margin,finalY);finalY+=lines.length*4.5+6;doc.setTextColor(0);
   }
 
   // Состав услуг (описания тарифов)
@@ -9379,7 +9392,7 @@ function exportKpToPdf(){
 
   doc.setFont('Roboto','bold');
   doc.setFontSize(12);
-  doc.text('Итого к оплате:', labelX, finalY, {align:'right'});
+  doc.text(preliminary?'Предварительный итог:':'Итого к оплате:', labelX, finalY, {align:'right'});
   doc.text(pdfMoney(data.total), valueX, finalY, {align:'right'});
   finalY += 8;
 
@@ -9569,6 +9582,7 @@ function loadKpForm(kp){
     catalogIndex: s.catalogIndex || 0,
     qty: s.qty || 1,
     customRate: (s.customRate===undefined ? null : s.customRate),
+    preliminaryArea: s.preliminaryArea === true,
   }));
   if(!kpServices.length) addKpService();
   renderKpServices();
@@ -9587,7 +9601,7 @@ async function saveKpForm(){
     payment_method: kpPaymentMethod,
     discount_type: document.getElementById('kp-discount-type').value,
     discount_value: parseFloat(document.getElementById('kp-discount-value').value) || 0,
-    services: kpServices.map(s=>({catalogIndex: s.catalogIndex, qty: s.qty, customRate: s.customRate})),
+    services: kpServices.map(s=>({catalogIndex: s.catalogIndex, qty: s.qty, customRate: s.customRate, preliminaryArea: s.preliminaryArea === true})),
     updated_at: new Date().toISOString(),
   };
 
