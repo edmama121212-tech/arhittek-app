@@ -557,6 +557,10 @@ async function init(){
     }
     tzForm = row;
     answers = tzForm.answers || {};
+    // The same catalog as Settings and commercial offers, including older briefs.
+    const {data:catalogRows,error:catalogError}=await sb.from('kp_catalog').select('id,name,group_name,description,rate,unit').is('deleted_at',null).order('sort_order',{ascending:true});
+    if(!catalogError) LandscapeBrief.sync(answers,LandscapeBrief.catalog(catalogRows));
+    else console.warn('Не удалось обновить тарифы ТЗ',catalogError);
     renderForm();
   }catch(e){
     console.error(e);
@@ -644,7 +648,7 @@ function renderField(field){
   if(field.type==='scope') return answers.ld_scope?`<div class="q"><div class="q-label">${escapeHtml(field.label)}</div><div class="q-hint">${escapeHtml(answers.ld_scope)}</div></div>`:'';
   if(field.id==='ld_tariff'){
     const t=LandscapeBrief.selected(answers);
-    field={...field,hint:t?(t.desc||'Состав уточняется по договору'):'Выберите тариф, чтобы открыть вопросы ТЗ'};
+    field={...field,hint:t?((t.rate?`${t.rate} ₽/${t.unit||'м²'}. `:'')+(t.desc||'Состав уточняется по договору')):(LandscapeBrief.tariffs(answers).length?'Выберите тариф, чтобы открыть вопросы ТЗ':'Не удалось загрузить тарифы. Обновите страницу или обратитесь в ARHITTEK.')};
   }
   const val = answers[field.id];
 
