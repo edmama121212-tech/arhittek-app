@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="landscape-brief.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 <style>
@@ -249,7 +250,7 @@ const SCHEMA = [
       {id:'email', type:'text', label:'Email (необязательно)', placeholder:'example@mail.ru'},
       {id:'object_address', type:'text', label:'Адрес объекта', placeholder:'Город, улица, участок №'},
       {id:'service_type', type:'chips', label:'Какая услуга вам нужна?', multi:true,
-        options:['Архитектурное проектирование (АР)','Дизайн интерьера (ДИ)','Дизайн мебели','Ремонт под ключ']},
+        options:['Архитектурное проектирование (АР)','Дизайн интерьера (ДИ)','Дизайн мебели','Ремонт под ключ','Ландшафтный дизайн']},
     ]
   },
   {
@@ -417,8 +418,18 @@ const SCHEMA = [
 // ============================================================
 // PDF EXPORT
 // ============================================================
+function briefSchema(a){
+ const list=SCHEMA.map(s=>({...s,fields:s.fields.slice()}));
+ if((a.service_type||[]).includes(LandscapeBrief.service)){
+  list[0].fields.push({id:'ld_scope',type:'scope',label:'Состав выбранного тарифа'});
+  list[0].fields.push({id:'ld_tariff',type:'chips',label:'Тариф ландшафтного дизайна',options:LandscapeBrief.tariffs(a).map(t=>t.name)});
+  list.splice(list.length-1,0,...LandscapeBrief.sections(a));
+ }
+ return list;
+}
+
 function tzFieldLabel(fieldId){
-  for(const section of SCHEMA){
+  for(const section of briefSchema(answers)){
     for(const field of section.fields){
       if(field.id === fieldId) return field.label;
     }
@@ -460,7 +471,7 @@ function exportTzToPdf(formData){
   y = 38;
   const selectedServices = Array.isArray(formData.service_type) ? formData.service_type : [];
 
-  SCHEMA.forEach(section=>{
+  briefSchema(formData).forEach(section=>{
     if(section.requiresService && !selectedServices.includes(section.requiresService)) return;
 
     const hasAnswers = section.fields.some(f=>{
@@ -572,7 +583,7 @@ function renderForm(){
   const selectedServices = Array.isArray(answers.service_type) ? answers.service_type : [];
 
   // Build visible sections list
-  const visibleSections = SCHEMA.filter(s=>
+  const visibleSections = briefSchema(answers).filter(s=>
     !s.requiresService || selectedServices.includes(s.requiresService)
   );
   const total = visibleSections.length;
@@ -630,6 +641,11 @@ function renderForm(){
 }
 
 function renderField(field){
+  if(field.type==='scope') return answers.ld_scope?`<div class="q"><div class="q-label">${escapeHtml(field.label)}</div><div class="q-hint">${escapeHtml(answers.ld_scope)}</div></div>`:'';
+  if(field.id==='ld_tariff'){
+    const t=LandscapeBrief.selected(answers);
+    field={...field,hint:t?(t.desc||'Состав уточняется по договору'):'Выберите тариф, чтобы открыть вопросы ТЗ'};
+  }
   const val = answers[field.id];
 
   if(field.type === 'text' || field.type === 'tel' || field.type === 'number'){
@@ -773,7 +789,8 @@ function bindFieldEvents(){
       scheduleAutoSave();
 
       // If the service type selection changed, re-render to show/hide AR/DI sections
-      if(fieldId === 'service_type'){
+      if(fieldId === 'ld_tariff') LandscapeBrief.setTariff(answers,value);
+      if(fieldId === 'service_type' || fieldId === 'ld_tariff'){
         renderForm();
       }
     });
@@ -799,7 +816,7 @@ function bindFieldEvents(){
 // Update progress bar without full re-render
 function updateProgressBar(){
   const selectedServices = Array.isArray(answers.service_type) ? answers.service_type : [];
-  const visibleSections = SCHEMA.filter(s=> !s.requiresService || selectedServices.includes(s.requiresService));
+  const visibleSections = briefSchema(answers).filter(s=> !s.requiresService || selectedServices.includes(s.requiresService));
   const total = visibleSections.length;
   const filledCount = visibleSections.filter(s=>{
     return s.fields.some(f=>{
