@@ -21,6 +21,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="landscape-brief.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
@@ -8124,6 +8125,10 @@ const TZ_FIELD_LABELS = {
   other_notes: 'Любая другая важная информация',
 };
 
+LandscapeBrief.fields.forEach(f=>TZ_FIELD_LABELS[f.id]=f.label);
+TZ_FIELD_LABELS.ld_tariff='Тариф ландшафтного дизайна';
+TZ_FIELD_LABELS.ld_scope='Состав выбранного тарифа';
+
 function tzFormUrl(token){
   // Assumes tz.html is hosted alongside the main app
   const base = window.location.href.replace(/[^\/]*$/, '');
@@ -8201,6 +8206,12 @@ async function deleteTzForm(tzFormId){
   }
 }
 
+function landscapeTzSeed(p){
+ const cat=state.categories.find(c=>c.id===p.category_id);
+ if(!/ландшафт/i.test(cat?.name||'')) return {};
+ const items=kpCatalogGrouped().filter(g=>/ландшафт/i.test(g.group)).flatMap(g=>g.items);
+ return {service_type:[LandscapeBrief.service],_ld_tariffs:items.length?items.map(t=>({name:t.name,desc:t.desc||'',rate:t.rate,unit:t.unit})):LandscapeBrief.defaults};
+}
 async function createTzForm(){
   if(!editingProjectId) return;
   const p = state.projects.find(x=>x.id===editingProjectId);
@@ -8213,6 +8224,7 @@ async function createTzForm(){
       project_id: editingProjectId,
       token,
       status: 'Отправлено',
+      answers: landscapeTzSeed(p),
     }).select().single();
     if(error) throw error;
 
@@ -8248,15 +8260,22 @@ function viewTzAnswers(tzFormId){
   const answers = f.answers || {};
   const refs = state.tzReferences ? state.tzReferences.filter(r=>r.tz_form_id===tzFormId) : [];
 
+  if((answers.service_type||[]).includes(LandscapeBrief.service)){
+    answers.ld_tariff=answers.ld_tariff||'';
+    LandscapeBrief.fields.forEach(field=>{if(field.type!=='refs' && LandscapeBrief.visible(field.id,answers) && answers[field.id]===undefined) answers[field.id]='';});
+  }
+
   let html = `<div class="card">
     <div class="li-meta" style="margin-bottom:8px;">Заполнено ${fmtDateTime(f.submitted_at)}</div>
   `;
 
   Object.entries(answers).forEach(([key, val])=>{
+    if(key.startsWith('_') || !LandscapeBrief.visible(key,answers)) return;
     if(key.endsWith('_files')) return; // handled separately as refs
-    if(val === '' || val == null || (Array.isArray(val) && !val.length)) return;
+    if(key!=='ld_tariff' && !key.startsWith('ld_') && (val === '' || val == null || (Array.isArray(val) && !val.length))) return;
     const label = TZ_FIELD_LABELS[key] || key;
     const displayVal = Array.isArray(val) ? val.join(', ') : val;
+    if(key==='ld_tariff'){ html += `<div class="field"><label>${escapeHtml(label)}</label><select class="tz-edit-field" data-key="ld_tariff" onchange="changeLandscapeTariff('${f.id}',this.value)"><option value="">Выберите тариф</option>${LandscapeBrief.tariffs(answers).map(t=>`<option ${t.name===val?'selected':''} value="${escapeHtml(t.name)}">${escapeHtml(t.name)}</option>`).join('')}</select></div>`; return; }
     html += `<div class="fee-row" style="display:block; padding:8px 0;">
       <div class="fl" style="margin-bottom:3px;">${escapeHtml(label)}</div>
       <textarea class="tz-edit-field" data-key="${escapeHtml(key)}" data-is-array="${Array.isArray(val)?'1':'0'}"
@@ -8266,6 +8285,7 @@ function viewTzAnswers(tzFormId){
 
   // Reference photos
   Object.entries(answers).forEach(([key, val])=>{
+    if(key.startsWith('_') || !LandscapeBrief.visible(key.replace(/_files$/, ''),answers)) return;
     if(!key.endsWith('_files') || !Array.isArray(val) || !val.length) return;
     const baseKey = key.replace('_files','');
     const label = TZ_FIELD_LABELS[baseKey] || baseKey;
@@ -8286,6 +8306,11 @@ function viewTzAnswers(tzFormId){
   document.getElementById('tzSheetOverlay').classList.add('active');
 }
 
+function changeLandscapeTariff(id,value){
+ const f=state.tzForms.find(x=>x.id===id); if(!f) return;
+ document.querySelectorAll('.tz-edit-field').forEach(el=>{f.answers[el.dataset.key]=el.dataset.isArray==='1'?el.value.split(',').map(v=>v.trim()).filter(Boolean):el.value;});
+ LandscapeBrief.setTariff(f.answers,value); viewTzAnswers(id);
+}
 async function saveTzAnswers(tzFormId){
   const f = state.tzForms.find(x=>x.id===tzFormId);
   if(!f) return;
@@ -8302,6 +8327,7 @@ async function saveTzAnswers(tzFormId){
     }
   });
 
+  if((updatedAnswers.service_type||[]).includes(LandscapeBrief.service)) LandscapeBrief.setTariff(updatedAnswers,updatedAnswers.ld_tariff||'');
   showToast('Сохранение…');
   try{
     const {error} = await sb.from('tz_forms').update({answers: updatedAnswers}).eq('id', tzFormId);
@@ -8346,6 +8372,7 @@ async function exportTzAnswersToPdf(tzFormId){
   y = 38;
 
   Object.entries(answers).forEach(([key, val])=>{
+    if(key.startsWith('_') || !LandscapeBrief.visible(key,answers)) return;
     if(key.endsWith('_files')) return;
     if(val === '' || val == null || (Array.isArray(val) && !val.length)) return;
     const label = TZ_FIELD_LABELS[key] || key;
