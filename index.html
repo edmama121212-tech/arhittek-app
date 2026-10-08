@@ -8209,8 +8209,8 @@ async function deleteTzForm(tzFormId){
 function landscapeTzSeed(p){
  const cat=state.categories.find(c=>c.id===p.category_id);
  if(!/ландшафт/i.test(cat?.name||'')) return {};
- const items=kpCatalogGrouped().filter(g=>/ландшафт/i.test(g.group)).flatMap(g=>g.items);
- return {service_type:[LandscapeBrief.service],_ld_tariffs:items.length?items.map(t=>({name:t.name,desc:t.desc||'',rate:t.rate,unit:t.unit})):LandscapeBrief.defaults};
+ const items=LandscapeBrief.catalog(state.kpCatalog);
+ return {service_type:[LandscapeBrief.service],_ld_tariffs:items};
 }
 async function createTzForm(){
   if(!editingProjectId) return;
@@ -8258,6 +8258,7 @@ function viewTzAnswers(tzFormId){
   if(!f) return;
 
   const answers = f.answers || {};
+  if((answers.service_type||[]).includes(LandscapeBrief.service)) LandscapeBrief.sync(answers,LandscapeBrief.catalog(state.kpCatalog));
   const refs = state.tzReferences ? state.tzReferences.filter(r=>r.tz_form_id===tzFormId) : [];
 
   if((answers.service_type||[]).includes(LandscapeBrief.service)){
