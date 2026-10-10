@@ -185,6 +185,7 @@ sheet.addEventListener('click',e=>{
 sheet.addEventListener('input',e=>{if(e.target.id!=='team-deduct-costs')refresh();});sheet.addEventListener('change',e=>{if(e.target.id==='pf-category')defaults();refresh();});
 // Stale duplicate selections must never restore an employee removed in the team tab.
 ['pf-employee-fee','pf-co-employee-fee'].forEach((id,i)=>$(id).addEventListener('change',()=>{$(i?'pf-co-employee':'pf-employee').value=$(id).value;}));
+['pf-feepaid','pf-co-feepaid'].forEach(id=>{const el=$(id);if(el){el.readOnly=true;el.title='Фактическая выплата записывается через приём платежа или табель';}});
 const oldSave=saveProject;saveProject=async function(){
  const p=draft();
  if(p.employee_id&&p.employee_id===p.co_employee_id){selectTab('team');showToast('Один сотрудник выбран дважды. Оставьте его в одной строке.');return;}
@@ -2461,8 +2462,12 @@ function todayISO(){return financeLocalDate(new Date());}
 function salaryPaymentState(employeeId,month,dueOverride){
   const due=dueOverride==null?payrollDueForEmployee(employeeId,month):Math.max(0,num(dueOverride));
   const rows=salaryPaymentRows(employeeId,month);
-  let paid=rows.reduce((s,x)=>s+num(x.amount),0);
-  if(!rows.length && LEGACY_PAID_FN(employeeId,month)) paid=due;
+  const projectFeeRows=(state.ledger||[]).filter(x=>!x.deleted_at&&x.type==='fee_payment'&&
+    (()=>{const p=state.projects.find(p=>p.id===x.project_id);return p&&findStatus(p.status_id)?.name==='Завершён'&&
+      (x.payee_employee_id||p.employee_id)===employeeId&&
+      timesheetProjectRefDate(p)?.slice(0,7)===month;})());
+  let paid=rows.reduce((s,x)=>s+num(x.amount),0)+projectFeeRows.reduce((sum,x)=>sum+num(x.amount),0);
+  if(!rows.length && !projectFeeRows.length && LEGACY_PAID_FN(employeeId,month)) paid=due;
   paid=Math.max(0,Math.min(due,paid));
   const remaining=Math.max(0,due-paid);
   const dueDate=salaryDueDate(month);
