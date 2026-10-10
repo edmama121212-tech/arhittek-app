@@ -12,6 +12,16 @@ state.companyIncome.push({id:'lease',amount:20000,income_date:'2026-10-05',creat
 state.companyExpenses[0].deleted_at='2026-10-05';assert.equal(c.balance(state),70000);
 assert.equal(c.expected(state.projects[0]),100000);assert.equal(c.dueProjects(state,'2026-11').length,1);state.projects[0].end_date='2026-12-15';assert.equal(c.dueProjects(state,'2026-11').length,0);assert.equal(c.dueProjects(state,'2026-12').length,1);
 now='2026-10-31T21:00:00Z';assert.equal(c.day(),'2026-11-01');assert.equal(c.monthSummary(state,'2026-10').status,'Закрыт');assert.equal(c.monthSummary(state,'2026-11').opening,c.monthSummary(state,'2026-10').closing);assert.equal(c.shift('2026-12',1),'2027-01');
+// Re-entering historical receipts must not add cash already included in the snapshot.
+const settlement={projects:[],ledger:[
+ {type:'advance',amount:30000,entry_date:'2026-09-10',created_at:'2026-10-10T00:00:00Z'},
+ {type:'final_payment',amount:55000,entry_date:'2026-10-10',created_at:'2026-10-10T00:00:00Z'},
+ {type:'fee_payment',amount:34000,entry_date:'2026-10-10',created_at:'2026-10-10T00:00:00Z'}]};
+assert.equal(c.balance(settlement,'2026-10-10'),41000);
+assert.equal(c.amortization(settlement,'2026-10-10'),2750);
+settlement.ledger.push({type:'project_expense',amount:5000,entry_date:'2026-10-10',created_at:'2026-10-10T00:00:00Z'});
+assert.equal(c.balance(settlement,'2026-10-10'),36000);
+settlement.ledger.at(-1).deleted_at='deleted';assert.equal(c.balance(settlement,'2026-10-10'),41000);
 const dom=new JSDOM('<div id="view-finance"><div id="financeVisualTabs"></div>'+['overview','income','expense','reserve','forecast','team','amortization'].map(x=>'<div class="finance-visual-panel" data-fin-panel="'+x+'"></div>').join('')+'</div>',{url:'https://app.test',runScripts:'outside-only'}),w=dom.window;w.setTimeout=fn=>fn();w.setInterval=()=>0;w.session={isAdmin:true};w.state={employees:[],ledger:[],companyIncome:[],companyExpenses:[],projects:[],statuses:[]};w.getCompanyReserveBalance=()=>190000;w.escapeHtml=s=>String(s);w.fmtMoney=n=>String(n)+' ₽';w.fmtDate=s=>s;w.ruMonthLabel=s=>s;w.timesheetMonthRange=m=>({from:m+'-01',to:m+'-30'});w.completedProjectEarningsForRange=()=>({employees:{}});w.splitPayrollByEmployee=()=>({result:{}});w.ledgerTypeLabels={};w.findStatus=()=>({});w.showToast=()=>{};w.loadAll=async()=>{};
 let db=[],insertCount=0;w.sb={from:table=>({select:()=>({is:()=>({eq:async()=>({data:db.filter(x=>x.table===table),error:null})})}),insert:async row=>{insertCount++;const r={...row,id:String(insertCount),created_at:new Date().toISOString(),table};db.push(r);w.state[table==='company_income'?'companyIncome':'companyExpenses'].push(r);return {error:null}}})};
 w.eval(source);assert(w.document.getElementById('cash-panel-overview').textContent.includes('20000 ₽'));
