@@ -5719,7 +5719,7 @@ async function syncProjectExpensesTotal(projectId){
   if(!p) return 0;
   // role_payout — ФОТ, а не прямой расход проекта. Не записываем его в
   // projects.expenses, иначе он попадает в себестоимость и затем повторно в ФОТ.
-  const total = getProjectExpenses(p);
+  const total = isConstructionProject(p)?getProjectExpenses({...p,expenses:0}):(state.ledger||[]).filter(e=>e.project_id===projectId&&e.type==='project_expense'&&!e.deleted_at).reduce((sum,e)=>sum+(Number(e.amount)||0),0);
   const {error} = await sb.from('projects')
     .update({expenses: total, updated_at:new Date().toISOString()})
     .eq('id', projectId);
@@ -6009,7 +6009,7 @@ function renderLedger(){
 
   // Итог отфильтрованного периода
   const totalIn = list.filter(e=>['advance','final_payment','income','materials_budget','construction_budget'].includes(e.type)).reduce((s,e)=>s+Number(e.amount||0),0);
-  const totalOut = list.filter(e=>['expense','payment','withdrawal'].includes(e.type)).reduce((s,e)=>s+Number(e.amount||0),0);
+  const totalOut = list.filter(e=>['expense','project_expense','payment','withdrawal','fee_payment','salary_payment'].includes(e.type)).reduce((s,e)=>s+Number(e.amount||0),0);
   const summaryHtml = `<div style="display:flex;gap:10px;margin-bottom:8px;font-size:11px;">
     <span style="color:var(--green);">↑ Приход: ${fmtMoney(totalIn)}</span>
     <span style="color:var(--red);">↓ Расход: ${fmtMoney(totalOut)}</span>
@@ -6146,6 +6146,7 @@ async function savePayment(){
     const description = note || t?.label || 'Платёж';
     const {data, error} = await sb.from('ledger_entries').insert({
       type: paymentType, project_id: projectId, description, amount, entry_date,
+      ...(paymentType==='fee_payment'?{payee_employee_id:p.employee_id}:{}),
       received_by: session ? session.employeeId : null,
     }).select().single();
     if(error) throw error;
@@ -6202,6 +6203,9 @@ document.getElementById('payment-save').addEventListener('click', savePayment);
 async function deleteLedgerEntry(id){
   try{
     const e = state.ledger.find(x=>x.id===id);
+    if(e?.project_id&&e.type==='project_expense'){await deleteProjectExpense(id,e.project_id);return;}
+    if(e?.project_id&&e.type==='role_payout'){await deleteProjectRolePayout(id,e.project_id);return;}
+    if(e?.project_id&&['advance','final_payment','materials_budget','construction_budget','fee_payment'].includes(e.type)){await cancelPayment(id);return;}
     const {error} = await sb.from('ledger_entries').update({deleted_at: new Date().toISOString()}).eq('id', id);
     if(error) throw error;
     const proj = e ? state.projects.find(p=>p.id===e.project_id) : null;
