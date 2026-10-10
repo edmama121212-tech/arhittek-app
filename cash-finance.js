@@ -48,18 +48,41 @@ function render(){
  // Hide obsolete accrued-finance summaries; keep the previous tabs and payroll UI.
  const old=$('financeObligationsWrap');if(old)old.hidden=true;
 }
+function forecastProject(p){
+ const fees=getProjectFee(p),incoming=expected(p),rows=p.fee_base==='m2'
+   ? projectRolePayoutEntries(p.id).map(r=>({id:r.payee_employee_id,amount:n(r.amount)}))
+   : [{id:p.employee_id,amount:Math.max(0,n(fees.mainFeeAmount)-n(fees.mainPaid))},
+      {id:p.co_employee_id,amount:Math.max(0,n(fees.coFeeAmount)-n(fees.coPaid))}];
+ const payouts=rows.filter(r=>r.id),unpaid=payouts.reduce((sum,r)=>sum+r.amount,0);
+ return {project:p,incoming,payouts,unpaid,net:incoming-unpaid,amortization:Math.round(incoming*5)/100};
+}
 function renderForecast(){
- const current=day().slice(0,7);let running=available(state),html='<div class="note">Ожидаемые остатки оплаты — по срокам проектов. Прогноз не меняет фактический баланс. Доход от сдачи помещения планируется, но признаётся только после подтверждения.</div>';
+ const current=day().slice(0,7);let running=available(state),html='<div class="note">По срокам проектов: оставшаяся оплата клиента минус невыплаченные гонорары по условиям карточки. Авансы повторно не учитываются. Прогноз пересчитывается при изменении стоимости, процентов и сроков; фактический баланс он не меняет.</div>';
  for(let i=0;i<6;i++){
- const month=shift(current,i),projects=dueProjects(state,month),income=projects.reduce((a,p)=>a+expected(p),0),lease=recurringState('sublease',month),rent=recurringState('rent',month),internet=recurringState('internet',month);
+ const month=shift(current,i),projects=dueProjects(state,month),plans=projects.map(forecastProject),income=plans.reduce((a,p)=>a+p.incoming,0),lease=recurringState('sublease',month),rent=recurringState('rent',month),internet=recurringState('internet',month);
  const range=timesheetMonthRange(month),earned=completedProjectEarningsForRange(range.from,range.to).employees,split=splitPayrollByEmployee(earned).result;
- let salaries=(state.employees||[]).filter(e=>!e.deleted_at&&e.active!==false).reduce((s,e)=>s+salaryPaymentState(e.id,month,n(split[e.id]?.payout)).remaining,0);
- projects.filter(p=>!/заверш/i.test(findStatus(p.status_id)?.name||'')).forEach(p=>{try{salaries+=Math.max(0,n(getProjectFee(p).feeAmount));}catch(_){} });
- const out=rent.left+internet.left+salaries,inc=(income+lease.left)*0.95;running+=inc-out;
- html+='<div class="card" style="margin-bottom:14px"><h3>'+esc(ruMonthLabel(month))+'</h3><div class="fee-row"><div class="fl">От проектов</div><div class="fv">'+money(income)+'</div></div><div class="fee-row"><div class="fl">Сдача помещения — ожидается</div><div class="fv">'+money(lease.left)+'</div></div><div class="fee-row"><div class="fl">Зарплаты, аренда, интернет — ожидается</div><div class="fv">'+money(out)+'</div></div><div class="fee-row total"><div class="fl">Прогноз остатка</div><div class="fv" style="color:'+(running<0?'var(--red)':'var(--green)')+'">'+money(running)+'</div></div><details><summary>Проекты и расчёт</summary>'+projects.map(p=>'<div class="fee-row"><div class="fl">'+esc(p.name)+' · '+fmtDate(p.end_date)+'</div><div class="fv">'+money(expected(p))+'</div></div>').join('')+'<div class="note">Зарплаты '+money(salaries)+' · аренда '+money(rent.left)+' · интернет '+money(internet.left)+'. Не включает будущие расходы на материалы без указанного графика оплаты.</div></details></div>';
+ const due={};Object.entries(split).forEach(([id,row])=>due[id]=n(row.payout));
+ plans.forEach(plan=>{
+   const completed=/заверш/i.test(findStatus(plan.project.status_id)?.name||'');
+   plan.payouts.forEach(row=>{
+     // Completed project fees already belong to this month's payroll.
+     if(!completed)due[row.id]=(due[row.id]||0)+row.amount;
+     else if(plan.project.fee_base!=='m2'){
+       const fees=getProjectFee(plan.project);
+       const directPaid=row.id===plan.project.employee_id?n(fees.mainPaid):n(fees.coPaid);
+       due[row.id]=Math.max(0,(due[row.id]||0)-directPaid);
+     }
+   });
+ });
+ const salaries=Object.entries(due).reduce((sum,[id,amount])=>sum+salaryPaymentState(id,month,amount).remaining,0);
+ const amort=Math.round((income+lease.left)*5)/100,out=rent.left+internet.left+salaries,inc=income+lease.left;
+ running+=inc-out-amort;
+ html+='<div class="card" style="margin-bottom:14px"><h3>'+esc(ruMonthLabel(month))+'</h3><div class="fee-row"><div class="fl">Остатки оплаты от клиентов</div><div class="fv">'+money(income)+'</div></div><div class="fee-row"><div class="fl">Сдача помещения — ожидается</div><div class="fv">'+money(lease.left)+'</div></div><div class="fee-row"><div class="fl">− Гонорары и зарплаты к выплате</div><div class="fv">'+money(salaries)+'</div></div><div class="fee-row"><div class="fl">− Аренда и интернет</div><div class="fv">'+money(rent.left+internet.left)+'</div></div><div class="fee-row"><div class="fl">− Амортизация · 5% ожидаемых поступлений</div><div class="fv">'+money(amort)+'</div></div><div class="fee-row total"><div class="fl">Прогноз доступного остатка</div><div class="fv" style="color:'+(running<0?'var(--red)':'var(--green)')+'">'+money(running)+'</div></div><details><summary>Проекты и расчёт</summary>'+plans.map(plan=>'<div class="card"><strong>'+esc(plan.project.name)+'</strong><div class="note">Срок: '+fmtDate(plan.project.end_date)+'</div><div class="fee-row"><div class="fl">Клиент доплатит</div><div class="fv">'+money(plan.incoming)+'</div></div>'+plan.payouts.map(row=>'<div class="fee-row"><div class="fl">− '+esc(findEmployee(row.id)?.name||'Сотрудник')+' · '+esc(findEmployee(row.id)?.role||'гонорар')+'</div><div class="fv">'+money(row.amount)+'</div></div>').join('')+'<div class="fee-row total"><div class="fl">Пополнение от проекта до амортизации</div><div class="fv">'+money(plan.net)+'</div></div></div>').join('')+'<div class="note">Выплаты через табель вычитаются из общих обязательств месяца один раз. В расчёте отдельного проекта отражены гонорары за вычетом выплат, привязанных к карточке. Будущие прямые расходы без графика оплаты не включены.</div></details></div>';
  }
  panel('forecast',html);
 }
+window.ARHITTEKCash.forecastProject=forecastProject;
+
 async function confirmRecurring(kind){
  if(busy||!session?.isAdmin)return;busy=true;const x=recurringState(kind,selected);if(!x.left){busy=false;return;}
  try{
