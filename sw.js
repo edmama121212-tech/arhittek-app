@@ -1,6 +1,6 @@
 // ARHITTEK Service Worker v1.9 (finance clarity + full names + team selector)
-const CACHE = 'arhittek-v3.12-cash-flow-reconciliation';
-const ASSETS = ['./index.html','./premium.css','./premium.js','./cash-finance.js','./client.css','./catalog.html','./tz.html','./landscape-brief.js','./manifest.json','./icon-192.png'];
+const CACHE = 'arhittek-v3.13-project-budget';
+const ASSETS = ['./index.html','./premium.css','./premium.js','./project-budget.js','./cash-finance.js','./client.css','./catalog.html','./tz.html','./landscape-brief.js','./manifest.json','./icon-192.png'];
 // CDN-библиотеки — кэшируем отдельно от основных ASSETS: если jsdelivr на
 // момент установки недоступен, это не должно валить весь install (addAll — all-or-nothing).
 const CDN_ASSETS = [
