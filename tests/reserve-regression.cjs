@@ -48,7 +48,7 @@ const root = path.resolve(__dirname, '..');
     return [s.incoming, s.outgoing, s.opening + s.incoming - s.outgoing, s.closing];
   }, [50000, 0, 70000, 70000]);
   await check('Historical operations stay visible', () => ARHITTEKCash.monthSummary(state, '2026-10').events.length, 2);
-  await check('Reserve accessor is the full cash balance', () => getCompanyReserveBalance(), 110000);
+  await check('Reserve excludes allocated money while cash stays auditable', () => [getCompanyReserveBalance(), getCompanyCashBalance()], [105500, 110000]);
   await check('October overview uses October available balance', () => {
     const picker = document.getElementById('cashMonth'); picker.value = '2026-10'; picker.dispatchEvent(new Event('change'));
     return document.querySelector('#cash-panel-overview .finance-kpi strong').textContent.replace(/\D/g, '');
@@ -134,7 +134,7 @@ const root = path.resolve(__dirname, '..');
     return [__db.projects[0].fee_paid, __db.projects[0].co_fee_paid,
       __db.ledger_entries.find(row => row.type === 'fee_payment')?.payee_employee_id];
   }, [0, 34000, 'architect']);
-  await check('Synthetic reconciliation: 20k + 55k + 20k - 34k = 61k', () => [ARHITTEKCash.balance(state), ARHITTEKCash.available(state)], [61000, 57250]);
+  await check('Cash and company budget differ by unpaid fees and amortization', () => [ARHITTEKCash.balance(state), ARHITTEKCash.available(state)], [61000, 31250]);
   await check('Cash groups cover every movement exactly once', () => {
     const f = ARHITTEKCash.flowSummary(ARHITTEKCash.cashEvents(state).filter(e => e.afterSnapshot));
     return [f.clients, f.otherIncome, f.team, f.projects, f.company, f.withdrawals, f.adjustments];
@@ -209,11 +209,47 @@ const root = path.resolve(__dirname, '..');
     renderCashFinance(); const visible = document.getElementById('cash-panel-reserve').textContent.includes('операций без даты создания');
     state.companyIncome.pop(); renderCashFinance(); return visible;
   }, true);
+  await page.evaluate(async () => {
+    __clockNow = '2026-10-11T09:00:00Z';
+    __db.employees.push({id:'budget-manager',name:'Тестовый менеджер',role:'Менеджер',active:true});
+    __db.projects = [
+      {id:'budget-old',name:'Завершён до сверки',category_id:'arch',status_id:'done',employee_id:'visual',fee_base:'profit',fee_percent:20,price:105000,advance:105000,expenses:5000,end_date:'2026-10-01'},
+      {id:'budget-closed',name:'Завершён после сверки',category_id:'arch',status_id:'done',employee_id:'architect',fee_base:'profit',fee_percent:40,price:85000,advance:85000,expenses:0,end_date:'2026-10-06',updated_at:'2026-10-11T07:25:00Z'},
+      {id:'budget-active-1',name:'Активный проект 1',category_id:'arch',status_id:'active',employee_id:'architect',co_employee_id:'budget-manager',fee_base:'profit',fee_percent:50,co_fee_percent:25,price:60000,advance:30000,expenses:0,end_date:'2026-10-20'},
+      {id:'budget-active-2',name:'Активный проект 2',category_id:'arch',status_id:'active',employee_id:'admin',co_employee_id:'budget-manager',fee_base:'profit',fee_percent:0,co_fee_percent:15,price:100000,advance:40000,expenses:0,end_date:'2026-10-21'}];
+    const row=(id,project_id,type,amount,extra={})=>({id,project_id,type,amount,entry_date:'2026-10-10',created_at:'2026-10-10T00:00:00Z',...extra});
+    __db.ledger_entries = [row('budget-early','budget-closed','advance',30000,{entry_date:'2026-09-23',created_at:'2026-09-23T00:00:00Z'}),
+      row('budget-final-old','budget-old','final_payment',65000),row('budget-a1','budget-active-1','advance',30000),row('budget-a2','budget-active-2','advance',40000),row('budget-final','budget-closed','final_payment',55000),
+      row('budget-pay1',null,'salary_payment',20000,{payee_employee_id:'visual',description:'[salary:2026-10]'}),row('budget-pay2',null,'salary_payment',7000,{payee_employee_id:'designer',description:'[salary:2026-10]'})];
+    __db.invoices=[];__db.company_income=[];__db.company_expenses=[{id:'budget-costs',category:'Прочие расходы',amount:42600,expense_date:'2026-10-10',created_at:'2026-10-10T00:00:00Z'}];
+    __db.timesheet_payments=[];await loadAll();renderCashFinance();
+  });
+  await check('Company reserve includes the old advance on completion and excludes project money and team debt',()=>{
+    const b=ARHITTEKCash.projectBudget(state);return [b.cashBalance,b.releasedOpeningFunds,b.projectsHeld,b.teamHeld,b.amortization,getCompanyReserveBalance()];
+  },[140400,30000,66500,34000,9500,60400]);
+  await check('Reserve hero shows the company share, with the old advance explained separately',()=>{
+    renderCashFinance();return [document.querySelector('[data-company-reserve]').textContent.replace(/\D/g,''),document.getElementById('cash-panel-reserve').textContent.includes('Старые авансы завершённых проектов')];
+  },['60400',true]);
+  await check('Project fee payout leaves company reserve and forecast unchanged',async()=>{
+    const before=ARHITTEKCash.available(state),forecast=document.querySelector('#cash-panel-forecast .fee-row.total .fv').textContent;
+    openPaymentSheet('budget-closed');document.querySelector('#payment-type [data-value="fee_payment"]').click();document.getElementById('payment-amount').value='34000';await savePayment();renderCashFinance();
+    return [ARHITTEKCash.available(state)===before,ARHITTEKCash.projectBudget(state).teamHeld,ARHITTEKCash.balance(state),document.querySelector('#cash-panel-forecast .fee-row.total .fv').textContent===forecast];
+  },[true,0,106400,true]);
+  await check('Reopening and re-closing restores one company share without creating money',async()=>{
+    const before=getCompanyReserveBalance(),cash=getCompanyCashBalance();__db.projects.find(p=>p.id==='budget-closed').status_id='active';await loadAll();const reopened=getCompanyReserveBalance();
+    __db.projects.find(p=>p.id==='budget-closed').status_id='done';await loadAll();return [reopened,before,getCompanyReserveBalance(),getCompanyCashBalance()===cash];
+  },[12150,60400,60400,true]);
+  await check('Withdrawal is limited to company money even when recorded cash is higher',async()=>{
+    const before=__db.company_expenses.length;openCompanyWithdrawal();document.getElementById('cex-amount').value='70000';document.getElementById('cex-desc').value='Тест вывода';await saveCompanyExpense();closeCompanyExpenseSheet();return __db.company_expenses.length===before;
+  },true);
+  await check('Common expense debits company reserve once and reload never re-transfers the old advance',async()=>{
+    openCompanyExpenseSheet(null);document.getElementById('cex-amount').value='1000';await saveCompanyExpense();await loadAll();await loadAll();return getCompanyReserveBalance();
+  },59400);
   await page.evaluate(() => {
     document.querySelectorAll('.sheet-overlay').forEach(overlay => overlay.classList.remove('active'));
     closeInvoiceSheet();
     document.querySelector('.nav-btn[data-view="view-finance"]').click();
-    const picker = document.getElementById('cashMonth'); picker.value = '2026-11'; picker.dispatchEvent(new Event('change'));
+    const picker = document.getElementById('cashMonth'); picker.value = '2026-10'; picker.dispatchEvent(new Event('change'));
     const note = document.createElement('div'); note.textContent = 'ТЕСТОВЫЕ ДАННЫЕ · рабочие операции пользователя не загружены';
     note.style.cssText = 'background:#ffe8a1;color:#342500;padding:12px;font-weight:bold'; document.getElementById('view-finance').prepend(note);
   });
