@@ -11,7 +11,7 @@ state.ledger.push({id:'salary',type:'salary_payment',amount:20000,entry_date:'20
 state.companyIncome.push({id:'lease',amount:20000,income_date:'2026-10-05',created_at:'2026-10-05T19:28:09Z'});assert.equal(c.balance(state),-40000);
 state.companyExpenses[0].deleted_at='2026-10-05';assert.equal(c.balance(state),70000);
 assert.equal(c.expected(state.projects[0]),100000);assert.equal(c.dueProjects(state,'2026-11').length,1);state.projects[0].end_date='2026-12-15';assert.equal(c.dueProjects(state,'2026-11').length,0);assert.equal(c.dueProjects(state,'2026-12').length,1);
-now='2026-10-31T21:00:00Z';assert.equal(c.day(),'2026-11-01');assert.equal(c.monthSummary(state,'2026-10').status,'Закрыт');assert.equal(c.monthSummary(state,'2026-11').opening,c.monthSummary(state,'2026-10').closing);assert.equal(c.shift('2026-12',1),'2027-01');
+now='2026-10-31T21:00:00Z';assert.equal(c.day(),'2026-11-01');assert.equal(c.monthSummary(state,'2026-10').status,'Прошедший');assert.equal(c.monthSummary(state,'2026-11').opening,c.monthSummary(state,'2026-10').closing);assert.equal(c.shift('2026-12',1),'2027-01');
 // Re-entering historical receipts must not add cash already included in the snapshot.
 const settlement={projects:[],ledger:[
  {type:'advance',amount:30000,entry_date:'2026-09-10',created_at:'2026-10-10T00:00:00Z'},
@@ -26,4 +26,4 @@ const dom=new JSDOM('<div id="view-finance"><div id="financeVisualTabs"></div>'+
 let db=[],insertCount=0;w.sb={from:table=>({select:()=>({is:()=>({eq:async()=>({data:db.filter(x=>x.table===table),error:null})})}),insert:async row=>{insertCount++;const r={...row,id:String(insertCount),created_at:new Date().toISOString(),table};db.push(r);w.state[table==='company_income'?'companyIncome':'companyExpenses'].push(r);return {error:null}}})};
 w.eval(source);assert(w.document.getElementById('cash-panel-overview').textContent.includes('20000 ₽'));
 const buttons=()=>w.document.querySelectorAll('[data-cash-action="confirm"][data-id="sublease"]');assert.equal(buttons().length,1);
-(async()=>{buttons()[0].click();buttons()[0].click();await new Promise(r=>setTimeout(r,30));assert.equal(insertCount,1);assert.equal(buttons().length,0);assert.equal(w.getCompanyReserveBalance(),39000);console.log('PASS: 20k snapshot, actual receipt only, no accrual debit, rent/salary/lease cash, deletion, deadline movement, Moscow month rollover and carry, recurring confirmation duplicate click');})();
+(async()=>{buttons()[0].click();buttons()[0].click();await new Promise(r=>setTimeout(r,30));assert.equal(insertCount,1);assert.equal(buttons().length,0);assert.equal(w.getCompanyReserveBalance(),40000);assert.equal(w.getCompanyAvailableCash(),39000);console.log('PASS: 20k snapshot, actual receipt only, no accrual debit, rent/salary/lease cash, deletion, deadline movement, Moscow month rollover and carry, recurring confirmation duplicate click');})();

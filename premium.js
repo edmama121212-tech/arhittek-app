@@ -252,11 +252,11 @@ addProjectRolePayout=async function(){
   const wasEditing=!!editingRolePayoutId;
   if(editingRolePayoutId){
     const before=(state.ledger||[]).find(x=>x.id===editingRolePayoutId);
-    const {error}=await sb.from('ledger_entries').update({payee_employee_id:emp.id,description,amount,entry_date:new Date().toISOString().slice(0,10)}).eq('id',editingRolePayoutId);
+    const {error}=await sb.from('ledger_entries').update({payee_employee_id:emp.id,description,amount,entry_date:financeToday()}).eq('id',editingRolePayoutId);
     if(error)throw error;
     await logAudit('project',projectId,p.name,'update',{role_payout_edited:{old:before?(before.description+' — '+fmtMoney(before.amount)):null,new:description+' — '+fmtMoney(amount)}});
   }else{
-    const {data,error}=await sb.from('ledger_entries').insert({type:'role_payout',project_id:projectId,payee_employee_id:emp.id,description,amount,entry_date:new Date().toISOString().slice(0,10),received_by:session.employeeId}).select().single();
+    const {data,error}=await sb.from('ledger_entries').insert({type:'role_payout',project_id:projectId,payee_employee_id:emp.id,description,amount,entry_date:financeToday(),received_by:session.employeeId}).select().single();
     if(error)throw error;
     if(data){state.ledger=state.ledger||[];state.ledger.push(data);}
     await logAudit('project',projectId,p.name,'update',{role_payout_added:{old:null,new:description+' — '+fmtMoney(amount)}});
@@ -895,7 +895,7 @@ window.openFinanceBonusSheet=function(id=null){
     $('finance-bonus-date').value=row.entry_date||'';
     $('finance-bonus-desc').value=row.description||'';
   }else{
-    $('finance-bonus-date').value=new Date().toISOString().slice(0,10);
+    $('finance-bonus-date').value=financeToday();
   }
   $('finance-bonus-save').onclick=saveFinanceBonus;
   if(row) $('finance-bonus-delete').onclick=deleteFinanceBonus;
@@ -956,7 +956,7 @@ async function saveReserveCorrection(){
   if(target<0){showToast('Резерв не может быть отрицательным');return;}
   const delta=Math.round(target-current);
   if(delta===0){closeFinanceControl();showToast('Резерв уже совпадает');return;}
-  const today=new Date().toISOString().slice(0,10);
+  const today=financeToday();
   try{
     if(delta>0){
       const {error}=await sb.from('company_income').insert({category:RESERVE_INCREASE_CATEGORY,amount:delta,income_date:today,description:comment||'Корректировка фактического резерва'});
@@ -1242,7 +1242,7 @@ function contractSnapshotFromForm(){
     address: $('ct-address')?.value.trim() || '',
     phone: $('ct-phone')?.value.trim() || '',
     number: $('ct-number')?.value.trim() || '',
-    date: $('ct-date')?.value || new Date().toISOString().slice(0,10),
+    date: $('ct-date')?.value || financeToday(),
     object: $('ct-object')?.value.trim() || '',
     scope: $('ct-scope')?.value || '',
     price: Number($('ct-price')?.value)||0,
@@ -1456,7 +1456,7 @@ function newContractDraft(){
   const ids=['ct-client-name','ct-passport','ct-birthdate','ct-passport-issuer','ct-passport-date','ct-address','ct-phone','ct-number','ct-object','ct-price','ct-start','ct-end'];
   ids.forEach(id=>{if($(id))$(id).value='';});
   if($('ct-project')) $('ct-project').value='';
-  if($('ct-date')) $('ct-date').value=new Date().toISOString().slice(0,10);
+  if($('ct-date')) $('ct-date').value=financeToday();
   if($('ct-advance-pct')) $('ct-advance-pct').value=50;
   contractType='ar';
   document.querySelectorAll('#contract-type .yn-btn').forEach(b=>b.classList.toggle('selected',b.dataset.value==='ar'));
@@ -1504,7 +1504,7 @@ function exportContractToWord(){
   const blob=new Blob(['\ufeff',wordContractHtml(s)],{type:'application/msword;charset=utf-8'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
   const safe=(s.number||'bez-nomera').replace(/[^a-zA-Zа-яА-Я0-9_-]/g,'_');
-  a.download=`Dogovor-${safe}-${s.date||new Date().toISOString().slice(0,10)}.doc`;
+  a.download=`Dogovor-${safe}-${s.date||financeToday()}.doc`;
   document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
   showToast('Word-файл скачивается...');
 }
@@ -1999,7 +1999,7 @@ function priceSafeName(groups,ext){
   if(priceMode==='group'&&groups.length===1) tag=groups[0].group;
   else if(priceMode==='custom') tag='vybrannye-uslugi';
   tag=String(tag).replace(/[^a-zA-Zа-яА-Я0-9_-]+/g,'_').replace(/^_+|_+$/g,'');
-  return 'ARHITTEK-Price-'+tag+'-'+new Date().toISOString().slice(0,10)+'.'+ext;
+  return 'ARHITTEK-Price-'+tag+'-'+financeToday()+'.'+ext;
 }
 function exportPricePdf(){
   const groups=priceSelectionOrWarn(); if(!groups)return;
@@ -2017,7 +2017,7 @@ function exportPricePdf(){
   doc.setFont('Roboto','bold');doc.setFontSize(18);doc.setTextColor(0);doc.text('ARHIT',tx,19);
   const w=doc.getTextWidth('ARHIT');doc.setTextColor(...blue);doc.text('TEK',tx+w,19);
   doc.setTextColor(0);doc.setFont('Roboto','normal');doc.setFontSize(11);doc.text(title,tx,26);
-  doc.setFontSize(8.5);doc.setTextColor(120);doc.text('Актуально на '+fmtDate(new Date().toISOString().slice(0,10)),pageW-margin,19,{align:'right'});
+  doc.setFontSize(8.5);doc.setTextColor(120);doc.text('Актуально на '+fmtDate(financeToday()),pageW-margin,19,{align:'right'});
   doc.setTextColor(0);
   let y=37;
 
@@ -2075,7 +2075,7 @@ function exportPricePdf(){
 function exportPriceXlsx(){
   const groups=priceSelectionOrWarn(); if(!groups)return;
   if(typeof XLSX==='undefined'){showToast('Excel-модуль не загружен');return;}
-  const rows=[['ARHITTEK — прайс-лист услуг'],['Актуально на',fmtDate(new Date().toISOString().slice(0,10))],[]];
+  const rows=[['ARHITTEK — прайс-лист услуг'],['Актуально на',fmtDate(financeToday())],[]];
   groups.forEach(g=>{
     rows.push([g.group]);
     rows.push(['Услуга','Стоимость, ₽','Единица','Что входит']);
@@ -2414,6 +2414,7 @@ const LEGACY_PAID_FN = typeof isTimesheetPaid==='function' ? isTimesheetPaid : (
 let editingSalaryPaymentId=null;
 let salarySheetEmployeeId=null;
 let salarySheetMonth=null;
+let salarySaveInFlight=false;
 
 function num(v){const n=Number(v);return Number.isFinite(n)?n:0;}
 function monthLabel(key){
@@ -2448,31 +2449,31 @@ function officeDueDay(kind){
   return Math.min(28,Math.max(1,parseInt(localStorage.getItem('finance_'+kind+'_due_day')||String(def),10)||def));
 }
 function salaryDueDate(month){
-  const p=month.split('-').map(Number),d=new Date(p[0],p[1],salaryDueDay());
+  const p=month.split('-').map(Number),d=new Date(Date.UTC(p[0],p[1],salaryDueDay(),12));
   return financeLocalDate(d);
 }
 function officeDueDate(month,kind){
-  const p=month.split('-').map(Number),d=new Date(p[0],p[1]-1,officeDueDay(kind));
+  const p=month.split('-').map(Number),d=new Date(Date.UTC(p[0],p[1]-1,officeDueDay(kind),12));
   return financeLocalDate(d);
 }
 function financeLocalDate(d){
-  return String(d.getFullYear())+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  return new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Moscow',year:'numeric',month:'2-digit',day:'2-digit'}).format(d);
 }
 function todayISO(){return financeLocalDate(new Date());}
 function salaryPaymentState(employeeId,month,dueOverride){
   const due=dueOverride==null?payrollDueForEmployee(employeeId,month):Math.max(0,num(dueOverride));
   const rows=salaryPaymentRows(employeeId,month);
-  const projectFeeRows=(state.ledger||[]).filter(x=>!x.deleted_at&&x.type==='fee_payment'&&
-    (()=>{const p=state.projects.find(p=>p.id===x.project_id);return p&&findStatus(p.status_id)?.name==='Завершён'&&
-      (x.payee_employee_id||p.employee_id)===employeeId&&
-      timesheetProjectRefDate(p)?.slice(0,7)===month;})());
-  let paid=rows.reduce((s,x)=>s+num(x.amount),0)+projectFeeRows.reduce((sum,x)=>sum+num(x.amount),0);
-  if(!rows.length && !projectFeeRows.length && LEGACY_PAID_FN(employeeId,month)) paid=due;
-  paid=Math.max(0,Math.min(due,paid));
+  const projectFeeRows=(state.ledger||[]).filter(x=>!x.deleted_at&&x.type==='fee_payment'&&x.entry_date<=todayISO()&&
+    (()=>{const p=state.projects.find(p=>p.id===x.project_id);if(!p||(x.payee_employee_id||p.employee_id)!==employeeId)return false;
+      return projectEmployeeRole(employeeId)==='manager' ? String(x.entry_date||'').slice(0,7)===month :
+        findStatus(p.status_id)?.name==='Завершён'&&timesheetProjectRefDate(p)?.slice(0,7)===month;})());
+  const actualPaid=rows.filter(x=>x.entry_date&&x.entry_date<=todayISO()).reduce((s,x)=>s+num(x.amount),0)+projectFeeRows.reduce((sum,x)=>sum+num(x.amount),0);
+  const legacyMarked=!rows.length&&!projectFeeRows.length&&LEGACY_PAID_FN(employeeId,month);
+  const paid=Math.max(0,Math.round((legacyMarked?due:actualPaid)*100)/100);
   const remaining=Math.max(0,due-paid);
   const dueDate=salaryDueDate(month);
   const overdue=remaining>0.009&&todayISO()>dueDate;
-  return {due,paid,remaining,dueDate,overdue,rows,full:due>0&&remaining<=0.009};
+  return {due,paid,actualPaid,legacyMarked,overpaid:Math.max(0,paid-due),remaining,dueDate,overdue,rows,full:due>0&&remaining<=0.009};
 }
 window.salaryPaymentState=salaryPaymentState;
 window.payrollDueForEmployee=payrollDueForEmployee;
@@ -2535,7 +2536,9 @@ function renderSalaryPaymentSheet(){
     '<div class="fee-row"><div class="fl">Начислено за '+escapeHtml(monthLabel(salarySheetMonth))+'</div><div class="fv">'+fmtMoney(st.due)+'</div></div>'+
     '<div class="fee-row"><div class="fl">Уже выплачено</div><div class="fv" style="color:var(--green)">'+fmtMoney(st.paid)+'</div></div>'+
     '<div class="fee-row total"><div class="fl">Осталось выплатить</div><div class="fv" style="color:'+(st.overdue?'var(--red)':'var(--gold)')+'">'+fmtMoney(st.remaining)+'</div></div>'+
-    '<div class="project-note" style="margin-top:8px">'+(st.full?'Закрыто полностью':st.overdue?'Просрочка · срок был до '+fmtDate(st.dueDate):'Срок выплаты до '+fmtDate(st.dueDate))+'</div>';
+    '<div class="project-note" style="margin-top:8px">'+(st.full?'Закрыто полностью':st.overdue?'Просрочка · срок был до '+fmtDate(st.dueDate):'Срок выплаты до '+fmtDate(st.dueDate))+'</div>'+
+    (st.legacyMarked?'<div class="note">По прежней отметке оплаты; отдельной денежной записи нет. Перед новой выплатой сверьте историю.</div>':'')+
+    (st.overpaid>0.009?'<div class="note" style="color:var(--red)">Выплачено сверх начисления: '+fmtMoney(st.overpaid)+'</div>':'');
   const max=Math.max(0,st.remaining+num(edit?.amount));
   $('salaryPaymentAmount').value=edit?edit.amount:(st.remaining||'');
   $('salaryPaymentAmount').max=String(max);
@@ -2559,7 +2562,7 @@ function openSalaryPaymentSheet(employeeId,month){
 window.openSalaryPaymentSheet=openSalaryPaymentSheet;
 
 async function saveSalaryPayment(){
-  if(!session?.isAdmin||!salarySheetEmployeeId||!salarySheetMonth)return;
+  if(salarySaveInFlight||!session?.isAdmin||!salarySheetEmployeeId||!salarySheetMonth)return;
   const amount=num($('salaryPaymentAmount').value),date=$('salaryPaymentDate').value,note=$('salaryPaymentNote').value.trim();
   const current=salaryPaymentState(salarySheetEmployeeId,salarySheetMonth);
   const edit=editingSalaryPaymentId?current.rows.find(x=>x.id===editingSalaryPaymentId):null;
@@ -2567,7 +2570,9 @@ async function saveSalaryPayment(){
   if(amount<=0){showToast('Укажите сумму выплаты');return;}
   if(amount>max+0.009){showToast('Сумма больше остатка к выплате: '+fmtMoney(max));return;}
   if(!date){showToast('Укажите дату выплаты');return;}
+  if(date>todayISO()){showToast('Фактическая выплата не может быть в будущем');return;}
   const description='[salary:'+salarySheetMonth+']'+(note?' '+note:'');
+  salarySaveInFlight=true;$('salaryPaymentSave').disabled=true;
   try{
     let savedId=edit?.id||null;
     if(edit){
@@ -2595,7 +2600,8 @@ async function saveSalaryPayment(){
     try{enhanceFinanceSalaryCard();}catch(_){}
     try{enhanceCompanyBudgetObligations();}catch(_){}
     showToast(edit?'Выплата изменена':'Выплата сохранена');
-  }catch(e){console.error(e);showToast('Не удалось сохранить выплату');}
+  }catch(e){console.error(e);showToast('Не удалось сохранить выплату');
+  }finally{salarySaveInFlight=false;renderSalaryPaymentSheet();}
 }
 async function deleteSalaryPayment(id){
   if(!session?.isAdmin)return;
@@ -2623,18 +2629,19 @@ function enhanceTimesheet(){
   note.textContent='Табель показывает начислено, фактически выплачено и остаток. Частичные выплаты сохраняются отдельно; просрочка появляется после установленного срока выплаты.';
   card.prepend(note);
 
-  let totalDue=0,totalPaid=0,totalRemaining=0,totalOverdue=0;
+  let totalDue=0,totalPaid=0,totalRemaining=0,totalOverdue=0,totalLegacy=0;
   const range=monthRange(month),earned=completedProjectEarningsForRange(range.from,range.to).employees,split=splitPayrollByEmployee(earned).result;
   Array.from(card.querySelectorAll('.list-item[onclick*="toggleTimesheetRow"]')).forEach(row=>{
     const click=row.getAttribute('onclick')||'',id=(click.match(/toggleTimesheetRow\('([^']+)'\)/)||[])[1];
     if(!id)return;
     const due=num(split[id]?.payout),st=salaryPaymentState(id,month,due);
     totalDue+=st.due;totalPaid+=st.paid;totalRemaining+=st.remaining;if(st.overdue)totalOverdue+=st.remaining;
+    if(st.legacyMarked)totalLegacy+=st.paid;
     const checkbox=row.querySelector('input[type="checkbox"]');
     if(checkbox)checkbox.style.display='none';
     const meta=row.querySelector('.li-meta');
     if(meta){
-      meta.innerHTML='Начислено '+fmtMoney(st.due)+' · <span style="color:var(--green)">выплачено '+fmtMoney(st.paid)+'</span> · <span style="color:'+(st.overdue?'var(--red)':'var(--gold)')+'">осталось '+fmtMoney(st.remaining)+'</span>'+(st.overdue?' · <b style="color:var(--red)">ПРОСРОЧЕНО</b>':st.full?' · <b style="color:var(--green)">ОПЛАЧЕНО</b>':'');
+      meta.innerHTML='Начислено '+fmtMoney(st.due)+' · <span style="color:var(--green)">'+(st.legacyMarked?'прежняя отметка оплаты ':'выплачено ')+fmtMoney(st.paid)+'</span> · <span style="color:'+(st.overdue?'var(--red)':'var(--gold)')+'">осталось '+fmtMoney(st.remaining)+'</span>'+(st.overpaid>0.009?' · <b style="color:var(--red)">СВЕРХ НАЧИСЛЕНИЯ '+fmtMoney(st.overpaid)+'</b>':st.overdue?' · <b style="color:var(--red)">ПРОСРОЧЕНО</b>':st.full?' · <b style="color:var(--green)">ОПЛАЧЕНО</b>':'');
     }
     const right=row.lastElementChild;
     if(right){
@@ -2654,9 +2661,10 @@ function enhanceTimesheet(){
     const sum=row.querySelector('.proj-sum');
     if(!sum)return;
     if(name==='Всего начислено за месяц')sum.textContent=fmtMoney(totalDue);
-    if(name==='Отмечено выплаченным'){row.querySelector('.li-name').textContent='Фактически выплачено';sum.textContent=fmtMoney(totalPaid);sum.style.color='var(--green)';}
+    if(name==='Отмечено выплаченным'){row.querySelector('.li-name').textContent=totalLegacy?'Учтено выплаченным':'Фактически выплачено';sum.textContent=fmtMoney(totalPaid);sum.style.color='var(--green)';}
     if(name==='Осталось выплатить'){sum.textContent=fmtMoney(totalRemaining);sum.style.color=totalOverdue?'var(--red)':'var(--gold)';}
   });
+  if(totalLegacy)note.textContent+=' В том числе '+fmtMoney(totalLegacy)+' по прежним отметкам без отдельных денежных записей.';
   if(totalOverdue>0){
     const warn=document.createElement('div');
     warn.className='note';warn.style.cssText='margin:8px 0 10px;border:1px solid rgba(224,82,82,.35);background:rgba(224,82,82,.08);color:var(--red);';

@@ -1,0 +1,247 @@
+const fs = require('fs'), path = require('path'), assert = require('node:assert/strict');
+const {chromium} = require('playwright');
+const root = path.resolve(__dirname, '..');
+
+(async () => {
+  const browser = await chromium.launch({executablePath: process.env.BROWSER_EXECUTABLE || undefined,
+    args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'], headless: true});
+  const context = await browser.newContext({timezoneId: 'Europe/Berlin', serviceWorkers: 'block'});
+  await context.addInitScript(() => {
+    const OriginalDate = Date;
+    window.__clockNow = '2026-11-15T12:00:00Z';
+    window.Date = class extends OriginalDate {
+      constructor(...args) { super(...(args.length ? args : [window.__clockNow])); }
+      static now() { return OriginalDate.parse(window.__clockNow); }
+    };
+  });
+  await context.addInitScript({path: path.join(__dirname, 'mock.js')});
+  await context.route('**/*', route => {
+    const url = new URL(route.request().url());
+    if (url.hostname === 'app.test') {
+      const file = path.join(root, url.pathname === '/' ? 'index.html' : url.pathname.slice(1));
+      if (fs.existsSync(file)) return route.fulfill({path: file,
+        contentType: file.endsWith('.html') ? 'text/html' : file.endsWith('.js') ? 'text/javascript' : undefined});
+    }
+    for (const [key, file] of [['xlsx@', 'xlsx/dist/xlsx.full.min.js'], ['jspdf@', 'jspdf/dist/jspdf.umd.min.js'],
+      ['jspdf-autotable@', 'jspdf-autotable/dist/jspdf.plugin.autotable.min.js']]) {
+      if (url.href.includes(key)) return route.fulfill({path: path.join(process.env.TEST_DEPS || path.join(root, 'node_modules'), file), contentType: 'text/javascript'});
+    }
+    return route.fulfill({body: '', contentType: 'text/javascript'});
+  });
+  const page = await context.newPage(), results = [], errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('https://app.test/');
+  await page.waitForTimeout(150);
+  async function check(name, fn, expected) {
+    try { const actual = await page.evaluate(fn); assert.deepEqual(actual, expected); results.push({name, pass: true}); }
+    catch (error) { results.push({name, pass: false, error: error.message}); }
+  }
+  await page.evaluate(async () => {
+    __db.ledger_entries = [
+      {id: 'old', type: 'advance', amount: 90000, entry_date: '2026-10-01', created_at: '2026-10-01T00:00:00Z'},
+      {id: 'new', type: 'advance', amount: 50000, entry_date: '2026-10-10', created_at: '2026-10-10T00:00:00Z'}];
+    __db.company_income = [{id: 'nov', category: 'Прочий доход', amount: 40000, income_date: '2026-11-02', created_at: '2026-11-02T00:00:00Z'}];
+    await loadAll(); renderCashFinance();
+  });
+  await check('October opening + movements equals closing', () => {
+    const s = ARHITTEKCash.monthSummary(state, '2026-10');
+    return [s.incoming, s.outgoing, s.opening + s.incoming - s.outgoing, s.closing];
+  }, [50000, 0, 70000, 70000]);
+  await check('Historical operations stay visible', () => ARHITTEKCash.monthSummary(state, '2026-10').events.length, 2);
+  await check('Reserve accessor is the full cash balance', () => getCompanyReserveBalance(), 110000);
+  await check('October overview uses October available balance', () => {
+    const picker = document.getElementById('cashMonth'); picker.value = '2026-10'; picker.dispatchEvent(new Event('change'));
+    return document.querySelector('#cash-panel-overview .finance-kpi strong').textContent.replace(/\D/g, '');
+  }, '67500');
+  await check('Reloading data does not move reserve', async () => {
+    const before = ARHITTEKCash.balance(state); await loadAll(); await loadAll(); return ARHITTEKCash.balance(state) === before;
+  }, true);
+  await check('Imported expense is not a new cash payment', () => {
+    state.ledger.push({id: 'import', type: 'project_expense', description: 'Ранее внесённые расходы', amount: 18000,
+      entry_date: '2026-10-06', created_at: '2026-10-11T00:00:00Z'});
+    return ARHITTEKCash.balance(state);
+  }, 110000);
+  await check('A receipt note cannot switch off amortization', () => {
+    state.ledger.push({id: 'note', type: 'advance', description: 'Сверка оплаты по проекту', amount: 20000,
+      entry_date: '2026-10-12', created_at: '2026-10-12T00:00:00Z'});
+    return ARHITTEKCash.amortization(state);
+  }, 5500);
+  await check('Editing an adjustment preserves its income category', () => {
+    state.companyIncome.push({id: 'adjust-plus', category: RESERVE_INCREASE_CATEGORY, amount: 5000, income_date: '2026-11-15'});
+    openCompanyIncomeSheet('adjust-plus'); return document.getElementById('cin-category').value;
+  }, 'Корректировка резерва (+)');
+  await check('Editing an adjustment preserves its expense category', () => {
+    state.companyExpenses.push({id: 'adjust-minus', category: RESERVE_DECREASE_CATEGORY, amount: 5000, expense_date: '2026-11-15'});
+    openCompanyExpenseSheet('adjust-minus'); return document.getElementById('cex-category').value;
+  }, 'Корректировка резерва (−)');
+  await page.evaluate(async () => { __db.company_income = []; __db.company_expenses = []; __db.ledger_entries = []; await loadAll(); });
+  await check('Two income submits create one receipt', async () => {
+    openCompanyIncomeSheet(null); document.getElementById('cin-amount').value = '20000';
+    await Promise.all([saveCompanyIncome(), saveCompanyIncome()]); return __db.company_income.length;
+  }, 1);
+  await check('Two expense submits create one payment', async () => {
+    openCompanyExpenseSheet(null); document.getElementById('cex-amount').value = '10000';
+    await Promise.all([saveCompanyExpense(), saveCompanyExpense()]); return __db.company_expenses.length;
+  }, 1);
+  await check('Two salary clicks create one payment', async () => {
+    openSalaryPaymentSheet('admin', '2026-10'); document.getElementById('salaryPaymentAmount').value = '20000';
+    const button = document.getElementById('salaryPaymentSave'); button.click(); button.click();
+    await new Promise(resolve => setTimeout(resolve, 150));
+    return __db.ledger_entries.filter(row => row.type === 'salary_payment').length;
+  }, 1);
+  await check('Future salary is not already paid', () => {
+    state.ledger = [{id: 'future-pay', type: 'salary_payment', payee_employee_id: 'admin', amount: 20000,
+      entry_date: '2026-11-20', description: '[salary:2026-10]'}];
+    return salaryPaymentState('admin', '2026-10', 50000).paid;
+  }, 0);
+  await check('Moscow dates agree across finance forms at midnight', () => {
+    __clockNow = '2026-10-31T21:30:00Z'; openCompanyIncomeSheet(null); openCompanyExpenseSheet(null);
+    openSalaryPaymentSheet('admin', '2026-10');
+    return [ARHITTEKCash.day(), document.getElementById('cin-date').value,
+      document.getElementById('cex-date').value, document.getElementById('salaryPaymentDate').value];
+  }, ['2026-11-01', '2026-11-01', '2026-11-01', '2026-11-01']);
+  await page.evaluate(async () => {
+    __clockNow = '2026-11-15T12:00:00Z';
+    __db.projects = [{id: 'p', name: 'Test', category_id: 'design', status_id: 'active', fee_base: 'm2', price: 100000,
+      advance: 20000, balance: 80000, expenses: 0, created_at: '2026-10-01T00:00:00Z'}];
+    __db.ledger_entries = []; await loadAll();
+  });
+  await check('Failed payment insert leaves project and cash unchanged', async () => {
+    openPaymentSheet('p'); document.getElementById('payment-amount').value = '10000';
+    __fail = {table: 'ledger_entries', op: 'insert'}; await savePayment(); __fail = null;
+    return [__db.projects[0].advance, __db.projects[0].balance, __db.ledger_entries.length];
+  }, [20000, 80000, 0]);
+  await check('Failed income save can be retried once', async () => {
+    openCompanyIncomeSheet(null); document.getElementById('cin-amount').value = '7000';
+    __fail = {table: 'company_income', op: 'insert'}; await saveCompanyIncome(); __fail = null;
+    const before = __db.company_income.length; await saveCompanyIncome(); return __db.company_income.length - before;
+  }, 1);
+  await page.evaluate(async () => {
+    __db.projects = [{id: 'settlement', name: 'Тестовый расчёт', category_id: 'arch', status_id: 'done', fee_base: 'profit',
+      employee_id: 'visual', co_employee_id: 'architect', price: 100000, advance: 55000, balance: 45000,
+      expenses: 0, fee_percent: 20, co_fee_percent: 40, fee_paid: 0, co_fee_paid: 0, end_date: '2026-11-14'}];
+    __db.ledger_entries = [{id: 'historical', project_id: 'settlement', type: 'advance', amount: 30000,
+      entry_date: '2026-09-10', created_at: '2026-11-10T00:00:00Z'},
+      {id: 'final', project_id: 'settlement', type: 'final_payment', amount: 55000,
+      entry_date: '2026-11-10', created_at: '2026-11-10T00:00:00Z'}];
+    __db.company_income = [{id: 'lease', category: 'Аренда помещений', amount: 20000,
+      income_date: '2026-11-10', created_at: '2026-11-10T00:00:00Z'}]; __db.company_expenses = []; await loadAll();
+  });
+  await check('A co-executor payment belongs to that employee', async () => {
+    openPaymentSheet('settlement'); document.querySelector('#payment-type [data-value="fee_payment"]').click();
+    document.getElementById('payment-payee').value = 'architect'; document.getElementById('payment-amount').value = '34000';
+    await savePayment();
+    return [__db.projects[0].fee_paid, __db.projects[0].co_fee_paid,
+      __db.ledger_entries.find(row => row.type === 'fee_payment')?.payee_employee_id];
+  }, [0, 34000, 'architect']);
+  await check('Synthetic reconciliation: 20k + 55k + 20k - 34k = 61k', () => [ARHITTEKCash.balance(state), ARHITTEKCash.available(state)], [61000, 57250]);
+  await check('Cash groups cover every movement exactly once', () => {
+    const f = ARHITTEKCash.flowSummary(ARHITTEKCash.cashEvents(state).filter(e => e.afterSnapshot));
+    return [f.clients, f.otherIncome, f.team, f.projects, f.company, f.withdrawals, f.adjustments];
+  }, [55000, 20000, 34000, 0, 0, 0, 0]);
+  await check('Failed cancellation preserves cash and co-executor payment', async () => {
+    const row = state.ledger.find(row => row.type === 'fee_payment'); __fail = {table: 'projects', op: 'update'};
+    await cancelPayment(row.id); __fail = null;
+    return [ARHITTEKCash.balance(state), __db.projects[0].co_fee_paid, !!__db.ledger_entries.find(e => e.id === row.id).deleted_at];
+  }, [61000, 34000, false]);
+  await check('Cancel and concurrent restore preserve one co-executor payment', async () => {
+    const row = state.ledger.find(row => row.type === 'fee_payment'); await cancelPayment(row.id); await loadDeferredData();
+    await Promise.all([restoreItem('ledger_entries', row.id, 'Выплата'), restoreItem('ledger_entries', row.id, 'Выплата')]);
+    return [ARHITTEKCash.balance(state), __db.projects[0].fee_paid, __db.projects[0].co_fee_paid];
+  }, [61000, 0, 34000]);
+  await check('Manager payment on an active project prevents a second payroll payment', () => {
+    state.employees.push({id: 'manager', name: 'Test manager', role: 'Менеджер'});
+    state.projects.push({id: 'managed', employee_id: 'manager', status_id: 'active', fee_base: 'profit'});
+    state.ledger.push({id: 'manager-paid', project_id: 'managed', type: 'fee_payment', amount: 5000,
+      payee_employee_id: 'manager', entry_date: '2026-11-14'});
+    const payment = salaryPaymentState('manager', '2026-11', 10000); return [payment.paid, payment.remaining];
+  }, [5000, 5000]);
+  await check('Overpayment is visible and never clamped to the accrued amount', () => {
+    state.ledger.push({id: 'overpaid', type: 'salary_payment', payee_employee_id: 'admin', amount: 35000,
+      description: '[salary:2026-11]', entry_date: '2026-11-14'});
+    const payment = salaryPaymentState('admin', '2026-11', 30000); return [payment.paid, payment.overpaid, payment.remaining];
+  }, [35000, 5000, 0]);
+  await page.evaluate(async () => {
+    __db.projects = [{id: 'build-test', name: 'Тестовая стройка', category_id: 'build', status_id: 'active', fee_base: 'price', expenses: 20000}];
+    __db.invoices = [{id: 'invoice-test', project_id: 'build-test', item_type: 'Материал', description: 'Тестовая закупка', amount: 20000,
+      invoice_date: '2026-11-14', created_at: '2026-11-14T00:00:00Z', paid_by_client: false}];
+    __db.ledger_entries = []; __db.company_income = []; __db.company_expenses = []; await loadAll();
+  });
+  await check('Invoice cost alone does not pretend to be a cash payment', () => [ARHITTEKCash.balance(state), getProjectExpenses(state.projects[0])], [20000, 20000]);
+  await check('Double invoice payment click debits cash once', async () => {
+    openInvoicePayment('invoice-test'); document.getElementById('cashInvoiceAmount').value = '5000';
+    const save = document.getElementById('cashInvoiceSave'); save.click(); save.click(); await new Promise(resolve => setTimeout(resolve, 150));
+    return [__db.ledger_entries.filter(r => !r.deleted_at).length, ARHITTEKCash.balance(state), getProjectExpenses(state.projects[0])];
+  }, [1, 15000, 20000]);
+  await check('Linking an existing expense changes neither cash nor invoice cost twice', async () => {
+    __db.ledger_entries.push({id: 'existing-expense', project_id: 'build-test', type: 'project_expense', amount: 15000,
+      description: 'Оплачены материалы', entry_date: '2026-11-14', created_at: '2026-11-14T00:00:00Z'});
+    await loadAll(); const before = ARHITTEKCash.balance(state); openInvoicePayment('invoice-test');
+    const select = document.getElementById('cashInvoiceExisting'); select.value = 'existing-expense'; select.dispatchEvent(new Event('change'));
+    document.getElementById('cashInvoiceSave').click(); await new Promise(resolve => setTimeout(resolve, 150));
+    return [ARHITTEKCash.balance(state) === before, getProjectExpenses(state.projects[0]),
+      ARHITTEKCash.invoicePaymentState(state, state.invoices[0]).remaining];
+  }, [true, 20000, 0]);
+  await check('Cancelling invoice payment restores cash once', async () => {
+    openInvoicePayment('invoice-test'); document.querySelector('#cashInvoiceOverlay [data-id="existing-expense"]').click();
+    await new Promise(resolve => setTimeout(resolve, 150));
+    return [ARHITTEKCash.balance(state), ARHITTEKCash.invoicePaymentState(state, state.invoices[0]).remaining, getProjectExpenses(state.projects[0])];
+  }, [15000, 15000, 20000]);
+  await check('Client-paid invoice cannot create a company payment', () => {
+    document.getElementById('cashInvoiceOverlay').classList.remove('active'); state.invoices[0].paid_by_client = true;
+    openInvoicePayment('invoice-test'); const opened = document.getElementById('cashInvoiceOverlay').classList.contains('active');
+    state.invoices[0].paid_by_client = false; return opened;
+  }, false);
+  await check('Paid invoice cannot be deleted while its payment exists', async () => {
+    const before = __db.invoices.length; openInvoiceSheet('invoice-test'); await deleteInvoiceSheet(); return __db.invoices.length === before;
+  }, true);
+  await check('Audit export excludes employee credentials', () => {
+    state.employees[0].pin = 'test-secret'; state.employees[0].auth_token = 'test-secret';
+    const data = ARHITTEKCash.auditData(state); return [JSON.stringify(data).includes('test-secret'), data.calculation.balance];
+  }, [false, 15000]);
+  await check('A failed refresh visibly marks the reserve as stale', async () => {
+    __fail = {table: 'company_expenses', op: 'select'}; await loadAll(); __fail = null;
+    const text = document.getElementById('cash-panel-reserve').textContent;
+    const stale = !!state.financialDataError && text.includes('Не удалось обновить операции'); await loadAll(); return stale;
+  }, true);
+  await check('Missing operation timestamps are visible rather than silently trusted', () => {
+    state.companyIncome.push({id: 'missing-time', category: 'Прочий доход', amount: 1000, income_date: '2026-11-15'});
+    renderCashFinance(); const visible = document.getElementById('cash-panel-reserve').textContent.includes('операций без даты создания');
+    state.companyIncome.pop(); renderCashFinance(); return visible;
+  }, true);
+  await page.evaluate(() => {
+    document.querySelectorAll('.sheet-overlay').forEach(overlay => overlay.classList.remove('active'));
+    closeInvoiceSheet();
+    document.querySelector('.nav-btn[data-view="view-finance"]').click();
+    const picker = document.getElementById('cashMonth'); picker.value = '2026-11'; picker.dispatchEvent(new Event('change'));
+    const note = document.createElement('div'); note.textContent = 'ТЕСТОВЫЕ ДАННЫЕ · рабочие операции пользователя не загружены';
+    note.style.cssText = 'background:#ffe8a1;color:#342500;padding:12px;font-weight:bold'; document.getElementById('view-finance').prepend(note);
+  });
+  for (const width of [390, 360]) {
+    await page.setViewportSize({width, height: 900});
+    for (const tab of ['overview', 'team', 'expense', 'reserve']) {
+      await page.evaluate(tab => document.querySelector('[data-fin-tab="' + tab + '"]').click(), tab);
+      await check('Finance ' + tab + ' fits ' + width + 'px', () => {
+        const panel = document.querySelector('.finance-visual-panel:not([hidden]) .cash-panel');
+        return panel.getBoundingClientRect().width > 0 && panel.scrollWidth <= panel.clientWidth + 1 && document.documentElement.scrollWidth <= innerWidth + 1;
+      }, true);
+    }
+  }
+  if (process.env.TEST_OUTPUT) {
+    await page.evaluate(() => document.querySelector('[data-fin-tab="overview"]').click());
+    await page.waitForTimeout(300);
+    await page.evaluate(() => document.getElementById('toast').classList.remove('show'));
+    await page.screenshot({path: path.join(process.env.TEST_OUTPUT, 'finance-mobile.png'), fullPage: true});
+    for (const tab of ['team', 'reserve']) {
+      await page.evaluate(tab => document.querySelector('[data-fin-tab="' + tab + '"]').click(), tab);
+      await page.waitForTimeout(250);
+      await page.screenshot({path: path.join(process.env.TEST_OUTPUT, 'finance-' + tab + '-mobile.png'), fullPage: true});
+    }
+  }
+  const output = process.env.TEST_OUTPUT;
+  if (output) { fs.mkdirSync(output, {recursive: true}); fs.writeFileSync(path.join(output, 'reserve-results.json'), JSON.stringify({results, errors}, null, 2)); }
+  console.log(JSON.stringify({passed: results.filter(row => row.pass).length, total: results.length,
+    failed: results.filter(row => !row.pass), errors}));
+  await browser.close();
+  if (results.some(row => !row.pass) || errors.length) process.exitCode = 1;
+})().catch(error => { console.error(error); process.exitCode = 1; });

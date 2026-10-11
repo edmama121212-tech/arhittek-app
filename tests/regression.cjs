@@ -4,8 +4,9 @@ const root=path.resolve(__dirname,'..'),outDir=path.resolve(process.env.TEST_OUT
 await ctx.route('**/*',r=>{const u=new URL(r.request().url());if(u.hostname==='app.test'){const f=path.join(root,u.pathname==='/'?'index.html':u.pathname.slice(1));if(fs.existsSync(f))return r.fulfill({path:f,contentType:f.endsWith('.html')?'text/html':f.endsWith('.js')?'text/javascript':f.endsWith('.css')?'text/css':undefined});}for(const [key,file] of [['xlsx@','xlsx/dist/xlsx.full.min.js'],['jspdf@','jspdf/dist/jspdf.umd.min.js'],['jspdf-autotable@','jspdf-autotable/dist/jspdf.plugin.autotable.min.js']]){if(u.href.includes(key))return r.fulfill({path:path.join(process.env.TEST_DEPS||path.join(root,"node_modules"),file),contentType:'text/javascript'});}return r.fulfill({body:'',contentType:'text/javascript'});});
 const p=await ctx.newPage(),errors=[],tests=[];p.on('pageerror',e=>errors.push(e.message));await p.goto('https://app.test/');await p.waitForTimeout(150);
 async function test(name,fn,expected){try{const actual=await p.evaluate(fn);tests.push({name,pass:JSON.stringify(actual)===JSON.stringify(expected),actual,expected})}catch(e){tests.push({name,pass:false,error:e.message})}}
-await test('architecture 40% after costs',()=>getProjectFee({id:'a',category_id:'arch',price:100000,expenses:10000,fee_percent:40,fee_base:'profit'}).mainFeeAmount,36000);
-await test('percentage of revenue',()=>getProjectFee({id:'a',category_id:'arch',price:100000,expenses:10000,fee_percent:40,fee_base:'price'}).mainFeeAmount,40000);
+await test('architecture 40% after costs',()=>getProjectFee({id:'a',category_id:'arch',employee_id:'architect',price:100000,expenses:10000,fee_percent:40,fee_base:'profit'}).mainFeeAmount,36000);
+await test('legacy percentage of revenue for assigned executor',()=>getProjectFee({id:'a',category_id:'arch',employee_id:'visual',price:100000,expenses:10000,fee_percent:40,fee_base:'price'}).mainFeeAmount,40000);
+await test('no fee without an assigned executor',()=>getProjectFee({id:'a',category_id:'arch',price:100000,expenses:10000,fee_percent:40,fee_base:'profit'}).mainFeeAmount,0);
 await test('monthly salary',()=>computeFinancePeriod('2026-09-01','2026-09-30').payrollPaidOut,100000);
 await test('quarter salary',()=>computeFinancePeriod('2026-07-01','2026-09-30').payrollPaidOut,300000);
 await test('year salary',()=>computeFinancePeriod('2026-01-01','2026-12-31').payrollPaidOut,1200000);
@@ -38,7 +39,7 @@ await test('salary employee has no automatic m2 bonus',async()=>{const n=__db.le
 await test('unsaved area blocked',async()=>{const n=__db.ledger_entries.length;document.getElementById('pf-rp-employee').value='architect';document.getElementById('pf-area').value='120';await addProjectRolePayout();document.getElementById('pf-area').value='100';return __db.ledger_entries.length===n},true);
 await test('method change cannot hide existing earnings',async()=>{document.getElementById('pf-compensation-method').value='percent_profit';await saveProject();const result=__db.projects[0].fee_base;document.getElementById('pf-compensation-method').value='m2';renderCompensationMethodUI();return result},'m2');
 await p.locator('#project-tab-money').click();
-await test('economy separates common costs',()=>document.getElementById('project-economy').textContent.includes('Остаток до общих расходов'),true);
+await test('economy separates common costs',()=>{const t=document.getElementById('project-economy').textContent;return t.includes('Остаётся компании')&&t.includes('общие расходы учитываются за месяц отдельно')},true);
 await p.locator('#project-tab-files').click();
 await test('documents accessible',()=>!document.getElementById('project-panel-files').hidden&&document.getElementById('project-panel-files').contains(document.getElementById('pf-tz-list')),true);
 await test('interior only m2 choice',()=>document.querySelector('[data-method="percent"]').hidden&&!document.querySelector('[data-method="m2"]').hidden,true);
