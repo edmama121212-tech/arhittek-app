@@ -21,6 +21,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="data-access.js"></script>
 <script src="landscape-brief.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
@@ -2208,6 +2209,7 @@ function applySessionToken(token){
 let state = {
   financialDataReady:false,financialDataError:null,financialLoadedAt:null,
   projects: [],
+  financialProjects: [],
   employees: [],
   categories: [],
   statuses: [],
@@ -2323,6 +2325,11 @@ function findStatus(id){ return state.statuses.find(s=>s.id===id); }
 // Для остальных проектов — ручное поле p.expenses как и раньше.
 // Единый источник прямых расходов проекта. Начисления сотрудникам (role_payout)
 // не смешиваются с себестоимостью проекта: это отдельная статья ФОТ.
+function getFinancialProjects(){
+  const live=state.projects||[], ids=new Set(live.map(p=>p.id));
+  const archived=(state.financialProjects||[]).filter(p=>p.deleted_at&&!ids.has(p.id));
+  return [...live,...archived];
+}
 function getProjectExpenses(p){
   if(!p) return 0;
   const manual = (state.ledger||[])
@@ -2539,6 +2546,7 @@ async function attemptLogin(){
     // Данные (проекты, финансы и т.д.) были недоступны до входа (требуют сессии) —
     // перезагружаем их теперь, когда клиент несёт токен.
     await loadAll();
+    setupRealtime();
     if('Notification' in window && Notification.permission === 'granted') subscribeToPush();
   }catch(e){
     console.error(e);
@@ -2779,25 +2787,31 @@ function renderStagesList(projectId){
 }
 
 // Переключение канонического этапа по имени: создаёт строку в БД при первой отметке
-async function toggleStageByName(projectId, nameEnc, makeDone){
-  const name = decodeURIComponent(nameEnc);
+const stageChangesInFlight=new Set();
+async function saveStageChange(projectId,key,write){
+  if(!isProjectMember(projectId)){showToast('Нет доступа к этапам этого проекта');return;}
+  const lock=projectId+':'+key;
+  if(stageChangesInFlight.has(lock))return;
+  stageChangesInFlight.add(lock);
   try{
-    // ищем существующую строку (в т.ч. со старым именем)
-    let existing = state.projectStages.find(s=>s.project_id===projectId && (s.name===name || STAGE_LEGACY_MAP[s.name]===name));
+    const result=await write();
+    if(result?.error)throw result.error;
+    await loadAll();renderStagesList(projectId);
+  }catch(e){console.error(e);showToast('Ошибка сохранения этапа');}
+  finally{stageChangesInFlight.delete(lock);}
+}
+async function toggleStageByName(projectId,nameEnc,makeDone){
+  const name=decodeURIComponent(nameEnc);
+  return saveStageChange(projectId,'name:'+name,()=>{
+    const existing=state.projectStages.find(s=>s.project_id===projectId && (s.name===name || STAGE_LEGACY_MAP[s.name]===name));
     if(existing){
-      const upd = {done: !!makeDone, done_at: makeDone ? new Date().toISOString() : null};
-      // заодно мигрируем старое имя на новое
-      if(existing.name !== name) upd.name = name;
-      await sb.from('project_stages').update(upd).eq('id', existing.id);
-    } else if(makeDone){
-      const sort_order = state.projectStages.filter(s=>s.project_id===projectId).length;
-      await sb.from('project_stages').insert({project_id:projectId, name, done:true, done_at:new Date().toISOString(), sort_order});
-    } else {
-      return; // нечего снимать
+      const update={done:!!makeDone,done_at:makeDone?new Date().toISOString():null};
+      if(existing.name!==name)update.name=name;
+      return sb.from('project_stages').update(update).eq('id',existing.id);
     }
-    await loadAll();
-    renderStagesList(projectId);
-  }catch(e){ console.error(e); showToast('Ошибка обновления этапа'); }
+    if(makeDone)return sb.from('project_stages').insert({project_id:projectId,name,done:true,done_at:new Date().toISOString(),sort_order:state.projectStages.filter(s=>s.project_id===projectId).length});
+    return {error:null};
+  });
 }
 
 function initStageDragSort(container, projectId){
@@ -2869,29 +2883,16 @@ async function addStage(projectId){
   }catch(e){ console.error(e); showToast('Ошибка добавления этапа'); }
 }
 
-async function markStageDone(stageId, projectId){
-  try{
-    await sb.from('project_stages').update({done:true, done_at: new Date().toISOString()}).eq('id', stageId);
-    await loadAll();
-    renderStagesList(projectId);
-  }catch(e){ console.error(e); }
+async function markStageDone(stageId,projectId){
+  return saveStageChange(projectId,'id:'+stageId,()=>sb.from('project_stages').update({done:true,done_at:new Date().toISOString()}).eq('id',stageId).eq('project_id',projectId));
 }
-
-async function markStageUndone(stageId, projectId){
-  try{
-    await sb.from('project_stages').update({done:false, done_at:null}).eq('id', stageId);
-    await loadAll();
-    renderStagesList(projectId);
-  }catch(e){ console.error(e); }
+async function markStageUndone(stageId,projectId){
+  return saveStageChange(projectId,'id:'+stageId,()=>sb.from('project_stages').update({done:false,done_at:null}).eq('id',stageId).eq('project_id',projectId));
 }
-
-async function deleteStage(stageId, projectId){
-  if(!confirm('Удалить этот этап?')) return;
-  try{
-    await sb.from('project_stages').delete().eq('id', stageId);
-    await loadAll();
-    renderStagesList(projectId);
-  }catch(e){ console.error(e); showToast('Ошибка удаления'); }
+async function deleteStage(stageId,projectId){
+  if(!session?.isAdmin)return;
+  if(!confirm('Удалить этот этап?'))return;
+  return saveStageChange(projectId,'id:'+stageId,()=>sb.from('project_stages').delete().eq('id',stageId).eq('project_id',projectId));
 }
 
 // ============================================================
@@ -3086,10 +3087,10 @@ function markTzSeen(){
 // is_salaried/fixed_salary (миграция 14), но если их ещё нет в базе —
 // не рушим всю загрузку приложения, а откатываемся к базовому набору полей.
 async function fetchEmployeesResilient(filterFn){
-  let res = await filterFn(sb.from('employees').select('id,name,role,is_admin,active,can_edit_cards,can_see_projects,can_see_construction,is_salaried,fixed_salary,deleted_at,created_at'));
+  let res = await fetchAllRows(()=>filterFn(sb.from('employees').select('id,name,role,is_admin,active,can_edit_cards,can_see_projects,can_see_construction,is_salaried,fixed_salary,deleted_at,created_at',{count:'exact'})));
   if(res.error){
     console.warn('Поля is_salaried/fixed_salary недоступны (миграция 14 не выполнена?), загружаю сотрудников без них:', res.error.message);
-    res = await filterFn(sb.from('employees').select('id,name,role,is_admin,active,can_edit_cards,can_see_projects,can_see_construction,deleted_at,created_at'));
+    res = await fetchAllRows(()=>filterFn(sb.from('employees').select('id,name,role,is_admin,active,can_edit_cards,can_see_projects,can_see_construction,deleted_at,created_at',{count:'exact'})));
   }
   return res;
 }
@@ -3102,26 +3103,38 @@ async function loadAll(){
   // таблиц требует его через RLS, иначе первый запрос после перезагрузки страницы
   // придёт без заголовка и вернёт пусто.
   if(!session) session = getSession();
+  if(!session?.token){
+    session=null;window.session=null;
+    applySessionToken(null);
+    state.financialDataReady=false;
+    try{
+      const result=await fetchAllRows(()=>sb.from('employees').select('id,name,active',{count:'exact'}).is('deleted_at',null).order('name'));
+      if(result.error) throw result.error;
+      state.employees=result.data||[];
+      setSyncStatus('on','войдите в приложение');
+    }catch(e){setSyncStatus('off','нет связи');showToast('Не удалось загрузить список сотрудников');}
+    showLoginScreen();loadAllInFlight=false;return;
+  }
   try{
     const [proj, emp, cat, st, dept, led, photos, invs, tzForms, tzRefs, company, kpForms, stages, members, kpCat, tsPay, compExp, compInc] = await Promise.all([
-      sb.from('projects').select('*').is('deleted_at', null).order('created_at', {ascending:true}),
+      fetchAllRows(()=>sb.from('projects').select('*',{count:'exact'}).order('created_at', {ascending:true})),
       fetchEmployeesResilient(q => q.is('deleted_at', null).order('name')),
-      sb.from('categories').select('*').is('deleted_at', null).order('sort_order'),
-      sb.from('statuses').select('*').order('sort_order'),
-      sb.from('departments').select('*').order('sort_order'),
-      sb.from('ledger_entries').select('*').is('deleted_at', null).order('created_at', {ascending:false}),
-      sb.from('expense_photos').select('*').order('created_at', {ascending:false}),
-      sb.from('invoices').select('*').order('invoice_date', {ascending:true}),
-      sb.from('tz_forms').select('*').order('created_at', {ascending:false}),
-      sb.from('tz_references').select('*'),
+      fetchAllRows(()=>sb.from('categories').select('*',{count:'exact'}).is('deleted_at', null).order('sort_order')),
+      fetchAllRows(()=>sb.from('statuses').select('*',{count:'exact'}).order('sort_order')),
+      fetchAllRows(()=>sb.from('departments').select('*',{count:'exact'}).order('sort_order')),
+      fetchAllRows(()=>sb.from('ledger_entries').select('*',{count:'exact'}).is('deleted_at', null).order('created_at', {ascending:false})),
+      fetchAllRows(()=>sb.from('expense_photos').select('*',{count:'exact'}).order('created_at', {ascending:false})),
+      fetchAllRows(()=>sb.from('invoices').select('*',{count:'exact'}).order('invoice_date', {ascending:true})),
+      fetchAllRows(()=>sb.from('tz_forms').select('*',{count:'exact'}).order('created_at', {ascending:false})),
+      fetchAllRows(()=>sb.from('tz_references').select('*',{count:'exact'})),
       sb.from('company_info').select('*').limit(1).maybeSingle(),
-      sb.from('kp_forms').select('*').order('created_at', {ascending:false}),
-      sb.from('project_stages').select('*').order('sort_order', {ascending:true}),
-      sb.from('project_members').select('*'),
-      sb.from('kp_catalog').select('*').is('deleted_at', null).order('sort_order', {ascending:true}),
-      sb.from('timesheet_payments').select('*'),
-      sb.from('company_expenses').select('*').is('deleted_at', null),
-      sb.from('company_income').select('*').is('deleted_at', null),
+      fetchAllRows(()=>sb.from('kp_forms').select('*',{count:'exact'}).order('created_at', {ascending:false})),
+      fetchAllRows(()=>sb.from('project_stages').select('*',{count:'exact'}).order('sort_order', {ascending:true})),
+      fetchAllRows(()=>sb.from('project_members').select('*',{count:'exact'})),
+      fetchAllRows(()=>sb.from('kp_catalog').select('*',{count:'exact'}).is('deleted_at', null).order('sort_order', {ascending:true})),
+      fetchAllRows(()=>sb.from('timesheet_payments').select('*',{count:'exact'})),
+      fetchAllRows(()=>sb.from('company_expenses').select('*',{count:'exact'}).is('deleted_at', null)),
+      fetchAllRows(()=>sb.from('company_income').select('*',{count:'exact'}).is('deleted_at', null)),
     ]);
 
     // kpForms and stages are optional — may not exist until migrations run
@@ -3135,7 +3148,8 @@ async function loadAll(){
     state.companyExpenses = compExp.error ? [] : (compExp.data || []);
     state.companyIncome = compInc.error ? [] : (compInc.data || []);
 
-    state.projects = proj.data || [];
+    state.financialProjects=proj.data||[];
+    state.projects=state.financialProjects.filter(p=>!p.deleted_at);
     state.employees = emp.data || [];
     state.categories = cat.data || [];
     state.statuses = st.data || [];
@@ -3212,6 +3226,7 @@ async function loadAll(){
     console.error(e);
     const wasOk = document.getElementById('syncDot').classList.contains('off') === false;
     setSyncStatus('off', 'нет связи');
+    state.financialDataReady=false;
     state.financialDataError=e.message||'Не удалось загрузить операции';
     window.renderCashFinance?.();
     if(wasOk) showToast('Ошибка подключения к базе');
@@ -3229,14 +3244,14 @@ async function loadAll(){
 async function loadDeferredData(){
   try{
     const [hist, trashProj, trashEmp, trashCat, trashLed, trashCompanyExpenses, trashCompanyIncome, trashTariffs] = await Promise.all([
-      sb.from('audit_log').select('*').order('created_at', {ascending:false}).limit(5000),
-      sb.from('projects').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
+      fetchAllRows(()=>sb.from('audit_log').select('*',{count:'exact'}).order('created_at', {ascending:false}),{maxRows:5000}),
+      fetchAllRows(()=>sb.from('projects').select('*',{count:'exact'}).not('deleted_at', 'is', null).order('deleted_at', {ascending:false})),
       fetchEmployeesResilient(q => q.not('deleted_at', 'is', null).order('deleted_at', {ascending:false})),
-      sb.from('categories').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
-      sb.from('ledger_entries').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
-      sb.from('company_expenses').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
-      sb.from('company_income').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
-      sb.from('kp_catalog').select('*').not('deleted_at', 'is', null).order('deleted_at', {ascending:false}),
+      fetchAllRows(()=>sb.from('categories').select('*',{count:'exact'}).not('deleted_at', 'is', null).order('deleted_at', {ascending:false})),
+      fetchAllRows(()=>sb.from('ledger_entries').select('*',{count:'exact'}).not('deleted_at', 'is', null).order('deleted_at', {ascending:false})),
+      fetchAllRows(()=>sb.from('company_expenses').select('*',{count:'exact'}).not('deleted_at', 'is', null).order('deleted_at', {ascending:false})),
+      fetchAllRows(()=>sb.from('company_income').select('*',{count:'exact'}).not('deleted_at', 'is', null).order('deleted_at', {ascending:false})),
+      fetchAllRows(()=>sb.from('kp_catalog').select('*',{count:'exact'}).not('deleted_at', 'is', null).order('deleted_at', {ascending:false})),
     ]);
     state.history = hist.error ? [] : (hist.data || []);
     state.trash = {
@@ -3251,9 +3266,9 @@ async function loadDeferredData(){
     // Loading must not trigger irreversible deletions from trash.
     renderHistory();
     renderTrash();
+    if(state.financialDataReady && typeof renderCashFinance==='function') renderCashFinance();
   }catch(e){ console.error('loadDeferredData error', e); }
 }
-
 function renderAll(){
   renderOverview();
   renderAnalytics();
@@ -3819,6 +3834,9 @@ function escapeHtml(s){
   if(s==null) return '';
   return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+
+// JSON string literals also need HTML attribute escaping in inline handlers.
+function htmlJsArg(value){ return escapeHtml(JSON.stringify(String(value??''))); }
 
 // Раздел «Финансы компании» → «Оклады»: сотрудники с фиксированной ЗП
 // (Мансур, менеджер и т.п.) — показывает сам оклад независимо от того,
@@ -4530,7 +4548,10 @@ function closeProjectSheet(){
   editingProjectLoadedAt = null;
 }
 
+let projectSaveInFlight=false;
 async function saveProject(){
+  if(projectSaveInFlight) return;
+  const wantedMemberIds=[...new Set(currentProjectMembers.map(m=>m.employee_id).filter(Boolean))];
   const price = parseFloat(document.getElementById('pf-price').value) || 0;
   const advance = parseFloat(document.getElementById('pf-advance').value) || 0;
 
@@ -4612,6 +4633,8 @@ async function saveProject(){
     return;
   }
 
+  projectSaveInFlight=true;
+  let mainRecordSaved=false;
   try{
     let savedProjectId = editingProjectId;
     if(editingProjectId){
@@ -4630,6 +4653,7 @@ async function saveProject(){
         showToast('Данные обновились, перезагрузите карточку и попробуйте снова');
         return;
       }
+      editingProjectLoadedAt=payload.updated_at;mainRecordSaved=true;
       const changes = diffChanges(before, payload, Object.keys(payload).filter(k=>k!=='updated_at'));
       if(Object.keys(changes).length){
         await logAudit('project', editingProjectId, payload.name, 'update', changes);
@@ -4639,6 +4663,7 @@ async function saveProject(){
       const {data, error} = await sb.from('projects').insert(payload).select().single();
       if(error) throw error;
       savedProjectId = data.id;
+      editingProjectId=data.id;editingProjectLoadedAt=payload.updated_at;mainRecordSaved=true;
       await logAudit('project', data.id, payload.name, 'create', {});
       showToast('Проект добавлен');
     }
@@ -4649,32 +4674,49 @@ async function saveProject(){
       const saved = state.projects.find(x=>x.id===savedProjectId);
       if(saved){
         const fin = getConstructionFinancials(saved);
+        const financialUpdatedAt=new Date().toISOString();
         const {error: finErr} = await sb.from('projects').update({
           expenses: fin.directCosts,
           balance: fin.balance,
-          updated_at: new Date().toISOString()
+          updated_at: financialUpdatedAt
         }).eq('id', savedProjectId);
         if(finErr) throw finErr;
+        editingProjectLoadedAt=financialUpdatedAt;
       }
     }
 
-    // Сохраняем дополнительных участников
+    // Добавляем новых участников до удаления прежних: сбой вставки не стирает команду.
     if(savedProjectId){
-      const {error: memberDeleteError}=await sb.from('project_members').delete().eq('project_id', savedProjectId);
-      if(memberDeleteError) throw memberDeleteError;
-      if(currentProjectMembers.length > 0){
-        const {error: memberInsertError}=await sb.from('project_members').insert(
-          currentProjectMembers.map(m=>({project_id: savedProjectId, employee_id: m.employee_id}))
-        );
-        if(memberInsertError) throw memberInsertError;
+      const previous=(state.projectMembers||[]).filter(m=>m.project_id===savedProjectId);
+      const previousIds=new Set(previous.map(m=>m.employee_id));
+      const addIds=wantedMemberIds.filter(id=>!previousIds.has(id));
+      const removeIds=previous.filter(m=>!wantedMemberIds.includes(m.employee_id)).map(m=>m.employee_id);
+      let added=[];
+      if(addIds.length){
+        const result=await sb.from('project_members').insert(addIds.map(employee_id=>({project_id:savedProjectId,employee_id}))).select('id');
+        if(result.error) throw result.error;
+        added=result.data||[];
       }
+      if(removeIds.length){
+        const result=await sb.from('project_members').delete().eq('project_id',savedProjectId).in('employee_id',removeIds);
+        if(result.error){
+          if(added.length){
+            const rollback=await sb.from('project_members').delete().in('id',added.map(m=>m.id));
+            if(rollback.error) console.error('Не удалось отменить добавление участников',rollback.error);
+          }
+          throw result.error;
+        }
+      }
+      state.projectMembers=[...(state.projectMembers||[]).filter(m=>m.project_id!==savedProjectId),
+        ...previous.filter(m=>wantedMemberIds.includes(m.employee_id)),
+        ...added.map((m,i)=>({...m,project_id:savedProjectId,employee_id:addIds[i]}))];
     }
     closeProjectSheet();
     await loadAll();
   }catch(e){
     console.error(e);
-    showToast('Ошибка сохранения');
-  }
+    showToast(mainRecordSaved?'Основные данные сохранены. Проверьте команду и повторите сохранение.':'Ошибка сохранения');
+  }finally{projectSaveInFlight=false;}
 }
 
 async function deleteProject(){
@@ -4885,6 +4927,7 @@ function salaryForRange(emp, from, to){
 
 function completedProjectEarningsForRange(from, to){
   const employees = {};
+  const projects=getFinancialProjects();
   function addEarn(empId, amount, projectId, projectName, role){
     if(!empId) return;
     amount = amount || 0;
@@ -4896,7 +4939,7 @@ function completedProjectEarningsForRange(from, to){
   let revenue = 0, projectCosts = 0;
   const byDeptProfit = {};
 
-  state.projects.forEach(p=>{
+  projects.forEach(p=>{
     const st = findStatus(p.status_id);
     if(!st || st.name !== 'Завершён') return;
     const refDate = timesheetProjectRefDate(p);
@@ -4930,7 +4973,7 @@ function completedProjectEarningsForRange(from, to){
   // Manager commission accrues in the receipt month, independently of project completion.
   (state.ledger||[]).filter(l=>!l.deleted_at && ['advance','final_payment','income'].includes(l.type)
     && l.entry_date>=from && l.entry_date<=to).forEach(l=>{
-    const project=state.projects.find(p=>p.id===l.project_id && !p.deleted_at);
+    const project=projects.find(p=>p.id===l.project_id);
     if(!project)return;
     projectManagerSlots(project).forEach(([id,rate])=>addEarn(id,
       Math.max(0,Number(l.amount)||0)*Math.max(0,Number(rate)||0)/100,
@@ -4941,7 +4984,7 @@ function completedProjectEarningsForRange(from, to){
   // к месяцу сдачи проекта, а не к дате, когда бухгалтер/руководитель создал запись.
   (state.ledger||[]).forEach(l=>{
     if(l.type !== 'role_payout' || l.deleted_at) return;
-    const proj = state.projects.find(p=>p.id===l.project_id);
+    const proj = projects.find(p=>p.id===l.project_id);
     if(!proj) return;
     const st = findStatus(proj.status_id);
     if(!st || st.name !== 'Завершён') return;
@@ -6473,6 +6516,7 @@ async function saveEmployee(){
     payload.is_salaried = document.getElementById('ef-is-salaried').checked;
     payload.fixed_salary = payload.is_salaried ? (parseFloat(document.getElementById('ef-fixed-salary').value) || 0) : 0;
   }
+  if(!Number.isFinite(payload.fixed_salary)||payload.fixed_salary<0){showToast('Оклад должен быть неотрицательной суммой');return;}
   try{
     let migrationFallback = false;
     if(editingEmployeeId){
@@ -6690,7 +6734,7 @@ function renderTariffs(){
         <div class="li-actions">
           ${editable
             ? `<button class="icon-btn" onclick="openTariffSheet('${it.id}')">✎</button>`
-            : `<button class="icon-btn" title="Сохраните, чтобы отредактировать" onclick="openTariffSheet(null,'${escapeHtml(g.group)}','${escapeHtml(it.name)}',${it.rate},'${escapeHtml(it.unit)}','${escapeHtml((it.desc||'').replace(/'/g,"\\'"))}')">✎</button>`}
+            : `<button class="icon-btn" title="Сохраните, чтобы отредактировать" onclick="openTariffSheet(null,${htmlJsArg(g.group)},${htmlJsArg(it.name)},${it.rate},${htmlJsArg(it.unit)},${htmlJsArg(it.desc||'')})">✎</button>`}
         </div>
       </div>`;
     });
@@ -6812,7 +6856,7 @@ function isConstructionProject(p){
     const nm = (cat.name||'').toLowerCase();
     if(nm.includes('строительств') || nm.includes('ремонт') || nm.includes('монтаж')) return true;
   }
-  return (state.invoices||[]).some(inv=>inv.project_id===p.id);
+  return (state.invoices||[]).some(inv=>inv.project_id===p.id&&!inv.deleted_at);
 }
 
 function getConstructionReceived(projectId, ledgerOverride=null){
@@ -6831,7 +6875,7 @@ function getConstructionExpenses(p){
     .filter(i=>i.item_type==='Работа')
     .reduce((s,i)=>s+Number(i.amount||0),0);
   const manualTotal = (state.ledger||[])
-    .filter(e=>e.project_id===p.id && e.type==='project_expense' && !e.deleted_at)
+    .filter(e=>e.project_id===p.id && e.type==='project_expense' && !e.deleted_at && !isInvoiceLinkedExpense(e))
     .reduce((s,e)=>s+Number(e.amount||0),0);
   return {matTotal, workTotal, manualTotal, expenses: matTotal + workTotal + manualTotal};
 }
@@ -6868,7 +6912,7 @@ function calcConstrFee(p){
   const profit = price - expenses;
   const feePercent = Number(p.fee_percent)||0;
   const coFeePercent = Number(p.co_fee_percent)||0;
-  const mainFeeAmount = Math.max(0, expenses * feePercent / 100);
+  const mainFeeAmount = p.employee_id ? Math.max(0, expenses * feePercent / 100) : 0;
   const coFeeAmount = p.co_employee_id ? Math.max(0, expenses * coFeePercent / 100) : 0;
   const feeAmount = mainFeeAmount + coFeeAmount;
   const mainPaid = Number(p.fee_paid)||0;
@@ -6880,22 +6924,9 @@ function calcConstrFee(p){
 }
 
 function getConstrProjects(){
-  const constrDept = state.departments.find(d=>d.name==='Строительный отдел');
-  return state.projects.filter(p=>{
-    const cat = findCategory(p.category_id);
-    if(cat){
-      if(constrDept && cat.department_id === constrDept.id) return true;
-      if(cat.name === 'Строительство') return true;
-    }
-    // Fallback: если у проекта есть накладные — считаем строительным
-    if((state.invoices||[]).some(inv=>inv.project_id===p.id)) return true;
-    return false;
-  });
+  return state.projects.filter(p=>isConstructionProject(p));
 }
 
-// ============================================================
-// CONSTRUCTION LIST (simple clickable cards)
-// ============================================================
 let activeConstrStatusFilter = 'all';
 let constrSearchQuery = '';
 
@@ -7298,7 +7329,7 @@ function renderObjTabContent(){
       <div class="photo-grid">
         ${photos.length ? photos.map(ph=>`
           <div class="photo-thumb">
-            <img src="${ph.photo_url}" alt="" loading="lazy">
+            <img src="${escapeHtml(ph.photo_url)}" alt="" loading="lazy">
             ${ph.amount ? `<div class="photo-amt">${fmtMoney(ph.amount)}</div>` : ''}
           </div>`).join('') : '<div class="empty-state" style="grid-column:1/-1; padding:14px;">Фото пока нет</div>'}
       </div>
@@ -7396,7 +7427,10 @@ async function addInvoiceFromView(){
 }
 
 
+let invoiceSaveInFlight=false;
 async function addInvoice(projectId){
+  if(invoiceSaveInFlight)return;
+  if(!session || !canSeeConstruction() || !state.projects.some(p=>p.id===projectId)){showToast('Нет доступа к этому объекту');return;}
   // Support both old suffix pattern and new "-obj" suffix from object view
   const suffix = document.getElementById(`inv-num-obj`) ? 'obj' : projectId;
   const number = document.getElementById(`inv-num-${suffix}`).value.trim();
@@ -7415,6 +7449,7 @@ async function addInvoice(projectId){
   if(!amount || amount <= 0){ showToast('Укажите сумму'); return; }
   if(!invoice_date){ showToast('Укажите дату накладной — нужна для корректного P&L по периоду'); return; }
 
+  invoiceSaveInFlight=true;
   showToast('Сохранение…');
 
   try{
@@ -7451,7 +7486,7 @@ async function addInvoice(projectId){
   }catch(e){
     console.error(e);
     showToast('Ошибка сохранения');
-  }
+  }finally{invoiceSaveInFlight=false;}
 }
 
 // ============================================================
@@ -7532,6 +7567,9 @@ async function saveInvoiceSheet(){
   }
 
   if(!amount || amount <= 0){ showToast('Укажите сумму'); return; }
+  if(typeof ARHITTEKCash!=='undefined' && amount+0.009<ARHITTEKCash.invoicePaymentState(state,inv).paid){
+    showToast('Сумма меньше уже записанной оплаты. Сначала исправьте оплату в истории.');return;
+  }
   if(!invoice_date){ showToast('Укажите дату накладной'); return; }
 
   showToast('Сохранение…');
@@ -7924,7 +7962,7 @@ function renderTrash(){
         <div class="li-meta">Проект · удалён ${fmtDateTime(p.deleted_at)}</div>
       </div>
       <div class="li-actions">
-        <button class="icon-btn" onclick="restoreItem('projects','${p.id}','${escapeHtml(p.name)}')">↺ Восстановить</button>
+        <button class="icon-btn" onclick="restoreItem('projects','${p.id}',${htmlJsArg(p.name)})">↺ Восстановить</button>
       </div>
     </div>`;
   });
@@ -7935,7 +7973,7 @@ function renderTrash(){
         <div class="li-meta">Сотрудник · удалён ${fmtDateTime(e.deleted_at)}</div>
       </div>
       <div class="li-actions">
-        <button class="icon-btn" onclick="restoreItem('employees','${e.id}','${escapeHtml(e.name)}')">↺ Восстановить</button>
+        <button class="icon-btn" onclick="restoreItem('employees','${e.id}',${htmlJsArg(e.name)})">↺ Восстановить</button>
       </div>
     </div>`;
   });
@@ -7946,7 +7984,7 @@ function renderTrash(){
         <div class="li-meta">Категория · удалена ${fmtDateTime(c.deleted_at)}</div>
       </div>
       <div class="li-actions">
-        <button class="icon-btn" onclick="restoreItem('categories','${c.id}','${escapeHtml(c.name)}')">↺ Восстановить</button>
+        <button class="icon-btn" onclick="restoreItem('categories','${c.id}',${htmlJsArg(c.name)})">↺ Восстановить</button>
       </div>
     </div>`;
   });
@@ -7958,7 +7996,7 @@ function renderTrash(){
         <div class="li-meta">Запись финансов · удалена ${fmtDateTime(e.deleted_at)}</div>
       </div>
       <div class="li-actions">
-        <button class="icon-btn" onclick="restoreItem('ledger_entries','${e.id}','${escapeHtml(e.description||t.label)}')">↺ Восстановить</button>
+        <button class="icon-btn" onclick="restoreItem('ledger_entries','${e.id}',${htmlJsArg(e.description||t.label)})">↺ Восстановить</button>
       </div>
     </div>`;
   });
@@ -7970,7 +8008,7 @@ function renderTrash(){
         <div class="li-meta">Расход компании · удалён ${fmtDateTime(e.deleted_at)}</div>
       </div>
       <div class="li-actions">
-        <button class="icon-btn" onclick="restoreItem('company_expenses','${e.id}','${escapeHtml(name)}')">↺ Восстановить</button>
+        <button class="icon-btn" onclick="restoreItem('company_expenses','${e.id}',${htmlJsArg(name)})">↺ Восстановить</button>
       </div>
     </div>`;
   });
@@ -7982,7 +8020,7 @@ function renderTrash(){
         <div class="li-meta">Доход компании · удалён ${fmtDateTime(e.deleted_at)}</div>
       </div>
       <div class="li-actions">
-        <button class="icon-btn" onclick="restoreItem('company_income','${e.id}','${escapeHtml(name)}')">↺ Восстановить</button>
+        <button class="icon-btn" onclick="restoreItem('company_income','${e.id}',${htmlJsArg(name)})">↺ Восстановить</button>
       </div>
     </div>`;
   });
@@ -7994,7 +8032,7 @@ function renderTrash(){
         <div class="li-meta">Тариф · ${fmtMoney(t.rate||0)} / ${escapeHtml(t.unit||'м²')} · удалён ${fmtDateTime(t.deleted_at)}</div>
       </div>
       <div class="li-actions">
-        <button class="icon-btn" onclick="restoreItem('kp_catalog','${t.id}','${escapeHtml(name)}')">↺ Восстановить</button>
+        <button class="icon-btn" onclick="restoreItem('kp_catalog','${t.id}',${htmlJsArg(name)})">↺ Восстановить</button>
       </div>
     </div>`;
   });
@@ -8613,9 +8651,19 @@ function kpFlatCatalog(){
   return flat;
 }
 
+function kpServiceSnapshot(item){
+  if(!item) return null;
+  return {id:item.id||null,name:String(item.name||''),unit:String(item.unit||'м²'),rate:Number(item.rate)||0,desc:String(item.desc||'')};
+}
+function kpServiceItem(service){
+  if(service?.snapshot?.name) return service.snapshot;
+  const flat=kpFlatCatalog();
+  return flat[service?.catalogIndex] || flat[0] || {name:'Услуга',unit:'м²',rate:0,desc:''};
+}
+
 function addKpService(){
   const id = 'kpsvc-' + (++kpServiceCounter);
-  kpServices.push({ id, catalogIndex: 0, qty: 1, customRate: null, preliminaryArea: false });
+  kpServices.push({ id, catalogIndex: 0, snapshot:kpServiceSnapshot(kpFlatCatalog()[0]), qty: 1, customRate: null, preliminaryArea: false });
   renderKpServices();
 }
 
@@ -8632,16 +8680,17 @@ function renderKpServices(){
   groups.forEach(g=>g.items.forEach(it=>flat.push(it)));
 
   list.innerHTML = kpServices.map((s, idx)=>{
-    const item = flat[s.catalogIndex] || flat[0];
+    const item = kpServiceItem(s);
     const effectiveRate = (s.customRate !== null && s.customRate !== undefined) ? s.customRate : item.rate;
     const sum = effectiveRate * (Number(s.qty)||0);
     const isCustom = effectiveRate !== item.rate;
-    let optionsHtml = '';
+    const selectedIndex=flat.findIndex(it=>it.name===item.name && it.unit===item.unit && Number(it.rate)===Number(item.rate) && (it.desc||'')===(item.desc||'') && (!item.id || it.id===item.id));
+    let optionsHtml = selectedIndex<0 ? `<option value="snapshot" selected>Согласовано: ${escapeHtml(item.name)} (${fmt(item.rate)} ₽/${escapeHtml(item.unit)})</option>` : '';
     let flatIdx = 0;
     groups.forEach(g=>{
       optionsHtml += `<optgroup label="${escapeHtml(g.group)}">`;
       g.items.forEach(it=>{
-        optionsHtml += `<option value="${flatIdx}" ${flatIdx===s.catalogIndex?'selected':''}>${escapeHtml(it.name)} (${fmt(it.rate)} ₽/${it.unit})</option>`;
+        optionsHtml += `<option value="${flatIdx}" ${flatIdx===selectedIndex?'selected':''}>${escapeHtml(it.name)} (${fmt(it.rate)} ₽/${it.unit})</option>`;
         flatIdx++;
       });
       optionsHtml += `</optgroup>`;
@@ -8680,7 +8729,10 @@ function updateKpService(id, field, value){
   const s = kpServices.find(x=>x.id===id);
   if(!s) return;
   if(field === 'catalogIndex'){
-    s.catalogIndex = parseInt(value);
+    const index=Number(value), item=kpFlatCatalog()[index];
+    if(!Number.isInteger(index)||!item) return;
+    s.catalogIndex = index;
+    s.snapshot = kpServiceSnapshot(item);
     s.customRate = null;
   }
   else if(field === 'preliminaryArea') s.preliminaryArea = value === true;
@@ -8692,7 +8744,7 @@ function updateKpService(id, field, value){
 function updateKpTotals(){
   const flat = kpFlatCatalog();
   const subtotal = kpServices.reduce((sum,s)=>{
-    const item = flat[s.catalogIndex] || flat[0];
+    const item = kpServiceItem(s);
     const rate = (s.customRate !== null && s.customRate !== undefined) ? s.customRate : item.rate;
     return sum + rate * (Number(s.qty)||0);
   }, 0);
@@ -8709,7 +8761,7 @@ function updateKpTotals(){
   const advance = total * 0.5;
   const remainder = total - advance;
 
-  const prefix = kpServices.some(s=>s.preliminaryArea&&flat[s.catalogIndex]?.unit==='м²')?'≈ ':'';
+  const prefix = kpServices.some(s=>s.preliminaryArea&&kpServiceItem(s).unit==='м²')?'≈ ':'';
   document.getElementById('kp-subtotal').textContent = prefix+fmtMoney(subtotal);
   document.getElementById('kp-discount-amount').textContent = fmtMoney(discountAmount);
   document.getElementById('kp-total').textContent = prefix+fmtMoney(total);
@@ -9378,7 +9430,7 @@ function getKpData(){
     cardHolder: c.card_holder || '',
     cardBank: c.card_bank || '',
     services: kpServices.map(s=>{
-      const item = flat[s.catalogIndex] || flat[0];
+      const item = kpServiceItem(s);
       const rate = (s.customRate !== null && s.customRate !== undefined) ? s.customRate : item.rate;
       return {
         name: item.name,
@@ -9717,6 +9769,7 @@ function openKpView(){
 
 let editingKpId = null;
 let editingKpProjectId = null;
+let kpSaveInFlight = false;
 
 function resetKpForm(){
   editingKpId = null;
@@ -9753,7 +9806,8 @@ function loadKpForm(kp){
   kpServices = (kp.services || []).map(s=>({
     id: 'kpsvc-' + (++kpServiceCounter),
     catalogIndex: s.catalogIndex || 0,
-    qty: s.qty || 1,
+    qty: s.qty ?? 1,
+    snapshot: kpServiceSnapshot(kpServiceItem(s)),
     customRate: (s.customRate===undefined ? null : s.customRate),
     preliminaryArea: s.preliminaryArea === true,
   }));
@@ -9762,6 +9816,10 @@ function loadKpForm(kp){
 }
 
 async function saveKpForm(){
+  if(kpSaveInFlight) return false;
+  if(kpServices.some(s=>!Number.isFinite(Number(s.qty)) || Number(s.qty)<0 || !Number.isFinite(Number(s.customRate ?? kpServiceItem(s).rate)) || Number(s.customRate ?? kpServiceItem(s).rate)<0)){
+    showToast('Количество и цена услуги должны быть неотрицательными');return false;
+  }
   const data = getKpData();
   const payload = {
     project_id: editingProjectId || editingKpProjectId || null,
@@ -9774,10 +9832,12 @@ async function saveKpForm(){
     payment_method: kpPaymentMethod,
     discount_type: document.getElementById('kp-discount-type').value,
     discount_value: parseFloat(document.getElementById('kp-discount-value').value) || 0,
-    services: kpServices.map(s=>({catalogIndex: s.catalogIndex, qty: s.qty, customRate: s.customRate, preliminaryArea: s.preliminaryArea === true})),
+    services: kpServices.map(s=>({catalogIndex: s.catalogIndex, snapshot:kpServiceSnapshot(kpServiceItem(s)), qty: s.qty, customRate: s.customRate, preliminaryArea: s.preliminaryArea === true})),
     updated_at: new Date().toISOString(),
   };
 
+  kpSaveInFlight=true;
+  const saveButton=document.getElementById('kpSaveBtn');if(saveButton)saveButton.disabled=true;
   showToast('Сохранение…');
   try{
     if(editingKpId){
@@ -9792,10 +9852,13 @@ async function saveKpForm(){
     await loadAll();
     renderKpSavedList();
     if(editingProjectId) renderKpListForProject(editingProjectId);
+    document.getElementById('view-kp').dataset.dirty='0';
+    return true;
   }catch(e){
     console.error(e);
     showToast('Ошибка сохранения КП');
-  }
+    return false;
+  }finally{kpSaveInFlight=false;if(saveButton)saveButton.disabled=false;}
 }
 
 async function deleteKpForm(id){
@@ -9820,7 +9883,7 @@ function kpRowSummary(kp){
   const services = kp.services || [];
   let subtotal = 0;
   services.forEach(s=>{
-    const item = flat[s.catalogIndex] || flat[0];
+    const item = kpServiceItem(s);
     const rate = (s.customRate!==null && s.customRate!==undefined) ? s.customRate : item.rate;
     subtotal += rate * (Number(s.qty)||0);
   });
@@ -10165,10 +10228,10 @@ function applyCardsRole(){
 // ── Загрузка карточек из Supabase ──
 async function loadCards(){
   try{
-    const { data, error } = await sb.from('project_cards')
-      .select('*')
+    const { data, error } = await fetchAllRows(()=>sb.from('project_cards')
+      .select('*',{count:'exact'})
       .is('deleted_at', null)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false }));
     if(error) throw error;
     cardsData = data || [];
     applyCardsRole();
@@ -10348,7 +10411,7 @@ function renderCardsList(){
   container.innerHTML = filtered.map(card => `
     <div class="card" style="margin-bottom:10px;cursor:pointer;position:relative;"
          onclick="viewCard('${card.id}')">
-      ${canEditCards() ? `<button class="icon-btn" title="Получить ссылку на этот проект" onclick="event.stopPropagation(); createShareLinkForProject('${card.id}','${escapeHtml((card.title||'Проект').replace(/'/g,'')) }')" style="position:absolute;top:8px;right:8px;font-size:15px;background:var(--card-solid);border:1px solid var(--line-strong);border-radius:8px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;z-index:2;">🔗</button>` : ''}
+      ${canEditCards() ? `<button class="icon-btn" title="Получить ссылку на этот проект" onclick="event.stopPropagation(); createShareLinkForProject('${card.id}',${htmlJsArg(card.title||'Проект')})" style="position:absolute;top:8px;right:8px;font-size:15px;background:var(--card-solid);border:1px solid var(--line-strong);border-radius:8px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;z-index:2;">🔗</button>` : ''}
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:700;line-height:1.35;margin-bottom:3px;">${escapeHtml(card.title||'Без названия')}</div>
@@ -10362,7 +10425,7 @@ function renderCardsList(){
         </div>
         <div style="text-align:right;flex-shrink:0;">
           ${(card.thumbnails?.[0] || card.images?.[0])
-            ? `<img src="${card.thumbnails?.[0] || card.images[0]}" loading="lazy" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid rgba(22,35,58,0.1);" onerror="this.parentNode.innerHTML='<div style=\'width:56px;height:56px;border-radius:8px;background:rgba(61,143,224,0.1);display:flex;align-items:center;justify-content:center;font-size:22px;border:1px dashed rgba(61,143,224,0.3);\'>🏠</div>'"/>`
+            ? `<img src="${escapeHtml(card.thumbnails?.[0] || card.images[0])}" loading="lazy" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid rgba(22,35,58,0.1);" onerror="this.parentNode.innerHTML='<div style=\'width:56px;height:56px;border-radius:8px;background:rgba(61,143,224,0.1);display:flex;align-items:center;justify-content:center;font-size:22px;border:1px dashed rgba(61,143,224,0.3);\'>🏠</div>'"/>`
             : `<div style="width:56px;height:56px;border-radius:8px;background:rgba(61,143,224,0.08);display:flex;align-items:center;justify-content:center;font-size:22px;border:1px dashed rgba(61,143,224,0.25);" title="Фото не загружено">🏠</div>`}
           <div style="font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:700;color:var(--blue);margin-top:4px;">${card.price ? card.price+' ₽' : ''}</div>
         </div>
@@ -10905,6 +10968,8 @@ async function uploadCardImages(images){
 }
 
 async function saveCard(){
+  if(!canEditCards()){showToast('Нет доступа к редактированию каталога');return;}
+  if(document.getElementById('ce-save-btn').disabled)return;
   const btn = document.getElementById('ce-save-btn');
   btn.disabled = true;
   btn.textContent = 'Сохранение…';
@@ -10988,10 +11053,12 @@ async function syncCardToWordPress(card, supabaseId){
 }
 
 async function deleteCard(){
+  if(!canEditCards())return;
   if(!ceCurrentId) return;
   if(!confirm('Удалить эту карточку?')) return;
   try{
-    await sb.from('project_cards').update({ deleted_at: new Date().toISOString() }).eq('id', ceCurrentId);
+    const {error}=await sb.from('project_cards').update({ deleted_at: new Date().toISOString() }).eq('id', ceCurrentId);
+    if(error)throw error;
     showToast('Проект удалён');
     closeCardEditor();
     await loadCards();
@@ -11070,10 +11137,11 @@ let shareLinkProjectId = null; // если задан — ссылка ведё�
 async function renderShareLinks(){
   if(!canEditCards()) return;
   try{
-    const { data } = await sb.from('share_links')
-      .select('*')
+    const { data, error } = await fetchAllRows(()=>sb.from('share_links')
+      .select('*',{count:'exact'})
       .is('deleted_at', null)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false }));
+    if(error) throw error;
     shareLinksData = data || [];
   } catch(e){ shareLinksData = []; }
 
@@ -11143,6 +11211,7 @@ function createShareLinkForProject(cardId, cardTitle){
 }
 
 async function generateShareLink(){
+  if(!canEditCards())return;
   const label = document.getElementById('sl-name').value.trim() || 'Ссылка';
   const filter = shareLinkProjectId ? 'all' : document.getElementById('sl-filter').value;
   const expiresDays = parseInt(document.getElementById('sl-expires').value);
@@ -11179,9 +11248,11 @@ function copyShareUrl(){
 }
 
 async function deactivateLink(id){
+  if(!canEditCards())return;
   if(!confirm('Деактивировать эту ссылку? Клиент больше не сможет открыть каталог по ней.')) return;
   try{
-    await sb.from('share_links').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+    const {error}=await sb.from('share_links').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+    if(error)throw error;
     showToast('Ссылка деактивирована');
     await renderShareLinks();
   } catch(e){ showToast('Ошибка'); }
@@ -11214,7 +11285,7 @@ function buildCardHTML(card){
     <div class="panel" id="floor2">
       <div class="plan-wrap">
         <div class="plan-label">Планировочное решение · 2-й этаж <span>${escapeHtml(card.floor2_area||'')} м²</span></div>
-        <div class="plan-img-container">${plan2?`<img class="plan-img" src="${plan2}" loading="lazy" style="width:100%;height:auto;border-radius:4px;"/>`:''}</div>
+        <div class="plan-img-container">${plan2?`<img class="plan-img" src="${escapeHtml(plan2)}" loading="lazy" style="width:100%;height:auto;border-radius:4px;"/>`:''}</div>
       </div>
       <div class="explication">
         <div class="expl-header"><span class="expl-header-title">Экспликация</span><span class="expl-header-total">${escapeHtml(card.floor2_area||'')} м²</span></div>
@@ -11301,8 +11372,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div class="panel active" id="facade">
   <div class="swiper-wrap" id="swiperWrap">
     <div class="swiper-track" id="swiperTrack">
-      <div class="swiper-slide">${facade1?`<img src="${facade1}"/>`:'<div style="width:100%;height:100%;background:#222;"></div>'}<div class="swiper-overlay"></div></div>
-      ${facade2?`<div class="swiper-slide"><img src="${facade2}" loading="lazy"/><div class="swiper-overlay"></div></div>`:''}
+      <div class="swiper-slide">${facade1?`<img src="${escapeHtml(facade1)}"/>`:'<div style="width:100%;height:100%;background:#222;"></div>'}<div class="swiper-overlay"></div></div>
+      ${facade2?`<div class="swiper-slide"><img src="${escapeHtml(facade2)}" loading="lazy"/><div class="swiper-overlay"></div></div>`:''}
     </div>
     <div class="swiper-caption">${escapeHtml(card.title||'')}</div>
     <div class="swiper-num">№ ${escapeHtml(card.project_number||'')}</div>
@@ -11312,7 +11383,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div class="panel" id="floor1">
   <div class="plan-wrap">
     <div class="plan-label">Планировочное решение · 1-й этаж <span>${escapeHtml(card.floor1_area||'')} м²</span></div>
-    <div class="plan-img-container">${plan1?`<img class="plan-img" src="${plan1}" loading="lazy" style="width:100%;height:auto;border-radius:4px;"/>`:''}</div>
+    <div class="plan-img-container">${plan1?`<img class="plan-img" src="${escapeHtml(plan1)}" loading="lazy" style="width:100%;height:auto;border-radius:4px;"/>`:''}</div>
   </div>
   <div class="explication">
     <div class="expl-header"><span class="expl-header-title">Экспликация</span><span class="expl-header-total">${escapeHtml(card.floor1_area||'')} м²</span></div>
@@ -11416,35 +11487,26 @@ function scheduleReload(source){
       setTimeout(()=>{ realtimeToastShown = false; }, 4000);
     }
     await loadAll();
-    setSyncStatus('on', 'синхронизировано · live');
+    if(state.financialDataReady&&!state.financialDataError)setSyncStatus('live','синхронизировано · live');
   }, 600);
 }
 
 function setupRealtime(){
-  // Убиваем старый канал если есть
-  if(realtimeChannel){
-    sb.removeChannel(realtimeChannel);
-    realtimeChannel = null;
+  if(!session?.token)return;
+  if(realtimeChannel){sb.removeChannel(realtimeChannel);realtimeChannel=null;}
+  let channel=sb.channel('arhittek-live');
+  for(const table of ['projects','invoices','ledger_entries','project_stages','project_members','employees',
+    'company_expenses','company_income','timesheet_payments','company_info','kp_catalog','kp_forms',
+    'categories','statuses','departments','tz_forms','tz_references']){
+    channel=channel.on('postgres_changes',{event:'*',schema:'public',table},()=>scheduleReload(table));
   }
-
-  realtimeChannel = sb
-    .channel('arhittek-live')
-    .on('postgres_changes', {event:'*', schema:'public', table:'projects'}, ()=>scheduleReload('projects'))
-    .on('postgres_changes', {event:'*', schema:'public', table:'invoices'}, ()=>scheduleReload('invoices'))
-    .on('postgres_changes', {event:'*', schema:'public', table:'ledger_entries'}, ()=>scheduleReload('ledger'))
-    .on('postgres_changes', {event:'*', schema:'public', table:'project_stages'}, ()=>scheduleReload('stages'))
-    .on('postgres_changes', {event:'*', schema:'public', table:'employees'}, ()=>scheduleReload('employees'))
-    .subscribe((status)=>{
-      if(status === 'SUBSCRIBED'){
-        setSyncStatus('on', 'синхронизировано · live');
-        console.log('[Realtime] подключено');
-      } else if(status === 'CHANNEL_ERROR' || status === 'TIMED_OUT'){
-        setSyncStatus('off', 'нет live-связи');
-        console.warn('[Realtime] ошибка:', status);
-        // Fallback на поллинг если realtime недоступен
-        startPollingFallback();
-      }
-    });
+  realtimeChannel=channel.subscribe(status=>{
+    if(status==='SUBSCRIBED'){
+      if(state.financialDataReady&&!state.financialDataError)setSyncStatus('live','синхронизировано · live');
+    }else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){
+      setSyncStatus('off','нет live-связи');startPollingFallback();
+    }
+  });
 }
 
 // Fallback поллинг если realtime не работает (каждые 20 сек)
@@ -11510,6 +11572,10 @@ async function registerSW(){
     navigator.serviceWorker.addEventListener('controllerchange', ()=>{
       if(reloaded) return;
       reloaded = true;
+      if(document.querySelector('[data-dirty="1"]')){
+        showToast('Новая версия готова. Сохраните изменения и обновите страницу.');
+        return;
+      }
       window.location.reload();
     });
   }catch(e){

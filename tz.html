@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="data-access.js"></script>
 <script src="landscape-brief.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
@@ -558,7 +559,7 @@ async function init(){
     tzForm = row;
     answers = tzForm.answers || {};
     // The same catalog as Settings and commercial offers, including older briefs.
-    const {data:catalogRows,error:catalogError}=await sb.from('kp_catalog').select('id,name,group_name,description,rate,unit').is('deleted_at',null).order('sort_order',{ascending:true});
+    const {data:catalogRows,error:catalogError}=await ARHITTEKData.fetchAllRows(()=>sb.from('kp_catalog').select('id,name,group_name,description,rate,unit',{count:'exact'}).is('deleted_at',null).order('sort_order',{ascending:true}));
     if(!catalogError) LandscapeBrief.sync(answers,LandscapeBrief.catalog(catalogRows));
     else console.warn('Не удалось обновить тарифы ТЗ',catalogError);
     renderForm();
@@ -705,21 +706,27 @@ function renderField(field){
 // ============================================================
 // EVENT BINDING & ANSWER COLLECTION
 // ============================================================
+function bindRefRemoveButton(button){
+  if(button.dataset.bound==='1')return;
+  button.dataset.bound='1';
+  button.addEventListener('click',()=>{
+    const grid=button.closest('.ref-grid'), key=button.dataset.field+'_files';
+    const index=Number(button.dataset.idx);
+    if(!Array.isArray(answers[key]) || !Number.isInteger(index) || index<0 || index>=answers[key].length)return;
+    answers[key].splice(index,1);
+    button.closest('.ref-thumb').remove();
+    grid?.querySelectorAll('.ref-remove').forEach((btn,i)=>{btn.dataset.idx=String(i);});
+    scheduleAutoSave();
+  });
+}
+
 function addRefThumbFromUrl(fieldId, url, idx){
   const grid = document.getElementById(`refgrid-${fieldId}`);
   if(!grid) return;
   const div = document.createElement('div');
   div.className = 'ref-thumb';
   div.innerHTML = `<img src="${escapeHtml(url)}"><button class="ref-remove" data-field="${escapeHtml(fieldId)}" data-idx="${idx}" data-existing="1">✕</button>`;
-  div.querySelector('.ref-remove').addEventListener('click', ()=>{
-    const key = fieldId+'_files';
-    if(answers[key]) answers[key].splice(idx,1);
-    div.remove();
-    scheduleAutoSave();
-    // Re-index remaining thumbs
-    const remaining = grid.querySelectorAll('.ref-remove[data-existing]');
-    remaining.forEach((btn,i)=>{ btn.dataset.idx = i; });
-  });
+  bindRefRemoveButton(div.querySelector('.ref-remove'));
   grid.appendChild(div);
 }
 
@@ -810,7 +817,8 @@ function bindFieldEvents(){
     });
   });
 
-  // Remove existing refs — handled inside addRefThumbFromUrl
+  // Previously saved photos need the same handlers as newly uploaded photos.
+  document.querySelectorAll('.ref-remove[data-existing]').forEach(bindRefRemoveButton);
 }
 
 // ============================================================
@@ -833,7 +841,7 @@ function updateProgressBar(){
   const labels = document.querySelector('.progress-bar-labels');
   if(fill) fill.style.width = pct + '%';
   if(labels) labels.querySelector('.pbl-current').textContent = filledCount + ' из ' + total;
-  const pctEl = labels ? labels.querySelectorAll('span')[1] : null;
+  const pctEl = labels ? labels.lastElementChild : null;
   if(pctEl) pctEl.textContent = pct + '%';
 }
 
@@ -842,24 +850,31 @@ let saveInFlight = false;
 let saveTimer = null;
 
 let saveQueued=false;
+let answersDirty=false;
+let answersRevision=0;
 async function autoSave(){
   if(!tzForm) return;
   if(saveInFlight){saveQueued=true;return;}
   saveInFlight = true;
+  const revision=answersRevision;
+  const payload=JSON.parse(JSON.stringify(answers));
   const status = document.getElementById('saveStatus');
   if(status) status.textContent = 'Сохранение…';
   try{
     const {error} = await sb.rpc('submit_tz_form', {
       p_token: token,
-      p_answers: answers,
-      p_client_name: answers.full_name || tzForm?.client_name || '',
+      p_answers: payload,
+      p_client_name: payload.full_name || tzForm?.client_name || '',
     });
     if(error) throw error;
-    if(status) status.textContent = 'Сохранено · ' + new Date().toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'});
+    answersDirty=answersRevision!==revision;
+    const currentStatus=document.getElementById('saveStatus');
+    if(currentStatus)currentStatus.textContent='Сохранено · '+new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
     updateProgressBar();
   }catch(e){
     console.error('autosave error', e);
-    if(status) status.textContent = 'Ошибка сохранения';
+    const currentStatus=document.getElementById('saveStatus');
+    if(currentStatus)currentStatus.textContent='Не сохранено. Проверьте подключение — повторим попытку.';
   }finally{
     saveInFlight = false;
     if(saveQueued){saveQueued=false;await autoSave();}
@@ -867,11 +882,13 @@ async function autoSave(){
 }
 
 function scheduleAutoSave(){
+  answersDirty=true;answersRevision++;
   if(saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(autoSave, 1500);
 }
 
-setInterval(autoSave, 30000);
+setInterval(()=>{if(answersDirty)autoSave();},30000);
+window.addEventListener('beforeunload',e=>{if(answersDirty){e.preventDefault();e.returnValue='';}});
 
 init();
 </script>

@@ -1,6 +1,7 @@
-// ARHITTEK Service Worker v1.9 (finance clarity + full names + team selector)
-const CACHE = 'arhittek-v3.13-project-budget';
-const ASSETS = ['./index.html','./premium.css','./premium.js','./project-budget.js','./cash-finance.js','./client.css','./catalog.html','./tz.html','./landscape-brief.js','./manifest.json','./icon-192.png'];
+// ARHITTEK: complete reads, consistent budgets and safe app updates.
+const CACHE = 'arhittek-v3.14-full-audit';
+const ASSETS = ['./index.html','./premium.css','./premium.js','./data-access.js','./project-budget.js','./cash-finance.js','./client.css','./catalog.html','./tz.html','./landscape-brief.js','./manifest.json','./icon-192.png','./icon-512.png'];
+const APP_BASE = new URL('./', self.location.href);
 // CDN-библиотеки — кэшируем отдельно от основных ASSETS: если jsdelivr на
 // момент установки недоступен, это не должно валить весь install (addAll — all-or-nothing).
 const CDN_ASSETS = [
@@ -27,7 +28,7 @@ self.addEventListener('message', e=>{
 self.addEventListener('activate', e=>{
   e.waitUntil(
     caches.keys().then(keys=>Promise.all(
-      keys.filter(k=>k!==CACHE).map(k=>caches.delete(k))
+      keys.filter(k=>k.startsWith('arhittek-') && k!==CACHE).map(k=>caches.delete(k))
     )).then(()=>self.clients.claim())
   );
 });
@@ -39,11 +40,15 @@ self.addEventListener('fetch', e=>{
     e.respondWith(fetch(e.request).catch(()=>new Response('', {status:503})));
     return;
   }
+  // Кэшируем только ресурсы этого приложения и перечисленные публичные библиотеки.
+  const requestURL = new URL(e.request.url);
+  const isOwnGet = requestURL.origin === APP_BASE.origin &&
+    (requestURL.pathname === APP_BASE.pathname || ASSETS.some(path=>new URL(path, APP_BASE).pathname === requestURL.pathname));
+  if(!isOwnGet && !CDN_ASSETS.includes(e.request.url)) return;
   // Для GET-запросов своего сайта принудительно обходим HTTP-дисковый кэш браузера
   // (на iOS он может годами отдавать старую версию index.html/catalog.html,
   // даже когда service worker уже обновился) — иначе deploy может "не доходить" до телефона.
-  const isOwnGet = e.request.method === 'GET' && e.request.url.startsWith(self.location.origin);
-  const networkRequest = isOwnGet ? new Request(e.request.url, {cache:'no-store'}) : e.request;
+  const networkRequest = isOwnGet ? new Request(e.request, {cache:'no-store'}) : e.request;
   e.respondWith(
     fetch(networkRequest)
       .then(res=>{
@@ -53,13 +58,16 @@ self.addEventListener('fetch', e=>{
         }
         return res;
       })
-      .catch(async()=>await caches.match(e.request) || new Response('Нет подключения. Откройте приложение после восстановления связи.',{status:503,headers:{'Content-Type':'text/plain; charset=utf-8'}}))
+      .catch(async()=>await (await caches.open(CACHE)).match(e.request) || new Response('Нет подключения. Откройте приложение после восстановления связи.',{status:503,headers:{'Content-Type':'text/plain; charset=utf-8'}}))
   );
 });
 
 // Push-уведомления
 self.addEventListener('push', e=>{
-  const data = e.data ? e.data.json() : {};
+  let data = {};
+  try{ data = e.data ? e.data.json() : {}; }
+  catch(_){ data = {body: e.data?.text() || ''}; }
+  if(!data || typeof data !== 'object') data = {};
   const title = data.title || 'ARHITTEK';
   const options = {
     body: data.body || '',
@@ -75,11 +83,14 @@ self.addEventListener('push', e=>{
 self.addEventListener('notificationclick', e=>{
   e.notification.close();
   e.waitUntil(
-    clients.matchAll({type:'window'}).then(cs=>{
-      const url = e.notification.data?.url || './index.html';
-      const match = cs.find(c=>c.url.includes('arhittek') && 'focus' in c);
-      if(match) return match.focus();
-      return clients.openWindow(url);
+    self.clients.matchAll({type:'window',includeUncontrolled:true}).then(async cs=>{
+      let url;
+      try{ url = new URL(e.notification.data?.url || './index.html', APP_BASE); }
+      catch(_){ url = new URL('./index.html', APP_BASE); }
+      if(url.origin !== APP_BASE.origin || !url.pathname.startsWith(APP_BASE.pathname)) url = new URL('./index.html', APP_BASE);
+      const match = cs.find(c=>c.url.startsWith(APP_BASE.href) && 'focus' in c);
+      if(match){ if(match.url !== url.href && 'navigate' in match) await match.navigate(url.href); return match.focus(); }
+      return self.clients.openWindow(url.href);
     })
   );
 });
