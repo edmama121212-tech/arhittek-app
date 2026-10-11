@@ -1275,7 +1275,7 @@ function contractRowSnapshot(row){ return row?.changes?.snapshot?.new || row?.ch
 
 async function queryContractHistory(){
   try{
-    const {data,error}=await sb.from('audit_log').select('*').eq('entity_type','contract').order('created_at',{ascending:false}).limit(1000);
+    const {data,error}=await fetchAllRows(()=>sb.from('audit_log').select('*',{count:'exact'}).eq('entity_type','contract').order('created_at',{ascending:false}));
     if(error) throw error;
     contractHistoryRows=data||[];
   }catch(e){
@@ -1775,8 +1775,8 @@ if(typeof saveKpForm==='function'){
   saveKpForm=async function(){
     if($('kp-project-link'))editingKpProjectId=$('kp-project-link').value||null;
     const r=await old.apply(this,arguments);
-    if($('view-kp'))$('view-kp').dataset.dirty='0';
-    if(editingKpProjectId){renderKpListForProject(editingKpProjectId);if(typeof currentObjectId!=='undefined'&&currentObjectId===editingKpProjectId)renderObjectDocuments(editingKpProjectId);}
+    if(r===true && $('view-kp'))$('view-kp').dataset.dirty='0';
+    if(r===true && editingKpProjectId){renderKpListForProject(editingKpProjectId);if(typeof currentObjectId!=='undefined'&&currentObjectId===editingKpProjectId)renderObjectDocuments(editingKpProjectId);}
     setTimeout(()=>window.__applyKpSavedSearch?.(),0);
     return r;
   };
@@ -2395,11 +2395,8 @@ window.__arhittekClearSavedRoute=()=>{try{sessionStorage.removeItem(ROUTE_KEY);}
     if(dirtyOverlay||dirtyView){e.preventDefault();e.returnValue='';}
   });
 
-  // Explicit successful-save buttons clear the simple dirty marker after the save flow.
-  ['kpSaveBtn','ct-save-history'].forEach(id=>document.getElementById(id)?.addEventListener('click',()=>setTimeout(()=>{
-    const v=id==='kpSaveBtn'?document.getElementById('view-kp'):document.getElementById('view-contracts');
-    if(v) v.dataset.dirty='0';
-  },700)));
+  // Each save flow clears its marker only after a confirmed database write.
+
 })();
 
 

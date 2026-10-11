@@ -6,7 +6,14 @@ window.LandscapeBrief = (() => {
  const detail = new Set(fields.filter(f=>f.group==='engineering').map(f=>f.id));
  function tariffs(a){return Array.isArray(a._ld_tariffs)?a._ld_tariffs.filter(t=>!t.profile):[];}
  function catalog(rows){return (rows||[]).filter(t=>/ландшафт/i.test((t.group_name||'')+' '+(t.name||''))).map(t=>({id:t.id,name:t.name,desc:t.description||'',rate:Number(t.rate)||0,unit:t.unit||'м²'}));}
- function sync(a,items){a._ld_tariffs=items; if(!selected(a)){a.ld_tariff='';a.ld_scope='';}else setTariff(a,a.ld_tariff);return a;}
+ function sync(a,items){
+   // The selected scope belongs to this brief; changing the price list cannot rewrite it.
+   const previous=selected(a)||(a.ld_tariff?{name:a.ld_tariff,desc:a.ld_scope||'',rate:0,unit:'м²'}:null);
+   a._ld_tariffs=(items||[]).filter(t=>!previous||t.name!==previous.name).map(t=>({...t}));
+   if(previous)a._ld_tariffs.unshift({...previous});
+   if(!selected(a)){a.ld_tariff='';a.ld_scope='';}else setTariff(a,a.ld_tariff);
+   return a;
+ }
  function selected(a){return tariffs(a).find(t=>t.name===a.ld_tariff);}
  function visible(key,a){
    if(!key.startsWith('ld_') || key==='ld_tariff' || key==='ld_scope') return true;

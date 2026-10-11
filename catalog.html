@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Каталог проектов — ARHITTEK</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="data-access.js"></script>
 <style>
   :root{--blue:#3D8FE0;--blue-dark:#2A72C0;--blue-light:#E8F3FC;--black:#0A0A0A;--border:#D0D0D0;--border-soft:#DCDCDC;--text-primary:#1A1A1A;--text-sub:#888;--text-label:#BBB;}
   *{margin:0;padding:0;box-sizing:border-box;}
@@ -195,7 +196,7 @@ async function init(){
       }
       allCards = [data];
     } else {
-      const { data, error } = await sb.from('project_cards').select('*').is('deleted_at', null).order('created_at', { ascending: false });
+      const { data, error } = await ARHITTEKData.fetchAllRows(()=>sb.from('project_cards').select('*',{count:'exact'}).is('deleted_at', null).order('created_at', { ascending: false }));
       if(error) throw error;
       allCards = data || [];
     }
@@ -252,7 +253,7 @@ function buildCardHTML(card, idx){
     <div class="panel" id="floor2_${idx}">
       <div class="plan-wrap">
         <div class="plan-label">2-й этаж <span>${escapeHtml(card.floor2_area||'')} м²</span></div>
-        <div class="plan-img-container">${plan2?`<img class="plan-img" src="${plan2}"/>`:'<div style="height:60px;display:flex;align-items:center;justify-content:center;color:#aaa;font-size:12px;">Нет изображения</div>'}</div>
+        <div class="plan-img-container">${plan2?`<img class="plan-img" src="${escapeHtml(plan2)}"/>`:'<div style="height:60px;display:flex;align-items:center;justify-content:center;color:#aaa;font-size:12px;">Нет изображения</div>'}</div>
       </div>
       <div class="explication"><div class="expl-header"><span class="expl-header-title">Экспликация</span><span class="expl-header-total">${escapeHtml(card.floor2_area||'')} м²</span></div>${e2}</div>
       <div style="height:12px;"></div>
@@ -271,8 +272,8 @@ function buildCardHTML(card, idx){
   <div class="panel active" id="facade_${idx}">
     <div class="swiper-wrap" id="swiper-${idx}">
       <div class="swiper-track" id="track-${idx}">
-        <div class="swiper-slide">${facade1?`<img src="${facade1}"/>`:'<div style="width:100%;height:100%;background:#333;display:flex;align-items:center;justify-content:center;font-size:40px;">🏠</div>'}<div class="swiper-overlay"></div></div>
-        ${facade2?`<div class="swiper-slide"><img src="${facade2}"/><div class="swiper-overlay"></div></div>`:''}
+        <div class="swiper-slide">${facade1?`<img src="${escapeHtml(facade1)}"/>`:'<div style="width:100%;height:100%;background:#333;display:flex;align-items:center;justify-content:center;font-size:40px;">🏠</div>'}<div class="swiper-overlay"></div></div>
+        ${facade2?`<div class="swiper-slide"><img src="${escapeHtml(facade2)}"/><div class="swiper-overlay"></div></div>`:''}
       </div>
       <div class="swiper-caption">${escapeHtml(card.title||'')}</div>
       <div class="swiper-num">№ ${escapeHtml(card.project_number||'')}</div>
@@ -282,7 +283,7 @@ function buildCardHTML(card, idx){
   <div class="panel" id="floor1_${idx}">
     <div class="plan-wrap">
       <div class="plan-label">1-й этаж <span>${escapeHtml(card.floor1_area||'')} м²</span></div>
-      <div class="plan-img-container">${plan1?`<img class="plan-img" src="${plan1}"/>`:'<div style="height:60px;display:flex;align-items:center;justify-content:center;color:#aaa;font-size:12px;">Нет изображения</div>'}</div>
+      <div class="plan-img-container">${plan1?`<img class="plan-img" src="${escapeHtml(plan1)}"/>`:'<div style="height:60px;display:flex;align-items:center;justify-content:center;color:#aaa;font-size:12px;">Нет изображения</div>'}</div>
     </div>
     <div class="explication"><div class="expl-header"><span class="expl-header-title">Экспликация</span><span class="expl-header-total">${escapeHtml(card.floor1_area||'')} м²</span></div>${e1}</div>
     <div style="height:12px;"></div>

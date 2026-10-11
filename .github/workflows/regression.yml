@@ -34,3 +34,6 @@ jobs:
 
       - name: Run regression suite
         run: npm test
+
+      - name: Check complete reads, public forms and app workflows
+        run: npm run test:app
