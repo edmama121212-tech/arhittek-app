@@ -1919,9 +1919,13 @@
         <div class="yn-btn selected" data-value="advance" style="flex-basis:48%;">Аванс</div>
         <div class="yn-btn" data-value="final_payment" style="flex-basis:48%;">Оплата остатка</div>
         <div class="yn-btn" data-value="materials_budget" style="flex-basis:48%;">Бюджет на материалы</div>
-        <div class="yn-btn" data-value="fee_payment" style="flex-basis:48%;">Гонорар ARHIT<span style="color:#3D8FE0;">TEK</span></div>
+        <div class="yn-btn" data-value="fee_payment" style="flex-basis:48%;">Выплата команде</div>
         <div class="yn-btn" data-value="withdrawal" style="flex-basis:100%;">Вывод средств из бюджета объекта</div>
       </div>
+    </div>
+
+    <div class="field" id="payment-payee-field" hidden>
+      <label>Кому выдали деньги</label><select id="payment-payee"></select>
     </div>
 
     <div class="field-row">
@@ -2202,6 +2206,7 @@ function applySessionToken(token){
 // STATE
 // ============================================================
 let state = {
+  financialDataReady:false,financialDataError:null,financialLoadedAt:null,
   projects: [],
   employees: [],
   categories: [],
@@ -2322,6 +2327,7 @@ function getProjectExpenses(p){
   if(!p) return 0;
   const manual = (state.ledger||[])
     .filter(e => e.project_id===p.id && e.type==='project_expense' && !e.deleted_at)
+    .filter(e => !isInvoiceLinkedExpense(e))
     .reduce((sum,e)=>sum + Number(e.amount||0),0);
 
   if(isConstructionProject(p)){
@@ -2334,6 +2340,10 @@ function getProjectExpenses(p){
 
   // Старые проекты могли хранить расходы только в projects.expenses.
   return manual > 0 ? manual : Math.max(0, Number(p.expenses)||0);
+}
+function isInvoiceLinkedExpense(entry){
+  const id=typeof ARHITTEKCash!=='undefined'?ARHITTEKCash.invoicePaymentId(entry):null;
+  return !!id&&(state.invoices||[]).some(i=>i.id===id&&i.project_id===entry.project_id&&!i.deleted_at);
 }
 
 // Накладные, отмеченные «оплачено заказчиком напрямую» (заказчик оплатил
@@ -2393,6 +2403,9 @@ function isFrozen(p){
 }
 function findEmployee(id){ return state.employees.find(e=>e.id===id); }
 function findDepartment(id){ return state.departments.find(d=>d.id===id); }
+function financeToday(){
+  return new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Moscow',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+}
 
 function daysUntil(dateStr){
   if(!dateStr) return null;
@@ -3161,6 +3174,7 @@ async function loadAll(){
     state.tzForms = tzForms.data || [];
     state.tzReferences = tzRefs.data || [];
     state.companyInfo = company.data || null;
+    state.financialDataReady=true;state.financialDataError=null;state.financialLoadedAt=new Date().toISOString();
 
     // Показываем live-статус если realtime канал активен
     const isLive = realtimeChannel && realtimeChannel.state === 'joined';
@@ -3198,6 +3212,8 @@ async function loadAll(){
     console.error(e);
     const wasOk = document.getElementById('syncDot').classList.contains('off') === false;
     setSyncStatus('off', 'нет связи');
+    state.financialDataError=e.message||'Не удалось загрузить операции';
+    window.renderCashFinance?.();
     if(wasOk) showToast('Ошибка подключения к базе');
   }finally{
     loadAllInFlight = false;
@@ -4584,7 +4600,7 @@ async function saveProject(){
   // Иначе начисления могли попасть в табель за месяц создания проекта.
   const selectedStatusForSave = findStatus(payload.status_id);
   if(selectedStatusForSave && selectedStatusForSave.name === 'Завершён' && !payload.end_date){
-    payload.end_date = new Date().toISOString().slice(0,10);
+    payload.end_date = financeToday();
     const endField = document.getElementById('pf-end');
     if(endField) endField.value = payload.end_date;
   }
@@ -5307,6 +5323,7 @@ function openCompanyExpenseSheet(id, presetCategory){
   if(id){
     const ex = (state.companyExpenses||[]).find(x=>x.id===id);
     if(!ex) return;
+    if(ex.category && !COMPANY_EXPENSE_CATEGORIES.includes(ex.category)) catSel.add(new Option(ex.category,ex.category));
     title.textContent = 'Редактировать расход';
     deleteBtn.style.display = '';
     catSel.value = ex.category || COMPANY_EXPENSE_CATEGORIES[0];
@@ -5319,7 +5336,7 @@ function openCompanyExpenseSheet(id, presetCategory){
     catSel.value = (presetCategory && COMPANY_EXPENSE_CATEGORIES.includes(presetCategory)) ? presetCategory : COMPANY_EXPENSE_CATEGORIES[0];
     title.textContent = presetCategory===COMPANY_WITHDRAWAL_CATEGORY ? 'Вывод денег' : 'Новый расход';
     document.getElementById('cex-amount').value = '';
-    document.getElementById('cex-date').value = new Date().toISOString().slice(0,10);
+    document.getElementById('cex-date').value = financeToday();
     document.getElementById('cex-desc').value = '';
   }
   overlay.classList.add('active');
@@ -5330,16 +5347,19 @@ function closeCompanyExpenseSheet(){
   editingCompanyExpenseId = null;
 }
 
+let companyExpenseSaveInFlight=false;
 async function saveCompanyExpense(){
+  if(companyExpenseSaveInFlight) return;
   if(!session?.isAdmin){showToast("Требуются права администратора");return;}
   const category = document.getElementById('cex-category').value;
   const amount = parseFloat(document.getElementById('cex-amount').value) || 0;
   const expense_date = document.getElementById('cex-date').value;
   const description = document.getElementById('cex-desc').value.trim();
-  if(!amount || amount <= 0){ showToast('Укажите сумму'); return; }
+  if(!Number.isFinite(amount) || amount <= 0){ showToast('Укажите сумму'); return; }
+  if(!category){ showToast('Выберите категорию'); return; }
   if(!expense_date){ showToast('Укажите дату'); return; }
   if(category === COMPANY_WITHDRAWAL_CATEGORY){
-    let available = getCompanyReserveBalance();
+    let available = typeof getCompanyAvailableCash==='function' ? getCompanyAvailableCash() : getCompanyReserveBalance();
     if(editingCompanyExpenseId){
       const old = (state.companyExpenses||[]).find(x=>x.id===editingCompanyExpenseId);
       if(old && old.category===COMPANY_WITHDRAWAL_CATEGORY) available += Number(old.amount)||0;
@@ -5350,6 +5370,8 @@ async function saveCompanyExpense(){
     }
     if(!description){ showToast('Укажите назначение вывода денег'); return; }
   }
+  companyExpenseSaveInFlight=true;
+  document.getElementById('cex-save').disabled=true;
   try{
     if(editingCompanyExpenseId){
       const before=(state.companyExpenses||[]).find(x=>x.id===editingCompanyExpenseId);
@@ -5374,6 +5396,9 @@ async function saveCompanyExpense(){
   }catch(e){
     console.error(e);
     showToast('Ошибка сохранения — проверьте, что миграция company_expenses выполнена в Supabase');
+  }finally{
+    companyExpenseSaveInFlight=false;
+    document.getElementById('cex-save').disabled=false;
   }
 }
 
@@ -5433,6 +5458,7 @@ function openCompanyIncomeSheet(id){
   if(id){
     const inc = (state.companyIncome||[]).find(x=>x.id===id);
     if(!inc) return;
+    if(inc.category && !COMPANY_INCOME_CATEGORIES.includes(inc.category)) catSel.add(new Option(inc.category,inc.category));
     title.textContent = 'Редактировать доход';
     deleteBtn.style.display = '';
     catSel.value = inc.category || COMPANY_INCOME_CATEGORIES[0];
@@ -5444,7 +5470,7 @@ function openCompanyIncomeSheet(id){
     deleteBtn.style.display = 'none';
     catSel.selectedIndex = 0;
     document.getElementById('cin-amount').value = '';
-    document.getElementById('cin-date').value = new Date().toISOString().slice(0,10);
+    document.getElementById('cin-date').value = financeToday();
     document.getElementById('cin-desc').value = '';
   }
   overlay.classList.add('active');
@@ -5455,14 +5481,19 @@ function closeCompanyIncomeSheet(){
   editingCompanyIncomeId = null;
 }
 
+let companyIncomeSaveInFlight=false;
 async function saveCompanyIncome(){
+  if(companyIncomeSaveInFlight) return;
   if(!session?.isAdmin){showToast("Требуются права администратора");return;}
   const category = document.getElementById('cin-category').value;
   const amount = parseFloat(document.getElementById('cin-amount').value) || 0;
   const income_date = document.getElementById('cin-date').value;
   const description = document.getElementById('cin-desc').value.trim();
-  if(!amount || amount <= 0){ showToast('Укажите сумму'); return; }
+  if(!Number.isFinite(amount) || amount <= 0){ showToast('Укажите сумму'); return; }
+  if(!category){ showToast('Выберите категорию'); return; }
   if(!income_date){ showToast('Укажите дату'); return; }
+  companyIncomeSaveInFlight=true;
+  document.getElementById('cin-save').disabled=true;
   try{
     if(editingCompanyIncomeId){
       const before=(state.companyIncome||[]).find(x=>x.id===editingCompanyIncomeId);
@@ -5487,6 +5518,9 @@ async function saveCompanyIncome(){
   }catch(e){
     console.error(e);
     showToast('Ошибка сохранения — проверьте, что миграция company_income выполнена в Supabase');
+  }finally{
+    companyIncomeSaveInFlight=false;
+    document.getElementById('cin-save').disabled=false;
   }
 }
 
@@ -5604,7 +5638,7 @@ const ledgerTypeLabels = {
   final_payment: {label:'Оплата остатка', cls:'var(--green)', sign:'+'},
   materials_budget: {label:'Бюджет на материалы', cls:'var(--green)', sign:'+'},
   construction_budget: {label:'Бюджет строительства', cls:'var(--green)', sign:'+'},
-  fee_payment: {label:'Гонорар ARHITTEK', cls:'var(--blue)', sign:'+'},
+  fee_payment: {label:'Выплата сотруднику по проекту', cls:'var(--red)', sign:'−'},
   withdrawal: {label:'Вывод средств', cls:'var(--red)', sign:'−'},
   project_expense: {label:'Расход по проекту', cls:'var(--red)', sign:'−'},
   role_payout: {label:'Начисление исполнителю (м²)', cls:'var(--gold)', sign:'−'},
@@ -5864,7 +5898,7 @@ async function addProjectRolePayout(){
     const {error} = await sb.from('ledger_entries').insert({
       type:'role_payout', project_id:projectId, payee_employee_id: employeeId,
       description:`${role} — ${emp?emp.name:''} (${area} м² × ${fmtMoney(rate)}/м²)`,
-      amount, entry_date: new Date().toISOString().slice(0,10),
+      amount, entry_date: financeToday(),
       received_by: session ? session.employeeId : null,
     });
     if(error) throw error;
@@ -5897,16 +5931,20 @@ async function deleteProjectRolePayout(entryId, projectId){
 
 document.getElementById('pf-rp-add-btn').addEventListener('click', addProjectRolePayout);
 
+let projectExpenseSaveInFlight=false;
 async function addProjectExpense(){
+  if(projectExpenseSaveInFlight) return;
   const projectId = editingProjectId;
   if(!projectId){ showToast('Сначала сохраните проект'); return; }
   const desc = document.getElementById('pf-expense-desc').value.trim();
   const amount = parseFloat(document.getElementById('pf-expense-amount').value);
-  const entry_date = document.getElementById('pf-expense-date').value || new Date().toISOString().slice(0,10);
-  if(!amount || amount <= 0){ showToast('Укажите сумму расхода'); return; }
+  const entry_date = document.getElementById('pf-expense-date').value || financeToday();
+  if(!Number.isFinite(amount) || amount <= 0){ showToast('Укажите сумму расхода'); return; }
   if(!desc){ showToast('Укажите, на что расход'); return; }
   const p = state.projects.find(x=>x.id===projectId);
   const wasEditing = !!editingProjectExpenseId;
+  projectExpenseSaveInFlight=true;
+  document.getElementById('pf-expense-add-btn').disabled=true;
   try{
     if(editingProjectExpenseId){
       const before=(state.ledger||[]).find(x=>x.id===editingProjectExpenseId);
@@ -5917,13 +5955,14 @@ async function addProjectExpense(){
       });
     }else{
       const existing = state.ledger.filter(l=>l.project_id===projectId && l.type==='project_expense' && !l.deleted_at);
-      if(!existing.length && p && Number(p.expenses) > 0){
-        await sb.from('ledger_entries').insert({
+      if(!existing.length && p && !isConstructionProject(p) && Number(p.expenses) > 0){
+        const {error:importError}=await sb.from('ledger_entries').insert({
           type:'project_expense', project_id:projectId,
-          description:'Ранее внесённые расходы', amount:Number(p.expenses),
+          description:'[cash:historical-expense] Ранее внесённые расходы', amount:Number(p.expenses),
           entry_date:(p.created_at||new Date().toISOString()).slice(0,10),
           received_by:session ? session.employeeId : null,
         });
+        if(importError) throw importError;
       }
       const {error}=await sb.from('ledger_entries').insert({
         type:'project_expense', project_id:projectId,
@@ -5941,7 +5980,8 @@ async function addProjectExpense(){
     updateCompanyRemainderField(projectId);
     const up=state.projects.find(x=>x.id===projectId); if(up) renderFeeSummaryForProject(up);
     showToast(wasEditing ? 'Расход изменён' : 'Расход добавлен');
-  }catch(e){ console.error(e); showToast(wasEditing ? 'Ошибка изменения расхода' : 'Ошибка добавления расхода'); }
+  }catch(e){ console.error(e); showToast(wasEditing ? 'Ошибка изменения расхода' : 'Ошибка добавления расхода');
+  }finally{ projectExpenseSaveInFlight=false; document.getElementById('pf-expense-add-btn').disabled=false; }
 }
 
 async function deleteProjectExpense(entryId, projectId){
@@ -6037,7 +6077,7 @@ async function addLedgerEntry(){
   const project_id = document.getElementById('ledgerProject').value || null;
   const description = document.getElementById('ledgerDesc').value.trim();
   const amount = parseFloat(document.getElementById('ledgerAmount').value);
-  const entry_date = document.getElementById('ledgerDate').value || new Date().toISOString().slice(0,10);
+  const entry_date = document.getElementById('ledgerDate').value || financeToday();
 
   if(!amount || amount <= 0){
     showToast('Укажите сумму');
@@ -6082,7 +6122,7 @@ const paymentHints = {
   advance: 'Увеличит «Получено» и уменьшит «Остаток» по проекту.',
   final_payment: 'Увеличит «Получено» и уменьшит «Остаток» по проекту — оплата финального остатка.',
   materials_budget: 'Деньги клиента на закупку материалов — увеличит «Получено» и уменьшит «Остаток» (учитывается в общем приходе по проекту).',
-  fee_payment: 'Увеличит «Выплачено гонорара» — не влияет на приход/остаток по проекту.',
+  fee_payment: 'Фактическая выплата выбранному сотруднику. Уменьшит деньги компании и будет учтена в табеле; оплату клиента не меняет.',
   withdrawal: 'Запись о выводе средств из бюджета объекта (например, наличные на материалы). Не влияет на «Получено»/«Остаток» — только запись в истории с указанием причины. Укажите причину в комментарии.',
 };
 
@@ -6093,8 +6133,12 @@ function openPaymentSheet(projectId){
   document.querySelectorAll('#payment-type .yn-btn').forEach(b=>b.classList.toggle('selected', b.dataset.value==='advance'));
   document.getElementById('payment-amount').value = '';
   document.getElementById('payment-note').value = '';
-  document.getElementById('payment-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('payment-date').value = financeToday();
   document.getElementById('payment-hint').textContent = paymentHints.advance;
+  const p=state.projects.find(p=>p.id===paymentProjectId);
+  const ids=[...new Set([p?.employee_id,p?.co_employee_id,...projectRolePayoutEntries(paymentProjectId).map(r=>r.payee_employee_id)].filter(Boolean))];
+  document.getElementById('payment-payee').innerHTML=ids.map(id=>`<option value="${escapeHtml(id)}">${escapeHtml(findEmployee(id)?.name||'Сотрудник')}</option>`).join('');
+  document.getElementById('payment-payee-field').hidden=true;
   document.getElementById('paymentSheetOverlay').classList.add('active');
 }
 
@@ -6103,28 +6147,37 @@ document.querySelectorAll('#payment-type .yn-btn').forEach(btn=>{
     document.querySelectorAll('#payment-type .yn-btn').forEach(b=>b.classList.remove('selected'));
     btn.classList.add('selected');
     paymentType = btn.dataset.value;
+    document.getElementById('payment-payee-field').hidden=paymentType!=='fee_payment';
     document.getElementById('payment-hint').textContent = paymentHints[paymentType] || '';
   });
 });
 
 let paymentSaveInFlight=false;
+function projectFeePaidField(project,entry){
+  if(!project||project.fee_base==='m2')return null;
+  return entry.payee_employee_id&&entry.payee_employee_id===project.co_employee_id?'co_fee_paid':'fee_paid';
+}
 async function savePayment(){
   if(paymentSaveInFlight) return;
+  if(!session?.isAdmin){showToast('Финансовые операции сохраняет администратор');return;}
   const projectId = paymentProjectId || editingProjectId;
   if(!projectId) return;
   const amount = parseFloat(document.getElementById('payment-amount').value);
-  const entry_date = document.getElementById('payment-date').value || new Date().toISOString().slice(0,10);
+  const entry_date = document.getElementById('payment-date').value || financeToday();
   const note = document.getElementById('payment-note').value.trim();
 
-  if(!amount || amount <= 0){ showToast('Укажите сумму платежа'); return; }
+  if(!Number.isFinite(amount) || amount <= 0){ showToast('Укажите сумму платежа'); return; }
   if(paymentType === 'withdrawal' && !note){ showToast('Укажите причину вывода средств'); return; }
 
   const p = state.projects.find(x=>x.id===projectId);
   if(!p) return;
+  const payeeEmployeeId=paymentType==='fee_payment'?document.getElementById('payment-payee').value:null;
+  if(paymentType==='fee_payment'&&!payeeEmployeeId){showToast('Укажите сотрудника в команде проекта');return;}
 
   const updates = {};
   if(paymentType === 'fee_payment'){
-    updates.fee_paid = (Number(p.fee_paid)||0) + amount;
+    const field=projectFeePaidField(p,{payee_employee_id:payeeEmployeeId});
+    if(field)updates[field]=(Number(p[field])||0)+amount;
   }else if(paymentType === 'withdrawal'){
     // No effect on project financial fields — purely a journal record with a reason
   }else{
@@ -6136,26 +6189,30 @@ async function savePayment(){
   paymentSaveInFlight=true;
   document.getElementById('payment-save').disabled=true;
   showToast('Сохранение…');
+  let insertedPayment=null,projectSynced=false;
   try{
-    if(Object.keys(updates).length){
-      const {error: projErr} = await sb.from('projects').update(updates).eq('id', projectId);
-      if(projErr) throw projErr;
-    }
-
     const t = ledgerTypeLabels[paymentType];
     const description = note || t?.label || 'Платёж';
     const {data, error} = await sb.from('ledger_entries').insert({
       type: paymentType, project_id: projectId, description, amount, entry_date,
-      ...(paymentType==='fee_payment'?{payee_employee_id:p.employee_id}:{}),
+      ...(paymentType==='fee_payment'?{payee_employee_id:payeeEmployeeId}:{}),
       received_by: session ? session.employeeId : null,
     }).select().single();
     if(error) throw error;
+    insertedPayment=data;
 
     if(isConstructionProject(p) && paymentType !== 'fee_payment' && paymentType !== 'withdrawal'){
       const finAfterPayment = getConstructionFinancials(p, [...(state.ledger||[]), data]);
-      const {error: syncErr} = await sb.from('projects').update({balance: finAfterPayment.balance}).eq('id', projectId);
-      if(syncErr) throw syncErr;
+      updates.balance=finAfterPayment.balance;
     }
+    if(Object.keys(updates).length){
+      let query=sb.from('projects').update(updates).eq('id',projectId);
+      for(const field of Object.keys(updates)) query=p[field]==null?query.is(field,null):query.eq(field,p[field]);
+      const {data:updated,error:projErr}=await query.select().maybeSingle();
+      if(projErr) throw projErr;
+      if(!updated) throw new Error('Проект изменился на другом устройстве. Обновите данные перед повтором.');
+    }
+    projectSynced=true;
 
     await logAudit('project', projectId, p.name, 'update', {
       payment: {old:null, new: `${t?.label||paymentType} — ${fmtMoney(amount)}${note?' ('+note+')':''}`}
@@ -6184,7 +6241,10 @@ async function savePayment(){
     }
   }catch(e){
     console.error(e);
-    showToast('Платёж не завершён. Проверьте журнал и карточку перед повтором');
+    if(insertedPayment&&!projectSynced){
+      const rollback=await sb.from('ledger_entries').update({deleted_at:new Date().toISOString()}).eq('id',insertedPayment.id);
+      showToast(rollback.error?'Не удалось завершить платёж. Проверьте журнал перед повтором':'Платёж не сохранён: данные проекта изменились или недоступны');
+    }else showToast(projectSynced?'Платёж сохранён. Обновите страницу для проверки':'Платёж не сохранён. Проверьте журнал перед повтором');
     await loadAll();
   }finally{
     paymentSaveInFlight=false;
@@ -6221,16 +6281,22 @@ async function deleteLedgerEntry(id){
 // ============================================================
 // CANCEL PAYMENT
 // ============================================================
+const paymentCancellationsInFlight=new Set();
 async function cancelPayment(entryId){
+  if(paymentCancellationsInFlight.has(entryId))return;
   if(!confirm('Отменить этот платёж? Сумма будет возвращена в расчёты проекта.')) return;
+  paymentCancellationsInFlight.add(entryId);
+  let cancelledEntry=null,projectSynced=false;
   try{
     const e = state.ledger.find(x => x.id === entryId);
     if(!e){ showToast('Запись не найдена'); return; }
     const p = state.projects.find(x => x.id === e.project_id);
 
     // Soft-delete the ledger entry
-    const {error} = await sb.from('ledger_entries').update({deleted_at: new Date().toISOString()}).eq('id', entryId);
+    const {data:cancelled,error} = await sb.from('ledger_entries').update({deleted_at: new Date().toISOString()}).eq('id', entryId).is('deleted_at',null).select().maybeSingle();
     if(error) throw error;
+    if(!cancelled){await loadAll();return;}
+    cancelledEntry=e;
 
     // Reverse the project financial fields
     const updates = {};
@@ -6239,7 +6305,7 @@ async function cancelPayment(entryId){
       const finAfterCancel = getConstructionFinancials(p, ledgerAfterCancel);
       updates.balance = finAfterCancel.balance;
     }else if(e.type === 'fee_payment'){
-      updates.fee_paid = Math.max(0, (Number(p?.fee_paid)||0) - (Number(e.amount)||0));
+      const field=projectFeePaidField(p,e);if(field)updates[field]=Math.max(0,(Number(p?.[field])||0)-(Number(e.amount)||0));
     } else if(e.type !== 'withdrawal'){
       const newAdvance = Math.max(0, (Number(p?.advance)||0) - (Number(e.amount)||0));
       updates.advance = newAdvance;
@@ -6247,9 +6313,13 @@ async function cancelPayment(entryId){
     }
 
     if(p && Object.keys(updates).length){
-      const {error: projErr} = await sb.from('projects').update(updates).eq('id', p.id);
+      let query=sb.from('projects').update(updates).eq('id',p.id);
+      for(const field of Object.keys(updates))query=p[field]==null?query.is(field,null):query.eq(field,p[field]);
+      const {data:updated,error:projErr}=await query.select().maybeSingle();
       if(projErr) throw projErr;
+      if(!updated)throw new Error('Проект изменился на другом устройстве');
     }
+    projectSynced=true;
 
     if(p) await logAudit('project', p.id, p.name, 'update', {
       payment_cancelled: {old: null, new: 'отмена: ' + (e.description||entryId)}
@@ -6273,7 +6343,13 @@ async function cancelPayment(entryId){
     }
   }catch(err){
     console.error(err);
-    showToast('Ошибка отмены платежа');
+    if(cancelledEntry&&!projectSynced){
+      const rollback=await sb.from('ledger_entries').update({deleted_at:null}).eq('id',entryId);
+      showToast(rollback.error?'Отмена не завершена. Проверьте историю перед повтором':'Платёж сохранён: отмена не завершена');
+    }else showToast(projectSynced?'Платёж отменён. Обновите страницу':'Ошибка отмены платежа');
+    await loadAll();
+  }finally{
+    paymentCancellationsInFlight.delete(entryId);
   }
 }
 
@@ -7180,7 +7256,7 @@ function renderObjTabContent(){
         <label>Номер накладной</label>
         <input type="text" id="inv-num-obj" placeholder="например: БИ 14.04.26">
         <label>Дата</label>
-        <input type="date" id="inv-date-obj" value="${new Date().toISOString().slice(0,10)}">
+        <input type="date" id="inv-date-obj" value="${financeToday()}">
         <label>Категория</label>
         <select id="inv-cat-obj" onchange="(function(s){var c=document.getElementById('inv-cat-obj-custom');c.style.display=s.value==='__other__'?'block':'none';})(this)">
           <option value="">— выберите —</option>
@@ -7451,6 +7527,9 @@ async function saveInvoiceSheet(){
   const category     = document.getElementById('invSheet-category').value.trim();
   const description  = document.getElementById('invSheet-desc').value.trim();
   const paid_by_client = document.getElementById('invSheet-paid-client').checked;
+  if(paid_by_client&&typeof ARHITTEKCash!=='undefined'&&ARHITTEKCash.invoicePaymentState(state,inv).rows.length){
+    showToast('У накладной есть оплата компании. Сначала отмените её в истории оплаты.');return;
+  }
 
   if(!amount || amount <= 0){ showToast('Укажите сумму'); return; }
   if(!invoice_date){ showToast('Укажите дату накладной'); return; }
@@ -7487,6 +7566,9 @@ async function deleteInvoiceSheet(){
   if(!confirm('Удалить эту накладную? Это необратимо.')) return;
   const inv = state.invoices.find(i=>i.id===invSheetCurrentId);
   if(!inv) return;
+  if(typeof ARHITTEKCash!=='undefined'&&ARHITTEKCash.invoicePaymentState(state,inv).rows.length){
+    showToast('У накладной есть связанные оплаты. Сначала отмените их в истории.');return;
+  }
   try{
     const {error} = await sb.from('invoices').delete().eq('id', invSheetCurrentId);
     if(error) throw error;
@@ -7529,7 +7611,7 @@ async function exportConstrPdf(projectId){
   doc.text('Отчёт по объекту', textX, 24);
 
   doc.setFontSize(9); doc.setTextColor(120);
-  doc.text(`Дата отчёта: ${fmtDate(new Date().toISOString().slice(0,10))}`, pageWidth-margin, 18, {align:'right'});
+  doc.text(`Дата отчёта: ${fmtDate(financeToday())}`, pageWidth-margin, 18, {align:'right'});
   doc.setTextColor(0);
 
   let y = 34;
@@ -7641,7 +7723,7 @@ async function exportConstrPdf(projectId){
   doc.text('ARHITTEK — архитектурное проектирование, дизайн интерьера, ремонт под ключ', margin, y);
   pdfCompanyAddress(doc, margin, y+4, 0);
 
-  const fileName = `Otchet-${p.name.replace(/[^a-zA-Zа-яА-Я0-9]/g,'_')}-${new Date().toISOString().slice(0,10)}.pdf`;
+  const fileName = `Otchet-${p.name.replace(/[^a-zA-Zа-яА-Я0-9]/g,'_')}-${financeToday()}.pdf`;
   doc.save(fileName);
   showToast('PDF-отчёт скачивается...');
 }
@@ -7929,7 +8011,9 @@ const entityTypeMap = {
   kp_catalog: 'tariff',
 };
 
+const itemRestoresInFlight=new Set();
 async function restoreItem(table, id, name){
+  const restoreKey=table+':'+id;if(itemRestoresInFlight.has(restoreKey))return;itemRestoresInFlight.add(restoreKey);
   try{
     // Для финансовой записи запоминаем её до восстановления: после возвращения
     // платежа нужно вернуть и зависимые суммы в карточке проекта.
@@ -7952,7 +8036,7 @@ async function restoreItem(table, id, name){
           // Прямой расход участвует в базе % после расходов.
           await syncProjectExpensesTotal(p.id);
         }else if(deletedLedger.type==='fee_payment'){
-          updates.fee_paid=(Number(p.fee_paid)||0)+amount;
+          const field=projectFeePaidField(p,deletedLedger);if(field)updates[field]=(Number(p[field])||0)+amount;
         }else if(['advance','final_payment','materials_budget','construction_budget','income'].includes(deletedLedger.type)){
           if(isConstructionProject(p)){
             // Для стройки остаток всегда пересчитываем из фактического журнала.
@@ -7967,7 +8051,11 @@ async function restoreItem(table, id, name){
 
         if(Object.keys(updates).length){
           const {error:projErr}=await sb.from('projects').update(updates).eq('id',p.id);
-          if(projErr) throw projErr;
+          if(projErr){
+            const rollback=await sb.from('ledger_entries').update({deleted_at:deletedLedger.deleted_at}).eq('id',id);
+            if(rollback.error)showToast('Восстановление не завершено. Проверьте историю');
+            await loadAll();throw projErr;
+          }
         }
         if(deletedLedger.type==='project_expense' || Object.keys(updates).length){
           await loadAll();
@@ -7979,6 +8067,8 @@ async function restoreItem(table, id, name){
   }catch(e){
     console.error(e);
     showToast('Ошибка восстановления');
+  }finally{
+    itemRestoresInFlight.delete(restoreKey);
   }
 }
 
@@ -8074,7 +8164,7 @@ function exportToXlsx(){
     const ws = XLSX.utils.json_to_sheet(rows);
     XLSX.utils.book_append_sheet(wb, ws, name.slice(0,31));
   });
-  const dateStr = new Date().toISOString().slice(0,10);
+  const dateStr = financeToday();
   XLSX.writeFile(wb, `ARHITTEK-export-${dateStr}.xlsx`);
   showToast('Файл скачивается...');
 }
@@ -8472,7 +8562,7 @@ async function exportTzAnswersToPdf(tzFormId){
   pdfCompanyAddress(doc, margin, y+4, 0);
 
   const clientName = f.client_name || 'klient';
-  const fileName = `TZ-${clientName.replace(/[^a-zA-Zа-яА-Я0-9]/g,'_')}-${new Date().toISOString().slice(0,10)}.pdf`;
+  const fileName = `TZ-${clientName.replace(/[^a-zA-Zа-яА-Я0-9]/g,'_')}-${financeToday()}.pdf`;
   doc.save(fileName);
 }
 
@@ -8686,7 +8776,7 @@ function openContractsView(){
     state.projects.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
   sel.value = '';
 
-  document.getElementById('ct-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('ct-date').value = financeToday();
   if(!document.getElementById('ct-scope').value.trim()) fillContractDefaults();
 
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
@@ -8777,7 +8867,7 @@ function exportContractToPdf(){
   const phone = document.getElementById('ct-phone').value.trim();
 
   const number = document.getElementById('ct-number').value.trim() || '____';
-  const date = document.getElementById('ct-date').value || new Date().toISOString().slice(0,10);
+  const date = document.getElementById('ct-date').value || financeToday();
   const object = document.getElementById('ct-object').value.trim();
   const scope = document.getElementById('ct-scope').value.trim();
   const price = parseFloat(document.getElementById('ct-price').value) || 0;
@@ -9192,7 +9282,7 @@ function getCompanyExportSections(scope){
     const sections = getCompanyExportSections(scope);
     const companyName = (document.getElementById('co-short-name').value || document.getElementById('co-full-name').value || 'Company').trim();
     const safeName = companyName.replace(/[^a-zA-Zа-яА-Я0-9]/g,'_').slice(0,40) || 'Company';
-    const fileBase = 'Rekvizity-' + safeName + '-' + new Date().toISOString().slice(0,10);
+    const fileBase = 'Rekvizity-' + safeName + '-' + financeToday();
 
     if(format==='pdf'){
       const { jsPDF } = window.jspdf;
@@ -9267,7 +9357,7 @@ function getKpData(){
   return {
     clientName: document.getElementById('kp-client-name').value.trim() || 'Клиент',
     clientPhone: document.getElementById('kp-client-phone').value.trim(),
-    date: document.getElementById('kp-date').value || new Date().toISOString().slice(0,10),
+    date: document.getElementById('kp-date').value || financeToday(),
     object: document.getElementById('kp-object').value.trim(),
     deadline: document.getElementById('kp-deadline').value.trim(),
     startDate: document.getElementById('kp-start').value.trim(),
@@ -9617,7 +9707,7 @@ function exportKpToXlsx(){
 
 function openKpView(){
   if(!kpServices.length) addKpService();
-  if(!document.getElementById('kp-date').value) document.getElementById('kp-date').value = new Date().toISOString().slice(0,10);
+  if(!document.getElementById('kp-date').value) document.getElementById('kp-date').value = financeToday();
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-kp').classList.add('active');
@@ -9635,7 +9725,7 @@ function resetKpForm(){
   document.getElementById('kp-client-name').value = '';
   document.getElementById('kp-client-phone').value = '';
   document.getElementById('kp-object').value = '';
-  document.getElementById('kp-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('kp-date').value = financeToday();
   document.getElementById('kp-deadline').value = '';
   document.getElementById('kp-start').value = '';
   document.getElementById('kp-discount-type').value = 'percent';
@@ -9651,7 +9741,7 @@ function loadKpForm(kp){
   document.getElementById('kp-client-name').value = kp.client_name || '';
   document.getElementById('kp-client-phone').value = kp.client_phone || '';
   document.getElementById('kp-object').value = kp.object || '';
-  document.getElementById('kp-date').value = kp.kp_date || new Date().toISOString().slice(0,10);
+  document.getElementById('kp-date').value = kp.kp_date || financeToday();
   document.getElementById('kp-deadline').value = kp.deadline || '';
   document.getElementById('kp-start').value = kp.start_date || '';
   document.getElementById('kp-discount-type').value = kp.discount_type || 'percent';
@@ -9678,7 +9768,7 @@ async function saveKpForm(){
     client_name: document.getElementById('kp-client-name').value.trim(),
     client_phone: document.getElementById('kp-client-phone').value.trim(),
     object: document.getElementById('kp-object').value.trim(),
-    kp_date: document.getElementById('kp-date').value || new Date().toISOString().slice(0,10),
+    kp_date: document.getElementById('kp-date').value || financeToday(),
     deadline: document.getElementById('kp-deadline').value.trim(),
     start_date: document.getElementById('kp-start').value.trim(),
     payment_method: kpPaymentMethod,
