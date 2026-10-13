@@ -4805,15 +4805,21 @@ function projectEmployeeRole(id){
   if(/(^|\s)архитектор(?=\s|$)/.test(role)) return 'architect';
   return 'other';
 }
+function projectFeePercent(p){
+  // Explicit historical terms stay intact. Salary alone does not imply a category fee.
+  if(p.fee_percent !== null && p.fee_percent !== undefined) return Number(p.fee_percent) || 0;
+  if(findEmployee(p.employee_id)?.is_salaried) return 0;
+  return Number(findCategory(p.category_id)?.fee_percent) || 0;
+}
 function projectManagerSlots(p){
   if(isConstructionProject(p)||p.fee_base==='m2')return [];
-  return [[p.employee_id,p.fee_percent ?? findCategory(p.category_id)?.fee_percent ?? 0],
+  return [[p.employee_id,projectFeePercent(p)],
     [p.co_employee_id,p.co_fee_percent||0]].filter(([id])=>id&&projectEmployeeRole(id)==='manager');
 }
 
 function calcFee(p){
   const cat = findCategory(p.category_id);
-  const feePercent = (p.fee_percent !== null && p.fee_percent !== undefined) ? Number(p.fee_percent) : (cat ? Number(cat.fee_percent) : 0);
+  const feePercent = projectFeePercent(p);
   const feeBase = p.fee_base || (cat ? cat.fee_base : 'profit');
   const coFeePercent = Number(p.co_fee_percent) || 0;
 
