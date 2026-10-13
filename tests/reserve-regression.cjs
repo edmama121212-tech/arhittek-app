@@ -36,7 +36,54 @@ const root = path.resolve(__dirname, '..');
     try { const actual = await page.evaluate(fn); assert.deepEqual(actual, expected); results.push({name, pass: true}); }
     catch (error) { results.push({name, pass: false, error: error.message}); }
   }
+  await check('An unspecified percentage does not add a project fee to a salaried employee', () => {
+    const p = {category_id: 'arch', employee_id: 'admin', price: 50000, expenses: 2400, fee_percent: null};
+    return [getProjectFee(p).mainFeeAmount, getProjectFee({...p, fee_percent: undefined}).mainFeeAmount];
+  }, [0, 0]);
+  await check('A non-salaried project employee keeps the category percentage fallback', () =>
+    getProjectFee({category_id: 'arch', employee_id: 'architect', price: 50000, expenses: 2400, fee_percent: null}).mainFeeAmount,
+  19040);
+  await check('An explicit historical percentage for a salaried employee is preserved', () =>
+    getProjectFee({category_id: 'arch', employee_id: 'admin', price: 50000, expenses: 2400, fee_percent: 40}).mainFeeAmount,
+  19040);
+  await check('A salaried manager without a percentage has no inferred commission', () => {
+    const e = {id: 'salaried-manager', role: 'Менеджер', is_salaried: true}; state.employees.push(e);
+    const p = {category_id: 'arch', employee_id: e.id, price: 50000, fee_percent: null};
+    const result = [getProjectFee(p).mainFeeAmount, projectManagerSlots(p)[0]?.[1]];
+    state.employees = state.employees.filter(row => row.id !== e.id); return result;
+  }, [0, 0]);
   await page.evaluate(async () => {
+    __db.projects = [{id: 'old-salary', name: 'Старый проект на окладе', category_id: 'arch',
+      status_id: 'done', employee_id: 'admin', price: 50000, advance: 50000, expenses: 0,
+      fee_percent: null, fee_base: 'profit', fee_paid: 0, created_at: '2026-06-13T00:00:00Z',
+      updated_at: '2026-06-25T00:00:00Z'}];
+    __db.ledger_entries = [{id: 'old-salary-income', project_id: 'old-salary', type: 'advance',
+      amount: 50000, entry_date: '2026-06-25', created_at: '2026-06-25T00:00:00Z'}];
+    __db.company_income = []; __db.company_expenses = []; await loadAll();
+  });
+  await check('A later album expense on an old salaried project debits only its actual cost', async () => {
+    const before = getCompanyReserveBalance();
+    __db.projects[0].expenses = 2400; __db.projects[0].updated_at = '2026-10-13T00:00:00Z';
+    __db.ledger_entries.push({id: 'old-album', project_id: 'old-salary', type: 'project_expense',
+      amount: 2400, entry_date: '2026-10-13', created_at: '2026-10-13T00:00:00Z'});
+    await loadAll(); const budget = ARHITTEKCash.projectBudget(state);
+    return [before, budget.available, budget.teamHeld];
+  }, [20000, 17600, 0]);
+  await check('The project card shows salary without inventing the category fee', () => {
+    openProjectSheet('old-salary');
+    return document.getElementById('team-main-result').textContent.includes('На окладе');
+  }, true);
+  await check('Other income increases reserve once and assigns only 5% to amortization', async () => {
+    const before = ARHITTEKCash.projectBudget(state);
+    __db.company_income.push({id: 'other-sale', category: 'Прочий доход', amount: 35000,
+      income_date: '2026-10-13', created_at: '2026-10-13T00:00:00Z'});
+    await loadAll(); await loadAll(); const after = ARHITTEKCash.projectBudget(state);
+    return [after.available - before.available, after.amortization - before.amortization,
+      after.teamHeld - before.teamHeld, after.projectsHeld - before.projectsHeld,
+      ARHITTEKCash.cashEvents(state).filter(e => e.row.id === 'other-sale').length];
+  }, [33250, 1750, 0, 0, 1]);
+  await page.evaluate(async () => {
+    __db.projects = []; await loadAll();
     __db.ledger_entries = [
       {id: 'old', type: 'advance', amount: 90000, entry_date: '2026-10-01', created_at: '2026-10-01T00:00:00Z'},
       {id: 'new', type: 'advance', amount: 50000, entry_date: '2026-10-10', created_at: '2026-10-10T00:00:00Z'}];
