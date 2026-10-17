@@ -2217,6 +2217,7 @@ let state = {
   ledger: [],
   photos: [],
   history: [],
+  cashCounts: [],
   invoices: [],
   tzForms: [],
   tzReferences: [],
@@ -3116,7 +3117,7 @@ async function loadAll(){
     showLoginScreen();loadAllInFlight=false;return;
   }
   try{
-    const [proj, emp, cat, st, dept, led, photos, invs, tzForms, tzRefs, company, kpForms, stages, members, kpCat, tsPay, compExp, compInc] = await Promise.all([
+    const [proj, emp, cat, st, dept, led, photos, invs, tzForms, tzRefs, company, kpForms, stages, members, kpCat, tsPay, compExp, compInc, counts] = await Promise.all([
       fetchAllRows(()=>sb.from('projects').select('*',{count:'exact'}).order('created_at', {ascending:true})),
       fetchEmployeesResilient(q => q.is('deleted_at', null).order('name')),
       fetchAllRows(()=>sb.from('categories').select('*',{count:'exact'}).is('deleted_at', null).order('sort_order')),
@@ -3135,10 +3136,11 @@ async function loadAll(){
       fetchAllRows(()=>sb.from('timesheet_payments').select('*',{count:'exact'})),
       fetchAllRows(()=>sb.from('company_expenses').select('*',{count:'exact'}).is('deleted_at', null)),
       fetchAllRows(()=>sb.from('company_income').select('*',{count:'exact'}).is('deleted_at', null)),
+      fetchAllRows(()=>sb.from('audit_log').select('id,entity_type,entity_id,entity_name,action,changes,created_at',{count:'exact'}).eq('entity_type','reserve').eq('action','cash_count').order('created_at',{ascending:false})),
     ]);
 
     // kpForms and stages are optional — may not exist until migrations run
-    const errs = [proj,emp,cat,st,dept,led,photos,invs,tzForms,tzRefs,company,tsPay,compExp,compInc].map(r=>r.error).filter(Boolean);
+    const errs = [proj,emp,cat,st,dept,led,photos,invs,tzForms,tzRefs,company,tsPay,compExp,compInc,counts].map(r=>r.error).filter(Boolean);
     if(errs.length) throw errs[0];
     state.kpForms = kpForms.error ? [] : (kpForms.data || []);
     state.projectStages = stages.error ? [] : (stages.data || []);
@@ -3147,6 +3149,7 @@ async function loadAll(){
     state.timesheetPayments = tsPay.error ? [] : (tsPay.data || []);
     state.companyExpenses = compExp.error ? [] : (compExp.data || []);
     state.companyIncome = compInc.error ? [] : (compInc.data || []);
+    state.cashCounts = counts.data || [];
 
     state.financialProjects=proj.data||[];
     state.projects=state.financialProjects.filter(p=>!p.deleted_at);
@@ -5389,6 +5392,7 @@ function openCompanyExpenseSheet(id, presetCategory){
     document.getElementById('cex-desc').value = '';
   }
   overlay.classList.add('active');
+  window.ARHITTEKCash?.attachCountField('cex-desc');
 }
 
 function closeCompanyExpenseSheet(){
@@ -5403,7 +5407,7 @@ async function saveCompanyExpense(){
   const category = document.getElementById('cex-category').value;
   const amount = parseFloat(document.getElementById('cex-amount').value) || 0;
   const expense_date = document.getElementById('cex-date').value;
-  const description = document.getElementById('cex-desc').value.trim();
+  let description = document.getElementById('cex-desc').value.trim();
   if(!Number.isFinite(amount) || amount <= 0){ showToast('Укажите сумму'); return; }
   if(!category){ showToast('Выберите категорию'); return; }
   if(!expense_date){ showToast('Укажите дату'); return; }
@@ -5419,6 +5423,7 @@ async function saveCompanyExpense(){
     }
     if(!description){ showToast('Укажите назначение вывода денег'); return; }
   }
+  if(window.ARHITTEKCash?.operationDescription) description=ARHITTEKCash.operationDescription('cex-desc',description);
   companyExpenseSaveInFlight=true;
   document.getElementById('cex-save').disabled=true;
   try{
@@ -5523,6 +5528,7 @@ function openCompanyIncomeSheet(id){
     document.getElementById('cin-desc').value = '';
   }
   overlay.classList.add('active');
+  window.ARHITTEKCash?.attachCountField('cin-desc');
 }
 
 function closeCompanyIncomeSheet(){
@@ -5537,10 +5543,11 @@ async function saveCompanyIncome(){
   const category = document.getElementById('cin-category').value;
   const amount = parseFloat(document.getElementById('cin-amount').value) || 0;
   const income_date = document.getElementById('cin-date').value;
-  const description = document.getElementById('cin-desc').value.trim();
+  let description = document.getElementById('cin-desc').value.trim();
   if(!Number.isFinite(amount) || amount <= 0){ showToast('Укажите сумму'); return; }
   if(!category){ showToast('Выберите категорию'); return; }
   if(!income_date){ showToast('Укажите дату'); return; }
+  if(window.ARHITTEKCash?.operationDescription) description=ARHITTEKCash.operationDescription('cin-desc',description);
   companyIncomeSaveInFlight=true;
   document.getElementById('cin-save').disabled=true;
   try{
@@ -6189,6 +6196,7 @@ function openPaymentSheet(projectId){
   document.getElementById('payment-payee').innerHTML=ids.map(id=>`<option value="${escapeHtml(id)}">${escapeHtml(findEmployee(id)?.name||'Сотрудник')}</option>`).join('');
   document.getElementById('payment-payee-field').hidden=true;
   document.getElementById('paymentSheetOverlay').classList.add('active');
+  window.ARHITTEKCash?.attachCountField('payment-note');
 }
 
 document.querySelectorAll('#payment-type .yn-btn').forEach(btn=>{
@@ -6241,7 +6249,7 @@ async function savePayment(){
   let insertedPayment=null,projectSynced=false;
   try{
     const t = ledgerTypeLabels[paymentType];
-    const description = note || t?.label || 'Платёж';
+    const description = window.ARHITTEKCash?.operationDescription ? ARHITTEKCash.operationDescription('payment-note',note || t?.label || 'Платёж') : note || t?.label || 'Платёж';
     const {data, error} = await sb.from('ledger_entries').insert({
       type: paymentType, project_id: projectId, description, amount, entry_date,
       ...(paymentType==='fee_payment'?{payee_employee_id:payeeEmployeeId}:{}),
@@ -11506,6 +11514,7 @@ function setupRealtime(){
     'categories','statuses','departments','tz_forms','tz_references']){
     channel=channel.on('postgres_changes',{event:'*',schema:'public',table},()=>scheduleReload(table));
   }
+  channel=channel.on('postgres_changes',{event:'*',schema:'public',table:'audit_log',filter:'entity_type=eq.reserve'},()=>scheduleReload('cash_count'));
   realtimeChannel=channel.subscribe(status=>{
     if(status==='SUBSCRIBED'){
       if(state.financialDataReady&&!state.financialDataError)setSyncStatus('live','синхронизировано · live');

@@ -114,10 +114,12 @@ function calculate(s,until,hooks={}){
  }
  const projectsHeld=round(details.reduce((a,d)=>a+d.projectHeld,0)),teamHeld=round(details.reduce((a,d)=>a+d.teamHeld,0)),costsHeld=round(details.reduce((a,d)=>a+d.costsHeld,0));
  const releasedOpeningFunds=round(details.reduce((a,d)=>a+d.releasedOpeningFunds,0)),openingFundsUsed=round(details.reduce((a,d)=>a+d.openingFundsUsed,0));
- // The opening 20k is the COMPANY reserve, not the unfinished projects' advances.
- // Old project money enters the reserve only when that project closes; never on each reload.
- const companyReserve=round(cashBalance+releasedOpeningFunds+openingFundsUsed-amortization-projectsHeld-teamHeld-costsHeld);
- return {cashBalance,amortization,projectsHeld,teamHeld,costsHeld,releasedOpeningFunds,openingFundsUsed,companyReserve,available:companyReserve,beforeTeam:round(companyReserve+teamHeld),projects:details.filter(d=>d.eligible),warnings};
+ // A physical count already includes every old advance. Reclassifying that money
+ // must not add cash or offset a cash payment for a second time.
+ const counted=typeof cash.cashCount==='function'&&!!cash.cashCount(s,until);
+ const openingTransfer=counted?0:releasedOpeningFunds+openingFundsUsed;
+ const companyReserve=round(cashBalance+openingTransfer-amortization-projectsHeld-teamHeld-costsHeld);
+ return {cashBalance,amortization,projectsHeld,teamHeld,costsHeld,releasedOpeningFunds,openingFundsUsed,countedCash:counted,companyReserve,available:companyReserve,beforeTeam:round(companyReserve+teamHeld),projects:details.filter(d=>d.eligible),warnings};
 }
 window.ARHITTEKBudget={calculate,projectRows};
 })();
