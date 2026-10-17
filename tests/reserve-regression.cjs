@@ -292,6 +292,84 @@ const root = path.resolve(__dirname, '..');
   await check('Common expense debits company reserve once and reload never re-transfers the old advance',async()=>{
     openCompanyExpenseSheet(null);document.getElementById('cex-amount').value='1000';await saveCompanyExpense();await loadAll();await loadAll();return getCompanyReserveBalance();
   },59400);
+  await page.evaluate(()=>{__clockNow='2026-10-17T14:00:00Z';renderCashFinance();});
+  await check('A physical cash count records all money separately from receipts and payments',async()=>{
+    const before=[__db.company_income.length,__db.company_expenses.length,__db.ledger_entries.length];
+    openReserveCorrection();document.getElementById('cashBalanceValue').value='158000';document.getElementById('cashBalanceNote').value='Тестовая сверка кассы и счетов';
+    document.getElementById('cashBalanceSave').click();document.getElementById('cashBalanceSave').click();
+    await new Promise(resolve=>setTimeout(resolve,220));await loadAll();renderCashFinance();
+    const counts=__db.audit_log.filter(r=>r.action==='cash_count');
+    return [counts.length,ARHITTEKCash.balance(state),ARHITTEKCash.bookBalance(state),getCompanyReserveBalance(),
+      JSON.stringify(before)===JSON.stringify([__db.company_income.length,__db.company_expenses.length,__db.ledger_entries.length])];
+  },[1,158000,105400,82000,true]);
+  await check('Money total, reserve and open discrepancy are visibly distinct',()=>{
+    const reserve=document.getElementById('cash-panel-reserve');
+    return [reserve.querySelector('[data-company-total]').textContent.replace(/\D/g,''),
+      reserve.querySelector('[data-company-reserve]').textContent.replace(/\D/g,''),
+      !!reserve.querySelector('[data-cash-discrepancy]'),reserve.textContent.includes('не записывается расходом или доходом')];
+  },['158000','82000',true,true]);
+  await check('The first financial load retains a count without waiting for the general audit history',async()=>{
+    state.cashCounts=[];state.history=[];await loadAll();
+    return [state.cashCounts.length,ARHITTEKCash.balance(state)];
+  },[1,158000]);
+  await check('A failed count read hides unconfirmed financial amounts',async()=>{
+    __fail={table:'audit_log',op:'select'};await loadAll();__fail=null;
+    const hidden=!state.financialDataReady&&document.getElementById('cash-panel-reserve').textContent.includes('Не удалось обновить операции');
+    await loadAll();return hidden;
+  },true);
+  await check('A failed count save leaves cash and all monetary records unchanged',async()=>{
+    const before=[__db.company_income.length,__db.company_expenses.length,__db.ledger_entries.length,__db.audit_log.length];
+    openReserveCorrection();document.getElementById('cashBalanceValue').value='150000';__fail={table:'audit_log',op:'insert'};
+    document.getElementById('cashBalanceSave').click();await new Promise(resolve=>setTimeout(resolve,180));__fail=null;
+    return [ARHITTEKCash.balance(state),JSON.stringify(before)===JSON.stringify([__db.company_income.length,__db.company_expenses.length,__db.ledger_entries.length,__db.audit_log.length])];
+  },[158000,true]);
+  await check('Negative physical money is rejected without changing the count',async()=>{
+    document.getElementById('cashBalanceValue').value='-1';document.getElementById('cashBalanceSave').click();
+    await new Promise(resolve=>setTimeout(resolve,80));return [__db.audit_log.filter(r=>r.action==='cash_count').length,ARHITTEKCash.balance(state)];
+  },[1,158000]);
+  await check('Audit export preserves the actual cash observation and unresolved journal difference',()=>{
+    const data=ARHITTEKCash.auditData(state);return [data.cashCounts.length,data.calculation.balance,data.calculation.bookBalance,data.calculation.difference];
+  },[1,158000,105400,-52600]);
+  await page.evaluate(()=>{__clockNow='2026-10-17T15:00:00Z';});
+  await check('A same-day old expense can be restored without spending counted money again',async()=>{
+    const before=ARHITTEKCash.bookBalance(state);
+    openCompanyExpenseSheet(null);document.getElementById('cex-amount').value='1000';
+    document.getElementById('cex-desc').value='Восстановлен старый расход';
+    document.getElementById('counted-before-cex-desc').checked=true;await saveCompanyExpense();
+    return [ARHITTEKCash.balance(state),ARHITTEKCash.bookBalance(state)-before];
+  },[158000,-1000]);
+  await check('Editing a restored expense keeps its counted flag and clean comment',async()=>{
+    const row=__db.company_expenses.find(r=>r.description?.startsWith('Восстановлен старый расход'));
+    openCompanyExpenseSheet(row.id);
+    const visible=[document.getElementById('counted-before-cex-desc').checked,document.getElementById('cex-desc').value];
+    document.getElementById('cex-amount').value='2000';await saveCompanyExpense();
+    return [...visible,ARHITTEKCash.balance(state),ARHITTEKCash.bookBalance(state)];
+  },[true,'Восстановлен старый расход',158000,103400]);
+  await check('A genuine new payment after the count still debits real cash once',async()=>{
+    openCompanyExpenseSheet(null);const unchecked=!document.getElementById('counted-before-cex-desc').checked;
+    document.getElementById('cex-amount').value='500';await saveCompanyExpense();
+    return [unchecked,ARHITTEKCash.balance(state),ARHITTEKCash.bookBalance(state)];
+  },[true,157500,102900]);
+  await check('A genuine new other income increases cash and amortization once after a count',async()=>{
+    const amort=ARHITTEKCash.amortization(state);openCompanyIncomeSheet(null);
+    const unchecked=!document.getElementById('counted-before-cin-desc').checked;
+    document.getElementById('cin-amount').value='2000';await saveCompanyIncome();
+    return [unchecked,ARHITTEKCash.balance(state),ARHITTEKCash.amortization(state)-amort];
+  },[true,159500,100]);
+  await check('Restoring a prior project receipt changes its ledger without inventing new physical cash',async()=>{
+    const before=ARHITTEKCash.bookBalance(state);openPaymentSheet('budget-closed');
+    document.getElementById('payment-amount').value='1000';document.getElementById('payment-note').value='Старая оплата';
+    document.getElementById('counted-before-payment-note').checked=true;await savePayment();
+    return [ARHITTEKCash.balance(state),ARHITTEKCash.bookBalance(state)-before];
+  },[159500,1000]);
+  await check('Restoring a prior payroll payment preserves salary month and avoids a second cash debit',async()=>{
+    const before=ARHITTEKCash.bookBalance(state);openSalaryPaymentSheet('admin','2026-10');
+    document.getElementById('salaryPaymentAmount').value='1000';
+    document.getElementById('salaryPaymentNote').value='Старая выплата';document.getElementById('counted-before-salaryPaymentNote').checked=true;
+    document.getElementById('salaryPaymentSave').click();await new Promise(resolve=>setTimeout(resolve,220));await loadAll();
+    const row=__db.ledger_entries.find(r=>r.description?.includes('Старая выплата'));
+    return [ARHITTEKCash.balance(state),ARHITTEKCash.bookBalance(state)-before,row?.description?.match(/\[salary:(\d{4}-\d{2})\]/)?.[1]];
+  },[159500,-1000,'2026-10']);
   await page.evaluate(() => {
     document.querySelectorAll('.sheet-overlay').forEach(overlay => overlay.classList.remove('active'));
     closeInvoiceSheet();
