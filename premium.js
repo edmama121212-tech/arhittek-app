@@ -2541,12 +2541,13 @@ function renderSalaryPaymentSheet(){
   $('salaryPaymentAmount').max=String(max);
   $('salaryPaymentDate').value=edit?.entry_date||todayISO();
   $('salaryPaymentNote').value=edit?salaryPaymentNote(edit):'';
+  window.ARHITTEKCash?.attachCountField('salaryPaymentNote');
   $('salaryPaymentSave').textContent=edit?'Сохранить изменение':'Сохранить выплату';
   $('salaryPaymentSave').disabled=!edit&&st.remaining<=0.009;
   $('salaryPaymentCancelEdit').style.display=edit?'':'none';
   $('salaryPaymentHistory').innerHTML=st.rows.length?st.rows.map(x=>
     '<div class="list-item">'+
-      '<div><div class="li-name">'+fmtMoney(x.amount)+'</div><div class="li-meta">'+fmtDate(x.entry_date)+(salaryPaymentNote(x)?' · '+escapeHtml(salaryPaymentNote(x)):'')+'</div></div>'+
+      '<div><div class="li-name">'+fmtMoney(x.amount)+'</div><div class="li-meta">'+fmtDate(x.entry_date)+(salaryPaymentNote(x)?' · '+escapeHtml(window.ARHITTEKCash?.displayNote?ARHITTEKCash.displayNote(salaryPaymentNote(x)):salaryPaymentNote(x)):'')+'</div></div>'+
       '<div class="li-actions"><button class="icon-btn" type="button" data-edit-salary-payment="'+escapeHtml(x.id)+'" title="Редактировать">✏️</button><button class="icon-btn danger" type="button" data-delete-salary-payment="'+escapeHtml(x.id)+'" title="Удалить выплату">🗑</button></div>'+
     '</div>'
   ).join(''):'<div class="empty-state">Выплат пока нет</div>';
@@ -2568,7 +2569,8 @@ async function saveSalaryPayment(){
   if(amount>max+0.009){showToast('Сумма больше остатка к выплате: '+fmtMoney(max));return;}
   if(!date){showToast('Укажите дату выплаты');return;}
   if(date>todayISO()){showToast('Фактическая выплата не может быть в будущем');return;}
-  const description='[salary:'+salarySheetMonth+']'+(note?' '+note:'');
+  const paymentNote=window.ARHITTEKCash?.operationDescription?ARHITTEKCash.operationDescription('salaryPaymentNote',note):note;
+  const description='[salary:'+salarySheetMonth+']'+(paymentNote?' '+paymentNote:'');
   salarySaveInFlight=true;$('salaryPaymentSave').disabled=true;
   try{
     let savedId=edit?.id||null;
