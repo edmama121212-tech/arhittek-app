@@ -65,7 +65,7 @@ function auditData(s){
   companyIncome:pick(s.companyIncome,['id','category','amount','income_date','created_at','description','deleted_at']),companyExpenses:pick(s.companyExpenses,['id','category','amount','expense_date','created_at','description','deleted_at']),
   invoices:pick(s.invoices,['id','project_id','amount','invoice_date','created_at','item_type','description','paid_by_client','deleted_at']),timesheetPayments:pick(s.timesheetPayments,['id','employee_id','month','paid','paid_at'])};
 }
-function expected(p){return Math.max(0,n(p.price)-n(p.advance));}
+function expected(p){const received=typeof isConstructionProject==='function'&&isConstructionProject(p)&&typeof getConstructionFinancials==='function'?getConstructionFinancials(p).received:p.advance;return Math.max(0,n(p.price)-n(received));}
 function dueProjects(s,month){return (s.projects||[]).filter(p=>!p.deleted_at&&String(p.end_date||'').slice(0,7)===month).filter(p=>{const status=(s.statuses||[]).find(x=>x.id===p.status_id);return !/заморож|отмен/i.test(status?.name||'');});}
 window.ARHITTEKCash={day,shift,period,cashEvents,balance,bookBalance,cashCount,cashStatus,isCountedNote,displayNote,amortEvents,amortization,projectBudget,available,monthSummary,flowGroup,flowSummary,isAdjustment,isImportedExpense,invoicePaymentId,invoicePaymentState,auditData,expected,dueProjects,opening:OPENING,cutoff:CUTOFF};
 if(typeof document==='undefined')return;

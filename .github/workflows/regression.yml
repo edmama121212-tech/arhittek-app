@@ -40,3 +40,6 @@ jobs:
 
       - name: Check responsive interactions and audit regressions
         run: npm run test:ux
+
+      - name: Check construction accounting, access and customer portal
+        run: npm run test:construction

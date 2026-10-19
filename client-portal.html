@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' blob:; font-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'">
+  <!-- Enable only after the server checklist in supabase/client-portal-contract.md passes. -->
+  <meta name="arhittek-client-portal-enabled" content="false">
+  <title>Объект · ARHITTEK</title>
+  <link rel="stylesheet" href="./client-portal.css">
+  <script src="./client-portal.js" defer></script>
+</head>
+<body>
+  <header class="portal-header">
+    <div><a class="brand" aria-label="ARHITTEK">ARHITTEK<span>СТРОИТЕЛЬСТВО И РЕМОНТ</span></a></div>
+    <span class="access-label">Кабинет заказчика</span>
+  </header>
+  <main>
+    <section class="portal-state" id="portal-state" role="status" aria-live="polite">
+      <span class="state-symbol" aria-hidden="true">↗</span>
+      <h1 id="state-title">Проверяем доступ</h1>
+      <p id="state-message">Информация об объекте появится после проверки вашей ссылки.</p>
+      <button type="button" class="button" id="state-retry" hidden>Повторить проверку</button>
+    </section>
+    <div id="portal-content" hidden>
+      <section class="project-heading">
+        <div class="eyebrow">ВАШ ОБЪЕКТ</div>
+        <h1 id="project-name"></h1>
+        <p id="project-address" class="muted"></p>
+        <div class="heading-bottom"><span id="project-status" class="badge"></span><span id="updated-at" class="muted"></span></div>
+        <div class="project-actions"><button type="button" class="button secondary" id="refresh-portal">Обновить</button><button type="button" class="button quiet" id="close-portal">Закрыть доступ на этом устройстве</button></div>
+      </section>
+      <nav class="section-nav" aria-label="Разделы объекта"><a href="#project-money">Деньги</a><a href="#project-stages">Этапы</a><a href="#project-works">Работы</a><a href="#project-documents">Накладные</a></nav>
+      <section id="project-money" class="portal-section"><div class="section-heading"><span class="section-number">01</span><h2>Деньги объекта</h2></div><div id="money-content"></div></section>
+      <section id="project-stages" class="portal-section"><div class="section-heading"><span class="section-number">02</span><h2>Ход ремонта</h2></div><div id="stages-content"></div></section>
+      <section id="project-works" class="portal-section"><div class="section-heading"><span class="section-number">03</span><h2>Виды работ</h2></div><p class="section-note">Завершение работы и её приёмка показаны отдельно.</p><div id="works-content"></div></section>
+      <section id="project-documents" class="portal-section"><div class="section-heading"><span class="section-number">04</span><h2>Накладные и затраты</h2></div><p class="section-note">Сумма накладной и фактическая оплата — разные показатели. Загрузка документа сама по себе не списывает деньги.</p><div id="documents-content"></div></section>
+      <section class="portal-section"><div class="section-heading"><span class="section-number">05</span><h2>Ваши переводы компании</h2></div><div id="receipts-content"></div></section>
+      <section class="portal-section" id="refunds-section" hidden><div class="section-heading"><span class="section-number">06</span><h2>Возвраты вам</h2></div><div id="refunds-content"></div></section>
+      <p id="document-status" role="status" aria-live="polite"></p>
+      <footer class="portal-footer">Информация по вашему объекту · ARHITTEK</footer>
+    </div>
+  </main>
+  <noscript><p class="portal-state">Для проверки доступа включите JavaScript и откройте исходную ссылку ещё раз.</p></noscript>
+</body>
+</html>
