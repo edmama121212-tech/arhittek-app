@@ -7292,7 +7292,7 @@ function renderConstruction(){
         ${otherTotal>0?`<div class="fee-row" style="padding:5px 0;"><div class="fl">Прочие накладные</div><div class="fv">${fmtMoney(otherTotal)}</div></div>`:''}
         ${directPaid > 0 ? `<div class="fee-row" style="padding:5px 0;"><div class="fl">🤝 Оплачено заказчиком напрямую</div><div class="fv" style="color:var(--text-dim);">${fmtMoney(directPaid)}</div></div>` : ''}
         <div class="fee-row" style="padding:5px 0; border-top:1px solid var(--line); margin-top:2px;"><div class="fl">Выплачено из денег объекта</div><div class="fv" style="color:var(--red);">${fmtMoney(cashOutgoing)}</div></div>
-        <div class="fee-row" style="padding:5px 0;"><div class="fl">Не оплачено по накладным</div><div class="fv">${fmtMoney(unpaidInvoices)}</div></div>
+        <div class="fee-row" style="padding:5px 0;"><div class="fl">Оплата накладных не подтверждена</div><div class="fv">${fmtMoney(unpaidInvoices)}</div></div>
         ${f.feeAmount > 0 ? `<div class="fee-row" style="padding:5px 0;"><div class="fl">Начислено исполнителям</div><div class="fv" style="color:var(--blue);">${fmtMoney(f.feeAmount)}</div></div>` : ''}
       </div>
     </div>`;
@@ -7371,7 +7371,7 @@ function renderObjectSummary(p){
       <div class="fee-row"><div class="fl">Накладные на материалы</div><div class="fv">${fmtMoney(matTotal)}</div></div>
       <div class="fee-row"><div class="fl">Накладные на работы</div><div class="fv">${fmtMoney(workTotal)}</div></div>
       ${otherTotal>0?`<div class="fee-row"><div class="fl">Прочие накладные</div><div class="fv">${fmtMoney(otherTotal)}</div></div>`:''}
-      <div class="fee-row"><div class="fl">Не оплачено по накладным</div><div class="fv">${fmtMoney(unpaidInvoices)}</div></div>
+      <div class="fee-row"><div class="fl">Оплата накладных не подтверждена</div><div class="fv">${fmtMoney(unpaidInvoices)}</div></div>
       ${rolePayouts>0?`<div class="fee-row"><div class="fl">Начисления за объёмы работ</div><div class="fv">${fmtMoney(rolePayouts)}</div></div>`:''}
       ${f.feeAmount>0?`<div class="fee-row"><div class="fl">Вознаграждение исполнителей по условиям проекта</div><div class="fv">${fmtMoney(f.feeAmount)}</div></div>`:''}
     </div>
@@ -8043,7 +8043,7 @@ async function exportConstrPdf(projectId){
     ['Деньги объекта по журналу:', `${fmt(balance)} руб.`],
     ['Заказчик оплатил напрямую:', `${fmt(constrFin.directPaid)} руб.`],
     ['Стоимость документов и начислений:', `${fmt(expenses)} руб.`],
-    ['Не оплачено по накладным:', `${fmt(constrFin.unpaidInvoices)} руб.`],
+    ['Оплата накладных не подтверждена:', `${fmt(constrFin.unpaidInvoices)} руб.`],
     ['Вознаграждение исполнителей:', `${fmt(f.feeAmount)} руб.`],
   ];
   summaryRows.forEach(([lbl,val])=>{
