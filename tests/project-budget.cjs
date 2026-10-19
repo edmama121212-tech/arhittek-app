@@ -47,10 +47,10 @@ check('A completed unpaid invoice holds money; paying it releases that hold with
  let x=b.calculate(s,undefined,hooks);assert.equal(x.costsHeld,10000);assert.equal(x.available,57500);
  s.ledger.push(event('e','expense',10000,'p',{description:'[invoice-payment:i] material'}));x=b.calculate(s,undefined,hooks);assert.equal(x.costsHeld,0);assert.equal(x.available,57500);
 });
-check('Old advance enters the company reserve only on closing, without another cash receipt',()=>{
+check('An old advance cannot increase recorded money or free reserve on closing',()=>{
  const s=fresh();s.projects=[{id:'p',status_id:'done',employee_id:'executor',mainFee:34000,end_date:'2026-10-06',updated_at:'2026-10-11T07:25:00Z'}];
  s.ledger=[event('old','advance',30000,'p',{entry_date:'2026-09-23',created_at:'2026-09-23T00:00:00Z'}),event('f','final_payment',55000,'p')];
- const x=b.calculate(s,undefined,hooks);assert.equal(x.cashBalance,75000);assert.equal(x.releasedOpeningFunds,30000);assert.equal(x.available,68250);
+ const x=b.calculate(s,undefined,hooks);assert.equal(x.cashBalance,75000);assert.equal(x.releasedOpeningFunds,30000);assert.equal(x.available,38250);assert.equal(x.companyReserve+x.amortization+x.projectsHeld+x.teamHeld+x.costsHeld,x.cashBalance);
  assert.equal(JSON.stringify(b.calculate(s,undefined,hooks)),JSON.stringify(b.calculate(s,undefined,hooks)));
 });
 check('Actual-derived sanitized reconciliation separates 140400 cash, project advances, and the unpaid 34000 fee',()=>{
@@ -61,12 +61,12 @@ check('Actual-derived sanitized reconciliation separates 140400 cash, project ad
  s.ledger=[event('historical','advance',30000,'closed-new',{entry_date:'2026-09-23',created_at:'2026-09-23T00:00:00Z'}),event('h','final_payment',65000,'closed-old'),event('i','advance',30000,'active-one'),event('e','advance',40000,'active-two'),event('m','final_payment',55000,'closed-new'),
   event('s1','salary_payment',20000,null,{payee_employee_id:'paid-executor',description:'[salary:2026-10]'}),event('s2','salary_payment',7000,null,{payee_employee_id:'salaried',description:'[salary:2026-10]'})];
  s.companyExpenses=[{id:'expenses',amount:42600,expense_date:'2026-10-10',created_at:'2026-10-10T00:00:00Z'}];
- const x=b.calculate(s,undefined,hooks);assert.equal(x.cashBalance,140400);assert.equal(x.projectsHeld,66500);assert.equal(x.teamHeld,34000);assert.equal(x.amortization,9500);assert.equal(x.releasedOpeningFunds,30000);assert.equal(x.available,60400);
- s.ledger.push(event('fee','fee_payment',34000,'closed-new',{payee_employee_id:'executor'}));s.projects[1].fee_paid=34000;assert.equal(b.calculate(s,undefined,hooks).available,60400);
+ const x=b.calculate(s,undefined,hooks);assert.equal(x.cashBalance,140400);assert.equal(x.projectsHeld,66500);assert.equal(x.teamHeld,34000);assert.equal(x.amortization,9500);assert.equal(x.releasedOpeningFunds,30000);assert.equal(x.available,30400);
+ s.ledger.push(event('fee','fee_payment',34000,'closed-new',{payee_employee_id:'executor'}));s.projects[1].fee_paid=34000;assert.equal(b.calculate(s,undefined,hooks).available,30400);
 });
-check('Expenses paid from an old active-project advance do not spend company money twice',()=>{
+check('An old advance cannot offset an actual payment in the current cash base',()=>{
  const s=fresh();s.projects=[{id:'p',status_id:'active'}];s.ledger=[event('old','advance',30000,'p',{entry_date:'2026-09-23',created_at:'2026-09-23T00:00:00Z'}),event('expense','project_expense',5000,'p')];
- const x=b.calculate(s,undefined,hooks);assert.equal(x.cashBalance,15000);assert.equal(x.openingFundsUsed,5000);assert.equal(x.available,20000);
+ const x=b.calculate(s,undefined,hooks);assert.equal(x.cashBalance,15000);assert.equal(x.openingFundsUsed,5000);assert.equal(x.available,15000);
 });
 check('A final receipt on a project closed before the snapshot does not re-transfer its old advance',()=>{
  const s=fresh();s.projects=[{id:'p',status_id:'done',employee_id:'executor',mainFee:20000,end_date:'2026-10-01',updated_at:'2026-10-10T00:00:00Z'}];
@@ -81,7 +81,30 @@ check('Reopening a project returns its share to the project; closing again does 
 check('A completed project deducts recorded direct costs even before a separate cash payment is confirmed',()=>{
  const s=fresh();s.projects=[{id:'p',status_id:'done',employee_id:'executor',mainFee:32000,expenses:5000,end_date:'2026-10-06',updated_at:'2026-10-11T00:00:00Z'}];
  s.ledger=[event('old','advance',30000,'p',{entry_date:'2026-09-23',created_at:'2026-09-23T00:00:00Z'}),event('new','final_payment',55000,'p')];
- const before=b.calculate(s,undefined,hooks);assert.equal(before.costsHeld,5000);assert.equal(before.available,65250);
+ const before=b.calculate(s,undefined,hooks);assert.equal(before.costsHeld,5000);assert.equal(before.available,35250);
  s.ledger.push(event('e','project_expense',5000,'p'));const after=b.calculate(s,undefined,hooks);assert.equal(after.costsHeld,0);assert.equal(after.available,before.available);
+});
+check('Closing a legacy 145000 advance never creates cash or funds an unrecorded reserve',()=>{
+ const s=fresh(),p={id:'legacy',status_id:'active',fee_base:'m2',end_date:'2026-10-19',updated_at:'2026-10-19T17:24:00Z'};
+ s.employees=[{id:'executor'}];s.projects=[p];
+ s.ledger=[event('legacy-receipt','advance',145000,p.id,{entry_date:'2026-09-23',created_at:'2026-09-23T00:00:00Z'}),
+  event('fee-accrual','role_payout',60400,p.id,{payee_employee_id:'executor',entry_date:'2026-10-19',created_at:'2026-10-19T17:22:00Z'}),
+  event('album','project_expense',5000,p.id,{entry_date:'2026-10-18',created_at:'2026-10-19T17:23:00Z'}),
+  event('paid','salary_payment',60400,null,{payee_employee_id:'executor',description:'[salary:2026-10]',entry_date:'2026-10-19',created_at:'2026-10-19T17:27:00Z'})];
+ s.companyIncome=[{id:'supervision',amount:50000,income_date:'2026-10-19',created_at:'2026-10-19T17:29:00Z'}];
+ const before=b.calculate(s,'2026-10-19',hooks);p.status_id='done';const after=b.calculate(s,'2026-10-19',hooks);
+ assert.equal(after.cashBalance,4600);assert.equal(after.amortization,2500);assert.equal(after.teamHeld,0);assert.equal(after.companyReserve,2100);
+ assert.equal(after.cashBalance,before.cashBalance);assert.equal(after.companyReserve,before.companyReserve);
+ assert.equal(after.companyReserve+after.amortization+after.projectsHeld+after.teamHeld+after.costsHeld,after.cashBalance);
+ for(let i=0;i<3;i++){p.status_id='active';b.calculate(s,'2026-10-19',hooks);p.status_id='done';assert.equal(b.calculate(s,'2026-10-19',hooks).companyReserve,2100);}
+});
+check('Cash is conserved for legacy advances, actual costs, accruals and subsequent fee payments',()=>{
+ for(const paid of [0,10000,60400]){
+  const s=fresh();s.employees=[{id:'executor'}];s.projects=[{id:'p',status_id:'done',fee_base:'m2',end_date:'2026-10-10',updated_at:'2026-10-10T12:00:00Z'}];
+  s.ledger=[event('old','advance',145000,'p',{entry_date:'2026-09-23',created_at:'2026-09-23T00:00:00Z'}),event('new','final_payment',100000,'p'),event('accrued','role_payout',60400,'p',{payee_employee_id:'executor'}),event('cost','project_expense',5000,'p')];
+  if(paid)s.ledger.push(event('paid','salary_payment',paid,null,{payee_employee_id:'executor',description:'[salary:2026-10]'}));
+  const x=b.calculate(s,undefined,hooks);assert.equal(x.companyReserve,49600);assert.equal(x.teamHeld,60400-paid);
+  assert.equal(x.companyReserve+x.amortization+x.projectsHeld+x.teamHeld+x.costsHeld,x.cashBalance);
+ }
 });
 console.log('PASS: '+count+' project budget scenarios');
