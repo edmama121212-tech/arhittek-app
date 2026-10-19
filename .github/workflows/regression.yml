@@ -37,3 +37,6 @@ jobs:
 
       - name: Check complete reads, public forms and app workflows
         run: npm run test:app
+
+      - name: Check responsive interactions and audit regressions
+        run: npm run test:ux

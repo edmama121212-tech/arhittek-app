@@ -3,6 +3,14 @@ const source=fs.readFileSync('cash-finance.js','utf8'),budgetSource=fs.readFileS
 let now='2026-10-05T19:27:08Z';class Clock extends Date{constructor(...args){super(...(args.length?args:[now]));}}
 const ctx={window:{},Date:Clock,Intl,Number,Math,String,Set};vm.createContext(ctx);vm.runInContext(budgetSource,ctx);vm.runInContext(source,ctx);const c=ctx.window.ARHITTEKCash;
 const state={projects:[{id:'p',price:150000,advance:50000,end_date:'2026-11-15'}],ledger:[],companyIncome:[],companyExpenses:[]};assert.equal(c.balance(state),20000);
+// An invoice marker cannot transfer another object's payment into this object.
+const invoice={id:'bill',project_id:'object-a',amount:10000},invoiceLedger={ledger:[
+ {id:'own-payment',project_id:'object-a',type:'project_expense',amount:3000,entry_date:'2026-10-05',description:'[invoice-payment:bill]'},
+ {id:'foreign-payment',project_id:'object-b',type:'project_expense',amount:7000,entry_date:'2026-10-05',description:'[invoice-payment:bill]'},
+ {id:'unscoped-payment',type:'expense',amount:2000,entry_date:'2026-10-05',description:'[invoice-payment:bill]'}]};
+assert.equal(c.invoicePaymentState(invoiceLedger,invoice).paid,3000);
+assert.equal(c.invoicePaymentState(invoiceLedger,invoice).remaining,7000);
+assert.equal(c.invoicePaymentState(invoiceLedger,{id:'bill',amount:10000}).paid,0);
 state.ledger.push({id:'old',type:'advance',amount:999000,entry_date:'2026-10-01',created_at:'2026-10-01T00:00:00Z'});assert.equal(c.balance(state),20000);
 state.ledger.push({id:'new',type:'advance',amount:50000,entry_date:'2026-10-05',created_at:'2026-10-05T19:27:09Z'});assert.equal(c.balance(state),70000);assert.equal(c.amortization(state),2500);assert.equal(c.available(state),67500);
 state.ledger.push({type:'role_payout',amount:100000,entry_date:'2026-10-05',created_at:'2026-10-05T19:28:09Z'});assert.equal(c.balance(state),70000);

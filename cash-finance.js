@@ -55,7 +55,7 @@ function monthSummary(s,month){const current=day().slice(0,7),events=cashEvents(
 function flowGroup(event){const row=event.row;if(isAdjustment(row))return 'adjustments';if(event.amount>0)return event.kind==='ledger'&&row.project_id?'clients':'otherIncome';if(['salary_payment','fee_payment'].includes(row.type)||(row.type==='payment'&&row.payee_employee_id))return 'team';if(row.type==='withdrawal'||row.category==='Вывод средств')return 'withdrawals';if(row.project_id)return 'projects';return 'company';}
 function flowSummary(events){const groups={clients:0,otherIncome:0,team:0,projects:0,company:0,withdrawals:0,adjustments:0};events.forEach(event=>{const key=flowGroup(event);groups[key]=rounded(groups[key]+(key==='adjustments'?event.amount:Math.abs(event.amount)));});return groups;}
 function invoicePaymentId(row){return (String(row.description||'').match(/\[invoice-payment:([^\]]+)\]/)||[])[1]||null;}
-function invoicePaymentState(s,invoice,until=day()){const rows=(s.ledger||[]).filter(r=>!r.deleted_at&&['expense','project_expense','payment'].includes(r.type)&&invoicePaymentId(r)===invoice.id),paid=rounded(rows.filter(r=>r.entry_date<=until).reduce((sum,r)=>sum+n(r.amount),0));return {rows,paid,remaining:Math.max(0,rounded(n(invoice.amount)-paid)),overpaid:Math.max(0,rounded(paid-n(invoice.amount)))};}
+function invoicePaymentState(s,invoice,until=day()){const rows=(s.ledger||[]).filter(r=>invoice.id&&invoice.project_id&&!r.deleted_at&&r.project_id===invoice.project_id&&['expense','project_expense','payment'].includes(r.type)&&invoicePaymentId(r)===invoice.id),paid=rounded(rows.filter(r=>r.entry_date<=until).reduce((sum,r)=>sum+n(r.amount),0));return {rows,paid,remaining:Math.max(0,rounded(n(invoice.amount)-paid)),overpaid:Math.max(0,rounded(paid-n(invoice.amount)))};}
 function auditData(s){
  const pick=(rows,keys)=>(rows||[]).map(row=>Object.fromEntries(keys.filter(key=>row[key]!==undefined).map(key=>[key,row[key]])));
  return {version:3,exportedAt:new Date().toISOString(),asOf:day(),lastSuccessfulLoad:s.financialLoadedAt||null,loadError:s.financialDataError||null,openingSnapshot:{kind:'company-reserve',amount:OPENING,at:CUTOFF,projectAdvancesExcluded:true},calculation:{balance:balance(s),...cashStatus(s),...projectBudget(s)},cashCounts:pick(s.cashCounts,['id','entity_type','entity_name','action','changes','created_at']),
@@ -182,29 +182,43 @@ function renderForecast(){
 }
 window.ARHITTEKCash.forecastProject=forecastProject;
 
+let invoicePaymentFormGeneration=0;
 function openInvoicePayment(invoiceId){
- const invoice=(state.invoices||[]).find(i=>i.id===invoiceId&&!i.deleted_at);if(!invoice||invoice.paid_by_client)return;
+ const row=(state.invoices||[]).find(i=>i.id===invoiceId&&!i.deleted_at);if(!row||row.paid_by_client)return;
+ const invoice={...row},generation=++invoicePaymentFormGeneration;
+ const ownsForm=()=>generation===invoicePaymentFormGeneration;
  let overlay=$('cashInvoiceOverlay');if(!overlay){overlay=document.createElement('div');overlay.id='cashInvoiceOverlay';overlay.className='sheet-overlay';document.body.appendChild(overlay);}
  const payment=invoicePaymentState(state,invoice),existing=(state.ledger||[]).filter(r=>!r.deleted_at&&r.project_id===invoice.project_id&&['expense','project_expense','payment'].includes(r.type)&&!invoicePaymentId(r)&&!isImportedExpense(r)&&r.entry_date<=day());
  overlay.innerHTML='<div class="sheet"><h3>Оплата накладной</h3><p>'+esc(invoice.description||invoice.number||invoice.item_type)+'</p>'+rowHTML('Связано оплат',payment.paid)+rowHTML('Осталось подтвердить',payment.remaining)+'<div class="field"><label>Запись оплаты</label><select id="cashInvoiceExisting"><option value="">Новая фактическая оплата</option>'+existing.map(r=>'<option value="'+esc(r.id)+'">Связать: '+esc(fmtDate(r.entry_date)+' · '+money(r.amount)+' · '+r.description)+'</option>').join('')+'</select></div><div class="field"><label>Сумма оплаты, ₽</label><input id="cashInvoiceAmount" type="number" min="0.01" step="0.01" value="'+payment.remaining+'"></div><div class="field"><label>Фактическая дата оплаты</label><input id="cashInvoiceDate" type="date" value="'+day()+'"></div><div class="field"><label>Комментарий</label><input id="cashInvoiceNote"></div><button id="cashInvoiceSave" type="button" class="btn btn-primary">Сохранить оплату</button><button id="cashInvoiceClose" type="button" class="btn btn-secondary">Закрыть</button><div class="card">'+payment.rows.map(r=>'<div class="list-item"><span>'+esc(fmtDate(r.entry_date))+' · '+money(r.amount)+'</span>'+btn('Отменить оплату','cancel-invoice',r.id)+'</div>').join('')+'</div></div>';
  $('cashInvoiceExisting').onchange=()=>{const r=existing.find(r=>r.id===$('cashInvoiceExisting').value);$('cashInvoiceAmount').disabled=!!r;$('cashInvoiceDate').disabled=!!r;if(r){$('cashInvoiceAmount').value=r.amount;$('cashInvoiceDate').value=r.entry_date;}else{$('cashInvoiceAmount').value=payment.remaining;$('cashInvoiceDate').value=day();}};
- $('cashInvoiceClose').onclick=()=>overlay.classList.remove('active');
+ $('cashInvoiceClose').onclick=()=>{if(ownsForm()){invoicePaymentFormGeneration++;overlay.classList.remove('active');}};
  overlay.onclick=e=>{const b=e.target.closest('[data-cash-action="cancel-invoice"]');if(b)cancelInvoicePayment(b.dataset.id,invoiceId);};
  $('cashInvoiceSave').onclick=async()=>{
-  if(busy||!session?.isAdmin)return;
+  if(!ownsForm()||busy||!session?.isAdmin)return;
   const linked=existing.find(r=>r.id===$('cashInvoiceExisting').value),amount=linked?n(linked.amount):n($('cashInvoiceAmount').value),date=linked?linked.entry_date:$('cashInvoiceDate').value;
+  const note=$('cashInvoiceNote').value.trim(),receivedBy=session.employeeId,saveButton=$('cashInvoiceSave');
   if(amount<=0||!date||date>day()){showToast('Укажите сумму и фактическую дату оплаты');return;}
-  busy=true;$('cashInvoiceSave').disabled=true;
+  busy=true;saveButton.disabled=true;
+  let persisted=false;
   try{
-   const check=await sb.from('ledger_entries').select('*').eq('project_id',invoice.project_id).is('deleted_at',null);if(check.error)throw check.error;
-   const fresh=invoicePaymentState({ledger:check.data||[]},invoice);
+   const invoiceCheck=await sb.from('invoices').select('*').eq('id',invoiceId).maybeSingle();if(invoiceCheck.error)throw invoiceCheck.error;
+   const currentInvoice=invoiceCheck.data;if(!currentInvoice||currentInvoice.deleted_at||currentInvoice.paid_by_client||currentInvoice.project_id!==invoice.project_id)throw new Error('Накладная изменена или удалена. Обновите историю оплаты.');
+   const check=await fetchAllRows(()=>sb.from('ledger_entries').select('*',{count:'exact'}).eq('project_id',currentInvoice.project_id).is('deleted_at',null));if(check.error)throw check.error;
+   const fresh=invoicePaymentState({ledger:check.data||[]},currentInvoice);
    if(amount>fresh.remaining+0.009)throw new Error('Оплата больше неподтверждённого остатка');
    const marker='[invoice-payment:'+invoiceId+']';
-   if(linked){const row=(check.data||[]).find(r=>r.id===linked.id);if(!row||invoicePaymentId(row))throw new Error('Расход уже изменён');const result=await sb.from('ledger_entries').update({description:marker+' '+(row.description||'Оплата накладной')}).eq('id',row.id);if(result.error)throw result.error;}
-   else{const result=await sb.from('ledger_entries').insert({type:'expense',project_id:invoice.project_id,amount,entry_date:date,description:marker+' '+(invoice.description||invoice.number||'Накладная')+($('cashInvoiceNote').value?' · '+$('cashInvoiceNote').value:''),received_by:session.employeeId});if(result.error)throw result.error;}
+   if(linked){const row=(check.data||[]).find(r=>r.id===linked.id);if(!row||invoicePaymentId(row))throw new Error('Расход уже изменён');let query=sb.from('ledger_entries').update({description:marker+' '+(row.description||'Оплата накладной')}).eq('id',row.id).is('deleted_at',null);query=row.description==null?query.is('description',null):query.eq('description',row.description);const result=await query.select('id').maybeSingle();if(result.error)throw result.error;if(!result.data)throw new Error('Расход изменён на другом устройстве. Обновите историю оплаты.');}
+   else{const result=await sb.from('ledger_entries').insert({type:'expense',project_id:invoice.project_id,amount,entry_date:date,description:marker+' '+(invoice.description||invoice.number||'Накладная')+(note?' · '+note:''),received_by:receivedBy});if(result.error)throw result.error;}
+   persisted=true;
    await logAudit('project',invoice.project_id,(state.projects||[]).find(p=>p.id===invoice.project_id)?.name||'','update',{invoice_payment:{old:null,new:(linked?'Связан расход: ':'Оплачено: ')+money(amount)}});
-   await loadAll();if(linked?.type==='project_expense')await syncProjectExpensesTotal(invoice.project_id);overlay.classList.remove('active');render();showToast(linked?'Расход связан без повторного списания':'Оплата накладной сохранена');
-  }catch(error){showToast(error.message||'Не удалось сохранить оплату');}finally{busy=false;if($('cashInvoiceSave'))$('cashInvoiceSave').disabled=false;}
+   const refreshed=await loadAll();if(linked?.type==='project_expense')await syncProjectExpensesTotal(invoice.project_id);
+   if(ownsForm())overlay.classList.remove('active');
+   render();
+   showToast(refreshed===false?'Оплата записана. Не удалось обновить данные — повторите обновление':ownsForm()?(linked?'Расход связан без повторного списания':'Оплата накладной сохранена'):'Оплата накладной «'+(invoice.description||invoice.number||'Накладная')+'» сохранена');
+  }catch(error){
+   const message=persisted?'Оплата записана. Не удалось обновить данные — повторите обновление':error.message||'Не удалось сохранить оплату';
+   showToast(ownsForm()?message:'Накладная «'+(invoice.description||invoice.number||'Накладная')+'»: '+message);
+  }finally{busy=false;saveButton.disabled=false;}
  };
  overlay.classList.add('active');
 }
