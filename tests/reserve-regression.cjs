@@ -271,12 +271,12 @@ const root = path.resolve(__dirname, '..');
     __db.invoices=[];__db.company_income=[];__db.company_expenses=[{id:'budget-costs',category:'Прочие расходы',amount:42600,expense_date:'2026-10-10',created_at:'2026-10-10T00:00:00Z'}];
     __db.timesheet_payments=[];await loadAll();renderCashFinance();
   });
-  await check('Company reserve includes the old advance on completion and excludes project money and team debt',()=>{
+  await check('Company reserve uses one cash base and excludes project money and team debt',()=>{
     const b=ARHITTEKCash.projectBudget(state);return [b.cashBalance,b.releasedOpeningFunds,b.projectsHeld,b.teamHeld,b.amortization,getCompanyReserveBalance()];
-  },[140400,30000,66500,34000,9500,60400]);
+  },[140400,30000,66500,34000,9500,30400]);
   await check('Reserve hero shows the company share, with the old advance explained separately',()=>{
-    renderCashFinance();return [document.querySelector('[data-company-reserve]').textContent.replace(/\D/g,''),document.getElementById('cash-panel-reserve').textContent.includes('Старые авансы завершённых проектов')];
-  },['60400',true]);
+    renderCashFinance();return [document.querySelector('[data-company-reserve]').textContent.replace(/\D/g,''),document.getElementById('cash-panel-reserve').textContent.includes('Они не являются новым приходом и не прибавлены к деньгам')];
+  },['30400',true]);
   await check('Project fee payout leaves company reserve and forecast unchanged',async()=>{
     const before=ARHITTEKCash.available(state),forecast=document.querySelector('#cash-panel-forecast .fee-row.total .fv').textContent;
     openPaymentSheet('budget-closed');document.querySelector('#payment-type [data-value="fee_payment"]').click();document.getElementById('payment-amount').value='34000';await savePayment();renderCashFinance();
@@ -285,13 +285,13 @@ const root = path.resolve(__dirname, '..');
   await check('Reopening and re-closing restores one company share without creating money',async()=>{
     const before=getCompanyReserveBalance(),cash=getCompanyCashBalance();__db.projects.find(p=>p.id==='budget-closed').status_id='active';await loadAll();const reopened=getCompanyReserveBalance();
     __db.projects.find(p=>p.id==='budget-closed').status_id='done';await loadAll();return [reopened,before,getCompanyReserveBalance(),getCompanyCashBalance()===cash];
-  },[12150,60400,60400,true]);
+  },[12150,30400,30400,true]);
   await check('Withdrawal is limited to company money even when recorded cash is higher',async()=>{
     const before=__db.company_expenses.length;openCompanyWithdrawal();document.getElementById('cex-amount').value='70000';document.getElementById('cex-desc').value='Тест вывода';await saveCompanyExpense();closeCompanyExpenseSheet();return __db.company_expenses.length===before;
   },true);
   await check('Common expense debits company reserve once and reload never re-transfers the old advance',async()=>{
     openCompanyExpenseSheet(null);document.getElementById('cex-amount').value='1000';await saveCompanyExpense();await loadAll();await loadAll();return getCompanyReserveBalance();
-  },59400);
+  },29400);
   await page.evaluate(()=>{__clockNow='2026-10-17T14:00:00Z';renderCashFinance();});
   await check('A physical cash count records all money separately from receipts and payments',async()=>{
     const before=[__db.company_income.length,__db.company_expenses.length,__db.ledger_entries.length];

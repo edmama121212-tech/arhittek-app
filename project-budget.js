@@ -114,11 +114,10 @@ function calculate(s,until,hooks={}){
  }
  const projectsHeld=round(details.reduce((a,d)=>a+d.projectHeld,0)),teamHeld=round(details.reduce((a,d)=>a+d.teamHeld,0)),costsHeld=round(details.reduce((a,d)=>a+d.costsHeld,0));
  const releasedOpeningFunds=round(details.reduce((a,d)=>a+d.releasedOpeningFunds,0)),openingFundsUsed=round(details.reduce((a,d)=>a+d.openingFundsUsed,0));
- // A physical count already includes every old advance. Reclassifying that money
- // must not add cash or offset a cash payment for a second time.
+ // Every allocation uses the same cash base. A historical advance is evidence
+ // for reconciliation, never a new receipt on completion or an expense offset.
  const counted=typeof cash.cashCount==='function'&&!!cash.cashCount(s,until);
- const openingTransfer=counted?0:releasedOpeningFunds+openingFundsUsed;
- const companyReserve=round(cashBalance+openingTransfer-amortization-projectsHeld-teamHeld-costsHeld);
+ const companyReserve=round(cashBalance-amortization-projectsHeld-teamHeld-costsHeld);
  return {cashBalance,amortization,projectsHeld,teamHeld,costsHeld,releasedOpeningFunds,openingFundsUsed,countedCash:counted,companyReserve,available:companyReserve,beforeTeam:round(companyReserve+teamHeld),projects:details.filter(d=>d.eligible),warnings};
 }
 window.ARHITTEKBudget={calculate,projectRows};
