@@ -675,7 +675,7 @@
   <!-- ===================== ЭКРАН ОБЪЕКТА (детальный) ===================== -->
   <div class="view" id="view-object">
 
-    <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
+    <div class="construction-object-head" style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
       <button class="icon-btn" id="objBack" style="font-size:22px; color:var(--blue);">←</button>
       <div id="objTitle" style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:17px; flex:1;"></div>
       <button class="btn btn-secondary" id="objPdfBtn" style="padding:6px 12px; font-size:13px; white-space:nowrap;">📄 PDF</button>
@@ -2343,14 +2343,13 @@ function getFinancialProjects(){
 function getProjectExpenses(p){
   if(!p) return 0;
   const manual = (state.ledger||[])
-    .filter(e => e.project_id===p.id && e.type==='project_expense' && !e.deleted_at)
+    .filter(e => e.project_id===p.id && !e.deleted_at && (['expense','project_expense'].includes(e.type)||(e.type==='payment'&&!e.payee_employee_id)))
     .filter(e => !isInvoiceLinkedExpense(e))
     .reduce((sum,e)=>sum + Number(e.amount||0),0);
 
   if(isConstructionProject(p)){
     const invoiceTotal = (state.invoices||[])
       .filter(inv => inv.project_id===p.id && !inv.deleted_at)
-      .filter(i => ['Материал','Инструмент','Расходник','Доставка','Работа'].includes(i.item_type))
       .reduce((sum,i)=>sum + Number(i.amount||0),0);
     return invoiceTotal + manual;
   }
@@ -2605,6 +2604,17 @@ function canSeeConstruction(){
   if(emp && emp.can_see_construction === false) return false;
   // Поле не задано явно в БД — используем эвристику по роли
   return canSeeConstructionForRole(getEmployeeRole());
+}
+
+// This is a client-side workflow guard. Server RLS must independently verify
+// the actor and membership; an open form never grants access by itself.
+function canAccessConstructionProject(projectId,actor=null){
+  if(!session||!canSeeConstruction())return false;
+  if(actor&&(session.employeeId!==actor.employeeId||session.token!==actor.token||!!session.isAdmin!==!!actor.isAdmin))return false;
+  const project=(state.projects||[]).find(p=>p.id===projectId&&!p.deleted_at);
+  if(!project||!isConstructionProject(project))return false;
+  if(session.isAdmin)return true;
+  return !state.projectMembersDataError&&isProjectMember(projectId);
 }
 
 // Может ли видеть проектный отдел
@@ -3461,20 +3471,20 @@ function renderConstrSummary(){
     return {p, ...fin, f, st};
   });
 
-  const totExpenses = rows.reduce((s,r)=>s+r.expenses,0);
+  const totExpenses = rows.reduce((s,r)=>s+r.cashOutgoing,0);
   const totReceived = rows.reduce((s,r)=>s+r.received,0);
   const totDirectPaid = rows.reduce((s,r)=>s+r.directPaid,0);
   const totLeft = rows.reduce((s,r)=>s+r.balance,0);
   const totFeePaid = rows.reduce((s,r)=>s+r.f.paid,0);
 
-  const rowsHtml = rows.map(({p, received, expenses, directPaid, balance, isOverspent, f, st}) => `
+  const rowsHtml = rows.map(({p, received, cashOutgoing, directPaid, balance, isOverspent, f, st}) => `
     <tr onclick="openObjectView('${p.id}')" style="cursor:pointer;" class="constr-sum-row">
       <td>
         <div class="entity-name" title="${escapeHtml(p.name)}" style="font-weight:600; font-size:13px; color:var(--text);">${escapeHtml(p.name)}</div>
         ${st ? `<div style="font-size:10px; color:var(--text-dim); margin-top:2px;">${escapeHtml(st.name)}</div>` : ''}
       </td>
-      <td style="color:${isOverspent ? 'var(--red)' : 'var(--text)'}; font-weight:${isOverspent ? '700' : '400'};" title="${directPaid > 0 ? 'Из них '+fmtMoney(directPaid)+' оплачено заказчиком напрямую' : ''}">${isOverspent ? '⚠ ' : ''}${fmtMoney(balance)}${directPaid > 0 ? ' 🤝' : ''}</td>
-      <td style="color:var(--red);">${fmtMoney(expenses)}</td>
+      <td style="color:${isOverspent ? 'var(--red)' : 'var(--text)'}; font-weight:${isOverspent ? '700' : '400'};" title="По денежному журналу объекта; прямые оплаты заказчика сюда не входят">${isOverspent ? '⚠ ' : ''}${fmtMoney(balance)}${directPaid > 0 ? ' 🤝' : ''}</td>
+      <td style="color:var(--red);">${fmtMoney(cashOutgoing)}</td>
       <td style="color:var(--green);">${fmtMoney(received)}</td>
       <td style="color:var(--blue);">${f.feePercent ? f.feePercent+'%' : '—'}</td>
       <td style="color:var(--text-dim);">${f.paid > 0 ? fmtMoney(f.paid) : '—'}</td>
@@ -3484,7 +3494,7 @@ function renderConstrSummary(){
   el.innerHTML = `
     <div style="overflow-x:auto; -webkit-overflow-scrolling:touch;">
     <table class="constr-sum-table">
-      <thead><tr><th>Объект</th><th>Остаток</th><th>Расход</th><th>Приход</th><th>Гонорар</th><th>Выплачен</th></tr></thead>
+      <thead><tr><th>Объект</th><th>Деньги по журналу</th><th>Выплачено</th><th>Получено</th><th>% исполнителя</th><th>Выплачен</th></tr></thead>
       <tbody>${rowsHtml}</tbody>
       <tfoot>
         <tr>
@@ -4613,6 +4623,11 @@ function openProjectSheet(id){
     // Для Архитектуры и Дизайна интерьера она не нужна.
     const isConstr = isConstructionProject(p);
     document.getElementById('pf-open-as-object').style.display = isConstr ? '' : 'none';
+    if(isConstr){
+      const financials=getConstructionFinancials(p);
+      document.getElementById('pf-advance').value=financials.received;
+      document.getElementById('pf-balance').value=financials.balance;
+    }
     // Для строительных объектов расходы считаются из накладных (вкладка «Стройка»),
     // а не из этого списка — прячем блок, чтобы не путал устаревшим/нерелевантным числом.
     const expBlock = document.getElementById('pf-expenses-block');
@@ -4831,6 +4846,7 @@ async function saveProject(){
         const financialUpdatedAt=new Date().toISOString();
         const {error: finErr} = await sb.from('projects').update({
           expenses: fin.directCosts,
+          advance: fin.received,
           balance: fin.balance,
           updated_at: financialUpdatedAt
         }).eq('id', savedProjectId);
@@ -6492,9 +6508,10 @@ async function savePayment(){
     if(error) throw error;
     insertedPayment=data;
 
-    if(isConstructionProject(p) && paymentType !== 'fee_payment' && paymentType !== 'withdrawal'){
+    if(isConstructionProject(p)){
       const finAfterPayment = getConstructionFinancials(p, [...(state.ledger||[]), data]);
       updates.balance=finAfterPayment.balance;
+      if(CONSTRUCTION_INCOME_TYPES.includes(paymentType))updates.advance=finAfterPayment.received;
     }
     if(Object.keys(updates).length){
       let query=sb.from('projects').update(updates).eq('id',projectId);
@@ -6591,10 +6608,14 @@ async function cancelPayment(entryId){
 
     // Reverse the project financial fields
     const updates = {};
-    if(p && isConstructionProject(p) && e.type !== 'fee_payment' && e.type !== 'withdrawal'){
+    if(p && isConstructionProject(p)){
       const ledgerAfterCancel = (state.ledger||[]).map(x=>x.id===entryId ? {...x, deleted_at:new Date().toISOString()} : x);
       const finAfterCancel = getConstructionFinancials(p, ledgerAfterCancel);
       updates.balance = finAfterCancel.balance;
+      if(CONSTRUCTION_INCOME_TYPES.includes(e.type))updates.advance=finAfterCancel.received;
+      if(e.type==='fee_payment'){
+        const field=projectFeePaidField(p,e);if(field)updates[field]=Math.max(0,(Number(p[field])||0)-(Number(e.amount)||0));
+      }
     }else if(e.type === 'fee_payment'){
       const field=projectFeePaidField(p,e);if(field)updates[field]=Math.max(0,(Number(p?.[field])||0)-(Number(e.amount)||0));
     } else if(e.type !== 'withdrawal'){
@@ -7142,29 +7163,38 @@ function getConstructionExpenses(p){
   const workTotal = projInvoices
     .filter(i=>i.item_type==='Работа')
     .reduce((s,i)=>s+Number(i.amount||0),0);
+  const otherTotal = projInvoices
+    .filter(i=>!['Материал','Инструмент','Расходник','Доставка','Работа'].includes(i.item_type))
+    .reduce((s,i)=>s+Number(i.amount||0),0);
   const manualTotal = (state.ledger||[])
-    .filter(e=>e.project_id===p.id && e.type==='project_expense' && !e.deleted_at && !isInvoiceLinkedExpense(e))
+    .filter(e=>e.project_id===p.id && !e.deleted_at && (['expense','project_expense'].includes(e.type)||(e.type==='payment'&&!e.payee_employee_id)) && !isInvoiceLinkedExpense(e))
     .reduce((s,e)=>s+Number(e.amount||0),0);
-  return {matTotal, workTotal, manualTotal, expenses: matTotal + workTotal + manualTotal};
+  return {matTotal, workTotal, otherTotal, manualTotal, expenses: matTotal + workTotal + otherTotal + manualTotal};
 }
 
 function getConstructionFinancials(p, ledgerOverride=null){
-  const {matTotal, workTotal, manualTotal, expenses: directCosts} = getConstructionExpenses(p);
-  const ledger = ledgerOverride || state.ledger || [];
+  const {matTotal, workTotal, otherTotal, manualTotal, expenses: directCosts} = getConstructionExpenses(p);
+  const today=financeToday(),ledger = (ledgerOverride || state.ledger || []).filter(e=>!e.deleted_at&&(!e.entry_date||e.entry_date<=today));
   const received = getConstructionReceived(p.id, ledger);
   const directPaid = getProjectDirectClientPaid(p);
   const rolePayouts = ledger
     .filter(e=>e.project_id===p.id && e.type==='role_payout' && !e.deleted_at)
     .reduce((s,e)=>s+Number(e.amount||0),0);
-  // Остаток бюджета учитывает начисленный ФОТ. Сам ФОТ не входит в directCosts,
-  // поэтому в финансовой сводке он учитывается отдельной строкой.
+  // Документ и начисление описывают стоимость/обязательство, а не выплату.
+  // Прямая оплата клиента не проходит через кассу компании.
   const totalCosts = directCosts + rolePayouts;
-  const balance = received + directPaid - totalCosts;
-  const pct = received + directPaid > 0
-    ? Math.min(100, Math.round((totalCosts / (received + directPaid)) * 100))
-    : (totalCosts > 0 ? 100 : 0);
-  return {received, directPaid, matTotal, workTotal, manualTotal, rolePayouts,
-    directCosts, expenses: totalCosts, balance, pct, isOverspent: balance < 0};
+  const outgoingTypes=['expense','project_expense','payment','withdrawal','fee_payment','salary_payment'];
+  const paidRows=ledger.filter(e=>e.project_id===p.id&&outgoingTypes.includes(e.type)&&
+    !(e.type==='project_expense'&&(e.description==='Ранее внесённые расходы'||String(e.description||'').startsWith('[cash:historical-expense]'))));
+  const cashOutgoing=Math.round(paidRows.reduce((s,e)=>s+Number(e.amount||0),0)*100)/100;
+  const balance = Math.round((received-cashOutgoing)*100)/100;
+  const projectInvoices=(state.invoices||[]).filter(i=>i.project_id===p.id&&!i.deleted_at&&!i.paid_by_client&&(!i.invoice_date||i.invoice_date<=today));
+  const unpaidInvoices=Math.round(projectInvoices.reduce((sum,i)=>sum+(window.ARHITTEKCash?.invoicePaymentState({ledger},i,today).remaining??Number(i.amount||0)),0)*100)/100;
+  const undatedCashRows=ledger.filter(e=>e.project_id===p.id&&!e.entry_date&&(CONSTRUCTION_INCOME_TYPES.includes(e.type)||outgoingTypes.includes(e.type))).length;
+  const pct = received > 0 ? Math.max(0,Math.min(100,Math.round(cashOutgoing/received*100))) : cashOutgoing>0?100:0;
+  return {received, directPaid, matTotal, workTotal, otherTotal, manualTotal, rolePayouts,
+    directCosts, expenses: totalCosts, cashOutgoing, unpaidInvoices, undatedCashRows,
+    balance, pct, isOverspent: balance < 0};
 }
 
 function syncConstructionProjectBalance(p, ledgerOverride=null){
@@ -7240,28 +7270,30 @@ function renderConstruction(){
     const st = findStatus(p.status_id);
     const fin = getConstructionFinancials(p);
     const f = getProjectFee(p);
-    const {received, directPaid, matTotal, workTotal, expenses, balance, pct, isOverspent} = fin;
+    const {received, directPaid, matTotal, workTotal, otherTotal, expenses, cashOutgoing, unpaidInvoices, balance, pct, isOverspent} = fin;
 
     if(!showFinance){
       return `<div class="obj-card" onclick="openObjectView('${p.id}')">
         <div class="obj-head"><div><div class="obj-title">${escapeHtml(p.name)}</div><div class="obj-sub">${escapeHtml(p.address||'Нажмите для просмотра')}</div></div><div class="obj-chevron">›</div></div>
         ${st ? `<div class="status-chip" data-status="${escapeHtml(st.name)}" style="margin-top:8px; display:inline-block;">${escapeHtml(st.name)}</div>` : ''}
         <div class="obj-bar" style="margin-top:10px;"><i style="width:${pct}%"></i></div>
-        <div class="obj-bar-lbl"><span>Израсходовано ${pct}%</span><span>${(state.invoices||[]).filter(i=>i.project_id===p.id).length} записей</span></div>
+        <div class="obj-bar-lbl"><span>Выплачено ${pct}%</span><span>${(state.invoices||[]).filter(i=>i.project_id===p.id&&!i.deleted_at).length} записей</span></div>
       </div>`;
     }
 
     return `<div class="obj-card" onclick="openObjectView('${p.id}')">
       <div class="obj-head"><div><div class="obj-title">${escapeHtml(p.name)}</div><div class="obj-sub">${escapeHtml(p.address||'')}</div></div><div style="display:flex; align-items:center; gap:6px;">${st ? `<span class="status-chip" data-status="${escapeHtml(st.name)}">${escapeHtml(st.name)}</span>` : ''}<div class="obj-chevron">›</div></div></div>
       <div class="obj-bar" style="margin-bottom:4px;"><i style="width:${pct}%; background:${pct>90?'var(--red)':pct>70?'var(--gold)':'var(--blue)'};"></i></div>
-      <div class="obj-bar-lbl"><span>Израсходовано ${pct}% от полученного</span><span style="color:${isOverspent?'var(--red)':''}">${isOverspent ? '⚠ Перерасход: '+fmtMoney(Math.abs(balance)) : 'Остаток: '+fmtMoney(balance)}</span></div>
+      <div class="obj-bar-lbl"><span>Выплачено ${pct}% от полученного</span><span style="color:${isOverspent?'var(--red)':''}">${isOverspent ? '⚠ Недостаток: '+fmtMoney(Math.abs(balance)) : 'Деньги: '+fmtMoney(balance)}</span></div>
       <div style="margin-top:12px;">
         <div class="fee-row" style="padding:5px 0;"><div class="fl">💰 Приход от заказчика</div><div class="fv" style="color:var(--green);">${fmtMoney(received)}</div></div>
-        <div class="fee-row" style="padding:5px 0;"><div class="fl">📦 Материалы</div><div class="fv">${fmtMoney(matTotal)}</div></div>
-        <div class="fee-row" style="padding:5px 0;"><div class="fl">🔨 Работы</div><div class="fv">${fmtMoney(workTotal)}</div></div>
+        <div class="fee-row" style="padding:5px 0;"><div class="fl">📦 Накладные на материалы</div><div class="fv">${fmtMoney(matTotal)}</div></div>
+        <div class="fee-row" style="padding:5px 0;"><div class="fl">🔨 Накладные на работы</div><div class="fv">${fmtMoney(workTotal)}</div></div>
+        ${otherTotal>0?`<div class="fee-row" style="padding:5px 0;"><div class="fl">Прочие накладные</div><div class="fv">${fmtMoney(otherTotal)}</div></div>`:''}
         ${directPaid > 0 ? `<div class="fee-row" style="padding:5px 0;"><div class="fl">🤝 Оплачено заказчиком напрямую</div><div class="fv" style="color:var(--text-dim);">${fmtMoney(directPaid)}</div></div>` : ''}
-        <div class="fee-row" style="padding:5px 0; border-top:1px solid var(--line); margin-top:2px;"><div class="fl">Итого расход</div><div class="fv" style="color:var(--red);">${fmtMoney(expenses)}</div></div>
-        ${f.feeAmount > 0 ? `<div class="fee-row" style="padding:5px 0;"><div class="fl">Гонорар ARHITTEK (${f.feePercent}%)</div><div class="fv" style="color:var(--blue);">${fmtMoney(f.feeAmount)}</div></div>` : ''}
+        <div class="fee-row" style="padding:5px 0; border-top:1px solid var(--line); margin-top:2px;"><div class="fl">Выплачено из денег объекта</div><div class="fv" style="color:var(--red);">${fmtMoney(cashOutgoing)}</div></div>
+        <div class="fee-row" style="padding:5px 0;"><div class="fl">Оплата накладных не подтверждена</div><div class="fv">${fmtMoney(unpaidInvoices)}</div></div>
+        ${f.feeAmount > 0 ? `<div class="fee-row" style="padding:5px 0;"><div class="fl">Начислено исполнителям</div><div class="fv" style="color:var(--blue);">${fmtMoney(f.feeAmount)}</div></div>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -7275,6 +7307,7 @@ let constructionReturnScrollY = 0;
 let activeObjTab = 'materials';
 
 function openObjectView(id){
+  if(!canAccessConstructionProject(id)){showToast('Нет доступа к этому объекту');return;}
   const activeView=document.querySelector('.view.active');
   if(activeView?.id==='view-construction') constructionReturnScrollY=window.scrollY||0;
   currentObjectId = id;
@@ -7302,12 +7335,12 @@ function openObjectView(id){
 }
 
 function renderObjectSummary(p){
-  const showFinance = !session || session.isAdmin;
+  const showFinance = !!session?.isAdmin;
   const el = document.getElementById('objSummary');
   const pdfBtn = document.getElementById('objPdfBtn');
   const editBtn = document.getElementById('objEditBtn');
 
-  if(pdfBtn){ pdfBtn.style.display = showFinance ? '' : 'none'; pdfBtn.onclick = ()=>exportConstrPdf(p.id); }
+  if(pdfBtn){ pdfBtn.style.display = showFinance&&state.financialDataReady!==false ? '' : 'none'; pdfBtn.onclick = ()=>exportConstrPdf(p.id); }
   if(editBtn){ editBtn.style.display = ''; editBtn.onclick = ()=>openProjectSheet(p.id); }
 
   if(!showFinance){
@@ -7315,33 +7348,44 @@ function renderObjectSummary(p){
     return;
   }
 
-  const price = Number(p.price)||0;
-  const {received, directPaid, matTotal, workTotal, expenses, balance, isOverspent} = getConstructionFinancials(p);
-  const f = calcConstrFee({...p, expenses});
+  if(state.financialDataReady===false){el.innerHTML='<div class="note">Финансовые данные не подтверждены. Обновите приложение.</div>';return;}
+  const {received, directPaid, matTotal, workTotal, otherTotal, expenses, cashOutgoing, unpaidInvoices, rolePayouts, undatedCashRows, balance, isOverspent} = getConstructionFinancials(p);
+  const f = getProjectFee(p);
 
-  const noBudgetWarning = received === 0 && expenses > 0
+  const noBudgetWarning = received === 0 && cashOutgoing > 0
     ? `<div style="background:rgba(232,163,61,0.12); border:1px solid rgba(232,163,61,0.3); border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:12px; color:var(--gold);">⚠ Приход от заказчика не зарегистрирован — добавьте поступление для корректного расчёта остатка.</div>`
     : '';
   const overspentWarning = isOverspent
-    ? `<div style="background:rgba(224,82,82,0.12); border:1px solid rgba(224,82,82,0.3); border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:12px; color:var(--red);">🔴 Перерасход бюджета: ${fmtMoney(Math.abs(balance))} — расходы превышают приход от заказчика!</div>`
+    ? `<div style="background:rgba(224,82,82,0.12); border:1px solid rgba(224,82,82,0.3); border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:12px; color:var(--red);">Выплаты превышают полученные деньги на ${fmtMoney(Math.abs(balance))}. Проверьте финансирование объекта.</div>`
     : '';
 
   document.getElementById('objSummary').innerHTML = `
     ${noBudgetWarning}${overspentWarning}
+    <div class="note">Остаток рассчитан по денежному журналу объекта. Неоплаченные накладные и начисления показаны отдельно; фактическое наличие денег требует сверки.</div>
+    ${undatedCashRows?'<div class="note" style="color:var(--red)">Есть денежные записи без даты: '+undatedCashRows+'. Историю нужно уточнить.</div>':''}
     <div class="fee-card">
-      <div class="fee-row"><div class="fl">Приход от заказчика</div><div class="fv" style="color:var(--green)">${fmtMoney(received)}</div></div>
-      <div class="fee-row"><div class="fl">Материалы и чеки</div><div class="fv">${fmtMoney(matTotal)}</div></div>
-      <div class="fee-row"><div class="fl">Работы</div><div class="fv">${fmtMoney(workTotal)}</div></div>
-      ${directPaid > 0 ? `<div class="fee-row"><div class="fl">🤝 Из них оплачено заказчиком напрямую</div><div class="fv" style="color:var(--text-dim)">${fmtMoney(directPaid)}</div></div>` : ''}
-      <div class="fee-row"><div class="fl">Итого расход</div><div class="fv" style="color:var(--red)">${fmtMoney(expenses)}</div></div>
-      <div class="fee-row"><div class="fl">${isOverspent ? '⚠ Перерасход' : 'Остаток на объекте'}</div><div class="fv" style="color:${isOverspent?'var(--red)':'var(--gold)'}">${isOverspent ? '−'+fmtMoney(Math.abs(balance)) : fmtMoney(balance)}</div></div>
-      <div class="fee-row total"><div class="fl">Гонорар ARHITTEK ${f.feePercent}% от расходов</div><div class="fv">${fmtMoney(f.feeAmount)}</div></div>
-      <div class="fee-row"><div class="fl">Выплачено гонорара</div><div class="fv">${fmtMoney(f.paid)}</div></div>
-      <div class="fee-row remaining"><div class="fl">Осталось получить</div><div class="fv">${fmtMoney(f.remaining)}</div></div>
+      <div class="fee-row"><div class="fl">Получено компанией от заказчика</div><div class="fv" style="color:var(--green)">${fmtMoney(received)}</div></div>
+      <div class="fee-row"><div class="fl">Выплачено из денег объекта</div><div class="fv" style="color:var(--red)">${fmtMoney(cashOutgoing)}</div></div>
+      <div class="fee-row total"><div class="fl">Деньги объекта по журналу</div><div class="fv" style="color:${isOverspent?'var(--red)':'var(--gold)'}">${fmtMoney(balance)}</div></div>
+      ${directPaid > 0 ? `<div class="fee-row"><div class="fl">Заказчик оплатил поставщикам напрямую</div><div class="fv">${fmtMoney(directPaid)}</div></div>` : ''}
+      <div class="fee-row"><div class="fl">Накладные на материалы</div><div class="fv">${fmtMoney(matTotal)}</div></div>
+      <div class="fee-row"><div class="fl">Накладные на работы</div><div class="fv">${fmtMoney(workTotal)}</div></div>
+      ${otherTotal>0?`<div class="fee-row"><div class="fl">Прочие накладные</div><div class="fv">${fmtMoney(otherTotal)}</div></div>`:''}
+      <div class="fee-row"><div class="fl">Оплата накладных не подтверждена</div><div class="fv">${fmtMoney(unpaidInvoices)}</div></div>
+      ${rolePayouts>0?`<div class="fee-row"><div class="fl">Начисления за объёмы работ</div><div class="fv">${fmtMoney(rolePayouts)}</div></div>`:''}
+      ${f.feeAmount>0?`<div class="fee-row"><div class="fl">Вознаграждение исполнителей по условиям проекта</div><div class="fv">${fmtMoney(f.feeAmount)}</div></div>`:''}
     </div>
+    ${constructionCompanyFeePlanHtml(p)}
     <div id="objIncomeHistoryBlock"></div>
   `;
   renderObjectIncomeHistory(p.id);
+}
+
+function constructionCompanyFeePlanHtml(p){
+  const budget=Number(p.price),valid=Number.isFinite(budget)&&budget>0;
+  if(!valid)return '<div class="card construction-company-fee-plan"><strong>Гонорар компании — 15% бюджета</strong><p class="note">Укажите и согласуйте бюджет объекта. Затем подтвердите, входит ли гонорар в эту сумму или оплачивается сверху.</p></div>';
+  const fee=Math.round(budget*15)/100,works=Math.round((budget-fee)*100)/100,total=Math.round((budget+fee)*100)/100;
+  return '<div class="card construction-company-fee-plan"><strong>Гонорар компании — 15% бюджета</strong><div class="fee-row"><div class="fl">Бюджет карточки</div><div class="fv">'+fmtMoney(budget)+'</div></div><div class="fee-row"><div class="fl">План гонорара компании</div><div class="fv">'+fmtMoney(fee)+'</div></div><p class="note">Условия ещё не подтверждены. Если гонорар входит в бюджет: на работы и материалы '+fmtMoney(works)+', всего '+fmtMoney(budget)+'. Если оплачивается сверху: на работы и материалы '+fmtMoney(budget)+', всего '+fmtMoney(total)+'. План не создаёт приход или выплату.</p></div>';
 }
 
 // История поступлений от заказчика по объекту стройки — когда и сколько пришло
@@ -7350,7 +7394,7 @@ function renderObjectIncomeHistory(projectId){
   if(!container) return;
   const incomeTypes = ['advance','final_payment','materials_budget','construction_budget','income'];
   const entries = (state.ledger||[])
-    .filter(l=>l.project_id===projectId && incomeTypes.includes(l.type))
+    .filter(l=>l.project_id===projectId && !l.deleted_at && incomeTypes.includes(l.type)&&(!l.entry_date||l.entry_date<=financeToday()))
     .sort((a,b)=> new Date(b.entry_date) - new Date(a.entry_date) || new Date(b.created_at) - new Date(a.created_at));
 
   const received = entries.reduce((s,e)=>s+Number(e.amount||0),0);
@@ -7422,10 +7466,10 @@ let objSearch = {materials:'', works:''};
 function renderObjInvoiceList(kind){
   const listEl = document.getElementById('objInvList');
   if(!listEl) return;
-  const projInvoices = state.invoices.filter(inv=>inv.project_id===currentObjectId);
+  const projInvoices = state.invoices.filter(inv=>inv.project_id===currentObjectId&&!inv.deleted_at);
   let base = kind==='works'
     ? projInvoices.filter(i=>i.item_type==='Работа')
-    : projInvoices.filter(i=>['Материал','Инструмент','Расходник','Доставка'].includes(i.item_type));
+    : projInvoices.filter(i=>i.item_type!=='Работа');
   const q = objSearch[kind] || '';
   const filtered = base.filter(inv=>invoiceMatchesQuery(inv, q));
   // сортировка по дате, самая новая запись сверху
@@ -7528,7 +7572,7 @@ function buildInvoiceGroupsHtml(invoices){
 }
 function renderObjTabContent(){
   const el = document.getElementById('objTabContent');
-  const projInvoices = state.invoices.filter(inv=>inv.project_id===currentObjectId);
+  const projInvoices = state.invoices.filter(inv=>inv.project_id===currentObjectId&&!inv.deleted_at);
 
   if(activeObjTab === 'materials'){
     objSearch.materials = '';
@@ -7592,16 +7636,21 @@ function renderObjTabContent(){
     </div>`;
   }
   else if(activeObjTab === 'photos'){
-    const photos = state.photos.filter(ph=>ph.project_id===currentObjectId);
+    const photoMap=new Map();
+    state.photos.filter(ph=>ph.project_id===currentObjectId&&!ph.deleted_at&&ph.photo_url).forEach(ph=>photoMap.set(ph.photo_url,{...ph,sourceLabel:'Фото объекта'}));
+    projInvoices.filter(inv=>!inv.deleted_at&&inv.photo_url).forEach(inv=>photoMap.set(inv.photo_url,{photo_url:inv.photo_url,amount:inv.amount,invoice_id:inv.id,sourceLabel:inv.description||inv.number||'Накладная'}));
+    const photos=[...photoMap.values()];
     el.innerHTML = `<div class="card" style="margin-top:4px;">
       <div class="photo-grid">
         ${photos.length ? photos.map(ph=>`
           <div class="photo-thumb">
             <img src="${escapeHtml(ph.photo_url)}" alt="" loading="lazy">
             ${ph.amount ? `<div class="photo-amt">${fmtMoney(ph.amount)}</div>` : ''}
+            ${ph.invoice_id?`<button type="button" class="btn btn-secondary" style="padding:6px;font-size:11px" data-photo-invoice="${escapeHtml(ph.invoice_id)}">${escapeHtml(ph.sourceLabel)}</button>`:''}
           </div>`).join('') : '<div class="empty-state" style="grid-column:1/-1; padding:14px;">Фото пока нет</div>'}
       </div>
     </div>`;
+    el.querySelectorAll('[data-photo-invoice]').forEach(button=>button.addEventListener('click',()=>openInvoiceSheet(button.dataset.photoInvoice)));
   }
   else if(activeObjTab === 'audit'){
     el.innerHTML = buildObjectAuditHtml(currentObjectId);
@@ -7613,7 +7662,7 @@ function renderObjTabContent(){
 // (инструмент для самостоятельной проверки объекта, например Митаева 21)
 // ============================================================
 function buildObjectAuditHtml(projectId){
-  const invs = state.invoices.filter(inv=>inv.project_id===projectId);
+  const invs = state.invoices.filter(inv=>inv.project_id===projectId&&!inv.deleted_at);
   const p = state.projects.find(x=>x.id===projectId);
 
   const matTotal = invs.filter(i=>['Материал','Инструмент','Расходник','Доставка'].includes(i.item_type)).reduce((s,i)=>s+Number(i.amount||0),0);
@@ -7631,7 +7680,9 @@ function buildObjectAuditHtml(projectId){
     if(seen[key]) dups.push(i); else seen[key]=i;
   });
 
-  const expectedExpenses = matTotal + workTotal;
+  const otherTotal=invs.filter(i=>!['Материал','Инструмент','Расходник','Доставка','Работа'].includes(i.item_type)).reduce((s,i)=>s+Number(i.amount||0),0);
+  const invoiceTotal = matTotal + workTotal + otherTotal;
+  const expectedExpenses = p?getProjectExpenses(p):invoiceTotal;
   const storedExpenses = Number(p?.expenses) || 0;
   const mismatch = Math.abs(expectedExpenses - storedExpenses) > 1;
 
@@ -7639,7 +7690,8 @@ function buildObjectAuditHtml(projectId){
     <div class="fee-row"><div class="fl">Всего накладных</div><div class="fv">${invs.length}</div></div>
     <div class="fee-row"><div class="fl">Материалы (сумма)</div><div class="fv">${fmtMoney(matTotal)}</div></div>
     <div class="fee-row"><div class="fl">Работы (сумма)</div><div class="fv">${fmtMoney(workTotal)}</div></div>
-    <div class="fee-row total"><div class="fl">Итого по накладным</div><div class="fv">${fmtMoney(expectedExpenses)}</div></div>
+    ${otherTotal?`<div class="fee-row"><div class="fl">Прочие типы накладных</div><div class="fv">${fmtMoney(otherTotal)}</div></div>`:''}
+    <div class="fee-row total"><div class="fl">Итого по накладным</div><div class="fv">${fmtMoney(invoiceTotal)}</div></div>
     ${mismatch ? `<div class="fee-row"><div class="fl" style="color:var(--red);">⚠ Расход в проекте</div><div class="fv" style="color:var(--red);">${fmtMoney(storedExpenses)} (не совпадает)</div></div>` : ''}
   </div>`;
 
@@ -7698,7 +7750,8 @@ async function addInvoiceFromView(){
 let invoiceSaveInFlight=false;
 async function addInvoice(projectId){
   if(invoiceSaveInFlight)return;
-  if(!session || !canSeeConstruction() || !state.projects.some(p=>p.id===projectId)){showToast('Нет доступа к этому объекту');return;}
+  if(!canAccessConstructionProject(projectId)){showToast('Нет доступа к этому объекту');return;}
+  const actor={employeeId:session.employeeId,token:session.token,isAdmin:!!session.isAdmin};
   // Support both old suffix pattern and new "-obj" suffix from object view
   const suffix = document.getElementById(`inv-num-obj`) ? 'obj' : projectId;
   const number = document.getElementById(`inv-num-${suffix}`).value.trim();
@@ -7718,28 +7771,33 @@ async function addInvoice(projectId){
   if(!invoice_date){ showToast('Укажите дату накладной — нужна для корректного P&L по периоду'); return; }
 
   invoiceSaveInFlight=true;
+  let persisted=false;
   showToast('Сохранение…');
 
   try{
     let photo_url = '';
     if(photoFile){
       const fileName = `${projectId}/${Date.now()}.jpg`;
-      photo_url = await compressAndUpload(photoFile, 'expense-photos', fileName);
+      photo_url = await compressAndUpload(photoFile, 'expense-photos', fileName,()=>canAccessConstructionProject(projectId,actor));
     }
 
+    if(!canAccessConstructionProject(projectId,actor))throw new Error('Сеанс или доступ к объекту изменился');
     const {error} = await sb.from('invoices').insert({
       project_id: projectId, number, invoice_date, category, item_type, description, amount, photo_url, paid_by_client
     });
     if(error) throw error;
+    persisted=true;
 
     // Keep project.expenses in sync with the real sum of invoices,
     // so the fee calculation (% от расходов) always reflects накладные
     const projInvoicesAfter = [...state.invoices.filter(inv=>inv.project_id===projectId), {amount}];
-    const newExpensesTotal = projInvoicesAfter.reduce((s,i)=>s+Number(i.amount||0), 0);
+    const newExpensesTotal = projInvoicesAfter.reduce((s,i)=>s+Number(i.amount||0), 0)+getConstructionExpenses(state.projects.find(p=>p.id===projectId)).manualTotal;
+    if(!canAccessConstructionProject(projectId,actor))throw new Error('Сеанс или доступ к объекту изменился');
     const {error: updErr} = await sb.from('projects').update({expenses: newExpensesTotal}).eq('id', projectId);
     if(updErr) console.error(updErr);
 
     const projForAudit = state.projects.find(x=>x.id===projectId);
+    if(!canAccessConstructionProject(projectId,actor))throw new Error('Сеанс или доступ к объекту изменился');
     await logAudit('project', projectId, projForAudit?.name || '', 'update', {invoice_added: {old:null, new: `${number} — ${description} — ${fmtMoney(amount)}`}});
 
     showToast('Накладная добавлена');
@@ -7753,7 +7811,7 @@ async function addInvoice(projectId){
     }
   }catch(e){
     console.error(e);
-    showToast('Ошибка сохранения');
+    showToast(persisted?'Накладная сохранена. Не удалось обновить итоги — обновите объект':'Ошибка сохранения');
   }finally{invoiceSaveInFlight=false;}
 }
 
@@ -7768,6 +7826,7 @@ const invoiceSheetSavesInFlight = new Set();
 function openInvoiceSheet(invId){
   const inv = state.invoices.find(i=>i.id===invId);
   if(!inv){ showToast('Накладная не найдена'); return; }
+  if(!canAccessConstructionProject(inv.project_id)){showToast('Нет доступа к этому объекту');return;}
   invoiceFormGeneration++;
   invSheetCurrentId = invId;
   invSheetNewPhotoBlob = null;
@@ -7833,6 +7892,8 @@ async function saveInvoiceSheet(){
   if(invoiceSheetSavesInFlight.has(invoiceId))return;
   const currentInvoice = state.invoices.find(i=>i.id===invoiceId);
   if(!currentInvoice) return;
+  if(!canAccessConstructionProject(currentInvoice.project_id)){showToast('Нет доступа к этому объекту');return;}
+  const actor={employeeId:session.employeeId,token:session.token,isAdmin:!!session.isAdmin};
   const inv={...currentInvoice},photoBlob=invSheetNewPhotoBlob;
 
   const number       = document.getElementById('invSheet-number').value.trim();
@@ -7861,9 +7922,10 @@ async function saveInvoiceSheet(){
     let photo_url = inv.photo_url || '';
     if(photoBlob){
       const fileName = `${inv.project_id}/${Date.now()}_edit.jpg`;
-      photo_url = await compressAndUpload(photoBlob, 'expense-photos', fileName);
+      photo_url = await compressAndUpload(photoBlob, 'expense-photos', fileName,()=>canAccessConstructionProject(inv.project_id,actor));
     }
 
+    if(!canAccessConstructionProject(inv.project_id,actor))throw new Error('Сеанс или доступ к объекту изменился');
     const {data,error} = await sb.from('invoices').update({
       number, invoice_date, item_type, amount, category, description, photo_url, paid_by_client
     }).eq('id', invoiceId).select('id').maybeSingle();
@@ -7875,10 +7937,12 @@ async function saveInvoiceSheet(){
     // this photo was uploading. Never copy the amount into the next open row.
     const totals=await fetchAllRows(()=>sb.from('invoices').select('id,amount',{count:'exact'}).eq('project_id',inv.project_id).order('id'));
     if(totals.error)throw totals.error;
-    const newTotal=(totals.data||[]).reduce((sum,row)=>sum+Number(row.amount||0),0);
+    const newTotal=(totals.data||[]).reduce((sum,row)=>sum+Number(row.amount||0),0)+getConstructionExpenses(state.projects.find(p=>p.id===inv.project_id)).manualTotal;
+    if(!canAccessConstructionProject(inv.project_id,actor))throw new Error('Сеанс или доступ к объекту изменился');
     const update=await sb.from('projects').update({expenses: newTotal}).eq('id', inv.project_id);
     if(update.error)throw update.error;
 
+    if(!canAccessConstructionProject(inv.project_id,actor))throw new Error('Сеанс или доступ к объекту изменился');
     await logAudit('project', inv.project_id, (state.projects.find(p=>p.id===inv.project_id)||{}).name||'', 'update', {invoice_edited:{old:`${inv.number}—${fmtMoney(inv.amount)}`, new:`${number}—${fmtMoney(amount)}`}});
 
     if(invoiceFormGeneration===generation&&invSheetCurrentId===invoiceId){
@@ -7899,30 +7963,39 @@ async function saveInvoiceSheet(){
 
 async function deleteInvoiceSheet(){
   if(!invSheetCurrentId) return;
-  if(!confirm('Удалить эту накладную? Это необратимо.')) return;
-  const inv = state.invoices.find(i=>i.id===invSheetCurrentId);
+  const invoiceId=invSheetCurrentId,generation=invoiceFormGeneration;
+  const inv = state.invoices.find(i=>i.id===invoiceId);
   if(!inv) return;
+  if(!canAccessConstructionProject(inv.project_id)){showToast('Нет доступа к этому объекту');return;}
+  const actor={employeeId:session.employeeId,token:session.token,isAdmin:!!session.isAdmin};
+  if(!confirm('Удалить эту накладную? Это необратимо.')) return;
   if(typeof ARHITTEKCash!=='undefined'&&ARHITTEKCash.invoicePaymentState(state,inv).rows.length){
     showToast('У накладной есть связанные оплаты. Сначала отмените их в истории.');return;
   }
+  let persisted=false;
   try{
-    const {error} = await sb.from('invoices').delete().eq('id', invSheetCurrentId);
+    if(!canAccessConstructionProject(inv.project_id,actor))throw new Error('Сеанс или доступ к объекту изменился');
+    const {error} = await sb.from('invoices').delete().eq('id', invoiceId);
     if(error) throw error;
+    persisted=true;
 
     // Пересчитываем p.expenses
-    const projInvs = state.invoices.filter(i=>i.project_id===inv.project_id && i.id!==invSheetCurrentId);
-    const newTotal  = projInvs.reduce((s,i)=>s+Number(i.amount||0),0);
+    const projInvs = state.invoices.filter(i=>i.project_id===inv.project_id && i.id!==invoiceId);
+    const newTotal  = projInvs.reduce((s,i)=>s+Number(i.amount||0),0)+getConstructionExpenses(state.projects.find(p=>p.id===inv.project_id)).manualTotal;
+    if(!canAccessConstructionProject(inv.project_id,actor))throw new Error('Сеанс или доступ к объекту изменился');
     await sb.from('projects').update({expenses: newTotal}).eq('id', inv.project_id);
 
-    closeInvoiceSheet();
+    if(invSheetCurrentId===invoiceId&&invoiceFormGeneration===generation)closeInvoiceSheet();
     await loadAll();
     if(currentObjectId === inv.project_id){ const p=state.projects.find(x=>x.id===inv.project_id); if(p) renderObjectSummary(p); renderObjTabContent(); }
     showToast('Накладная удалена');
-  }catch(e){ console.error(e); showToast('Ошибка удаления'); }
+  }catch(e){ console.error(e); showToast(persisted?'Накладная удалена. Не удалось обновить итоги — обновите объект':'Ошибка удаления'); }
 }
 
 
 async function exportConstrPdf(projectId){
+  if(state.financialDataReady===false){showToast('Финансовые данные не подтверждены. Обновите приложение.');return;}
+  if(!session?.isAdmin||!canAccessConstructionProject(projectId)){showToast('Нет доступа к финансовому отчёту объекта');return;}
   const p = state.projects.find(x=>x.id===projectId);
   if(!p) return;
 
@@ -7959,18 +8032,19 @@ async function exportConstrPdf(projectId){
   const price = Number(p.price)||0;
   const constrFin = getConstructionFinancials(p);
   const expenses = constrFin.expenses;
-  const f = calcConstrFee({...p, expenses});
+  const f = getProjectFee(p);
   const balance = constrFin.balance;
   const received = constrFin.received;
 
   doc.setFont('Roboto','normal'); doc.setFontSize(9);
   const summaryRows = [
     ['Приход от заказчика:', `${fmt(received)} руб.`],
-    ['Расход (материалы + работы):', `${fmt(expenses)} руб.`],
-    ['Остаток на объекте:', `${fmt(balance)} руб.`],
-    [`Гонорар ARHITTEK (${f.feePercent}% от расходов):`, `${fmt(f.feeAmount)} руб.`],
-    ['Выплачено гонорара:', `${fmt(f.paid)} руб.`],
-    ['Осталось получить:', `${fmt(f.remaining)} руб.`],
+    ['Выплачено из денег объекта:', `${fmt(constrFin.cashOutgoing)} руб.`],
+    ['Деньги объекта по журналу:', `${fmt(balance)} руб.`],
+    ['Заказчик оплатил напрямую:', `${fmt(constrFin.directPaid)} руб.`],
+    ['Стоимость документов и начислений:', `${fmt(expenses)} руб.`],
+    ['Оплата накладных не подтверждена:', `${fmt(constrFin.unpaidInvoices)} руб.`],
+    ['Вознаграждение исполнителей:', `${fmt(f.feeAmount)} руб.`],
   ];
   summaryRows.forEach(([lbl,val])=>{
     doc.setFont('Roboto','bold');
@@ -7983,8 +8057,8 @@ async function exportConstrPdf(projectId){
   y += 4;
   doc.setDrawColor(200); doc.line(margin, y, pageWidth-margin, y); y += 6;
 
-  const projInvoices = state.invoices.filter(inv=>inv.project_id===projectId);
-  const materials = projInvoices.filter(i=>['Материал','Инструмент','Расходник','Доставка'].includes(i.item_type));
+  const projInvoices = state.invoices.filter(inv=>inv.project_id===projectId&&!inv.deleted_at);
+  const materials = projInvoices.filter(i=>i.item_type!=='Работа');
   const works = projInvoices.filter(i=>i.item_type==='Работа');
 
   function printSection(title, items){
@@ -8067,34 +8141,27 @@ async function exportConstrPdf(projectId){
 
 
 async function updateObjField(id, field, value){
-  const payload = {};
-  if(field === 'floors_total' || field === 'floors_done'){
-    payload[field] = value === '' ? null : parseInt(value);
-  }else{
-    payload[field] = value;
-  }
-  try{
-    const p = state.projects.find(x=>x.id===id);
-    const {error} = await sb.from('projects').update(payload).eq('id', id);
-    if(error) throw error;
-    await logAudit('project', id, p?p.name:'', 'update', {[field]: {old: p?p[field]:null, new: payload[field]}});
-    await loadAll();
-  }catch(e){
-    console.error(e);
-    showToast('Ошибка сохранения');
-  }
+  if(!canAccessConstructionProject(id)){showToast('Нет доступа к этому объекту');return false;}
+  // Deprecated legacy entry point: there is no current UI or validated field
+  // schema for these inline writes. Use the project editor and payment forms.
+  showToast('Измените данные объекта в карточке проекта');
+  return false;
 }
 
 async function uploadExpensePhoto(projectId, inputEl){
+  if(!canAccessConstructionProject(projectId)){showToast('Нет доступа к этому объекту');return;}
+  const actor={employeeId:session.employeeId,token:session.token,isAdmin:!!session.isAdmin};
   const file = inputEl.files[0];
   if(!file) return;
 
-  const desc = document.getElementById(`photo-desc-${projectId}`).value.trim();
-  const amtRaw = document.getElementById(`photo-amt-${projectId}`).value;
+  const descField=document.getElementById(`photo-desc-${projectId}`),amountField=document.getElementById(`photo-amt-${projectId}`);
+  const desc = descField?.value.trim()||'';
+  const amtRaw = amountField?.value||'';
   const amount = amtRaw ? parseFloat(amtRaw) : null;
 
   showToast('Загрузка фото…');
 
+  let persisted=false;
   try{
     const ext = file.name.split('.').pop();
     const fileName = `${projectId}/${Date.now()}.${ext}`;
@@ -8104,6 +8171,7 @@ async function uploadExpensePhoto(projectId, inputEl){
     const {data: urlData} = sb.storage.from('expense-photos').getPublicUrl(fileName);
     const photo_url = urlData.publicUrl;
 
+    if(!canAccessConstructionProject(projectId,actor))throw new Error('Сеанс или доступ к объекту изменился');
     const {error: insErr} = await sb.from('expense_photos').insert({
       project_id: projectId,
       description: desc,
@@ -8111,19 +8179,21 @@ async function uploadExpensePhoto(projectId, inputEl){
       photo_url: photo_url,
     });
     if(insErr) throw insErr;
+    persisted=true;
 
     const p = state.projects.find(x=>x.id===projectId);
+    if(!canAccessConstructionProject(projectId,actor))throw new Error('Сеанс или доступ к объекту изменился');
     await logAudit('project', projectId, p?p.name:'', 'update', {photo: {old:null, new: desc || 'фото расхода'}});
 
-    document.getElementById(`photo-desc-${projectId}`).value = '';
-    document.getElementById(`photo-amt-${projectId}`).value = '';
+    if(descField?.isConnected)descField.value='';
+    if(amountField?.isConnected)amountField.value='';
     inputEl.value = '';
 
     showToast('Фото добавлено');
     await loadAll();
   }catch(e){
     console.error(e);
-    showToast('Ошибка загрузки фото');
+    showToast(persisted?'Фото добавлено. Не удалось обновить объект — повторите обновление':'Ошибка загрузки фото');
   }
 }
 
@@ -8376,12 +8446,13 @@ async function restoreItem(table, id, name){
       }else if(restoredLedger.type==='fee_payment'){
         const field=projectFeePaidField(p,restoredLedger);if(field)updates[field]=(Number(p[field])||0)+amount;
       }else if(['advance','final_payment','materials_budget','construction_budget','income'].includes(restoredLedger.type)){
-        if(isConstructionProject(p))updates.balance=getConstructionFinancials(p).balance;
+        if(isConstructionProject(p)){const fin=getConstructionFinancials(p);updates.balance=fin.balance;updates.advance=fin.received;}
         else{
           updates.advance=(Number(p.advance)||0)+amount;
           updates.balance=Math.max(0,(Number(p.price)||0)-updates.advance);
         }
       }
+      if(isConstructionProject(p))updates.balance=getConstructionFinancials(p).balance;
       if(Object.keys(updates).length){
         let query=sb.from('projects').update(updates).eq('id',p.id);
         for(const field of Object.keys(updates))query=p[field]==null?query.is(field,null):query.eq(field,p[field]);
@@ -8435,8 +8506,8 @@ function buildExportRows(){
       'Адрес': p.address||'',
       'Телефон': p.phone||'',
       'Цена': p.price||0,
-      'Аванс': p.advance||0,
-      'Остаток': p.balance||0,
+      'Аванс': isConstructionProject(p)?getConstructionFinancials(p).received:p.advance||0,
+      'Остаток': isConstructionProject(p)?getConstructionFinancials(p).balance:p.balance||0,
       'Расходы': getProjectExpenses(p),
       'Прибыль': f.profit,
       '% гонорара': f.feePercent,
@@ -10948,8 +11019,9 @@ async function compressImage(file, maxSide, quality){
 }
 
 // Хелпер: сжать → загрузить в storage → вернуть publicUrl
-async function compressAndUpload(file, bucket, path){
+async function compressAndUpload(file, bucket, path,canUpload=null){
   const compressed = await compressImage(file);
+  if(canUpload&&!canUpload())throw new Error('Сеанс или доступ к объекту изменился');
   const {error} = await sb.storage.from(bucket).upload(path, compressed, {contentType:'image/jpeg', upsert:true});
   if(error) throw error;
   const {data: urlData} = sb.storage.from(bucket).getPublicUrl(path);
@@ -12276,3 +12348,5 @@ showNotifPrompt();
 <script src="project-budget.js"></script>
 <script src="cash-finance.js"></script>
 <script src="app-refresh.js"></script>
+<script src="construction-finance.js"></script>
+<script src="construction-workflow.js"></script>

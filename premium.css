@@ -229,3 +229,22 @@ html{background:var(--bg)!important}body{max-width:none!important;margin:0!impor
 .finance-current-balance{display:flex;align-items:flex-end;justify-content:space-between;gap:15px;padding:15px 16px;margin-bottom:14px;border:1px solid #eadfca;background:#fffaf0;border-radius:14px}
 .finance-current-balance span{font-size:11px;color:#7d705c}.finance-current-balance strong{font:700 23px 'Space Grotesk',sans-serif;color:#b57e16}
 @media(max-width:480px){.finance-management-actions{flex-direction:column}.finance-management-actions .btn{width:100%}.finance-management-row{align-items:flex-start}.finance-current-balance strong{font-size:20px}}
+
+/* Construction balances and saved stages stay readable during background updates. */
+#view-object,#view-object .card,#view-object .fee-card,#view-object .list-item,#view-construction,#view-construction .obj-card,.stage-item{animation:none!important}
+.construction-object-head{min-width:0}
+.construction-object-head #objTitle{min-width:0;overflow-wrap:anywhere}
+.construction-object-head .btn{width:auto;flex:0 0 auto}
+#objSummary .fee-row .fl{min-width:0;overflow-wrap:anywhere}
+#objSummary .fee-row .fv{flex-shrink:0;white-space:nowrap}
+.construction-company-fee-plan{margin-top:16px}
+#objTabContent .photo-thumb{height:auto;min-height:100px}
+#objTabContent .photo-thumb img{aspect-ratio:1;object-fit:cover;display:block}
+#objTabContent .photo-thumb [data-photo-invoice]{max-width:100%;white-space:normal;overflow-wrap:anywhere;text-align:left;position:relative;z-index:1}
+@media(max-width:600px){
+ .construction-object-head{display:grid!important;grid-template-columns:32px minmax(0,1fr) auto;gap:8px!important}
+ .construction-object-head #objBack{grid-column:1;grid-row:1 / 3}
+ .construction-object-head #objTitle{grid-column:2 / 4;grid-row:1}
+ .construction-object-head #objPdfBtn{grid-column:2;grid-row:2;justify-self:start}
+ .construction-object-head #objEditBtn{grid-column:3;grid-row:2}
+}

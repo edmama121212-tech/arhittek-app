@@ -213,6 +213,26 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
   return [earned,before.cashBalance,before.companyReserve,before.projectsHeld,after.cashBalance,after.companyReserve,after.projectsHeld];
  },[4500,40500,10500,28500,36000,10500,24000]);
  await fresh();
+ await check('Construction cash conserves independently calculated kopecks across 400 invoice, accrual and payment combinations',()=>{
+  let seed=19732;const next=max=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed%max;},money=minor=>minor/100;
+  const p={id:'math-build',name:'Cash property',category_id:'build',status_id:'active',price:1000000,advance:999999,balance:999999,fee_base:'expenses',employee_id:'architect',fee_percent:15};
+  state.projects=[p];state.financialProjects=[p];state.companyIncome=[];state.companyExpenses=[];state.cashCounts=[];state.history=[];
+  const failures=[];
+  for(let sample=0;sample<400;sample++){
+   const incomingOne=1+next(10000000),incomingTwo=next(10000000),material=1+next(3000000),work=1+next(3000000),direct=1+next(1000000),accrual=1+next(2000000),linked=next(material+1),manual=next(3000000),fee=next(2000000),withdrawal=next(1000000),foreign=next(1000000);
+   state.invoices=[{id:'bill-m',project_id:p.id,item_type:'Материал',amount:money(material),invoice_date:'2026-10-19'},{id:'bill-w',project_id:p.id,item_type:'Работа',amount:money(work),invoice_date:'2026-10-19'},{id:'bill-direct',project_id:p.id,item_type:'Прочее',amount:money(direct),paid_by_client:true,invoice_date:'2026-10-19'}];
+   const row=(id,type,amount,extra={})=>({id,project_id:p.id,type,amount:money(amount),entry_date:'2026-10-19',created_at:'2026-10-19T10:00:00Z',...extra});
+   state.ledger=[row('r-one','construction_budget',incomingOne),row('r-two','advance',incomingTwo),row('a-work','role_payout',accrual,{payee_employee_id:'architect'}),row('p-linked','project_expense',linked,{description:'[invoice-payment:bill-m] Material'}),row('p-manual','expense',manual),row('p-fee','fee_payment',fee,{payee_employee_id:'architect'}),row('p-withdraw','withdrawal',withdrawal),row('foreign','expense',foreign,{project_id:'some-other-object'}),row('future','advance',10000000,{entry_date:'2099-01-01'}),row('deleted','expense',10000000,{deleted_at:'2026-10-19T11:00:00Z'}),row('historical','project_expense',10000000,{description:'Ранее внесённые расходы'})];
+   const before=JSON.stringify([p,state.invoices,state.ledger]),expectedMinor=incomingOne+incomingTwo-linked-manual-fee-withdrawal,f=getConstructionFinancials(p),company=ARHITTEKCash.balance(state);
+   if(Math.round(f.balance*100)!==expectedMinor||Math.round(company*100)!==2000000+expectedMinor-foreign||Math.round(f.unpaidInvoices*100)!==material-linked+work)failures.push(sample);
+   p.status_id='done';if(Math.round(getConstructionFinancials(p).balance*100)!==expectedMinor)failures.push('close-'+sample);p.status_id='active';
+   const cancelled=state.ledger.map(r=>r.id==='p-withdraw'?{...r,deleted_at:'2026-10-19T12:00:00Z'}:r);
+   if(Math.round(getConstructionFinancials(p,cancelled).balance*100)!==expectedMinor+withdrawal)failures.push('cancel-'+sample);
+   if(JSON.stringify([p,state.invoices,state.ledger])!==before)failures.push('mutated-'+sample);
+  }
+  return failures;
+ },[]);
+ await fresh();
  for(const width of [390,360]){
   await page.setViewportSize({width,height:844});
   for(const view of ['overview','projects','construction','cards','finance','more']){
