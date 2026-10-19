@@ -9,7 +9,7 @@ Object.entries(meta).forEach(([id,[title,description]])=>{const v=document.getEl
 const overview=document.getElementById('overviewContent');if(overview){const h=document.createElement('section');h.className='studio-hero';h.innerHTML='<div><div class="hero-kicker">STUDIO / AT A GLANCE</div><h2>Большие идеи. Чёткий план.</h2><p>Всё, что важно для студии сегодня.</p></div><div class="hero-actions"><button type="button" class="btn btn-primary" id="premiumNewProject">+ Новый проект</button><button type="button" class="btn btn-secondary" id="premiumOpenPayroll">Выплаты команде ↗</button></div>';overview.prepend(h);document.getElementById('premiumNewProject').onclick=()=>openProjectSheet(null);document.getElementById('premiumOpenPayroll').onclick=()=>document.getElementById('openTimesheetBtn').click();}
 const grid=document.querySelector('#view-more > div[style*="display:grid"]');if(grid){grid.classList.add('premium-tool-grid');Object.entries({openKpBtn:'Коммерческие предложения',openContractsBtn:'Договоры',openCompanyBtn:'Реквизиты',openPriceListBtn:'Прайс для клиента',exportXlsxBtn:'Экспорт в Excel',openTimesheetBtn:'Табель и выплаты'}).forEach(([id,text])=>{document.getElementById(id).innerHTML=svg('cards')+text;});}
 const toast=document.getElementById('toast');if(toast){toast.setAttribute('role','status');toast.setAttribute('aria-live','polite');}document.querySelectorAll('.sheet-close').forEach(b=>b.setAttribute('aria-label','Закрыть'));document.querySelectorAll('.field').forEach(f=>{const l=f.querySelector('label'),i=f.querySelector('input,select,textarea');if(l&&i?.id&&!l.htmlFor)l.htmlFor=i.id;});
-const sync=()=>{const active=document.querySelector('.view.active')?.id,fab=document.getElementById('addProjectFab');if(fab)fab.style.display=['view-projects','view-construction'].includes(active)?'':'none';nav?.querySelectorAll('.nav-btn').forEach(b=>{if(b.dataset.view===active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});};const observer=new MutationObserver(sync);document.querySelectorAll('.view').forEach(v=>observer.observe(v,{attributes:true,attributeFilter:['class']}));sync();
+const sync=()=>{const active=document.querySelector('.view.active')?.id,fab=document.getElementById('addProjectFab');const create=typeof window.canCreateProjectCard==='function'?window.canCreateProjectCard():!!session?.isAdmin;if(fab)fab.style.display=create&&['view-projects','view-construction'].includes(active)?'':'none';nav?.querySelectorAll('.nav-btn').forEach(b=>{if(b.dataset.view===active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});};const observer=new MutationObserver(sync);document.querySelectorAll('.view').forEach(v=>observer.observe(v,{attributes:true,attributeFilter:['class']}));sync();
 const user=document.getElementById('userPill');if(user){user.setAttribute('role','button');user.setAttribute('aria-label','Выйти из аккаунта');user.tabIndex=0;user.addEventListener('keydown',e=>{if(e.key==='Enter')user.click();});}const f=document.createElement('div');f.className='page-footnote';f.textContent='ARHITTEK · Сделано для точной работы';document.querySelector('main')?.append(f);document.addEventListener('keydown',e=>{if(e.key==='Escape')[...document.querySelectorAll('.sheet-overlay.active')].at(-1)?.querySelector('.sheet-close')?.click();});
 })();
 
@@ -106,6 +106,11 @@ function refresh(){
    ? '<span>Сотрудник на окладе<small>Будет участником проекта без дополнительного начисления</small></span><strong>Без доплаты</strong>'
    : (a>0&&r>0&&Number.isFinite(a*r)?`<span>Гонорар сотрудника<small>${esc(a)} м² × ${esc(r.toLocaleString('ru-RU',{maximumFractionDigits:2}))} ₽</small></span><strong>${esc(money(Math.round(a*r*100)/100))}</strong>`:'Укажите площадь и ставку');
  const p=draft(),rows=planRows(p),total=rows.reduce((s,r)=>s+r.amount,0),done=findStatus(p.status_id)?.name==='Завершён',admin=!!session?.isAdmin;
+ const basicCreate=!editingProjectId&&canCreateProjectCard();
+ $('pf-save').hidden=!admin&&!basicCreate;
+ saveNote.textContent=!admin?(basicCreate?'Карточка будет создана с вами в качестве исполнителя. Стоимость, оплату и условия команды заполняет администратор.':'Условия проекта изменяет администратор. Этапы и задачи сохраняются отдельно.'):'Изменения полей — по кнопке «Сохранить проект».';
+ const activeView=document.querySelector('.view.active')?.id;
+ if($('addProjectFab'))$('addProjectFab').style.display=canCreateProjectCard()&&['view-projects','view-construction'].includes(activeView)?'':'none';
  nav.querySelectorAll('button').forEach(b=>b.hidden=!admin&&['team','money'].includes(b.dataset.tab));
  if(!admin&&(!panels.team.hidden||!panels.money.hidden))selectTab('overview');
  const isM2=p.fee_base==='m2',interior=isInterior(p.category_id),architecture=isArchitecture(p.category_id);
@@ -153,7 +158,7 @@ function defaults(){
  $('pf-feebase').value=$('pf-compensation-method').value==='m2'?'m2':$('pf-compensation-method').value==='percent_profit'?'profit':'price';
  renderCompensationMethodUI();
 }
-const oldOpen=openProjectSheet;openProjectSheet=function(id){oldOpen(id);$('projectSheetTitle').textContent=id?'Карточка проекта':'Новый проект';coDetails.hidden=!$('pf-co-employee').value;addSecond.hidden=!coDetails.hidden;special.open=false;contactDetails.open=false;defaults();$('pf-rp-rate').value='400';$('pf-rp-area').value=$('pf-area').value;$('pf-employee-fee').value=$('pf-employee').value;$('pf-co-employee-fee').value=$('pf-co-employee').value;selectTab('overview');refresh();sheet.scrollTop=0;};
+const oldOpen=openProjectSheet;openProjectSheet=function(id){if(!id&&!canCreateProjectCard()){showToast('Создание проекта доступно ведущему дизайнеру и администратору');return;}basicProjectDraftVersion++;oldOpen(id);$('projectSheetTitle').textContent=id?'Карточка проекта':'Новый проект';coDetails.hidden=!$('pf-co-employee').value;addSecond.hidden=!coDetails.hidden;special.open=false;contactDetails.open=false;defaults();$('pf-rp-rate').value='400';$('pf-rp-area').value=$('pf-area').value;$('pf-employee-fee').value=$('pf-employee').value;$('pf-co-employee-fee').value=$('pf-co-employee').value;selectTab('overview');refresh();sheet.scrollTop=0;};
 const oldRole=applyRole;applyRole=function(){oldRole();refresh();};
 const oldRecalc=recalcLiveFeeSummary;recalcLiveFeeSummary=function(){oldRecalc();refresh();};
 const oldRenderRoles=renderProjectRolePayouts;renderProjectRolePayouts=function(id){oldRenderRoles(id);refresh();};
@@ -186,7 +191,61 @@ sheet.addEventListener('input',e=>{if(e.target.id!=='team-deduct-costs')refresh(
 // Stale duplicate selections must never restore an employee removed in the team tab.
 ['pf-employee-fee','pf-co-employee-fee'].forEach((id,i)=>$(id).addEventListener('change',()=>{$(i?'pf-co-employee':'pf-employee').value=$(id).value;}));
 ['pf-feepaid','pf-co-feepaid'].forEach(id=>{const el=$(id);if(el){el.readOnly=true;el.title='Фактическая выплата записывается через приём платежа или табель';}});
+// The lead designer may start a project without editing contract or payroll terms.
+// Keep this path separate from the administrator's financial form: those hidden
+// fields may contain defaults or values from a previously opened project.
+function canCreateProjectCard(){
+ if(!session)return false;
+ if(session.isAdmin)return true;
+ const employee=findEmployee(session.employeeId);
+ return !!(employee&&employee.active!==false&&!employee.deleted_at&&canSeeProjects()&&String(employee.role||'').trim().toLowerCase()==='ведущий дизайнер');
+}
+window.canCreateProjectCard=canCreateProjectCard;
+let basicProjectSaveInFlight=false,basicProjectDraftVersion=0;
+async function saveBasicProjectCard(){
+ if(basicProjectSaveInFlight||!$('projectSheetOverlay').classList.contains('active'))return;
+ if(!canCreateProjectCard()||editingProjectId){showToast('Условия проекта изменяет администратор');return;}
+ const name=$('pf-name').value.trim(),category=findCategory($('pf-category').value);
+ const rawArea=$('pf-area').value,area=rawArea===''?null:Number(rawArea);
+ if(!name){showToast('Введите название проекта');return;}
+ if(!category){showToast('Выберите категорию проекта');return;}
+ if(isConstructionCategory(category.id)&&!canSeeConstruction()){showToast('Нет доступа к строительному отделу');return;}
+ if(area!==null&&(!Number.isFinite(area)||area<0)){showToast('Площадь не может быть отрицательной');return;}
+ const status=findStatus($('pf-status').value);
+ if(!status){showToast('Выберите статус проекта');return;}
+ if(status.name==='Завершён'){showToast('Завершение проекта подтверждает администратор');return;}
+ const address=$('pf-address').value.trim(),normalize=value=>String(value||'').trim().toLowerCase().replace(/\s+/g,' ');
+ const duplicate=address&&(state.projects||[]).find(p=>!p.deleted_at&&normalize(p.address)===normalize(address));
+ if(duplicate&&!confirm(`Объект с адресом «${address}» уже есть в системе («${duplicate.name}»). Всё равно создать ещё один?`))return;
+ const startDate=$('pf-start').value||null,endDate=$('pf-end').value||null;
+ if(startDate&&endDate&&startDate>endDate){showToast('Дата сдачи не может быть раньше начала проекта');return;}
+ const payload={name,category_id:category.id,status_id:status.id,employee_id:session.employeeId,
+   co_employee_id:null,phone:$('pf-phone').value.trim(),address,area,
+   start_date:startDate,end_date:endDate,
+   notes:$('pf-notes').value.trim(),client_name:$('pf-client-name').value.trim()||null,
+   price:0,advance:0,balance:0,expenses:0,fee_paid:0,co_fee_paid:0,fee_percent:0,co_fee_percent:0,
+   fee_base:isInterior(category.id)?'m2':isArchitecture(category.id)?'profit':(category.fee_base||'price'),
+   payment_status:'Ждём оплату',updated_at:new Date().toISOString()};
+ const draftVersion=basicProjectDraftVersion;let accepted=false;
+ basicProjectSaveInFlight=true;$('pf-save').disabled=true;
+ try{
+   const {data,error}=await sb.from('projects').insert(payload).select().single();
+   if(error)throw error;
+   if(!data?.id)throw new Error('Не получено подтверждение создания проекта');
+   accepted=true;
+   // Record success before secondary work: a failed refresh must not allow a
+   // second insert of a project the server has already accepted.
+   const sameDraft=()=>basicProjectDraftVersion===draftVersion&&!editingProjectId&&$('projectSheetOverlay').classList.contains('active');
+   state.projects=[...(state.projects||[]).filter(p=>p.id!==data.id),{...payload,...data}];
+   await logAudit('project',data.id,payload.name,'create',{});
+   if(sameDraft()){editingProjectId=data.id;editingProjectLoadedAt=payload.updated_at;closeProjectSheet();}
+   const refreshed=await loadAll();
+   showToast(state.projectMembersDataError?'Проект создан. Состав команды не обновлён — повторите обновление.':refreshed===false||state.financialDataReady===false?'Проект создан. Не удалось обновить список — повторите обновление.':'Проект добавлен');
+ }catch(error){console.error(error);showToast(accepted?'Проект создан. Не удалось обновить список — повторите обновление.':'Ошибка сохранения проекта. Данные формы сохранены — повторите попытку.');}
+ finally{basicProjectSaveInFlight=false;$('pf-save').disabled=false;}
+}
 const oldSave=saveProject;saveProject=async function(){
+ if(!session?.isAdmin){await saveBasicProjectCard();return;}
  const p=draft();
  if(p.employee_id&&p.employee_id===p.co_employee_id){selectTab('team');showToast('Один сотрудник выбран дважды. Оставьте его в одной строке.');return;}
  if(p.fee_base!=='m2'&&[[p.employee_id,p.fee_percent],[p.co_employee_id,p.co_fee_percent]].some(([id,rate])=>id&&rate>0&&findEmployee(id)?.is_salaried)){selectTab('team');showToast('Сотрудник на окладе: укажите 0% и добавьте его без проектной доплаты');return;}
@@ -2461,7 +2520,7 @@ function salaryPaymentState(employeeId,month,dueOverride){
   const due=dueOverride==null?payrollDueForEmployee(employeeId,month):Math.max(0,num(dueOverride));
   const rows=salaryPaymentRows(employeeId,month);
   const projectFeeRows=(state.ledger||[]).filter(x=>!x.deleted_at&&x.type==='fee_payment'&&x.entry_date<=todayISO()&&
-    (()=>{const p=state.projects.find(p=>p.id===x.project_id);if(!p||(x.payee_employee_id||p.employee_id)!==employeeId)return false;
+    (()=>{const p=getFinancialProjects().find(p=>p.id===x.project_id);if(!p||(x.payee_employee_id||p.employee_id)!==employeeId)return false;
       return projectEmployeeRole(employeeId)==='manager' ? String(x.entry_date||'').slice(0,7)===month :
         findStatus(p.status_id)?.name==='Завершён'&&timesheetProjectRefDate(p)?.slice(0,7)===month;})());
   const actualPaid=rows.filter(x=>x.entry_date&&x.entry_date<=todayISO()).reduce((s,x)=>s+num(x.amount),0)+projectFeeRows.reduce((sum,x)=>sum+num(x.amount),0);
