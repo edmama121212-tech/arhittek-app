@@ -6,9 +6,9 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
 // adapter models the new column grants; no production connection is made.
 (async()=>{
  const browser=await chromium.launch({executablePath:process.env.BROWSER_EXECUTABLE||undefined,args:['--no-sandbox','--disable-gpu','--disable-dev-shm-usage'],headless:true});
+ try{
  const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,serviceWorkers:'block'});
- await context.addInitScript({path:path.join(__dirname,'mock.js')});
- await context.addInitScript(()=>{
+ const employeeAccessFixture=()=>{
   if(new URL(location.href).searchParams.has('signed-out'))localStorage.removeItem('arhittek_session');
   __db.employees[0].pin_code='isolated-secret-admin';__db.employees[1].pin_code='isolated-secret-colleague';
   __db.employees.push({id:'archived-employee',name:'Archived colleague',active:false,deleted_at:'2026-10-18T10:00:00Z',is_salaried:true,fixed_salary:45000,pin_code:'isolated-secret-archive'});
@@ -51,7 +51,10 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
    return client;
   };
   window.__employeeWriteError=null;window.__employeeSalaryReadError=null;
- });
+ };
+ // Playwright does not define the order of separate init scripts. The access
+ // fixture depends on __db/session from mock.js, so install them as one script.
+ await context.addInitScript({content:fs.readFileSync(path.join(__dirname,'mock.js'),'utf8')+'\n;('+employeeAccessFixture.toString()+')();'});
  await context.route('**/*',route=>{
   const u=new URL(route.request().url());
   if(u.hostname==='app.test'){
@@ -64,7 +67,11 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
  const page=await context.newPage(),results=[],errors=[];page.on('pageerror',e=>errors.push(e.message));
  async function fresh(signedOut=false){
   await page.goto('https://app.test/'+(signedOut?'?signed-out=1':''));
-  await page.waitForFunction(signedOut?()=>typeof loadEmployeeLoginOptions==='function'&&document.getElementById('loginEmployeeList').children.length>0:()=>typeof loadEmployeesSafe==='function'&&state.financialDataReady);
+  try{
+   await page.waitForFunction(signedOut?()=>typeof loadEmployeeLoginOptions==='function'&&document.getElementById('loginEmployeeList').children.length>0:()=>typeof loadEmployeesSafe==='function'&&state.financialDataReady,undefined,{timeout:10000});
+  }catch(error){
+   throw new Error('Employee '+(signedOut?'signed-out':'signed-in')+' fixture failed to initialize. Page errors: '+(errors.join('; ')||'none')+'. '+error.message);
+  }
   await page.waitForTimeout(80);
  }
  async function check(name,fn,expected,arg){try{const actual=await page.evaluate(fn,arg);assert.deepEqual(actual,expected);results.push({name,pass:true});}catch(e){results.push({name,pass:false,error:e.message});}}
@@ -138,5 +145,6 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
   return [__db.employees.some(e=>e.name==='Forbidden new colleague'),__employeeAttempts.filter(q=>q.op==='insert').length,document.getElementById('empSheetOverlay').classList.contains('active')];
  },[false,1,true]);
  results.push({name:'No uncaught browser errors in employee server-access scenarios',pass:errors.length===0,...(errors.length?{error:errors.join('\n')}:{})});
- console.log(JSON.stringify(results,null,2));const failed=results.filter(r=>!r.pass);console.log(`${results.length-failed.length}/${results.length} passed`);await browser.close();process.exitCode=failed.length?1:0;
+ console.log(JSON.stringify(results,null,2));const failed=results.filter(r=>!r.pass);console.log(`${results.length-failed.length}/${results.length} passed`);process.exitCode=failed.length?1:0;
+ }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
