@@ -79,6 +79,12 @@ const root=path.resolve(__dirname,'..');
  await page.evaluate(()=>__releaseAccess());
  await page.waitForFunction(()=>typeof isOwner==='function'&&isOwner()&&!loadAllInFlight,null,{timeout:10000});
  eq(await page.evaluate(()=>isOwner()),true,'Owner unlocks only after verification');
+ const dataError=await page.evaluate(async()=>{
+  __fail={table:'company_expenses',op:'select'};await loadAll();
+  const result=[isOwner(),state.financialDataReady,state.companyExpenses.length,state.ledger.length];
+  __fail=null;await loadAll();return result;
+ });
+ eq(dataError,[true,false,0,0],'Verified owner sees an error without stale financial amounts');
  const revoked=await page.evaluate(async()=>{__denyAccess=true;await loadAll();return [isOwner(),document.documentElement.dataset.access,state.ledger.length,state.companyExpenses.length,state.timesheetPayments.length];});
  eq(revoked,[false,'locked',0,0,0],'Access error clears data and closes views');
  await page.goto('https://app.test/?actor=admin&missing=1');

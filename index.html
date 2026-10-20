@@ -3386,8 +3386,10 @@ async function loadAllData(){
     showLoginScreen();loadAllInFlight=false;return;
   }
   const accessActor={employeeId:session.employeeId,token:session.token};
+  let accessConfirmed=false;
   try{
     await verifyCurrentEmployeeAccess();
+    accessConfirmed=true;
     const ownerRead=read=>isOwner()?read():Promise.resolve({data:[],error:null,count:0});
     const documentRead=read=>canUseDocuments()?read():Promise.resolve({data:[],error:null,count:0});
     const stageRead=beginStageRead();
@@ -3523,7 +3525,10 @@ async function loadAllData(){
     }
   }catch(e){
     console.error(e);
-    if(accessActor.employeeId===session?.employeeId&&accessActor.token===session?.token){revokeVerifiedAccess();applyRole();}
+    if(accessActor.employeeId===session?.employeeId&&accessActor.token===session?.token){
+      if(accessConfirmed)clearPrivateState();else revokeVerifiedAccess();
+      applyRole();
+    }
     const wasOk = document.getElementById('syncDot').classList.contains('off') === false;
     setSyncStatus('off', 'нет связи');
     state.financialDataReady=false;

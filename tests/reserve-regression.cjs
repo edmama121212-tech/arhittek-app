@@ -246,10 +246,10 @@ const root = path.resolve(__dirname, '..');
     state.employees[0].pin = 'test-secret'; state.employees[0].auth_token = 'test-secret';
     const data = ARHITTEKCash.auditData(state); return [JSON.stringify(data).includes('test-secret'), data.calculation.balance];
   }, [false, 15000]);
-  await check('A failed refresh closes financial screens and clears private registers', async () => {
+  await check('A failed financial refresh preserves verified ownership but clears private registers', async () => {
     __fail = {table: 'company_expenses', op: 'select'}; await loadAll(); __fail = null;
     const text = document.getElementById('cash-panel-reserve').textContent;
-    const stale = !!state.financialDataError && !isOwner() && document.documentElement.dataset.access==='locked' && state.ledger.length===0 && state.companyExpenses.length===0; await loadAll(); return stale;
+    const stale = !!state.financialDataError && isOwner() && !state.financialDataReady && state.ledger.length===0 && state.companyExpenses.length===0 && text.includes('Не удалось обновить операции'); await loadAll(); return stale;
   }, true);
   await check('Missing operation timestamps are visible rather than silently trusted', () => {
     state.companyIncome.push({id: 'missing-time', category: 'Прочий доход', amount: 1000, income_date: '2026-11-15'});
@@ -314,7 +314,7 @@ const root = path.resolve(__dirname, '..');
   },[1,158000]);
   await check('A failed count read hides unconfirmed financial amounts',async()=>{
     __fail={table:'audit_log',op:'select'};await loadAll();__fail=null;
-    const hidden=!state.financialDataReady&&!isOwner()&&document.documentElement.dataset.access==='locked'&&state.cashCounts.length===0;
+    const hidden=!state.financialDataReady&&isOwner()&&state.cashCounts.length===0&&document.getElementById('cash-panel-reserve').textContent.includes('Не удалось обновить операции');
     await loadAll();return hidden;
   },true);
   await check('A failed count save leaves cash and all monetary records unchanged',async()=>{
