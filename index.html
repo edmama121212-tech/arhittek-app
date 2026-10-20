@@ -2528,9 +2528,9 @@ function applyAccessVisibility(){
     const el=document.getElementById(id);if(el)el.style.display=isOwner()?'':'none';
   }
   const active=document.querySelector('.view.active');
-  if(active&&!canAccessView(active.id)){
+  if(!active||!canAccessView(active.id)){
     document.querySelectorAll('.view.active,.nav-btn.active').forEach(el=>el.classList.remove('active'));
-    const fallback=hasVerifiedAccess()?(canSeeProjects()?'view-projects':canSeeConstruction()?'view-construction':null):null;
+    const fallback=hasVerifiedAccess()?(isOwner()?'view-overview':canSeeProjects()?'view-projects':canSeeConstruction()?'view-construction':canUseDocuments()?'view-more':null):null;
     if(fallback){document.getElementById(fallback)?.classList.add('active');document.querySelector('.nav-btn[data-view="'+fallback+'"]')?.classList.add('active');}
   }
 }

@@ -12,7 +12,8 @@ const root=path.resolve(__dirname,'..');
   __db.projects=__db.employees.map(e=>({id:'project-'+e.id,name:'Project '+e.id,employee_id:e.id,category_id:'arch',status_id:'active'}));
   const e=__db.employees.find(e=>e.id===actor);
   localStorage.setItem('arhittek_session',JSON.stringify({employeeId:e.id,name:'Мансур',isAdmin:true,token:'isolated-ui-session-'+e.id,createdAt:Date.now()}));
-  sessionStorage.setItem('arhittek_ui_route_v1',JSON.stringify({employeeId:e.id,view:'view-finance'}));
+  if(!params.has('fresh'))sessionStorage.setItem('arhittek_ui_route_v1',JSON.stringify({employeeId:e.id,view:'view-finance'}));
+  else sessionStorage.removeItem('arhittek_ui_route_v1');
   const create=supabase.createClient;
   supabase.createClient=function(){
    const client=create.apply(this,arguments);if(client.__rankWrapped)return client;client.__rankWrapped=true;
@@ -66,6 +67,11 @@ const root=path.resolve(__dirname,'..');
    });
    eq(forced,['none','none'],'Direct finance and payroll denied '+actor);
   }
+ }
+ for(const [actor,view]of [['admin','view-overview'],['architect','view-projects']]){
+  await page.goto('https://app.test/?actor='+actor+'&fresh=1');
+  await page.waitForFunction(()=>typeof hasVerifiedAccess==='function'&&hasVerifiedAccess()&&!loadAllInFlight,null,{timeout:10000});
+  eq(await page.evaluate(()=>document.querySelector('.view.active')?.id),view,'Usable first screen without saved route '+actor);
  }
  await page.goto('https://app.test/?actor=admin&hold=1');
  await page.waitForFunction(()=>!!window.__releaseAccess,null,{timeout:10000});
