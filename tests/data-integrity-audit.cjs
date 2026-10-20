@@ -61,9 +61,9 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
   __rowLimit=200;__db.ledger_entries=Array.from({length:705},(_,i)=>({id:'entry-'+String(i).padStart(4,'0'),type:'income',amount:1,entry_date:'2026-10-10',created_at:'2026-10-10T10:00:00Z'}));
   await loadAll();return [state.ledger.length,state.financialDataReady];
  },[705,true]);
- await check('Late page failure hides an old financial snapshot instead of publishing a partial one',async()=>{
+ await check('Late page failure clears the old financial snapshot without publishing partial rows',async()=>{
   __rowLimit=200;__fail={table:'ledger_entries',op:'select',offset:400};await loadAll();const r=[state.financialDataReady,!!state.financialDataError,state.ledger.length];__fail=null;return r;
- },[false,true,705]);
+ },[false,true,0]);
  await fresh();
  await check('Cash-count read failure also hides all unconfirmed financial totals',async()=>{
   __fail={table:'audit_log',op:'select'};await loadAll();const r=[state.financialDataReady,!!state.financialDataError];__fail=null;return r;
