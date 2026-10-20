@@ -36,20 +36,26 @@ jobs:
         run: timeout 90s node tests/owner-access-ui.cjs
 
       - name: Check server permissions, login compatibility and project isolation
+        if: ${{ !cancelled() }}
         run: node tests/session-security.cjs && node tests/invoice-payment-atomic.cjs && node tests/employees-server-access.cjs
 
       - name: Check cash accounting and payroll
-        run: npm run test:finance
+        if: ${{ !cancelled() }}
+        run: timeout 240s npm run test:finance
 
       - name: Run regression suite
-        run: npm test
+        if: ${{ !cancelled() }}
+        run: timeout 180s npm test
 
       - name: Check complete reads, public forms and app workflows
-        run: npm run test:app
+        if: ${{ !cancelled() }}
+        run: timeout 240s npm run test:app
 
       - name: Check responsive interactions and audit regressions
-        run: npm run test:ux
+        if: ${{ !cancelled() }}
+        run: timeout 240s npm run test:ux
 
       - name: Check construction accounting, access and customer portal
-        run: npm run test:construction
+        if: ${{ !cancelled() }}
+        run: timeout 240s npm run test:construction
 

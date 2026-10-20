@@ -21,7 +21,7 @@ const root=path.resolve(__dirname,'..'),U=n=>'10000000-0000-4000-8000-'+String(n
  await db.query("insert into public.ledger_entries(id,project_id,type,amount) values($1,$2,'advance',100)",[U(42),U(24)]);
  await db.query("insert into public.timesheet_payments(employee_id,month,paid) values($1,'2026-10',true)",[U(4)]);
  await db.query("insert into public.kp_forms(id,project_id) values($1,$2),($3,$4),($5,null)",[U(43),U(22),U(44),U(24),U(45)]);
- await db.exec(fs.readFileSync(path.join(root,'supabase/session-security.sql'),'utf8'));
+ await db.exec(fs.readFileSync(path.join(root,'supabase/install-owner-access.sql'),'utf8'));
  await db.exec(fs.readFileSync(path.join(root,'supabase/owner-access.sql'),'utf8'));
  await db.exec(fs.readFileSync(path.join(root,'supabase/owner-access.sql'),'utf8'));
  let checks=0;

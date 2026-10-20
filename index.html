@@ -10687,21 +10687,8 @@ document.getElementById('userPill').addEventListener('click', ()=>{
 // КАРТОЧКИ ПРОЕКТОВ
 // ============================================================
 
-// Резервный список редакторов карточек (фоллбэк если поле can_edit_cards не задано в БД)
-const CARD_EDITORS_FALLBACK = ['мансур', 'ислам'];
-
-function canEditCards(){
-  return isOwner();
-  /* Legacy card flags do not grant application access.
-  if(!session) return false;
-  if(session.isAdmin) return true; // админ всегда имеет доступ к каталогу
-  // Затем проверяем поле can_edit_cards в записи сотрудника (из БД)
-  const emp = state.employees.find(e=>e.id===session.employeeId);
-  if(emp && emp.can_edit_cards === true) return true;
-  if(emp && emp.can_edit_cards === false) return false;
-  // Фоллбэк на список имён (пока поле не добавлено в БД через миграцию)
-  return CARD_EDITORS_FALLBACK.includes((session.name||'').trim().toLowerCase()); */
-}
+// Catalogue administration belongs only to the verified owner.
+function canEditCards(){return isOwner();}
 
 // State карточек
 let cardsData = [];
