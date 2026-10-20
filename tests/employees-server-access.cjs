@@ -51,6 +51,8 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
    return client;
   };
   window.__employeeWriteError=null;window.__employeeSalaryReadError=null;
+  window.__employeeFixtureReady=true;
+  window.__employeeFixtureSignedOut=new URL(location.href).searchParams.has('signed-out');
  };
  // Playwright does not define the order of separate init scripts. The access
  // fixture depends on __db/session from mock.js, so install them as one script.
@@ -64,13 +66,37 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
   for(const [key,file]of[['xlsx@','xlsx/dist/xlsx.full.min.js'],['jspdf@','jspdf/dist/jspdf.umd.min.js'],['jspdf-autotable@','jspdf-autotable/dist/jspdf.plugin.autotable.min.js']])if(u.href.includes(key))return route.fulfill({path:path.join(root,'node_modules',file),contentType:'text/javascript'});
   return route.fulfill({body:'',contentType:'text/javascript'});
  });
- const page=await context.newPage(),results=[],errors=[];page.on('pageerror',e=>errors.push(e.message));
+ const page=await context.newPage(),results=[],errors=[],consoleErrors=[];page.on('pageerror',e=>errors.push(e.message));
+ page.on('console',message=>{
+  if(!['error','warning'].includes(message.type()))return;
+  const text=message.text();
+  consoleErrors.push(/token|pin|secret|session/i.test(text)?'[sensitive console output omitted]':text.slice(0,300));
+  if(consoleErrors.length>10)consoleErrors.shift();
+ });
  async function fresh(signedOut=false){
   await page.goto('https://app.test/'+(signedOut?'?signed-out=1':''));
   try{
    await page.waitForFunction(signedOut?()=>typeof loadEmployeeLoginOptions==='function'&&document.getElementById('loginEmployeeList').children.length>0:()=>typeof loadEmployeesSafe==='function'&&state.financialDataReady,undefined,{timeout:10000});
   }catch(error){
-   throw new Error('Employee '+(signedOut?'signed-out':'signed-in')+' fixture failed to initialize. Page errors: '+(errors.join('; ')||'none')+'. '+error.message);
+   let diagnostics;
+   try{diagnostics=await page.evaluate(()=>({
+    readyState:document.readyState,
+    fixtureReady:window.__employeeFixtureReady===true,
+    fixtureSignedOut:window.__employeeFixtureSignedOut===true,
+    storedSessionPresent:!!localStorage.getItem('arhittek_session'),
+    sessionPresent:typeof session!=='undefined'&&!!session,
+    sessionHasToken:typeof session!=='undefined'&&!!session?.token,
+    employeeCount:typeof state!=='undefined'?state.employees?.length:null,
+    financialDataReady:typeof state!=='undefined'?state.financialDataReady:null,
+    loadInFlight:typeof loadAllInFlight!=='undefined'?loadAllInFlight:null,
+    profileLoaderType:typeof loadEmployeesSafe,
+    loginLoaderType:typeof loadEmployeeLoginOptions,
+    loginChildren:document.getElementById('loginEmployeeList')?.children.length??null,
+    syncText:document.getElementById('syncText')?.textContent??null,
+    calls:(window.__employeeCalls||[]).slice(-10),
+    attempts:(window.__employeeAttempts||[]).slice(-10).map(row=>({op:row.op,columns:row.columns})),
+   }));}catch(diagnosticError){diagnostics={unavailable:diagnosticError.name};}
+   throw new Error('Employee '+(signedOut?'signed-out':'signed-in')+' fixture failed to initialize. Diagnostics: '+JSON.stringify(diagnostics)+'. Page errors: '+(errors.join('; ')||'none')+'. Console errors: '+JSON.stringify(consoleErrors)+'. '+error.message);
   }
   await page.waitForTimeout(80);
  }
