@@ -56,7 +56,9 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
  };
  // Playwright does not define the order of separate init scripts. The access
  // fixture depends on __db/session from mock.js, so install them as one script.
- await context.addInitScript({content:fs.readFileSync(path.join(__dirname,'mock.js'),'utf8')+'\n;('+employeeAccessFixture.toString()+')();'});
+ // The blank object-viewer iframe shares localStorage with its parent. Seeding
+ // a second admin fixture in that child would silently sign the parent in.
+ await context.addInitScript({content:'if(window===window.top){\n'+fs.readFileSync(path.join(__dirname,'mock.js'),'utf8')+'\n;('+employeeAccessFixture.toString()+')();\n}'});
  await context.route('**/*',route=>{
   const u=new URL(route.request().url());
   if(u.hostname==='app.test'){
