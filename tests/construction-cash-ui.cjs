@@ -26,6 +26,17 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
  }
  async function check(name,fn,expected,args){try{const actual=await page.evaluate(fn,args);assert.deepEqual(actual,expected);results.push({name,pass:true});}catch(e){results.push({name,pass:false,error:e.message});}}
  await fresh();
+ await check('A customer refund reduces site cash without becoming a markup expense',()=>{
+  state.ledger.push({id:'customer-refund',project_id:'build-a',type:'client_refund',amount:5000,entry_date:'2026-10-11'});
+  const f=getConstructionFinancials(state.projects[0]);return[f.balance,f.cashOutgoing,f.directCosts,f.companyMarkupAmount];
+ },[95000,5000,0,0]);
+ await fresh();
+ await check('Transfers, refunds and company-fee spending do not create a second markup',()=>{
+  for(const [index,purpose]of ['client_refund','cash_handover','company_fee_expense'].entries())state.ledger.push({id:'non-cost-'+index,project_id:'build-a',type:'expense',purpose,amount:1000,entry_date:'2026-10-11'});
+  state.ledger.push({id:'fee-funded',project_id:'build-a',type:'expense',funding_source:'company_fee',amount:1000,entry_date:'2026-10-11'});
+  const f=getConstructionFinancials(state.projects[0]);return[f.balance,f.cashOutgoing,f.directCosts,f.companyMarkupAmount];
+ },[96000,4000,0,0]);
+ await fresh();
  await check('An unpaid invoice is a commitment, not a cash payment',()=>{
   state.invoices=[{id:'bill-a',project_id:'build-a',item_type:'Материал',amount:40000,invoice_date:'2026-10-10'}];const f=getConstructionFinancials(state.projects[0]);return[f.received,f.cashOutgoing,f.balance,f.unpaidInvoices,f.directCosts];
  },[100000,0,100000,40000,40000]);

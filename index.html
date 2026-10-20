@@ -5981,6 +5981,7 @@ const ledgerTypeLabels = {
   construction_budget: {label:'Бюджет строительства', cls:'var(--green)', sign:'+'},
   fee_payment: {label:'Выплата сотруднику по проекту', cls:'var(--red)', sign:'−'},
   withdrawal: {label:'Вывод средств', cls:'var(--red)', sign:'−'},
+  client_refund: {label:'Возврат заказчику', cls:'var(--red)', sign:'−'},
   project_expense: {label:'Расход по проекту', cls:'var(--red)', sign:'−'},
   role_payout: {label:'Начисление исполнителю (м²)', cls:'var(--gold)', sign:'−'},
   bonus: {label:'Премия сотруднику', cls:'var(--gold)', sign:'−'},
@@ -7205,7 +7206,7 @@ function getConstructionExpenses(p, ledgerOverride=null){
     .reduce((s,i)=>s+Number(i.amount||0),0);
   const directPaid = projInvoices.filter(i=>i.paid_by_client).reduce((sum,i)=>sum+Number(i.amount||0),0);
   const manualTotal = (ledgerOverride||state.ledger||[])
-    .filter(e=>e.project_id===p.id && !e.deleted_at && (!e.entry_date||e.entry_date<=today) && (['expense','project_expense'].includes(e.type)||(e.type==='payment'&&!e.payee_employee_id)) && !isInvoiceLinkedExpense(e))
+    .filter(e=>e.project_id===p.id && !e.deleted_at && (!e.entry_date||e.entry_date<=today) && (['expense','project_expense'].includes(e.type)||(e.type==='payment'&&!e.payee_employee_id)) && !['client_refund','cash_handover','company_fee_expense'].includes(e.purpose) && e.funding_source!=='company_fee' && !isInvoiceLinkedExpense(e))
     .reduce((s,e)=>s+Number(e.amount||0),0);
   return {matTotal, workTotal, otherTotal, manualTotal, directPaid, expenses: matTotal + workTotal + otherTotal + manualTotal};
 }
@@ -7237,7 +7238,7 @@ function getConstructionFinancials(p, ledgerOverride=null){
   // Документ и начисление описывают стоимость/обязательство, а не выплату.
   // Прямая оплата клиента не проходит через кассу компании.
   const totalCosts = directCosts + rolePayouts;
-  const outgoingTypes=['expense','project_expense','payment','withdrawal','fee_payment','salary_payment'];
+  const outgoingTypes=['expense','project_expense','payment','withdrawal','fee_payment','salary_payment','client_refund'];
   const paidRows=ledger.filter(e=>e.project_id===p.id&&outgoingTypes.includes(e.type)&&
     !(e.type==='project_expense'&&(e.description==='Ранее внесённые расходы'||String(e.description||'').startsWith('[cash:historical-expense]'))));
   const cashOutgoing=Math.round(paidRows.reduce((s,e)=>s+Number(e.amount||0),0)*100)/100;
@@ -11936,21 +11937,23 @@ function setupRealtime(){
       setSyncStatus('off','нет live-связи');startPollingFallback();
     }
   });
+  // A joined WebSocket does not prove that custom-header employee RLS can
+  // deliver its events. Keep an authenticated HTTP refresh as a fallback.
+  startPollingFallback();
 }
 
-// Fallback поллинг если realtime не работает (каждые 20 сек)
+// Authenticated background refresh also covers silent Realtime/RLS filtering.
 let pollingTimer = null;
 function startPollingFallback(){
   if(pollingTimer) return; // уже запущен
-  console.log('[Realtime] переключение на поллинг 20с');
   pollingTimer = setInterval(()=>{
-    if(realtimeChannel && realtimeChannel.state === 'joined'){
-      // Realtime восстановился — отключаем поллинг
-      clearInterval(pollingTimer);
-      pollingTimer = null;
-    } else {
-      loadAll();
-    }
+    if(!session?.token || document.visibilityState!=='visible' || navigator.onLine===false ||
+       loadAllInFlight || pendingStageChanges.size ||
+       document.activeElement?.matches('input,textarea,select,[contenteditable]:not([contenteditable="false"])') ||
+       document.querySelector('.view.active[data-dirty="1"]'))return;
+    const editing=[...document.querySelectorAll('.sheet-overlay,.modal,.modal-overlay,.overlay,[id$="Overlay"],[role="dialog"],[aria-modal="true"],dialog[open]')]
+      .some(el=>el.getClientRects().length&&getComputedStyle(el).display!=='none'&&getComputedStyle(el).visibility!=='hidden');
+    if(!editing)void loadAll();
   }, 20000);
 }
 

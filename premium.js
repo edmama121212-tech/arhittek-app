@@ -267,7 +267,7 @@ const oldSave=saveProject;saveProject=async function(){
  if(!session?.isAdmin){await saveBasicProjectCard();return;}
  const p=draft();
  if(p.employee_id&&p.employee_id===p.co_employee_id){selectTab('team');showToast('Один сотрудник выбран дважды. Оставьте его в одной строке.');return;}
- if(p.fee_base!=='m2'&&[[p.employee_id,p.fee_percent],[p.co_employee_id,p.co_fee_percent]].some(([id,rate])=>id&&rate>0&&findEmployee(id)?.is_salaried)){selectTab('team');showToast('Сотрудник на окладе: укажите 0% и добавьте его без проектной доплаты');return;}
+ if(!isConstructionCategory(p.category_id)&&p.fee_base!=='m2'&&[[p.employee_id,p.fee_percent],[p.co_employee_id,p.co_fee_percent]].some(([id,rate])=>id&&rate>0&&findEmployee(id)?.is_salaried)){selectTab('team');showToast('Сотрудник на окладе: укажите 0% и добавьте его без проектной доплаты');return;}
  const old=state.projects.find(x=>x.id===editingProjectId);
  if(isInterior(p.category_id)&&p.fee_base!=='m2'&&(!old||old.category_id!==p.category_id||old.fee_base!==p.fee_base||Number(old.fee_percent||0)!==p.fee_percent||Number(old.co_fee_percent||0)!==p.co_fee_percent||(old.employee_id||null)!==p.employee_id||(old.co_employee_id||null)!==p.co_employee_id)){selectTab('team');showToast('В дизайне интерьера — только оплата за м². Выберите «За м²».');return;}
 

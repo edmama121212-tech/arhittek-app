@@ -117,8 +117,9 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
   const node=document.createElement('div');node.innerHTML=html;return node.querySelector('img')?.getAttribute('onerror')||null;
  },null);
  await check('Logged-out startup only loads the employee login directory',async()=>{
-  session=null;window.session=null;localStorage.removeItem('arhittek_session');__reads=[];await loadAll();return [...new Set(__reads.map(r=>r.table))];
- },['employees']);
+  session=null;window.session=null;localStorage.removeItem('arhittek_session');__reads=[];__rpcCalls=[];await loadAll();
+  return [[...new Set(__reads.map(r=>r.table))],__rpcCalls.map(r=>r.rpc),state.employees.every(e=>Object.keys(e).every(k=>['id','name','active'].includes(k)))];
+ },[[],['get_employee_login_options'],true]);
  await check('Staff without catalog access cannot invoke card save directly',async()=>{
   session={employeeId:'architect',name:'Адам',isAdmin:false,token:'test'};window.session=session;const n=__writes.length;await saveCard();return __writes.length===n;
  },true);

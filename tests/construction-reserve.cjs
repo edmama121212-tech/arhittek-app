@@ -23,6 +23,16 @@ check('A worker accrual is not a cash payment or personal percentage of the comp
  let x=b.calculate(s,'2026-10-20',{fee:()=>({mainFeeAmount:15000,mainPaid:0})});assert.equal(x.projects[0].team[0].due,7000);assert.equal(x.teamHeld,0);assert.equal(x.projectsHeld,100000);assert.equal(x.companyReserve,20000);
  s.ledger.push(row('paid','fee_payment',7000,{payee_employee_id:'foreman'}));x=calculate(s);assert.equal(x.projectsHeld,93000);assert.equal(x.companyReserve,20000);assert.equal(x.cashBalance,113000);conserved(x);
 });
+check('A refund to the client reduces real money and entrusted site funds without earning company markup',()=>{
+ const model=require('../construction-finance.js');
+ for(const refund of [row('refund','client_refund',5000),row('refund','withdrawal',5000,{purpose:'client_refund'})]){
+  const s=fresh();s.ledger.push(refund);s.projects[0].status_id='done';
+  const x=calculate(s),f=model.cashSummary({projectId:'repair',asOf:'2026-10-20',ledger:s.ledger,invoices:[]});
+  assert.equal(f.summary.physical_cash_balance,95000);assert.equal(f.summary.client_refunds,5000);
+  assert.equal(x.cashBalance,115000);assert.equal(x.projectsHeld,95000);assert.equal(x.companyReserve,20000);assert.equal(x.amortization,0);conserved(x);
+  refund.deleted_at='2026-10-20T01:00:00Z';const restored=calculate(s);assert.equal(restored.cashBalance,120000);assert.equal(restored.projectsHeld,100000);assert.equal(restored.companyReserve,20000);conserved(restored);
+ }
+});
 check('A project-linked salary payment consumes site cash once and settles its accrual once',()=>{
  const s=fresh();s.projects[0].status_id='done';s.projects[0].employee_id='foreman';s.employees=[{id:'foreman'}];s.ledger.push(row('accrual','role_payout',7000,{payee_employee_id:'foreman'}),row('paid','salary_payment',7000,{payee_employee_id:'foreman',description:'[salary:2026-10]'}));const x=calculate(s);assert.equal(x.cashBalance,113000);assert.equal(x.projectsHeld,93000);assert.equal(x.companyReserve,20000);assert.equal(x.projects[0].team[0].remaining,0);assert.equal(x.projects[0].teamPaidAfterSnapshot,7000);conserved(x);
 });

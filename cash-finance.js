@@ -13,7 +13,7 @@ function cashEvents(s){
  const out=[],add=(r,kind,date,amount)=>{if(!r.deleted_at&&n(amount)!==0&&date){const imported=isImportedExpense(r),timestamp=Date.parse(r.created_at),unknown=!Number.isFinite(timestamp);out.push({row:r,kind,date,amount:rounded(amount),afterSnapshot:!imported&&date>=OPENING_DAY&&!unknown&&timestamp>Date.parse(CUTOFF),excludedReason:imported?'Перенос старых расходов · не новая оплата':unknown?'Нет даты создания · требуется сверка':'Учтено в стартовой сверке'});}};
  (s.companyIncome||[]).forEach(r=>add(r,'income',r.income_date,n(r.amount)));
  (s.companyExpenses||[]).forEach(r=>add(r,'expense',r.expense_date,-n(r.amount)));
- const incoming=new Set(['advance','final_payment','income','materials_budget','construction_budget']),outgoing=new Set(['expense','project_expense','payment','withdrawal','fee_payment','salary_payment']);
+ const incoming=new Set(['advance','final_payment','income','materials_budget','construction_budget']),outgoing=new Set(['expense','project_expense','payment','withdrawal','fee_payment','salary_payment','client_refund']);
  (s.ledger||[]).forEach(r=>{if(incoming.has(r.type))add(r,'ledger',r.entry_date,n(r.amount));else if(outgoing.has(r.type))add(r,'ledger',r.entry_date,-n(r.amount));});
  return out.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
 }
