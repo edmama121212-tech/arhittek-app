@@ -40,7 +40,7 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
   await page.goto('https://app.test/');await page.waitForFunction(()=>typeof loadAll==='function'&&state.financialDataReady);await page.waitForTimeout(50);
   await page.evaluate(async profile=>{
    const employee={id:'lead-designer',name:'Ведущий дизайнер',role:'Ведущий дизайнер',is_admin:false,active:true,can_edit_cards:false,can_see_projects:true,can_see_construction:true,is_salaried:true,fixed_salary:50000,...profile};
-   __db.employees.push(employee);await loadAll();setSession({employeeId:employee.id,name:employee.name,isAdmin:!!employee.is_admin,token:'isolated-test'});applyRole();
+   __db.employees.push(employee);await loadAll();setSession({employeeId:employee.id,name:employee.name,isAdmin:!!employee.is_admin,token:'isolated-test'});await loadAll();applyRole();
    document.querySelector('.nav-btn[data-view="view-projects"]').click();__writes.length=0;
   },profile);
  }

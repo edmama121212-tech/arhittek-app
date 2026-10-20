@@ -42,12 +42,13 @@ const root=path.resolve(__dirname,'..');
  const eq=(a,b,label)=>{assert.deepEqual(a,b,label);checks++;};
  for(const [actor,mode,documents]of [['admin','owner',true],['lead-architect','lead',true],['designer','lead',true],['architect','staff',false],['visual','staff',false],['other-admin','staff',false]]){
   await page.goto('https://app.test/?actor='+actor);
-  await page.waitForFunction(()=>typeof hasVerifiedAccess==='function'&&hasVerifiedAccess()&&!loadAllInFlight,{timeout:10000});
+  await page.waitForFunction(()=>typeof hasVerifiedAccess==='function'&&hasVerifiedAccess()&&!loadAllInFlight,null,{timeout:10000});
+  if(documents&&actor!=='admin')await page.locator('.nav-btn[data-view="view-more"]').click();
   const value=await page.evaluate(()=>{
    const visible=id=>{const el=document.getElementById(id);return !!el&&getComputedStyle(el).display!=='none'&&el.checkVisibility();};
    return {mode:document.documentElement.dataset.access,finance:visible('nav-finance'),
     more:getComputedStyle(document.querySelector('.nav-btn[data-view="view-more"]')).display!=='none',
-    tools:[...document.querySelectorAll('#view-more button')].filter(el=>getComputedStyle(el).display!=='none').map(el=>el.id),
+    tools:[...document.querySelectorAll('#view-more button')].filter(el=>el.checkVisibility()).map(el=>el.id),
     reads:__reads.filter(x=>['ledger_entries','company_expenses','company_income','timesheet_payments','audit_log'].includes(x.table)).map(x=>x.table),
     projects:state.projects.map(p=>p.employee_id),salary:state.employees.some(e=>e.fixed_salary!=null),roleControl:document.getElementById('ef-role').tagName,
     active:document.querySelector('.view.active')?.id};
@@ -57,7 +58,7 @@ const root=path.resolve(__dirname,'..');
   if(actor!=='admin'){
    eq(value.reads,[],'No financial requests '+actor);eq(value.salary,false,'No payroll in client state '+actor);
    eq(value.projects,[actor],'Only assigned projects '+actor);
-   eq(value.tools,documents?['openKpBtn','openContractsBtn']:['openKpBtn','openContractsBtn'],'Only safe child buttons '+actor);
+   eq(value.tools,documents?['openKpBtn','openContractsBtn']:[],'Only safe child buttons '+actor);
    eq(value.active!=='view-finance',true,'Stale finance route denied '+actor);
    const forced=await page.evaluate(()=>{
     document.getElementById('openTimesheetBtn').click();renderTimesheet();document.getElementById('view-finance').classList.add('active');
@@ -67,15 +68,15 @@ const root=path.resolve(__dirname,'..');
   }
  }
  await page.goto('https://app.test/?actor=admin&hold=1');
- await page.waitForFunction(()=>!!window.__releaseAccess,{timeout:10000});
+ await page.waitForFunction(()=>!!window.__releaseAccess,null,{timeout:10000});
  eq(await page.evaluate(()=>[document.documentElement.dataset.access,__reads.some(x=>['ledger_entries','company_expenses','timesheet_payments'].includes(x.table))]),['locked',false],'No privileged first paint or request before verification');
  await page.evaluate(()=>__releaseAccess());
- await page.waitForFunction(()=>typeof isOwner==='function'&&isOwner()&&!loadAllInFlight,{timeout:10000});
+ await page.waitForFunction(()=>typeof isOwner==='function'&&isOwner()&&!loadAllInFlight,null,{timeout:10000});
  eq(await page.evaluate(()=>isOwner()),true,'Owner unlocks only after verification');
  const revoked=await page.evaluate(async()=>{__denyAccess=true;await loadAll();return [isOwner(),document.documentElement.dataset.access,state.ledger.length,state.companyExpenses.length,state.timesheetPayments.length];});
  eq(revoked,[false,'locked',0,0,0],'Access error clears data and closes views');
  await page.goto('https://app.test/?actor=admin&missing=1');
- await page.waitForFunction(()=>typeof loadAllInFlight!=='undefined'&&!loadAllInFlight,{timeout:10000});
+ await page.waitForFunction(()=>typeof loadAllInFlight!=='undefined'&&!loadAllInFlight,null,{timeout:10000});
  eq(await page.evaluate(()=>[document.documentElement.dataset.access,isOwner(),__reads.some(x=>x.table==='company_expenses')]),['locked',false,false],'Missing policy never falls back to saved admin');
  console.log(checks+' owner/rank mobile browser checks passed');
  }finally{await browser.close();}
