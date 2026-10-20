@@ -43,3 +43,6 @@ jobs:
 
       - name: Check construction accounting, access and customer portal
         run: npm run test:construction
+
+      - name: Check server permissions, login compatibility and project isolation
+        run: npm run test:security

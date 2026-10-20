@@ -2342,17 +2342,11 @@ function getFinancialProjects(){
 }
 function getProjectExpenses(p){
   if(!p) return 0;
+  if(isConstructionProject(p))return getConstructionExpenses(p).expenses;
   const manual = (state.ledger||[])
     .filter(e => e.project_id===p.id && !e.deleted_at && (['expense','project_expense'].includes(e.type)||(e.type==='payment'&&!e.payee_employee_id)))
     .filter(e => !isInvoiceLinkedExpense(e))
     .reduce((sum,e)=>sum + Number(e.amount||0),0);
-
-  if(isConstructionProject(p)){
-    const invoiceTotal = (state.invoices||[])
-      .filter(inv => inv.project_id===p.id && !inv.deleted_at)
-      .reduce((sum,i)=>sum + Number(i.amount||0),0);
-    return invoiceTotal + manual;
-  }
 
   // Старые проекты могли хранить расходы только в projects.expenses.
   return manual > 0 ? manual : Math.max(0, Number(p.expenses)||0);
@@ -2367,6 +2361,7 @@ function isInvoiceLinkedExpense(entry){
 // (getProjectExpenses), но не должна считаться перерасходом компании —
 // компания эти деньги не тратила и не получала.
 function getProjectDirectClientPaid(p){
+  if(isConstructionProject(p))return getConstructionExpenses(p).directPaid;
   return (state.invoices||[])
     .filter(inv => inv.project_id === p.id && !inv.deleted_at && inv.paid_by_client)
     .reduce((s,i)=>s+Number(i.amount||0), 0);
@@ -3213,16 +3208,54 @@ function markTzSeen(){
   updateTzBadge();
 }
 
-// Отказоустойчивая загрузка сотрудников: пытаемся получить новые поля
-// is_salaried/fixed_salary (миграция 14), но если их ещё нет в базе —
-// не рушим всю загрузку приложения, а откатываемся к базовому набору полей.
-async function fetchEmployeesResilient(filterFn){
-  let res = await fetchAllRows(()=>filterFn(sb.from('employees').select('id,name,role,is_admin,active,can_edit_cards,can_see_projects,can_see_construction,is_salaried,fixed_salary,deleted_at,created_at',{count:'exact'})));
-  if(res.error){
-    console.warn('Поля is_salaried/fixed_salary недоступны (миграция 14 не выполнена?), загружаю сотрудников без них:', res.error.message);
-    res = await fetchAllRows(()=>filterFn(sb.from('employees').select('id,name,role,is_admin,active,can_edit_cards,can_see_projects,can_see_construction,deleted_at,created_at',{count:'exact'})));
+// Profile data comes from a narrow server API; raw employee rows contain PINs.
+const EMPLOYEE_PROFILE_FIELDS=['id','name','role','is_admin','active','can_edit_cards','can_see_projects','can_see_construction','is_salaried','fixed_salary','deleted_at','created_at'];
+function isMissingEmployeeRpc(result){
+  const error=result?.error;if(!error)return false;
+  if(error.code==='PGRST202')return true;
+  return Number(result.status||error.status)===404&&(!error.code||error.code==='404');
+}
+function isMissingEmployeeSalaryColumn(error){
+  return !!(error&&['42703','PGRST204'].includes(error.code)&&/is_salaried|fixed_salary/.test(error.message||''));
+}
+function employeeRowsResult(result,fields){
+  if(result?.error)return result;
+  if(!Array.isArray(result?.data)||result.data.some(row=>!row||typeof row!=='object'||typeof row.id!=='string'||typeof row.name!=='string')){
+    return {data:null,error:{code:'EMPLOYEE_PROFILE_RESPONSE',message:'Не удалось проверить список сотрудников'}};
   }
-  return res;
+  return {...result,data:result.data.map(row=>{
+    const safe={};for(const key of fields)if(Object.hasOwn(row,key))safe[key]=row[key];
+    if(fields===EMPLOYEE_PROFILE_FIELDS&&!session?.isAdmin&&safe.id!==session?.employeeId)safe.fixed_salary=null;
+    return safe;
+  })};
+}
+// Compatibility is only for the interval before the safe RPCs are installed.
+// Permission/network failures must never fall back to a broader table query.
+async function fetchEmployeesResilient(filterFn){
+  let res=await fetchAllRows(()=>filterFn(sb.from('employees').select(EMPLOYEE_PROFILE_FIELDS.join(','),{count:'exact'})));
+  if(isMissingEmployeeSalaryColumn(res.error)){
+    const fields=EMPLOYEE_PROFILE_FIELDS.filter(key=>!['is_salaried','fixed_salary'].includes(key));
+    res=await fetchAllRows(()=>filterFn(sb.from('employees').select(fields.join(','),{count:'exact'})));
+  }
+  return employeeRowsResult(res,EMPLOYEE_PROFILE_FIELDS);
+}
+async function loadEmployeesSafe({deleted=false}={}){
+  let result;
+  try{result=await sb.rpc('get_employee_profiles',{});}catch(error){return {data:null,error};}
+  if(isMissingEmployeeRpc(result))return fetchEmployeesResilient(query=>deleted?query.not('deleted_at','is',null).order('deleted_at',{ascending:false}):query.is('deleted_at',null).order('name'));
+  result=employeeRowsResult(result,EMPLOYEE_PROFILE_FIELDS);
+  if(result.error)return result;
+  const rows=result.data.filter(employee=>deleted?employee.deleted_at!=null:employee.deleted_at==null);
+  rows.sort((a,b)=>deleted?String(b.deleted_at).localeCompare(String(a.deleted_at))||a.id.localeCompare(b.id):a.name.localeCompare(b.name,'ru')||a.id.localeCompare(b.id));
+  return {...result,data:rows,count:rows.length};
+}
+async function loadEmployeeLoginOptions(){
+  let result;
+  try{result=await sb.rpc('get_employee_login_options',{});}catch(error){return {data:null,error};}
+  if(isMissingEmployeeRpc(result))result=await fetchAllRows(()=>sb.from('employees').select('id,name,active',{count:'exact'}).is('deleted_at',null).order('name'));
+  result=employeeRowsResult(result,['id','name','active']);
+  if(result.error)return result;
+  return {...result,data:result.data.filter(employee=>employee.active!==false).sort((a,b)=>a.name.localeCompare(b.name,'ru')||a.id.localeCompare(b.id))};
 }
 
 function loadAll(){
@@ -3245,7 +3278,7 @@ async function loadAllData(){
     applySessionToken(null);
     state.financialDataReady=false;
     try{
-      const result=await fetchAllRows(()=>sb.from('employees').select('id,name,active',{count:'exact'}).is('deleted_at',null).order('name'));
+      const result=await loadEmployeeLoginOptions();
       if(result.error) throw result.error;
       state.employees=result.data||[];
       setSyncStatus('on','войдите в приложение');
@@ -3256,7 +3289,7 @@ async function loadAllData(){
     const stageRead=beginStageRead();
     const [proj, emp, cat, st, dept, led, photos, invs, tzForms, tzRefs, company, kpForms, stages, members, kpCat, tsPay, compExp, compInc, counts] = await Promise.all([
       fetchAllRows(()=>sb.from('projects').select('*',{count:'exact'}).order('created_at', {ascending:true})),
-      fetchEmployeesResilient(q => q.is('deleted_at', null).order('name')),
+      loadEmployeesSafe(),
       fetchAllRows(()=>sb.from('categories').select('*',{count:'exact'}).is('deleted_at', null).order('sort_order')),
       fetchAllRows(()=>sb.from('statuses').select('*',{count:'exact'}).order('sort_order')),
       fetchAllRows(()=>sb.from('departments').select('*',{count:'exact'}).order('sort_order')),
@@ -3401,7 +3434,7 @@ async function loadDeferredData(){
     const [hist, trashProj, trashEmp, trashCat, trashLed, trashCompanyExpenses, trashCompanyIncome, trashTariffs] = await Promise.all([
       fetchAllRows(()=>sb.from('audit_log').select('*',{count:'exact'}).order('created_at', {ascending:false}),{maxRows:5000}),
       fetchAllRows(()=>sb.from('projects').select('*',{count:'exact'}).not('deleted_at', 'is', null).order('deleted_at', {ascending:false})),
-      fetchEmployeesResilient(q => q.not('deleted_at', 'is', null).order('deleted_at', {ascending:false})),
+      loadEmployeesSafe({deleted:true}),
       fetchAllRows(()=>sb.from('categories').select('*',{count:'exact'}).not('deleted_at', 'is', null).order('deleted_at', {ascending:false})),
       fetchAllRows(()=>sb.from('ledger_entries').select('*',{count:'exact'}).not('deleted_at', 'is', null).order('deleted_at', {ascending:false})),
       fetchAllRows(()=>sb.from('company_expenses').select('*',{count:'exact'}).not('deleted_at', 'is', null).order('deleted_at', {ascending:false})),
@@ -4487,7 +4520,7 @@ document.getElementById('pf-category').addEventListener('change', ()=>{
   const cat=findCategory(document.getElementById('pf-category').value),name=(cat?.name||'').toLowerCase();
   const arch=name.includes('архитект')||name.includes('ландшафт');
   document.getElementById('pf-compensation-method').value=name.includes('интерьер')?'m2':arch?'percent_profit':(cat?.fee_base==='profit'?'percent_profit':'percent_price');
-  document.getElementById('pf-feepercent').value=cat?.fee_percent??(arch?40:'');
+  document.getElementById('pf-feepercent').value=isConstructionCategory(cat?.id)?15:(cat?.fee_percent??(arch?40:''));
   document.getElementById('pf-department').value=cat?.department_id||'';
   renderCompensationMethodUI();
 });
@@ -4678,7 +4711,7 @@ function openProjectSheet(id){
     document.getElementById('pf-m2-payouts-list').innerHTML = '<div class="empty-state" style="padding:10px;">Сохраните проект, чтобы начислять исполнителям</div>';
     updateCompanyRemainderField(null);
     document.getElementById('pf-feepaid').value = '';
-    document.getElementById('pf-feepercent').value = firstCat?.fee_percent ?? '';
+    document.getElementById('pf-feepercent').value = isConstructionCategory(firstCat?.id)?15:(firstCat?.fee_percent ?? '');
     document.getElementById('pf-feebase').value = '';
     const compMethod0 = document.getElementById('pf-compensation-method'); if(compMethod0) compMethod0.value = firstCat?.fee_base === 'm2' ? 'm2' : (firstCat?.fee_base === 'profit' ? 'percent_profit' : 'percent_price');
     document.getElementById('pf-co-feepercent').value = '';
@@ -4983,6 +5016,7 @@ function projectFeePercent(p){
   return Number(findCategory(p.category_id)?.fee_percent) || 0;
 }
 function projectManagerSlots(p){
+  if(isConstructionProject(p))return [];
   if(isConstructionProject(p)||p.fee_base==='m2')return [];
   return [[p.employee_id,projectFeePercent(p)],
     [p.co_employee_id,p.co_fee_percent||0]].filter(([id])=>id&&projectEmployeeRole(id)==='manager');
@@ -5125,8 +5159,9 @@ function completedProjectEarningsForRange(from, to){
     const isConstr = isConstructionCategory(p.category_id);
     let rev, cost;
     if(isConstr){
-      const fin = getConstructionFinancials(p);
-      rev = fin.received + fin.directPaid; cost = fin.directCosts;
+      // Customer advances and purchases are agency funds, not company revenue.
+      // A documented markup is shown in the object card; it is not a cash allocation.
+      rev = 0; cost = 0;
     } else {
       rev = Number(p.price) || 0; cost = getProjectExpenses(p);
     }
@@ -5151,7 +5186,7 @@ function completedProjectEarningsForRange(from, to){
   (state.ledger||[]).filter(l=>!l.deleted_at && ['advance','final_payment','income'].includes(l.type)
     && l.entry_date>=from && l.entry_date<=to).forEach(l=>{
     const project=projects.find(p=>p.id===l.project_id);
-    if(!project)return;
+    if(!project||isConstructionProject(project))return;
     projectManagerSlots(project).forEach(([id,rate])=>addEarn(id,
       Math.max(0,Number(l.amount)||0)*Math.max(0,Number(rate)||0)/100,
       project.id,project.name,'Менеджер · '+l.entry_date+' · поступление клиента'));
@@ -6799,15 +6834,16 @@ async function saveEmployee(){
     if(employeeId){
       const before = state.employees.find(x=>x.id===employeeId);
       let auditPayload = payload;
-      let {error} = await sb.from('employees').update(payload).eq('id', employeeId);
-      if(error && /is_salaried|fixed_salary/.test(error.message||'')){
+      let {data: updatedEmployee,error} = await sb.from('employees').update(payload).eq('id', employeeId).select('id').maybeSingle();
+      if(isMissingEmployeeSalaryColumn(error)){
         // Миграция 14 (оклад) не выполнена — сохраняем остальное, оклад пропускаем
         const {is_salaried, fixed_salary, ...rest} = payload;
-        ({error} = await sb.from('employees').update(rest).eq('id', employeeId));
+        ({data: updatedEmployee,error} = await sb.from('employees').update(rest).eq('id', employeeId).select('id').maybeSingle());
         migrationFallback = !error;
         if(!error) auditPayload = rest;
       }
       if(error) throw error;
+      if(!updatedEmployee?.id)throw new Error('Не получено подтверждение изменения сотрудника');
       persisted = true;
       // PIN никогда не попадает в историю изменений — только факт смены, без значений
       const auditKeys = Object.keys(auditPayload).filter(k => k !== 'pin_code');
@@ -6815,10 +6851,10 @@ async function saveEmployee(){
       if(payload.pin_code) changes.pin_code = { from: '••••••', to: '••••••' };
       if(Object.keys(changes).length) await logAudit('employee', employeeId, name, 'update', changes);
     }else{
-      let {data, error} = await sb.from('employees').insert(payload).select().single();
-      if(error && /is_salaried|fixed_salary/.test(error.message||'')){
+      let {data, error} = await sb.from('employees').insert(payload).select('id').single();
+      if(isMissingEmployeeSalaryColumn(error)){
         const {is_salaried, fixed_salary, ...rest} = payload;
-        ({data, error} = await sb.from('employees').insert(rest).select().single());
+        ({data, error} = await sb.from('employees').insert(rest).select('id').single());
         migrationFallback = !error;
       }
       if(error) throw error;
@@ -7155,8 +7191,9 @@ function getConstructionReceived(projectId, ledgerOverride=null){
     .reduce((s,e) => s + Number(e.amount||0), 0);
 }
 
-function getConstructionExpenses(p){
-  const projInvoices = (state.invoices||[]).filter(inv=>inv.project_id===p.id && !inv.deleted_at);
+function getConstructionExpenses(p, ledgerOverride=null){
+  const today=financeToday();
+  const projInvoices = (state.invoices||[]).filter(inv=>inv.project_id===p.id && !inv.deleted_at && (!inv.invoice_date||inv.invoice_date<=today));
   const matTotal = projInvoices
     .filter(i=>['Материал','Инструмент','Расходник','Доставка'].includes(i.item_type))
     .reduce((s,i)=>s+Number(i.amount||0),0);
@@ -7166,17 +7203,34 @@ function getConstructionExpenses(p){
   const otherTotal = projInvoices
     .filter(i=>!['Материал','Инструмент','Расходник','Доставка','Работа'].includes(i.item_type))
     .reduce((s,i)=>s+Number(i.amount||0),0);
-  const manualTotal = (state.ledger||[])
-    .filter(e=>e.project_id===p.id && !e.deleted_at && (['expense','project_expense'].includes(e.type)||(e.type==='payment'&&!e.payee_employee_id)) && !isInvoiceLinkedExpense(e))
+  const directPaid = projInvoices.filter(i=>i.paid_by_client).reduce((sum,i)=>sum+Number(i.amount||0),0);
+  const manualTotal = (ledgerOverride||state.ledger||[])
+    .filter(e=>e.project_id===p.id && !e.deleted_at && (!e.entry_date||e.entry_date<=today) && (['expense','project_expense'].includes(e.type)||(e.type==='payment'&&!e.payee_employee_id)) && !isInvoiceLinkedExpense(e))
     .reduce((s,e)=>s+Number(e.amount||0),0);
-  return {matTotal, workTotal, otherTotal, manualTotal, expenses: matTotal + workTotal + otherTotal + manualTotal};
+  return {matTotal, workTotal, otherTotal, manualTotal, directPaid, expenses: matTotal + workTotal + otherTotal + manualTotal};
+}
+
+function constructionAmount(value){
+  return value===null||value===undefined||!Number.isFinite(Number(value))?'—':Number(value).toLocaleString('ru-RU',{maximumFractionDigits:2});
+}
+function constructionMoney(value){return constructionAmount(value)+(value===null||value===undefined?'':' ₽');}
+function constructionCompanyMarkup(p,costBase){
+  const raw=p.fee_percent,number=Number(raw);
+  const rate=raw!==null&&raw!==undefined&&raw!==''&&Number.isFinite(number)&&number>=0&&number<=100&&Math.abs(number*100-Math.round(number*100))<0.000001?number:null;
+  const cost=Number(costBase??0),roundedMinor=Number.isFinite(cost)&&cost>=0?Math.round(cost*100):null;
+  const minor=Number.isSafeInteger(roundedMinor)?roundedMinor:null;
+  const base=minor===null?null:minor/100;
+  const feeMinor=rate===null||minor===null?null:Number((BigInt(minor)*BigInt(Math.round(rate*100))+5000n)/10000n);
+  const amount=feeMinor===null?null:feeMinor/100;
+  return {companyMarkupRate:rate,companyMarkupBase:base,companyMarkupAmount:amount,
+    totalWithMarkup:amount===null||!Number.isSafeInteger(minor+feeMinor)?null:(minor+feeMinor)/100,
+    companyMarkupRecordedPaid:Math.max(0,Number(p.fee_paid)||0)};
 }
 
 function getConstructionFinancials(p, ledgerOverride=null){
-  const {matTotal, workTotal, otherTotal, manualTotal, expenses: directCosts} = getConstructionExpenses(p);
+  const {matTotal, workTotal, otherTotal, manualTotal, directPaid, expenses: directCosts} = getConstructionExpenses(p,ledgerOverride);
   const today=financeToday(),ledger = (ledgerOverride || state.ledger || []).filter(e=>!e.deleted_at&&(!e.entry_date||e.entry_date<=today));
   const received = getConstructionReceived(p.id, ledger);
-  const directPaid = getProjectDirectClientPaid(p);
   const rolePayouts = ledger
     .filter(e=>e.project_id===p.id && e.type==='role_payout' && !e.deleted_at)
     .reduce((s,e)=>s+Number(e.amount||0),0);
@@ -7192,9 +7246,17 @@ function getConstructionFinancials(p, ledgerOverride=null){
   const unpaidInvoices=Math.round(projectInvoices.reduce((sum,i)=>sum+(window.ARHITTEKCash?.invoicePaymentState({ledger},i,today).remaining??Number(i.amount||0)),0)*100)/100;
   const undatedCashRows=ledger.filter(e=>e.project_id===p.id&&!e.entry_date&&(CONSTRUCTION_INCOME_TYPES.includes(e.type)||outgoingTypes.includes(e.type))).length;
   const pct = received > 0 ? Math.max(0,Math.min(100,Math.round(cashOutgoing/received*100))) : cashOutgoing>0?100:0;
+  const markup=constructionCompanyMarkup(p,directCosts);
+  // A document-based advance calculation is separate from cash history. A
+  // direct client purchase funds the same document without entering our cash.
+  const costFromAdvance=markup.companyMarkupBase===null?null:Math.round((markup.companyMarkupBase-directPaid)*100)/100;
+  const calculatedAdvanceBalance=markup.companyMarkupAmount===null||costFromAdvance===null?null:Math.round((received-costFromAdvance-markup.companyMarkupAmount)*100)/100;
+  const countedAgainstAdvance=markup.companyMarkupAmount===null||costFromAdvance===null?null:costFromAdvance+markup.companyMarkupAmount;
+  const documentaryPct=countedAgainstAdvance===null?null:received>0?Math.max(0,Math.min(100,Math.round(countedAgainstAdvance/received*100))):countedAgainstAdvance>0?100:0;
   return {received, directPaid, matTotal, workTotal, otherTotal, manualTotal, rolePayouts,
     directCosts, expenses: totalCosts, cashOutgoing, unpaidInvoices, undatedCashRows,
-    balance, pct, isOverspent: balance < 0};
+    balance, pct, isOverspent: balance < 0,...markup,costFromAdvance,calculatedAdvanceBalance,documentaryPct,
+    isCalculatedDeficit:calculatedAdvanceBalance!==null&&calculatedAdvanceBalance<0};
 }
 
 function syncConstructionProjectBalance(p, ledgerOverride=null){
@@ -7204,21 +7266,15 @@ function syncConstructionProjectBalance(p, ledgerOverride=null){
 }
 
 function calcConstrFee(p){
-  // Гонорар = fee_percent% от суммарных расходов (expenses); соисполнитель — свой % от той же базы
+  // Строительный процент — открытая наценка компании. Наличие исполнителя
+  // не превращает эту сумму в его личное начисление. Выплаты за работы
+  // учитываются отдельными записями, существующие условия/суммы не меняем.
   const price = Number(p.price)||0;
   const expenses = Number(p.expenses)||0;
   const profit = price - expenses;
-  const feePercent = Number(p.fee_percent)||0;
-  const coFeePercent = Number(p.co_fee_percent)||0;
-  const mainFeeAmount = p.employee_id ? Math.max(0, expenses * feePercent / 100) : 0;
-  const coFeeAmount = p.co_employee_id ? Math.max(0, expenses * coFeePercent / 100) : 0;
-  const feeAmount = mainFeeAmount + coFeeAmount;
-  const mainPaid = Number(p.fee_paid)||0;
-  const coPaid = Number(p.co_fee_paid)||0;
-  const paid = mainPaid + coPaid;
-  const remaining = Math.max(0, feeAmount - paid);
-  // Правило порога 30 000₽ на Стройку не распространяется — расходы тут и так база гонорара.
-  return {feePercent, feeBase:'expenses', coFeePercent, profit, feeAmount, paid, remaining, mainFeeAmount, coFeeAmount, mainPaid, coPaid, grossMainFee: mainFeeAmount, companyExpenseShare: 0};
+  return {feePercent:0,feeBase:'expenses',coFeePercent:0,profit,feeAmount:0,paid:0,remaining:0,
+    mainFeeAmount:0,coFeeAmount:0,mainPaid:0,coPaid:0,grossMainFee:0,companyExpenseShare:0,
+    ...constructionCompanyMarkup(p,expenses)};
 }
 
 function getConstrProjects(){
@@ -7269,8 +7325,7 @@ function renderConstruction(){
   list.innerHTML = projects.map(p=>{
     const st = findStatus(p.status_id);
     const fin = getConstructionFinancials(p);
-    const f = getProjectFee(p);
-    const {received, directPaid, matTotal, workTotal, otherTotal, expenses, cashOutgoing, unpaidInvoices, balance, pct, isOverspent} = fin;
+    const {received, directPaid, matTotal, workTotal, otherTotal, manualTotal, expenses, cashOutgoing, unpaidInvoices, balance, pct, isOverspent} = fin;
 
     if(!showFinance){
       return `<div class="obj-card" onclick="openObjectView('${p.id}')">
@@ -7290,10 +7345,12 @@ function renderConstruction(){
         <div class="fee-row" style="padding:5px 0;"><div class="fl">📦 Накладные на материалы</div><div class="fv">${fmtMoney(matTotal)}</div></div>
         <div class="fee-row" style="padding:5px 0;"><div class="fl">🔨 Накладные на работы</div><div class="fv">${fmtMoney(workTotal)}</div></div>
         ${otherTotal>0?`<div class="fee-row" style="padding:5px 0;"><div class="fl">Прочие накладные</div><div class="fv">${fmtMoney(otherTotal)}</div></div>`:''}
+        ${manualTotal>0?`<div class="fee-row" style="padding:5px 0;"><div class="fl">Расходы без накладной</div><div class="fv">${fmtMoney(manualTotal)}</div></div>`:''}
         ${directPaid > 0 ? `<div class="fee-row" style="padding:5px 0;"><div class="fl">🤝 Оплачено заказчиком напрямую</div><div class="fv" style="color:var(--text-dim);">${fmtMoney(directPaid)}</div></div>` : ''}
         <div class="fee-row" style="padding:5px 0; border-top:1px solid var(--line); margin-top:2px;"><div class="fl">Выплачено из денег объекта</div><div class="fv" style="color:var(--red);">${fmtMoney(cashOutgoing)}</div></div>
         <div class="fee-row" style="padding:5px 0;"><div class="fl">Оплата накладных не подтверждена</div><div class="fv">${fmtMoney(unpaidInvoices)}</div></div>
-        ${f.feeAmount > 0 ? `<div class="fee-row" style="padding:5px 0;"><div class="fl">Начислено исполнителям</div><div class="fv" style="color:var(--blue);">${fmtMoney(f.feeAmount)}</div></div>` : ''}
+        <div class="fee-row" style="padding:5px 0;"><div class="fl">Наценка ARHITTEK ${fin.companyMarkupRate===null?'не задана':constructionAmount(fin.companyMarkupRate)+'%'} по документам</div><div class="fv" style="color:var(--blue);">${constructionMoney(fin.companyMarkupAmount)}</div></div>
+        <div class="fee-row" style="padding:5px 0;"><div class="fl">Расходы с наценкой</div><div class="fv">${constructionMoney(fin.totalWithMarkup)}</div></div>
       </div>
     </div>`;
   }).join('');
@@ -7349,8 +7406,8 @@ function renderObjectSummary(p){
   }
 
   if(state.financialDataReady===false){el.innerHTML='<div class="note">Финансовые данные не подтверждены. Обновите приложение.</div>';return;}
-  const {received, directPaid, matTotal, workTotal, otherTotal, expenses, cashOutgoing, unpaidInvoices, rolePayouts, undatedCashRows, balance, isOverspent} = getConstructionFinancials(p);
-  const f = getProjectFee(p);
+  const fin=getConstructionFinancials(p);
+  const {received, directPaid, matTotal, workTotal, otherTotal, manualTotal, expenses, cashOutgoing, unpaidInvoices, rolePayouts, undatedCashRows, balance, isOverspent} = fin;
 
   const noBudgetWarning = received === 0 && cashOutgoing > 0
     ? `<div style="background:rgba(232,163,61,0.12); border:1px solid rgba(232,163,61,0.3); border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:12px; color:var(--gold);">⚠ Приход от заказчика не зарегистрирован — добавьте поступление для корректного расчёта остатка.</div>`
@@ -7371,21 +7428,28 @@ function renderObjectSummary(p){
       <div class="fee-row"><div class="fl">Накладные на материалы</div><div class="fv">${fmtMoney(matTotal)}</div></div>
       <div class="fee-row"><div class="fl">Накладные на работы</div><div class="fv">${fmtMoney(workTotal)}</div></div>
       ${otherTotal>0?`<div class="fee-row"><div class="fl">Прочие накладные</div><div class="fv">${fmtMoney(otherTotal)}</div></div>`:''}
+      ${manualTotal>0?`<div class="fee-row"><div class="fl">Расходы без накладной</div><div class="fv">${fmtMoney(manualTotal)}</div></div>`:''}
       <div class="fee-row"><div class="fl">Оплата накладных не подтверждена</div><div class="fv">${fmtMoney(unpaidInvoices)}</div></div>
       ${rolePayouts>0?`<div class="fee-row"><div class="fl">Начисления за объёмы работ</div><div class="fv">${fmtMoney(rolePayouts)}</div></div>`:''}
-      ${f.feeAmount>0?`<div class="fee-row"><div class="fl">Вознаграждение исполнителей по условиям проекта</div><div class="fv">${fmtMoney(f.feeAmount)}</div></div>`:''}
     </div>
-    ${constructionCompanyFeePlanHtml(p)}
+    ${constructionCompanyFeePlanHtml(p,fin)}
     <div id="objIncomeHistoryBlock"></div>
   `;
   renderObjectIncomeHistory(p.id);
 }
 
-function constructionCompanyFeePlanHtml(p){
-  const budget=Number(p.price),valid=Number.isFinite(budget)&&budget>0;
-  if(!valid)return '<div class="card construction-company-fee-plan"><strong>Гонорар компании — 15% бюджета</strong><p class="note">Укажите и согласуйте бюджет объекта. Затем подтвердите, входит ли гонорар в эту сумму или оплачивается сверху.</p></div>';
-  const fee=Math.round(budget*15)/100,works=Math.round((budget-fee)*100)/100,total=Math.round((budget+fee)*100)/100;
-  return '<div class="card construction-company-fee-plan"><strong>Гонорар компании — 15% бюджета</strong><div class="fee-row"><div class="fl">Бюджет карточки</div><div class="fv">'+fmtMoney(budget)+'</div></div><div class="fee-row"><div class="fl">План гонорара компании</div><div class="fv">'+fmtMoney(fee)+'</div></div><p class="note">Условия ещё не подтверждены. Если гонорар входит в бюджет: на работы и материалы '+fmtMoney(works)+', всего '+fmtMoney(budget)+'. Если оплачивается сверху: на работы и материалы '+fmtMoney(budget)+', всего '+fmtMoney(total)+'. План не создаёт приход или выплату.</p></div>';
+function constructionCompanyFeePlanHtml(p,fin=null){
+  const f=fin||getConstructionFinancials(p),rate=f.companyMarkupRate;
+  const rateText=rate===null?'Ставка не указана':constructionAmount(rate)+'% сверх расходов';
+  const legacyNote=rate!==null&&rate!==15?'<p class="note">Сохранена ставка этого объекта '+constructionAmount(rate)+'%. Для новых объектов применяется 15%.</p>':'';
+  return '<div class="card construction-company-fee-plan"><strong>Открытая наценка ARHITTEK</strong>'+
+    '<p class="note">'+rateText+'. Расчёт по документам объекта; аванс сам по себе наценку не создаёт.</p>'+
+    '<div class="fee-row"><div class="fl">Расходы по документам</div><div class="fv">'+constructionMoney(f.companyMarkupBase)+'</div></div>'+
+    '<div class="fee-row"><div class="fl">Расчётная наценка компании</div><div class="fv">'+constructionMoney(f.companyMarkupAmount)+'</div></div>'+
+    '<div class="fee-row total"><div class="fl">Расходы с наценкой</div><div class="fv">'+constructionMoney(f.totalWithMarkup)+'</div></div>'+
+    '<div class="fee-row"><div class="fl">Гонорар компании, записанный ранее</div><div class="fv">'+constructionMoney(f.companyMarkupRecordedPaid)+'</div></div>'+
+    '<div class="fee-row"><div class="fl">Расчётный остаток аванса после расходов и наценки</div><div class="fv" style="color:'+(f.isCalculatedDeficit?'var(--red)':'var(--text)')+'">'+constructionMoney(f.calculatedAdvanceBalance)+'</div></div>'+
+    '<p class="note">Прямые оплаты заказчика учтены в расходах и наценке, но не вычитаются повторно из переданного нам аванса. Оплата накладных подтверждается отдельно. Этот расчёт не изменяет деньги по журналу и свободный резерв.</p>'+legacyNote+'</div>';
 }
 
 // История поступлений от заказчика по объекту стройки — когда и сколько пришло
@@ -7749,70 +7813,7 @@ async function addInvoiceFromView(){
 
 let invoiceSaveInFlight=false;
 async function addInvoice(projectId){
-  if(invoiceSaveInFlight)return;
-  if(!canAccessConstructionProject(projectId)){showToast('Нет доступа к этому объекту');return;}
-  const actor={employeeId:session.employeeId,token:session.token,isAdmin:!!session.isAdmin};
-  // Support both old suffix pattern and new "-obj" suffix from object view
-  const suffix = document.getElementById(`inv-num-obj`) ? 'obj' : projectId;
-  const number = document.getElementById(`inv-num-${suffix}`).value.trim();
-  const invoice_date = document.getElementById(`inv-date-${suffix}`).value || null;
-  const _catRaw = document.getElementById(`inv-cat-${suffix}`).value.trim();
-  const category = (_catRaw === '__other__') ? (document.getElementById(`inv-cat-${suffix}-custom`) ? document.getElementById(`inv-cat-${suffix}-custom`).value.trim() : '') : _catRaw;
-  const description = document.getElementById(`inv-desc-${suffix}`).value.trim();
-  const item_type = document.getElementById(`inv-type-${suffix}`).value;
-  const amount = parseFloat(document.getElementById(`inv-amount-${suffix}`).value);
-  const paidClientEl = document.getElementById(`inv-paid-client-${suffix}`);
-  const paid_by_client = paidClientEl ? paidClientEl.checked : false;
-  const photoInput = document.getElementById(`inv-photo-${suffix}`);
-  const photoFile = photoInput?.files?.[0];
-
-  if(!description && !number){ showToast('Введите описание или номер накладной'); return; }
-  if(!amount || amount <= 0){ showToast('Укажите сумму'); return; }
-  if(!invoice_date){ showToast('Укажите дату накладной — нужна для корректного P&L по периоду'); return; }
-
-  invoiceSaveInFlight=true;
-  let persisted=false;
-  showToast('Сохранение…');
-
-  try{
-    let photo_url = '';
-    if(photoFile){
-      const fileName = `${projectId}/${Date.now()}.jpg`;
-      photo_url = await compressAndUpload(photoFile, 'expense-photos', fileName,()=>canAccessConstructionProject(projectId,actor));
-    }
-
-    if(!canAccessConstructionProject(projectId,actor))throw new Error('Сеанс или доступ к объекту изменился');
-    const {error} = await sb.from('invoices').insert({
-      project_id: projectId, number, invoice_date, category, item_type, description, amount, photo_url, paid_by_client
-    });
-    if(error) throw error;
-    persisted=true;
-
-    // Keep project.expenses in sync with the real sum of invoices,
-    // so the fee calculation (% от расходов) always reflects накладные
-    const projInvoicesAfter = [...state.invoices.filter(inv=>inv.project_id===projectId), {amount}];
-    const newExpensesTotal = projInvoicesAfter.reduce((s,i)=>s+Number(i.amount||0), 0)+getConstructionExpenses(state.projects.find(p=>p.id===projectId)).manualTotal;
-    if(!canAccessConstructionProject(projectId,actor))throw new Error('Сеанс или доступ к объекту изменился');
-    const {error: updErr} = await sb.from('projects').update({expenses: newExpensesTotal}).eq('id', projectId);
-    if(updErr) console.error(updErr);
-
-    const projForAudit = state.projects.find(x=>x.id===projectId);
-    if(!canAccessConstructionProject(projectId,actor))throw new Error('Сеанс или доступ к объекту изменился');
-    await logAudit('project', projectId, projForAudit?.name || '', 'update', {invoice_added: {old:null, new: `${number} — ${description} — ${fmtMoney(amount)}`}});
-
-    showToast('Накладная добавлена');
-    await loadAll();
-
-    // If we're in the object view, refresh it
-    if(currentObjectId === projectId){
-      const p = state.projects.find(x=>x.id===projectId);
-      if(p) renderObjectSummary(p);
-      renderObjTabContent();
-    }
-  }catch(e){
-    console.error(e);
-    showToast(persisted?'Накладная сохранена. Не удалось обновить итоги — обновите объект':'Ошибка сохранения');
-  }finally{invoiceSaveInFlight=false;}
+  return ARHITTEKConstructionOperations.addInvoice(projectId);
 }
 
 // ============================================================
@@ -7922,7 +7923,7 @@ async function saveInvoiceSheet(){
     let photo_url = inv.photo_url || '';
     if(photoBlob){
       const fileName = `${inv.project_id}/${Date.now()}_edit.jpg`;
-      photo_url = await compressAndUpload(photoBlob, 'expense-photos', fileName,()=>canAccessConstructionProject(inv.project_id,actor));
+      photo_url = await compressAndUpload(photoBlob, 'construction-documents', fileName,()=>canAccessConstructionProject(inv.project_id,actor));
     }
 
     if(!canAccessConstructionProject(inv.project_id,actor))throw new Error('Сеанс или доступ к объекту изменился');
@@ -8032,7 +8033,6 @@ async function exportConstrPdf(projectId){
   const price = Number(p.price)||0;
   const constrFin = getConstructionFinancials(p);
   const expenses = constrFin.expenses;
-  const f = getProjectFee(p);
   const balance = constrFin.balance;
   const received = constrFin.received;
 
@@ -8044,7 +8044,11 @@ async function exportConstrPdf(projectId){
     ['Заказчик оплатил напрямую:', `${fmt(constrFin.directPaid)} руб.`],
     ['Стоимость документов и начислений:', `${fmt(expenses)} руб.`],
     ['Оплата накладных не подтверждена:', `${fmt(constrFin.unpaidInvoices)} руб.`],
-    ['Вознаграждение исполнителей:', `${fmt(f.feeAmount)} руб.`],
+    ['Расходы по документам:', `${constructionAmount(constrFin.companyMarkupBase)} руб.`],
+    ['Расчётная наценка ARHITTEK'+(constrFin.companyMarkupRate===null?'':` ${constructionAmount(constrFin.companyMarkupRate)}%`)+':', constrFin.companyMarkupAmount===null?'Ставка не указана':`${constructionAmount(constrFin.companyMarkupAmount)} руб.`],
+    ['Расходы с наценкой:', constrFin.totalWithMarkup===null?'Не определены':`${constructionAmount(constrFin.totalWithMarkup)} руб.`],
+    ['Гонорар компании, записанный ранее:', `${constructionAmount(constrFin.companyMarkupRecordedPaid)} руб.`],
+    ['Расчётный остаток аванса:', constrFin.calculatedAdvanceBalance===null?'Не определён':`${constructionAmount(constrFin.calculatedAdvanceBalance)} руб.`],
   ];
   summaryRows.forEach(([lbl,val])=>{
     doc.setFont('Roboto','bold');
@@ -8054,10 +8058,14 @@ async function exportConstrPdf(projectId){
     y += 5.5;
   });
 
+  doc.setFont('Roboto','normal');doc.setFontSize(8);doc.setTextColor(100);
+  const calculationNote=doc.splitTextToSize('Наценка рассчитана сверх расходов по документам. Аванс сам по себе не создаёт наценку. Оплата накладных и фактическое наличие денег подтверждаются отдельно.',contentWidth);
+  doc.text(calculationNote,margin,y);y+=calculationNote.length*4+2;doc.setTextColor(0);
+
   y += 4;
   doc.setDrawColor(200); doc.line(margin, y, pageWidth-margin, y); y += 6;
 
-  const projInvoices = state.invoices.filter(inv=>inv.project_id===projectId&&!inv.deleted_at);
+  const projInvoices = state.invoices.filter(inv=>inv.project_id===projectId&&!inv.deleted_at&&(!inv.invoice_date||inv.invoice_date<=financeToday()));
   const materials = projInvoices.filter(i=>i.item_type!=='Работа');
   const works = projInvoices.filter(i=>i.item_type==='Работа');
 
@@ -8124,7 +8132,7 @@ async function exportConstrPdf(projectId){
   doc.setDrawColor(0); doc.line(margin, y, pageWidth-margin, y); y += 6;
   doc.setFont('Roboto','bold'); doc.setFontSize(11);
   const invTotal = projInvoices.reduce((s,i)=>s+Number(i.amount),0);
-  doc.text('Итого по объекту:', margin, y);
+  doc.text('Итого накладных:', margin, y);
   doc.text(`${fmt(invTotal)} руб.`, pageWidth-margin, y, {align:'right'});
 
   // Footer
@@ -8165,10 +8173,10 @@ async function uploadExpensePhoto(projectId, inputEl){
   try{
     const ext = file.name.split('.').pop();
     const fileName = `${projectId}/${Date.now()}.${ext}`;
-    const {error: upErr} = await sb.storage.from('expense-photos').upload(fileName, file);
+    const {error: upErr} = await sb.storage.from('construction-documents').upload(fileName, file);
     if(upErr) throw upErr;
 
-    const {data: urlData} = sb.storage.from('expense-photos').getPublicUrl(fileName);
+    const {data: urlData} = sb.storage.from('construction-documents').getPublicUrl(fileName);
     const photo_url = urlData.publicUrl;
 
     if(!canAccessConstructionProject(projectId,actor))throw new Error('Сеанс или доступ к объекту изменился');
@@ -12350,3 +12358,4 @@ showNotifPrompt();
 <script src="app-refresh.js"></script>
 <script src="construction-finance.js"></script>
 <script src="construction-workflow.js"></script>
+<script src="construction-operations.js"></script>

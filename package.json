@@ -5,16 +5,18 @@
   "description": "Static ARHITTEK application with isolated browser regression checks",
   "scripts": {
     "test": "node tests/regression.cjs",
-    "test:finance": "node tests/obligations.cjs && node tests/cash-finance.cjs && node tests/project-budget.cjs && node tests/cash-counts.cjs && node tests/reserve-regression.cjs",
+    "test:finance": "node tests/obligations.cjs && node tests/cash-finance.cjs && node tests/project-budget.cjs && node tests/cash-counts.cjs && node tests/reserve-regression.cjs && node tests/construction-reserve.cjs",
     "test:app": "node tests/application-units.cjs && node tests/application-audit.cjs",
     "test:ux": "node tests/stage-responsiveness.cjs && node tests/pull-refresh.cjs && node tests/interaction-audit.cjs && node tests/project-permissions.cjs && node tests/data-integrity-audit.cjs && node tests/workflow-mobile-audit.cjs",
-    "test:construction": "node tests/construction-finance.cjs && node tests/construction-stage-template.cjs && node tests/construction-access.cjs && node tests/construction-cash-ui.cjs && node tests/client-portal.cjs"
+    "test:construction": "node tests/construction-finance.cjs && node tests/construction-stage-template.cjs && node tests/construction-access.cjs && node tests/construction-cash-ui.cjs && node tests/client-portal.cjs && node tests/construction-operational-audit.cjs && node tests/construction-reserve-invariants.cjs && node tests/client-portal-gateway.cjs && node tests/client-portal-sql.cjs && node tests/invoice-payment-rpc-ui.cjs",
+    "test:security": "node tests/session-security.cjs && node tests/invoice-payment-atomic.cjs && node tests/employees-server-access.cjs"
   },
   "devDependencies": {
     "playwright": "1.62.1",
     "xlsx": "0.18.5",
     "jspdf": "2.5.1",
     "jspdf-autotable": "3.8.2",
-    "jsdom": "30.1.2"
+    "jsdom": "30.1.2",
+    "@electric-sql/pglite": "0.5.10"
   }
 }

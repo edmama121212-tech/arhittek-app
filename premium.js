@@ -147,13 +147,32 @@ function refresh(){
  overview.innerHTML=`<div class="project-eyebrow">${esc(findCategory(p.category_id)?.name||'Новый проект')}</div><h3>${esc($('pf-name').value||'Начнём с основного')}</h3><p class="project-note">${esc(findStatus(p.status_id)?.name||'В работе')} · ${$('pf-end').value?'Срок: '+esc(fmtDate($('pf-end').value)):'Укажите срок проекта'}</p>`+(admin?`<div class="project-metrics">${card('Стоимость',money(p.price))}${card('Команда · '+(done?'начислено':'план'),money(total))}</div>`:'');
  const construction=isConstructionCategory(p.category_id);
  economy.innerHTML=admin?(construction?'<p class="project-note">Бюджет стройки, накладные и прямые оплаты клиента доступны в карточке объекта.</p>':`<div class="project-metrics">${card('Получено от клиента',money(payment))}${card('Долг клиента',money(Math.max(0,p.price-payment)))}</div><div class="project-equation"><span>Стоимость договора <b>${esc(money(p.price))}</b></span><span>− Прямые расходы <b>${esc(money(p.expenses))}</b></span><span>− Вознаграждения команды <b>${esc(money(total))}</b></span><span class="project-total">Остаётся компании <b>${esc(money(p.price-p.expenses-total))}</b></span></div><p class="project-note">Оклады, аренда и другие общие расходы учитываются за месяц отдельно.</p>`):'';
+ if(construction){
+   methods.hidden=true;baseField.hidden=true;
+   compensation.querySelector('.accent-title').textContent='Открытая наценка компании';
+   $('pf-feepercent').closest('.field').querySelector('label').textContent='Наценка ARHITTEK, %';
+   $('pf-employee-fee').closest('.field').querySelector('label').textContent='Ответственный за объект';
+   $('pf-co-feepercent').closest('.field').hidden=true;addSecond.hidden=true;
+   const source=state.projects.find(item=>item.id===p.id)||p;
+   const fee=constructionCompanyMarkup({...source,fee_percent:p.fee_percent},getConstructionExpenses(source).expenses);
+   $('team-main-result').innerHTML='<span>Наценка компании по документам</span><strong>'+esc(constructionMoney(fee.companyMarkupAmount))+'</strong>';
+   teamSummary.innerHTML='<h3>Компания и команда объекта</h3><p class="project-note">Наценка начисляется на расходы объекта. Ответственный сотрудник не получает её автоматически; его выплаты учитываются отдельно.</p>';
+   baseNote.textContent='Материалы, работы, доставка и другие расходы × сохранённая ставка. Сам аванс наценку не создаёт.';
+   $('pf-compensation-summary').innerHTML='<p class="project-note">Суммы расходов, наценка и деньги заказчика показаны в карточке объекта.</p>';
+ }else{
+   compensation.querySelector('.accent-title').textContent='Вознаграждение команды';
+   $('pf-feepercent').closest('.field').querySelector('label').textContent='Ставка, %';
+   $('pf-employee-fee').closest('.field').querySelector('label').textContent='Сотрудник';
+   $('pf-co-feepercent').closest('.field').hidden=false;
+ }
  if(!admin){overview.querySelector('.project-metrics')?.remove();}
 }
 window.refreshProjectWorkspace=refresh;
 function defaults(){
  if(editingProjectId)return;
  const cat=findCategory($('pf-category').value),name=(cat?.name||'').toLowerCase();
- if(name.includes('интерьер')){$('pf-compensation-method').value='m2';$('pf-feepercent').value='0';}
+ if(isConstructionCategory(cat?.id)){$('pf-compensation-method').value='percent_price';$('pf-feepercent').value='15';}
+ else if(name.includes('интерьер')){$('pf-compensation-method').value='m2';$('pf-feepercent').value='0';}
  else if(name.includes('архитект')||name.includes('ландшафт')){$('pf-compensation-method').value='percent_profit';$('pf-feepercent').value=cat?.fee_percent>0?cat.fee_percent:40;}
  $('pf-feebase').value=$('pf-compensation-method').value==='m2'?'m2':$('pf-compensation-method').value==='percent_profit'?'profit':'price';
  renderCompensationMethodUI();

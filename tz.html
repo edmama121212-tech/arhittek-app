@@ -204,7 +204,10 @@
 <script>
 const SUPABASE_URL = 'https://chbkkoxwzpaghanofvqk.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_fOLaPnbXjzQnJwG__wVzzg_D0nMO-n0';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// Reference uploads are scoped by the same token as this public brief.
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {global:{headers:{
+  'x-tz-token': new URLSearchParams(window.location.search).get('token') || ''
+}}});
 
 function showToast(msg){
   const t = document.getElementById('toast');
