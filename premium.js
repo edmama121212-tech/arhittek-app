@@ -2279,7 +2279,7 @@ function scheduleRouteSave(){
   saveTimer=setTimeout(saveRouteNow,100);
 }
 function canUseSavedRoute(r){
-  if(!r||!r.view)return false;
+  if(!r||!r.view||!canAccessView(r.view))return false;
   const sid=(typeof session!=='undefined'&&session?.employeeId)||window.session?.employeeId||null;
   if(!sid||!r.employeeId||sid!==r.employeeId)return false;
   if(r.view==='view-settings' && !(typeof session!=='undefined'&&session?.isAdmin))return false;

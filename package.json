@@ -9,7 +9,7 @@
     "test:app": "node tests/application-units.cjs && node tests/application-audit.cjs",
     "test:ux": "node tests/stage-responsiveness.cjs && node tests/pull-refresh.cjs && node tests/interaction-audit.cjs && node tests/project-permissions.cjs && node tests/data-integrity-audit.cjs && node tests/workflow-mobile-audit.cjs && node tests/background-sync.cjs",
     "test:construction": "node tests/construction-finance.cjs && node tests/construction-stage-template.cjs && node tests/construction-access.cjs && node tests/construction-cash-ui.cjs && node tests/client-portal.cjs && node tests/construction-operational-audit.cjs && node tests/construction-reserve-invariants.cjs && node tests/client-portal-gateway.cjs && node tests/client-portal-sql.cjs && node tests/invoice-payment-rpc-ui.cjs",
-    "test:security": "node tests/session-security.cjs && node tests/invoice-payment-atomic.cjs && node tests/employees-server-access.cjs"
+    "test:security": "node tests/session-security.cjs && node tests/invoice-payment-atomic.cjs && node tests/employees-server-access.cjs && node tests/owner-access.cjs && node tests/owner-access-ui.cjs"
   },
   "devDependencies": {
     "playwright": "1.62.1",

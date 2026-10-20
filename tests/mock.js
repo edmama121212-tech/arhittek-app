@@ -13,6 +13,14 @@ const client={from:query,rpc:async(n,a={})=>{
   (window.__rpcCalls||=[]).push({rpc:n,args:clone(a)});
   return {data:null,error:{code:'PGRST202',message:'Client access RPC unavailable in compatibility fixture'}};
  }
+ if(n==='get_employee_access'){
+  (window.__rpcCalls||=[]).push({rpc:n,args:clone(a)});
+  if(__fail?.rpc===n)return {data:null,error:{code:'42501',message:'Access unavailable'}};
+  const e=(__db.employees||[]).find(x=>x.id===window.session?.employeeId&&x.active!==false&&!x.deleted_at);
+  if(!e||!window.session?.token)return {data:[],error:null};
+  const owner=e.id==='admin';
+  return {data:[{employee_id:e.id,name:e.name,role:e.role,is_owner:owner,can_documents:owner||['ведущий архитектор','ведущий дизайнер'].includes(String(e.role||'').trim().toLowerCase()),access_policy:'owner-only-v1'}],error:null};
+ }
  if(n==='get_employee_login_options'||n==='get_employee_profiles'){
   (window.__rpcCalls||=[]).push({rpc:n,args:clone(a)});
   if(__fail?.rpc===n||(__fail?.table==='employees'&&(!__fail.op||__fail.op==='select')))return {data:null,error:{message:'Simulated employee read failure'}};
