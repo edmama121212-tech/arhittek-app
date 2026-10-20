@@ -9,6 +9,10 @@ const q={select(columns,options){countRequested=options?.count==='exact';return 
 const client={from:query,rpc:async(n,a={})=>{
  // Compatibility fixture: transactional invoice RPC has its own server tests.
  if(n==='save_invoice_payment')return {data:null,error:{code:'PGRST202',message:'Invoice RPC unavailable in compatibility fixture'}};
+ if(n==='get_construction_client_settings'){
+  (window.__rpcCalls||=[]).push({rpc:n,args:clone(a)});
+  return {data:null,error:{code:'PGRST202',message:'Client access RPC unavailable in compatibility fixture'}};
+ }
  if(n==='get_employee_login_options'||n==='get_employee_profiles'){
   (window.__rpcCalls||=[]).push({rpc:n,args:clone(a)});
   if(__fail?.rpc===n||(__fail?.table==='employees'&&(!__fail.op||__fail.op==='select')))return {data:null,error:{message:'Simulated employee read failure'}};
