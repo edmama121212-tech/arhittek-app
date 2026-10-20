@@ -79,6 +79,14 @@ const root=path.resolve(__dirname,'..');
  await page.evaluate(()=>__releaseAccess());
  await page.waitForFunction(()=>typeof isOwner==='function'&&isOwner()&&!loadAllInFlight,null,{timeout:10000});
  eq(await page.evaluate(()=>isOwner()),true,'Owner unlocks only after verification');
+ const metadataOnly=await page.evaluate(()=>{
+  const key='arhittek_company_money_pending_v1:admin:expense';
+  sessionStorage.setItem(key,'isolated-pending-operation');
+  window.dispatchEvent(new StorageEvent('storage',{key:'arhittek_session',newValue:JSON.stringify({...session,isAdmin:false})}));
+  const result=[isOwner(),sessionStorage.getItem(key)];
+  sessionStorage.removeItem(key);return result;
+ });
+ eq(metadataOnly,[true,'isolated-pending-operation'],'Same verified session metadata preserves an uncertain operation');
  const dataError=await page.evaluate(async()=>{
   __fail={table:'company_expenses',op:'select'};await loadAll();
   const result=[isOwner(),state.financialDataReady,state.companyExpenses.length,state.ledger.length];

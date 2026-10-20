@@ -30,7 +30,14 @@ document.addEventListener('click',event=>{
 const observer=new MutationObserver(()=>applyAccessVisibility());
 document.querySelectorAll('.view').forEach(el=>observer.observe(el,{attributes:true,attributeFilter:['class']}));
 window.addEventListener('storage',event=>{
-  if(event.key==='arhittek_session'){purgePrivateStorage();revokeVerifiedAccess();applySessionToken(null);location.reload();}
+  if(event.key!=='arhittek_session')return;
+  try{
+    const next=JSON.parse(event.newValue||'null');
+    // A metadata-only notification for the same verified credentials is not
+    // an account switch and must not destroy an uncertain payment UUID.
+    if(hasVerifiedAccess()&&next?.employeeId===session.employeeId&&next?.token===session.token)return;
+  }catch(e){}
+  purgePrivateStorage();revokeVerifiedAccess();applySessionToken(null);location.reload();
 });
 applyAccessVisibility();
 })();
