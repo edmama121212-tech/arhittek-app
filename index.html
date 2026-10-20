@@ -3466,7 +3466,7 @@ async function loadAllData(){
     state.tzForms = tzForms.data || [];
     state.tzReferences = tzRefs.data || [];
     state.companyInfo = company.data || null;
-    state.financialDataReady=isOwner();state.financialDataError=null;state.financialLoadedAt=new Date().toISOString();
+    state.financialDataReady=true;state.financialDataError=null;state.financialLoadedAt=new Date().toISOString();
 
     // Показываем live-статус если realtime канал активен
     const isLive = realtimeChannel && realtimeChannel.state === 'joined';

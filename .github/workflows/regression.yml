@@ -29,8 +29,14 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
+      - name: Check owner-only database permissions and employee ranks
+        run: timeout 90s node tests/owner-access.cjs
+
+      - name: Check owner-only screens and employee ranks on mobile
+        run: timeout 90s node tests/owner-access-ui.cjs
+
       - name: Check server permissions, login compatibility and project isolation
-        run: npm run test:security
+        run: node tests/session-security.cjs && node tests/invoice-payment-atomic.cjs && node tests/employees-server-access.cjs
 
       - name: Check cash accounting and payroll
         run: npm run test:finance
