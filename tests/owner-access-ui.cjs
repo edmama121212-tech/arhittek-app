@@ -19,7 +19,7 @@ const root=path.resolve(__dirname,'..');
    const rpc=client.rpc;
    client.rpc=async function(name,args){
     if(name==='get_employee_access'){
-     if(params.has('hold'))await new Promise(resolve=>window.__releaseAccess=resolve);
+     if(params.has('hold')&&!window.__accessWasHeld){window.__accessWasHeld=true;await new Promise(resolve=>window.__releaseAccess=resolve);}
      if(params.has('missing')||window.__denyAccess)return {data:null,error:{code:'PGRST202',message:'Isolated unavailable policy'}};
     }
     return rpc.call(this,name,args);

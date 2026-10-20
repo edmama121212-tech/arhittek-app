@@ -30,7 +30,7 @@ document.addEventListener('click',event=>{
 const observer=new MutationObserver(()=>applyAccessVisibility());
 document.querySelectorAll('.view').forEach(el=>observer.observe(el,{attributes:true,attributeFilter:['class']}));
 window.addEventListener('storage',event=>{
-  if(event.key==='arhittek_session'){revokeVerifiedAccess();applySessionToken(null);location.reload();}
+  if(event.key==='arhittek_session'){purgePrivateStorage();revokeVerifiedAccess();applySessionToken(null);location.reload();}
 });
 applyAccessVisibility();
 })();

@@ -2206,16 +2206,20 @@ function animateCountUp(el, duration){
 // ============================================================
 const SUPABASE_URL = 'https://chbkkoxwzpaghanofvqk.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_fOLaPnbXjzQnJwG__wVzzg_D0nMO-n0';
-let sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+function createAppClient(token){
+  return supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{global:{
+    headers:token?{'x-session-token':token}:{},
+    fetch:(input,options)=>fetch(input,{...options,cache:'no-store'})
+  }});
+}
+let sb = createAppClient(null);
     window.sb = sb;
 
 // После входа сервер выдаёт токен сессии — пересобираем клиент так, чтобы
 // каждый запрос нёс его заголовком x-session-token. Без этого заголовка
 // доступ к данным (кроме заведомо публичных, вроде каталога) закрыт политиками RLS.
 function applySessionToken(token){
-  sb = token
-    ? supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { global: { headers: { 'x-session-token': token } } })
-    : supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  sb = createAppClient(token);
   window.sb = sb;
 }
 
@@ -2481,6 +2485,14 @@ function clearPrivateState(){
   document.querySelectorAll('.sheet-overlay.active').forEach(el=>el.classList.remove('active'));
   for(const id of ['view-finance','view-timesheet'])document.getElementById(id)?.querySelectorAll('input,textarea').forEach(el=>el.value='');
 }
+function purgePrivateStorage(){
+  for(const storage of [localStorage,sessionStorage]){
+    try{for(const key of Object.keys(storage)){
+      if(/^(forecast_|finance_|arhittek_finance_|arhittek_company_money_pending_)/.test(key))storage.removeItem(key);
+    }}catch(e){}
+  }
+  try{companyMoneyPending.clear();companyMoneyForms.expense=null;companyMoneyForms.income=null;}catch(e){}
+}
 function revokeVerifiedAccess(){
   verifiedAccess=null;if(session)session.isAdmin=false;
   document.documentElement.dataset.access='locked';clearPrivateState();
@@ -2544,6 +2556,7 @@ function getSession(){
 }
 
 function setSession(s){
+  if(session?.employeeId!==s?.employeeId)purgePrivateStorage();
   revokeVerifiedAccess();
   session = {...s, isAdmin:false, createdAt: Date.now()};
   window.session = session;
@@ -2553,6 +2566,7 @@ function setSession(s){
 
 function clearSession(){
   const token = session && session.token;
+  purgePrivateStorage();
   revokeVerifiedAccess();
   session = null;window.session=null;applySessionToken(null);
   try{ localStorage.removeItem('arhittek_session'); }catch(e){}
@@ -3403,7 +3417,11 @@ async function loadAllData(){
     // kpForms and stages are optional — may not exist until migrations run
     const errs = [proj,emp,cat,st,dept,led,photos,invs,tzForms,tzRefs,company,tsPay,compExp,compInc,counts].map(r=>r.error).filter(Boolean);
     if(errs.length) throw errs[0];
-    state.kpForms = kpForms.error ? [] : (kpForms.data || []);
+    const freshEmployee=(emp.data||[]).find(e=>e.id===session.employeeId);
+    if(!freshEmployee||freshEmployee.active===false)throw new Error('Учётная запись недоступна');
+    if(!isOwner()&&!['ведущий архитектор','ведущий дизайнер'].includes(String(freshEmployee.role||'').trim().toLowerCase()))verifiedAccess.documents=false;
+    applyAccessVisibility();
+    state.kpForms = !canUseDocuments()||kpForms.error ? [] : (kpForms.data || []);
     if(stages.error)failStageRead(stageRead,stages.error);
     else state.projectStages=mergeStageRead(stages.data,stageRead);
     // Membership affects visibility and edits: a failed read is not an empty team.
@@ -3418,7 +3436,7 @@ async function loadAllData(){
         projectMembersDraftUnverified=false;
       }
     }
-    state.kpCatalog = kpCat.error ? [] : (kpCat.data || []);
+    state.kpCatalog = !canUseDocuments()||kpCat.error ? [] : (kpCat.data || []);
     state.timesheetPayments = tsPay.error ? [] : (tsPay.data || []);
     state.companyExpenses = compExp.error ? [] : (compExp.data || []);
     state.companyIncome = compInc.error ? [] : (compInc.data || []);
@@ -3465,7 +3483,7 @@ async function loadAllData(){
     state.invoices = invs.data || [];
     state.tzForms = tzForms.data || [];
     state.tzReferences = tzRefs.data || [];
-    state.companyInfo = company.data || null;
+    state.companyInfo = canUseDocuments()?(company.data||null):null;
     state.financialDataReady=true;state.financialDataError=null;state.financialLoadedAt=new Date().toISOString();
 
     // Показываем live-статус если realtime канал активен
