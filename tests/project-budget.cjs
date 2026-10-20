@@ -41,11 +41,11 @@ check('Active manager commission paid through payroll comes from the project poo
  s.ledger.push(event('s','salary_payment',7500,null,{payee_employee_id:'manager',description:'[salary:2026-10]'}));
  const x=b.calculate(s,undefined,hooks);assert.equal(x.projectsHeld,21000);assert.equal(x.available,20000);
 });
-check('A completed unpaid invoice holds money; paying it releases that hold without a second debit',()=>{
+check('A completed construction retains client cash; unpaid bills and payment never create company profit',()=>{
  const s=fresh();s.projects=[{id:'p',status_id:'done',kind:'build',end_date:'2026-10-10'}];s.ledger=[event('a','construction_budget',50000,'p')];
  s.invoices=[{id:'i',project_id:'p',amount:10000,invoice_date:'2026-10-10',created_at:'2026-10-10T00:00:00Z'}];
- let x=b.calculate(s,undefined,hooks);assert.equal(x.costsHeld,10000);assert.equal(x.available,57500);
- s.ledger.push(event('e','expense',10000,'p',{description:'[invoice-payment:i] material'}));x=b.calculate(s,undefined,hooks);assert.equal(x.costsHeld,0);assert.equal(x.available,57500);
+ let x=b.calculate(s,undefined,hooks);assert.equal(x.costsHeld,0);assert.equal(x.projectsHeld,50000);assert.equal(x.amortization,0);assert.equal(x.available,20000);
+ s.ledger.push(event('e','expense',10000,'p',{description:'[invoice-payment:i] material'}));x=b.calculate(s,undefined,hooks);assert.equal(x.costsHeld,0);assert.equal(x.projectsHeld,40000);assert.equal(x.available,20000);
 });
 check('An old advance cannot increase recorded money or free reserve on closing',()=>{
  const s=fresh();s.projects=[{id:'p',status_id:'done',employee_id:'executor',mainFee:34000,end_date:'2026-10-06',updated_at:'2026-10-11T07:25:00Z'}];

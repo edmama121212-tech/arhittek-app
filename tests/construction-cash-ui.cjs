@@ -26,6 +26,17 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
  }
  async function check(name,fn,expected,args){try{const actual=await page.evaluate(fn,args);assert.deepEqual(actual,expected);results.push({name,pass:true});}catch(e){results.push({name,pass:false,error:e.message});}}
  await fresh();
+ await check('A customer refund reduces site cash without becoming a markup expense',()=>{
+  state.ledger.push({id:'customer-refund',project_id:'build-a',type:'client_refund',amount:5000,entry_date:'2026-10-11'});
+  const f=getConstructionFinancials(state.projects[0]);return[f.balance,f.cashOutgoing,f.directCosts,f.companyMarkupAmount];
+ },[95000,5000,0,0]);
+ await fresh();
+ await check('Transfers, refunds and company-fee spending do not create a second markup',()=>{
+  for(const [index,purpose]of ['client_refund','cash_handover','company_fee_expense'].entries())state.ledger.push({id:'non-cost-'+index,project_id:'build-a',type:'expense',purpose,amount:1000,entry_date:'2026-10-11'});
+  state.ledger.push({id:'fee-funded',project_id:'build-a',type:'expense',funding_source:'company_fee',amount:1000,entry_date:'2026-10-11'});
+  const f=getConstructionFinancials(state.projects[0]);return[f.balance,f.cashOutgoing,f.directCosts,f.companyMarkupAmount];
+ },[96000,4000,0,0]);
+ await fresh();
  await check('An unpaid invoice is a commitment, not a cash payment',()=>{
   state.invoices=[{id:'bill-a',project_id:'build-a',item_type:'Материал',amount:40000,invoice_date:'2026-10-10'}];const f=getConstructionFinancials(state.projects[0]);return[f.received,f.cashOutgoing,f.balance,f.unpaidInvoices,f.directCosts];
  },[100000,0,100000,40000,40000]);
@@ -63,14 +74,14 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
   const p=state.projects[0],row=buildExportRows()['Проекты'][0];return[row['Аванс'],row['Остаток'],ARHITTEKCash.expected(p)];
  },[100000,100000,900000]);
  await fresh();
- await check('List, object and PDF use the same employee fee basis; company 15% is a separate plan',()=>{
+ await check('Company 15% uses documented costs, independently of employee accruals and planned budget',()=>{
   state.invoices=[{id:'cost-bill',project_id:'build-a',item_type:'Материал',amount:40000,invoice_date:'2026-10-10'}];state.ledger.push({id:'work-accrual',project_id:'build-a',type:'role_payout',amount:50000,payee_employee_id:'visual',entry_date:'2026-10-11'});
   openObjectView('build-a');const p=state.projects[0],plan=document.querySelector('.construction-company-fee-plan').textContent.replace(/\s/g,'');
-  return[getProjectFee(p).feeAmount,document.getElementById('objSummary').textContent.replace(/\s/g,'').includes('6000'),plan.includes('150000'),plan.includes('850000'),plan.includes('1150000'),plan.includes('неподтверждены'),__writes.length];
- },[6000,true,true,true,true,true,0]);
- await check('The generated internal PDF separates cash, commitments and employee fees',()=>{
-  const Original=window.jspdf.jsPDF;window.__pdfText=[];window.jspdf.jsPDF=function(...args){const doc=new Original(...args),text=doc.text;doc.text=function(value,...rest){__pdfText.push(String(value));return text.call(this,value,...rest);};doc.save=()=>{};return doc;};try{exportConstrPdf('build-a');}finally{window.jspdf.jsPDF=Original;}return[__pdfText.some(t=>t.includes('Выплачено из денег объекта')),__pdfText.some(t=>t.includes('Оплата накладных не подтверждена')),__pdfText.includes('6 000 руб.')||__pdfText.includes('6\u00a0000 руб.'),__pdfText.some(t=>t.includes('Гонорар ARHITTEK'))];
- },[true,true,true,false]);
+  return[getProjectFee(p).feeAmount,document.getElementById('objSummary').textContent.replace(/\s/g,'').includes('6000'),plan.includes('40000'),plan.includes('46000'),plan.includes('150000'),plan.includes('подокументам'),__writes.length];
+ },[0,true,true,true,false,true,0]);
+ await check('The generated internal PDF separates cash, documentary costs and company markup',()=>{
+  const Original=window.jspdf.jsPDF;window.__pdfText=[];window.jspdf.jsPDF=function(...args){const doc=new Original(...args),text=doc.text;doc.text=function(value,...rest){__pdfText.push(String(value));return text.call(this,value,...rest);};doc.save=()=>{};return doc;};try{exportConstrPdf('build-a');}finally{window.jspdf.jsPDF=Original;}return[__pdfText.some(t=>t.includes('Выплачено из денег объекта')),__pdfText.some(t=>t.includes('Оплата накладных не подтверждена')),__pdfText.includes('6 000 руб.')||__pdfText.includes('6\u00a0000 руб.'),__pdfText.some(t=>t.includes('Расчётная наценка ARHITTEK 15%')),__pdfText.some(t=>t.includes('Вознаграждение исполнителей'))];
+ },[true,true,true,true,false]);
  await fresh();
  await check('Invoice photos appear in the object gallery without duplicating shared URLs',()=>{
   state.invoices=[{id:'image-bill',project_id:'build-a',item_type:'Материал',description:'Фото накладной',amount:5000,invoice_date:'2026-10-10',photo_url:'https://example.invalid/invoice.jpg'}];state.photos=[{id:'same-image',project_id:'build-a',photo_url:'https://example.invalid/invoice.jpg'},{id:'site-image',project_id:'build-a',photo_url:'https://example.invalid/site.jpg'},{id:'foreign-image',project_id:'build-b',photo_url:'https://example.invalid/foreign.jpg'}];openObjectView('build-a');switchObjTab('photos');return[document.querySelectorAll('#objTabContent .photo-thumb').length,document.querySelectorAll('#objTabContent [data-photo-invoice="image-bill"]').length];
@@ -87,7 +98,7 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
    return[document.documentElement.scrollWidth<=width+1,buttons.every(r=>r.left>=0&&r.right<=width+1),getComputedStyle(document.getElementById('objSummary').querySelector('.fee-card')).opacity];
   },[true,true,'1']);
  }
- await check('Unconfirmed company fee plan does not change company cash, reserve or employee terms',()=>{
+ await check('Documentary company markup display does not change company cash, reserve or employee terms',()=>{
   const before=[ARHITTEKCash.balance(state),ARHITTEKCash.available(state),JSON.stringify(state.projects[0]),JSON.stringify(state.ledger)],p=state.projects[0];constructionCompanyFeePlanHtml(p);constructionCompanyFeePlanHtml({...p,price:0});return JSON.stringify(before)===JSON.stringify([ARHITTEKCash.balance(state),ARHITTEKCash.available(state),JSON.stringify(p),JSON.stringify(state.ledger)]);
  },true);
  await fresh();

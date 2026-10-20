@@ -1,6 +1,6 @@
 // ARHITTEK: complete reads, consistent budgets and safe app updates.
-const CACHE = 'arhittek-v3.19-construction-audit';
-const ASSETS = ['./index.html','./premium.css','./premium.js','./data-access.js','./project-budget.js','./cash-finance.js','./app-refresh.js','./construction-finance.js','./construction-workflow.js','./client.css','./catalog.html','./tz.html','./landscape-brief.js','./manifest.json','./icon-192.png','./icon-512.png'];
+const CACHE = 'arhittek-v3.20-construction-markup-access';
+const ASSETS = ['./index.html','./premium.css','./premium.js','./data-access.js','./project-budget.js','./cash-finance.js','./app-refresh.js','./construction-finance.js','./construction-workflow.js','./construction-operations.js','./client.css','./catalog.html','./tz.html','./landscape-brief.js','./manifest.json','./icon-192.png','./icon-512.png'];
 const APP_BASE = new URL('./', self.location.href);
 // CDN-библиотеки — кэшируем отдельно от основных ASSETS: если jsdelivr на
 // момент установки недоступен, это не должно валить весь install (addAll — all-or-nothing).

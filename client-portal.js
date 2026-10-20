@@ -7,7 +7,7 @@
   const FILE_EXTENSIONS = {'application/pdf':['pdf'],'image/jpeg':['jpg','jpeg'],'image/png':['png'],'image/webp':['webp']};
   const STATES = new Set(['planned', 'in_progress', 'completed', 'accepted']);
   const STATUS_LABELS = {planned:'Запланировано',in_progress:'В работе',completed:'Выполнено',accepted:'Принято'};
-  const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43,128}$/;
+  const TOKEN_PATTERN = /^[a-f0-9]{64}$/;
   function invalid() { throw new Error('Invalid client portal response'); }
   function object(value, keys) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) invalid();
@@ -43,27 +43,26 @@
   function collection(value) { if (!Array.isArray(value) || value.length > MAX_ROWS) invalid(); return value; }
   function unique(rows) { const set = new Set(); for (const row of rows) { if (set.has(row.id)) invalid(); set.add(row.id); } return set; }
   function scope(row, expected) { if (id(row.scope_ref) !== expected) invalid(); }
-  function exactFee(amount) { return Number((BigInt(amount) * 1500n + 5000n) / 10000n); }
+  function exactFee(amount,rateBps = 1500) { if (!Number.isSafeInteger(rateBps) || rateBps < 0 || rateBps > 10000) invalid(); return Number((BigInt(amount) * BigInt(rateBps) + 5000n) / 10000n); }
   function quantityAmount(quantity,unitPrice) {
     const [whole,fraction = ''] = quantity.split('.'), denominator = 10n ** BigInt(fraction.length);
     return Number((BigInt(whole + fraction) * BigInt(unitPrice) + denominator / 2n) / denominator);
   }
-  function validateBudget(b) {
-    object(b, ['terms_confirmed','approved_kopeks','fee_rate_bps','fee_mode','fee_total_kopeks','works_budget_kopeks','contract_total_kopeks']);
-    if (typeof b.terms_confirmed !== 'boolean' || b.fee_rate_bps !== 1500) invalid();
-    if (b.approved_kopeks !== null) money(b.approved_kopeks);
-    if (!b.terms_confirmed) {
-      if (b.fee_mode !== null || b.fee_total_kopeks !== null || b.works_budget_kopeks !== null || b.contract_total_kopeks !== null) invalid();
+  function validatePricing(p) {
+    object(p,['terms_confirmed','fee_basis','fee_rate_bps','fee_mode','cost_facts_complete','confirmed_cost_base_kopeks','fee_total_kopeks','chargeable_cost_total_kopeks']);
+    if (typeof p.terms_confirmed !== 'boolean' || typeof p.cost_facts_complete !== 'boolean' || (!Number.isSafeInteger(p.fee_rate_bps) || p.fee_rate_bps < 0 || p.fee_rate_bps > 10000) || p.fee_basis !== 'actual_cost_markup' || p.fee_mode !== 'on_top') invalid();
+    if (p.cost_facts_complete) money(p.confirmed_cost_base_kopeks);
+    else if (p.confirmed_cost_base_kopeks !== null) invalid();
+    if (!p.terms_confirmed || !p.cost_facts_complete) {
+      if (p.fee_total_kopeks !== null || p.chargeable_cost_total_kopeks !== null) invalid();
       return;
     }
-    money(b.approved_kopeks);
-    if (!['included','on_top'].includes(b.fee_mode)) invalid();
-    const fee = exactFee(b.approved_kopeks);
-    if (money(b.fee_total_kopeks) !== fee || money(b.works_budget_kopeks) !== (b.fee_mode === 'included' ? b.approved_kopeks - fee : b.approved_kopeks) || money(b.contract_total_kopeks) !== (b.fee_mode === 'included' ? b.approved_kopeks : add(b.approved_kopeks,fee))) invalid();
+    const fee = exactFee(p.confirmed_cost_base_kopeks,p.fee_rate_bps);
+    if (money(p.fee_total_kopeks) !== fee || money(p.chargeable_cost_total_kopeks) !== add(p.confirmed_cost_base_kopeks,fee)) invalid();
   }
   function validateSnapshot(s, now = Date.now()) {
-    object(s,['schema_version','scope','complete','generated_at','access_expires_at','project','budget','cash','stages','work_items','invoices','other_costs','receipts','refunds','row_counts']);
-    if (s.schema_version !== 1 || s.scope !== 'construction_client_readonly' || s.complete !== true) invalid();
+    object(s,['schema_version','scope','complete','generated_at','access_expires_at','project','pricing','cash','stages','work_items','invoices','other_costs','receipts','refunds','row_counts']);
+    if (s.schema_version !== 2 || s.scope !== 'construction_client_readonly' || s.complete !== true) invalid();
     const generated = instant(s.generated_at), expires = instant(s.access_expires_at);
     if (generated > now + 120000 || generated < now - 300000 || expires <= now) invalid();
     const asOf = new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Moscow',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(generated));
@@ -72,7 +71,7 @@
     object(s.project,['reference','name','address','status']);
     const project = id(s.project.reference);
     text(s.project.name,250); text(s.project.address,500,true); text(s.project.status,100);
-    validateBudget(s.budget);
+    validatePricing(s.pricing);
     object(s.cash,['classification_ok','received_kopeks','direct_paid_kopeks','company_spent_kopeks','fee_allocated_kopeks','refunded_kopeks','held_kopeks','accountable_outstanding_kopeks']);
     if (typeof s.cash.classification_ok !== 'boolean') invalid();
     for (const key of ['received_kopeks','direct_paid_kopeks','fee_allocated_kopeks','refunded_kopeks']) money(s.cash[key]);
@@ -80,7 +79,7 @@
       money(s.cash.company_spent_kopeks); money(s.cash.held_kopeks,true); money(s.cash.accountable_outstanding_kopeks);
       add(s.cash.held_kopeks,-s.cash.accountable_outstanding_kopeks);
       if (s.cash.held_kopeks !== add(add(add(s.cash.received_kopeks,-s.cash.company_spent_kopeks),-s.cash.fee_allocated_kopeks),-s.cash.refunded_kopeks)) invalid();
-      if (s.budget.terms_confirmed && s.cash.fee_allocated_kopeks > s.budget.fee_total_kopeks) invalid();
+      if (s.pricing.terms_confirmed && s.pricing.fee_total_kopeks !== null && s.cash.fee_allocated_kopeks > s.pricing.fee_total_kopeks) invalid();
     } else if (s.cash.company_spent_kopeks !== null || s.cash.held_kopeks !== null || s.cash.accountable_outstanding_kopeks !== null) invalid();
     collection(s.stages); collection(s.work_items); collection(s.invoices); collection(s.other_costs); collection(s.receipts); collection(s.refunds);
     const stageIds = unique(s.stages); unique(s.work_items); unique(s.invoices); unique(s.other_costs); unique(s.receipts); unique(s.refunds);
@@ -106,13 +105,14 @@
       if (w.completed_at && w.inspected_at && Date.parse(w.inspected_at) < Date.parse(w.completed_at)) invalid();
       if (w.completed_at && w.accepted_at && Date.parse(w.accepted_at) < Date.parse(w.completed_at)) invalid();
     }
-    let invoiceCompanyPaid = 0, invoiceDirectPaid = 0, documentCount = 0;
+    let invoiceCompanyPaid = 0, invoiceDirectPaid = 0, documentCount = 0, costBase = 0;
     const docIds = new Set();
     for (const invoice of s.invoices) {
-      object(invoice,['id','scope_ref','number','date','kind','title','amount_kopeks','company_paid_kopeks','direct_paid_kopeks','documents']);
+      object(invoice,['id','scope_ref','number','date','kind','title','amount_kopeks','credit_kopeks','net_amount_kopeks','company_paid_kopeks','direct_paid_kopeks','overpaid_kopeks','documents']);
       id(invoice.id); scope(invoice,project); text(invoice.number,100,true); actualDate(invoice.date); text(invoice.kind,80); text(invoice.title,300);
-      money(invoice.amount_kopeks); money(invoice.company_paid_kopeks); money(invoice.direct_paid_kopeks);
-      if (add(invoice.company_paid_kopeks,invoice.direct_paid_kopeks) > invoice.amount_kopeks) invalid();
+      money(invoice.amount_kopeks); money(invoice.credit_kopeks); money(invoice.net_amount_kopeks); money(invoice.company_paid_kopeks); money(invoice.direct_paid_kopeks); money(invoice.overpaid_kopeks);
+      if (invoice.credit_kopeks > invoice.amount_kopeks || invoice.net_amount_kopeks !== invoice.amount_kopeks - invoice.credit_kopeks || invoice.overpaid_kopeks !== Math.max(0,add(invoice.company_paid_kopeks,invoice.direct_paid_kopeks) - invoice.net_amount_kopeks)) invalid();
+      costBase = add(costBase,invoice.net_amount_kopeks);
       invoiceCompanyPaid = add(invoiceCompanyPaid,invoice.company_paid_kopeks);
       invoiceDirectPaid = add(invoiceDirectPaid,invoice.direct_paid_kopeks);
       if (collection(invoice.documents).length > 50) invalid();
@@ -128,7 +128,7 @@
     }
     let otherSpent = 0, received = 0, refunded = 0;
     for (const row of s.other_costs) {
-      object(row,['id','scope_ref','title','date','amount_kopeks']); id(row.id); scope(row,project); text(row.title,300); actualDate(row.date); otherSpent = add(otherSpent,money(row.amount_kopeks));
+      object(row,['id','scope_ref','title','date','amount_kopeks','credit_kopeks','net_amount_kopeks']); id(row.id); scope(row,project); text(row.title,300); actualDate(row.date); otherSpent = add(otherSpent,money(row.amount_kopeks)); money(row.credit_kopeks); money(row.net_amount_kopeks); if (row.credit_kopeks > row.amount_kopeks || row.net_amount_kopeks !== row.amount_kopeks - row.credit_kopeks) invalid(); costBase = add(costBase,row.net_amount_kopeks);
     }
     for (const row of s.receipts) {
       object(row,['id','scope_ref','title','date','amount_kopeks']); id(row.id); scope(row,project); text(row.title,300); actualDate(row.date); received = add(received,money(row.amount_kopeks));
@@ -136,6 +136,7 @@
     for (const row of s.refunds) {
       object(row,['id','scope_ref','title','date','amount_kopeks']); id(row.id); scope(row,project); text(row.title,300); actualDate(row.date); refunded = add(refunded,money(row.amount_kopeks));
     }
+    if (s.pricing.cost_facts_complete && costBase !== s.pricing.confirmed_cost_base_kopeks) invalid();
     if (received !== s.cash.received_kopeks || refunded !== s.cash.refunded_kopeks || invoiceDirectPaid !== s.cash.direct_paid_kopeks || (s.cash.classification_ok && add(invoiceCompanyPaid,otherSpent) !== s.cash.company_spent_kopeks)) invalid();
     object(s.row_counts,['stages','work_items','invoices','documents','other_costs','receipts','refunds']);
     for (const key of ['stages','work_items','invoices','other_costs','receipts','refunds']) if (s.row_counts[key] !== s[key].length) invalid();
@@ -144,8 +145,8 @@
   }
   const exported = Object.freeze({validateSnapshot,exactFee,quantityAmount});
   if (typeof module !== 'undefined' && module.exports) module.exports = exported;
+  if (root) root.ARHITTEKClientPortal = exported;
   if (!root || !root.document) return;
-  root.ARHITTEKClientPortal = exported;
   const doc = root.document, $ = id => doc.getElementById(id);
   const numberFormat = new Intl.NumberFormat('ru-RU',{style:'currency',currency:'RUB',minimumFractionDigits:0,maximumFractionDigits:2});
   const rubles = value => numberFormat.format(value / 100);
@@ -156,19 +157,19 @@
   function listPanel(rows,render,empty) { const panel = el('div',rows.length ? 'list-panel' : 'empty'); if (!rows.length) panel.textContent = empty; else rows.forEach(item => panel.append(render(item))); return panel; }
   function metric(label,value,note,featured = false) { const node = el('div','metric' + (featured ? ' featured' : '') + (value !== null && value < 0 ? ' negative' : '')), formatted = value === null ? '—' : rubles(value); node.append(el('div','metric-label',label),el('div','metric-value' + (formatted.length > 12 ? ' compact' : ''),formatted)); if (note) node.append(el('div','metric-note',note)); return node; }
   function renderMoney(s) {
-    const b = s.budget, c = s.cash, section = $('money-content'), metrics = el('div','metrics');
-    metrics.append(metric('Остаток средств объекта',c.held_kopeks,c.classification_ok ? 'После оплаченных затрат, гонорара и возвратов' : 'Станет известен после сверки платежей',true),metric('Вы передали компании',c.received_kopeks,'Переводы на ведение этого объекта'),metric('Оплачено на объект',c.company_spent_kopeks,c.classification_ok ? 'Затраты из переданных вами средств' : 'Распределение затрат требует сверки'),metric('Вы оплатили напрямую',c.direct_paid_kopeks,'Эти деньги не поступали компании'));
+    const b = s.pricing, feePercent = b.fee_rate_bps / 100, c = s.cash, section = $('money-content'), metrics = el('div','metrics');
+    metrics.append(metric('Остаток средств объекта',c.held_kopeks,c.classification_ok ? 'По журналу после затрат, гонорара и возвратов' : 'Станет известен после сверки платежей',true),metric('Вы передали компании',c.received_kopeks,'Переводы на ведение этого объекта'),metric('Оплачено на объект',c.company_spent_kopeks,c.classification_ok ? 'Затраты из переданных вами средств' : 'Распределение затрат требует сверки'),metric('Вы оплатили напрямую',c.direct_paid_kopeks,'Эти деньги не поступали компании'));
     section.append(metrics);
     if (c.held_kopeks !== null && c.held_kopeks < 0) section.append(el('p','warning','Оплаченные затраты, выделенный гонорар и возвраты превышают переданные компании средства. Остаток отрицательный.'));
     if (!c.classification_ok) section.append(el('p','warning','Часть платежей объекта требует сверки. Непроверенный остаток и распределение затрат пока не показаны; переводы и возвраты сохранены как отдельные факты.'));
-    const panel = el('div','budget-panel'); panel.append(el('h3','panel-title','Гонорар ARHITTEK · 15%'));
-    if (!b.terms_confirmed) panel.append(el('p','warning','Условия бюджета ещё не подтверждены. Ставка услуг — 15%; полная стоимость появится после согласования, входит ли гонорар в бюджет или оплачивается отдельно.'));
-    else {
-      panel.append(row('Утверждённая база бюджета',rubles(b.approved_kopeks)),row('На материалы и работы',rubles(b.works_budget_kopeks)),row('Гонорар компании · 15%',rubles(b.fee_total_kopeks)),row('Полная сумма по договорённости',rubles(b.contract_total_kopeks)));
-      panel.append(el('p','money-note',b.fee_mode === 'included' ? 'Гонорар включён в утверждённый бюджет.' : 'Гонорар оплачивается сверх бюджета материалов и работ.'));
-    }
+    const panel = el('div','budget-panel'); panel.append(el('h3','panel-title','Расходы + ' + feePercent + '% услуг ARHITTEK'));
+    if (b.cost_facts_complete) panel.append(row('Расходы по документам объекта',rubles(b.confirmed_cost_base_kopeks)));
+    else panel.append(el('p','warning','Подтверждение расходов ещё не завершено. Итоговая база, наценка и полная сумма появятся после сверки документов.'));
+    if (!b.terms_confirmed) panel.append(el('p','warning','Условия услуг ещё не подтверждены. Сохранённая ставка: ' + feePercent + '% сверху расходов объекта.'));
+    if (b.fee_total_kopeks !== null) panel.append(row('Услуги ARHITTEK · ' + feePercent + '% сверху',rubles(b.fee_total_kopeks)),row('Расходы с услугами компании',rubles(b.chargeable_cost_total_kopeks)));
+    panel.append(el('p','money-note','Наценка рассчитывается от расходов по документам. Поступление аванса само по себе не создаёт гонорар. Оплата и остаток показаны отдельно по журналу.'));
     panel.append(row('Из денег объекта выделено на гонорар',rubles(c.fee_allocated_kopeks)));
-    if (!b.terms_confirmed && c.fee_allocated_kopeks) panel.append(el('p','money-note','В журнале уже есть выделенный гонорар. Его договорные условия нужно подтвердить; записанная сумма не заменяет согласованный бюджет.'));
+    if (!b.terms_confirmed && c.fee_allocated_kopeks) panel.append(el('p','money-note','В журнале уже есть выделенный гонорар. Его условия нужно подтвердить; записанная сумма сохраняется как отдельный факт.'));
     panel.append(row('Возвращено вам',rubles(c.refunded_kopeks)));
     if (c.classification_ok && c.accountable_outstanding_kopeks !== null && c.held_kopeks !== null && c.accountable_outstanding_kopeks > 0) {
       const withoutAdvance = c.held_kopeks - c.accountable_outstanding_kopeks;
@@ -191,8 +192,10 @@
     const section = $('documents-content');
     section.append(listPanel(s.invoices,invoice => {
       const item = el('div','item'), header = el('div','item-heading'), paid = invoice.company_paid_kopeks + invoice.direct_paid_kopeks;
-      header.append(el('div','item-title',invoice.title),el('div','item-amount',rubles(invoice.amount_kopeks))); item.append(header,el('div','item-meta',`${invoice.number ? '№ ' + invoice.number + ' · ' : ''}${dayFormat(invoice.date)} · ${invoice.kind}`));
-      item.append(el('span','badge ' + (paid === invoice.amount_kopeks ? 'completed' : paid ? 'in_progress' : 'planned'),paid === invoice.amount_kopeks ? 'Оплачена' : paid ? 'Оплачена частично' : 'Не оплачена'));
+      header.append(el('div','item-title',invoice.title),el('div','item-amount',rubles(invoice.net_amount_kopeks))); item.append(header,el('div','item-meta',`${invoice.number ? '№ ' + invoice.number + ' · ' : ''}${dayFormat(invoice.date)} · ${invoice.kind}`));
+      item.append(el('span','badge ' + (paid === invoice.net_amount_kopeks ? 'completed' : paid ? 'in_progress' : 'planned'),paid === invoice.net_amount_kopeks ? 'Оплачена' : paid ? 'Оплачена частично' : 'Не оплачена'));
+      if (invoice.credit_kopeks) item.append(el('div','item-meta','Стоимость документа: ' + rubles(invoice.amount_kopeks) + ' · Уменьшение: ' + rubles(invoice.credit_kopeks)));
+      if (invoice.overpaid_kopeks) item.append(el('p','warning','Переплата по документу: ' + rubles(invoice.overpaid_kopeks) + '. Уменьшение стоимости само по себе не возвращает деньги.'));
       item.append(el('div','item-meta','Оплачено компанией: ' + rubles(invoice.company_paid_kopeks)));
       if (invoice.direct_paid_kopeks) item.append(el('div','item-meta','Оплачено вами напрямую: ' + rubles(invoice.direct_paid_kopeks)));
       if (invoice.documents.length) { const buttons = el('div','document-buttons'); for (const file of invoice.documents) { const button = el('button','document-button','↓ ' + file.name); button.type = 'button'; button.dataset.document = file.id; buttons.append(button); } item.append(buttons); }
@@ -206,7 +209,9 @@
   let access = null, snapshot = null, epoch = 0, request = null, refreshTimer = null, expiryTimer = null;
   const controllers = new Set(), downloading = new Set(), blobURLs = new Set();
   const enabled = doc.querySelector('meta[name="arhittek-client-portal-enabled"]')?.content === 'true';
-  const apiBase = new URL('./api/client-portal/',root.location.href);
+  const API_ORIGIN = 'https://chbkkoxwzpaghanofvqk.supabase.co', API_PATH = '/functions/v1/construction-client-portal/';
+  const apiBase = new URL(doc.querySelector('meta[name="arhittek-client-portal-api"]')?.content || API_ORIGIN + API_PATH);
+  const apiAllowed = apiBase.origin === API_ORIGIN && apiBase.pathname === API_PATH && !apiBase.search && !apiBase.hash;
   function resetView(title,message,retry = false) {
     snapshot = null; $('portal-content').hidden = true; $('portal-state').hidden = false;
     $('state-title').textContent = title; $('state-message').textContent = message;
@@ -246,7 +251,7 @@
     const bytes = new Uint8Array(size); let offset = 0; for (const chunk of chunks) { bytes.set(chunk,offset); offset += chunk.length; } return bytes;
   }
   async function call(endpoint,body,controller) {
-    if (!enabled || !access || root.location.protocol !== 'https:' || apiBase.origin !== root.location.origin) invalid();
+    if (!enabled || !access || root.location.protocol !== 'https:' || !apiAllowed) invalid();
     const response = await root.fetch(new URL(endpoint,apiBase),{method:'POST',headers:{Authorization:'Bearer ' + access,'Content-Type':'application/json',Accept:endpoint === 'snapshot' ? 'application/json' : 'application/pdf,image/jpeg,image/png,image/webp'},body:JSON.stringify(body),cache:'no-store',credentials:'omit',redirect:'error',referrerPolicy:'no-referrer',signal:controller.signal});
     if ([401,403,404].includes(response.status)) { const error = new Error('Access denied'); error.denied = true; throw error; }
     if (!response.ok) throw new Error('Portal unavailable');
@@ -310,7 +315,7 @@
     const candidate = params.get('access');
     // Fragment secrets never become query strings, persisted browser storage, or future referrers.
     root.history.replaceState(null,'',initial.pathname);
-    if (!enabled) { resetView('Кабинет ещё не подключён','ARHITTEK подготовит защищённый доступ к вашему объекту и передаст вам ссылку.'); return; }
+    if (!enabled || !apiAllowed) { resetView('Кабинет ещё не подключён','ARHITTEK подготовит защищённый доступ к вашему объекту и передаст вам ссылку.'); return; }
     if (initial.search || Array.from(params.keys()).some(key => key !== 'access') || params.getAll('access').length !== 1 || !TOKEN_PATTERN.test(candidate || '') || root.location.protocol !== 'https:') {
       resetView('Нужна ссылка на ваш объект','Откройте персональную ссылку, которую вам передали в ARHITTEK.'); return;
     }
@@ -325,4 +330,4 @@
   });
   root.addEventListener('pagehide',() => stop('Откройте ссылку ещё раз','Для доступа к объекту нужна ваша персональная ссылка.'));
   init();
-})(typeof window !== 'undefined' ? window : null);
+})(typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : null);

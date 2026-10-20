@@ -12,11 +12,11 @@ const direct=(id,amount,changes={})=>({id,project_id:'object',amount,entry_date:
 const code=(result,name)=>result.issues.some(issue=>issue.code===name);
 let checks=0;function check(name,fn){fn();checks++;console.log('PASS: '+name);}
 
-check('The included 1m budget contains 150k fee and 850k works',()=>{
+check('Historical v1: the included 1m budget contains 150k fee and 850k works',()=>{
  const result=finance.normalizeContract(contract());assert.equal(result.ok,true);
  assert.deepEqual(result.summary,{budget_basis_amount:1000000,works_budget:850000,company_fee_total:150000,contract_total:1000000});
 });
-check('The on-top 1m works budget has 150k fee and a 1.15m contract',()=>{
+check('Historical v1: the on-top 1m works budget has 150k fee and a 1.15m contract',()=>{
  const result=finance.normalizeContract(contract({company_fee_mode:'on_top'}));assert.equal(result.ok,true);
  assert.deepEqual(result.summary,{budget_basis_amount:1000000,works_budget:1000000,company_fee_total:150000,contract_total:1150000});
 });
@@ -263,5 +263,266 @@ check('Foreign currency rows are not silently treated as rubles',()=>{
 check('An unsettled advance prevents a promise that all money is available after liabilities',()=>{
  const result=finance.evaluate(input({ledger:[operation('in','advance',100000),operation('hand','withdrawal',10000,{purpose:'cash_handover',funding_source:'client'})]}));
  assert.equal(result.summary.client_resources_with_advances,100000);assert.equal(result.commitments_complete,false);assert.equal(result.summary.client_available_after_reserved_fee,null);assert(code(result,'UNSETTLED_ACCOUNTABLE_ADVANCE'));
+});
+const markupContract=(changes={})=>({version:2,project_id:'object',currency:'RUB',company_fee_rate:15,
+ company_fee_basis:'actual_cost_markup',company_fee_mode:'on_top',confirmed_at:'2026-10-19T08:00:00Z',confirmed_by:'Owner',revision:1,...changes});
+const markupInput=(changes={})=>input({contract:markupContract(),costFactsComplete:true,costFacts:[],costCredits:[],...changes});
+const costFact=(id,type,sourceId,amount,changes={})=>({id,project_id:'object',source_type:type,source_id:sourceId,amount,
+ entry_date:day,cost_scope:'project',confirmed_at:'2026-10-19T10:00:00Z',confirmed_by:'Owner',...changes});
+const credit=(id,factId,amount,changes={})=>({id,project_id:'object',cost_fact_id:factId,amount,entry_date:day,
+ confirmed_at:'2026-10-19T11:00:00Z',confirmed_by:'Owner',...changes});
+const costBase=(changes={})=>markupInput({invoices:[invoice('cost',100000)],costFacts:[costFact('fact','invoice','cost',100000)],...changes});
+
+check('V2 terms explicitly declare cost markup with no invented budget or final project price',()=>{
+ const result=finance.normalizeContract(markupContract());assert.equal(result.ok,true);assert.equal(result.version,2);
+ assert.equal(result.company_fee_basis,'actual_cost_markup');assert.equal(result.summary.company_fee_total,null);assert.equal(result.summary.contract_total,null);
+ assert.equal(result.summary.budget_basis_amount,null);
+});
+check('V2: 100k confirmed costs plus 15k markup makes 115k chargeable',()=>{
+ const result=finance.evaluate(costBase());assert.equal(result.costs_ok,true);assert.equal(result.version,2);
+ assert.equal(result.summary.confirmed_project_costs,100000);assert.equal(result.summary.company_fee_total,15000);assert.equal(result.summary.chargeable_cost_total,115000);
+ assert.equal(result.summary.physical_cash_balance,0);assert.equal(result.summary.unpaid_invoices,100000);
+});
+check('V2: the invoice and its linked actual payment create one 100k cost base',()=>{
+ const result=finance.evaluate(costBase({ledger:[operation('in','advance',115000),operation('paid','expense',100000,{invoice_id:'cost'})]}));
+ assert.equal(result.summary.confirmed_project_costs,100000);assert.equal(result.summary.company_fee_total,15000);assert.equal(result.summary.physical_cash_balance,15000);
+ assert.equal(result.summary.unpaid_invoices,0);assert.equal(result.summary.chargeable_cost_total,115000);
+});
+check('V2: a partial payment changes cash and payables, never the same confirmed cost twice',()=>{
+ const result=finance.evaluate(costBase({ledger:[operation('in','advance',115000),operation('paid','expense',10000,{description:'[invoice-payment:cost]'})]}));
+ assert.equal(result.summary.company_fee_total,15000);assert.equal(result.summary.physical_cash_balance,105000);assert.equal(result.summary.unpaid_invoices,90000);
+});
+check('V2: a direct client expense creates markup without a company cash receipt',()=>{
+ const result=finance.evaluate(costBase({invoices:[invoice('cost',100000,{paid_by_client:true})]}));
+ assert.equal(result.summary.confirmed_project_costs,100000);assert.equal(result.summary.company_fee_total,15000);
+ assert.equal(result.summary.received_by_company,0);assert.equal(result.summary.physical_cash_balance,0);assert.equal(result.summary.direct_client_paid,100000);
+});
+check('V2: an advance without costs generates zero markup',()=>{
+ const result=finance.evaluate(markupInput({ledger:[operation('in','construction_budget',115000)]}));
+ assert.equal(result.costs_ok,true);assert.equal(result.summary.confirmed_project_costs,0);assert.equal(result.summary.company_fee_total,0);assert.equal(result.summary.chargeable_cost_total,0);
+ assert.equal(result.summary.physical_cash_balance,115000);assert.equal(result.summary.company_fee_allocated,0);
+});
+check('V2: changing a saved budget, price, staff or expense cache cannot create markup',()=>{
+ for(const budget of [0,1000000,9000000]){
+  const result=finance.evaluate(markupInput({contract:markupContract({budget_basis_amount:budget,price:budget,expenses:budget,employee_id:'manager',fee_percent:99}),price:budget}));
+  assert.equal(result.summary.company_fee_total,0);assert.equal(result.summary.chargeable_cost_total,0);
+ }
+});
+check('V2: no explicit completeness means unknown fee rather than zero',()=>{
+ for(const complete of [undefined,false,null,'true']){
+  const result=finance.evaluate(markupInput({costFactsComplete:complete}));assert.equal(result.costs_ok,false);assert.equal(result.summary.company_fee_total,null);assert.equal(result.summary.chargeable_cost_total,null);
+  assert(code(result,'COST_FACTS_INCOMPLETE'));
+ }
+});
+check('V2: an omitted cost or credit list does not claim a complete approved base',()=>{
+ for(const changes of [{costFacts:undefined},{costCredits:undefined}]){
+  const result=finance.evaluate(markupInput(changes));assert.equal(result.costs_ok,false);assert.equal(result.summary.company_fee_total,null);
+ }
+});
+check('V2: uploading a bill alone does not confirm the expense for markup',()=>{
+ const result=finance.evaluate(markupInput({invoices:[invoice('cost',100000)]}));
+ assert.equal(result.summary.physical_cash_balance,0);assert.equal(result.summary.known_confirmed_project_costs,0);assert.equal(result.summary.company_fee_total,null);assert(code(result,'UNCONFIRMED_COST_SOURCE'));
+});
+check('V2: unconfirmed, negative, invalid or mismatched facts block the fee',()=>{
+ for(const changes of [{confirmed_at:null},{confirmed_by:undefined},{amount:-1},{amount:NaN},{amount:undefined},{amount:'0.001'},{amount:90000},{cost_scope:undefined}]){
+  const result=finance.evaluate(costBase({costFacts:[costFact('fact','invoice','cost',100000,changes)]}));
+  assert.equal(result.costs_ok,false,JSON.stringify(changes));assert.equal(result.summary.company_fee_total,null);
+ }
+});
+check('V2: a wrong version basis, included mode or unsupported rate cannot be chosen implicitly',()=>{
+ for(const changes of [{company_fee_basis:'approved_budget'},{company_fee_mode:'included'},{company_fee_rate:undefined},{company_fee_rate:101},{confirmed_by:null}]){
+  const result=finance.evaluate(costBase({contract:markupContract(changes)}));assert.equal(result.contract_ok,false);assert.equal(result.summary.company_fee_total,null);assert.equal(result.summary.chargeable_cost_total,null);
+ }
+});
+check('V2: historical version1 is read by its own terms rather than migrated',()=>{
+ const old=finance.evaluate(costBase({contract:contract()}));const next=finance.evaluate(costBase());
+ assert.equal(old.version,1);assert.equal(old.summary.company_fee_total,150000);assert.equal(next.version,2);assert.equal(next.summary.company_fee_total,15000);
+});
+check('V2: a standalone actual project expense can be confirmed once',()=>{
+ const result=finance.evaluate(markupInput({ledger:[operation('in','advance',115000),operation('manual','project_expense',100000)],costFacts:[costFact('manual-fact','ledger','manual',100000)]}));
+ assert.equal(result.costs_ok,true);assert.equal(result.summary.confirmed_project_costs,100000);assert.equal(result.summary.company_fee_total,15000);assert.equal(result.summary.physical_cash_balance,15000);
+});
+check('V2: an unconfirmed standalone expense blocks a claimed complete zero base',()=>{
+ const result=finance.evaluate(markupInput({ledger:[operation('expense','project_expense',100000)]}));
+ assert.equal(result.costs_ok,false);assert.equal(result.summary.company_fee_total,null);assert.equal(result.summary.physical_cash_balance,-100000);
+});
+check('V2: adding a second fact for an invoice payment never doubles the base',()=>{
+ const result=finance.evaluate(costBase({ledger:[operation('paid','expense',100000,{invoice_id:'cost'})],costFacts:[costFact('fact','invoice','cost',100000),costFact('duplicate','ledger','paid',100000)]}));
+ assert.equal(result.costs_ok,false);assert.equal(result.summary.company_fee_total,null);assert(code(result,'INVOICE_PAYMENT_IS_NOT_SECOND_COST'));
+});
+check('V2: two IDs cannot confirm the same document twice',()=>{
+ const result=finance.evaluate(costBase({costFacts:[costFact('one','invoice','cost',100000),costFact('two','invoice','cost',100000)]}));
+ assert.equal(result.costs_ok,false);assert.equal(result.summary.known_confirmed_project_costs,100000);assert(code(result,'DUPLICATE_COST_SOURCE'));
+});
+check('V2: internal expenses paid from the company markup are not marked up again',()=>{
+ const result=finance.evaluate(costBase({ledger:[operation('in','advance',115000),operation('paid','expense',100000,{invoice_id:'cost'}),
+  operation('company-cost','fee_payment',5000,{payee_employee_id:'manager',funding_source:'company_fee'})],allocations:[allocation('fee',15000)]}));
+ assert.equal(result.costs_ok,true);assert.equal(result.summary.confirmed_project_costs,100000);assert.equal(result.summary.company_fee_total,15000);
+ assert.equal(result.summary.company_fee_cash_balance,10000);assert.equal(result.summary.client_cash_balance,0);
+});
+check('V2: explicitly excluded company invoices remain documents with no second markup',()=>{
+ const result=finance.evaluate(costBase({invoices:[invoice('cost',100000),invoice('overhead',15000,{funding_source:'company_fee'})],
+  costFacts:[costFact('fact','invoice','cost',100000),costFact('internal','invoice','overhead',15000,{cost_scope:'company_fee'})]}));
+ assert.equal(result.costs_ok,true);assert.equal(result.summary.confirmed_project_costs,100000);assert.equal(result.summary.confirmed_company_costs,15000);assert.equal(result.summary.company_fee_total,15000);
+});
+check('V2: a company-funded payout cannot be promoted into a client markup cost',()=>{
+ const result=finance.evaluate(markupInput({ledger:[operation('company','expense',10000,{funding_source:'company_fee'})],costFacts:[costFact('fake','ledger','company',10000)]}));
+ assert.equal(result.costs_ok,false);assert(code(result,'COMPANY_FEE_COST_NOT_MARKUP_BASE'));assert.equal(result.summary.company_fee_total,null);
+});
+check('V2: role accrual and handed-out cash are not automatic final expenses',()=>{
+ const result=finance.evaluate(markupInput({ledger:[operation('salary-accrual','role_payout',100000),operation('hand','withdrawal',10000,{funding_source:'client',purpose:'cash_handover'})]}));
+ assert.equal(result.costs_ok,true);assert.equal(result.summary.company_fee_total,0);assert.equal(result.commitments_complete,false);
+ for(const row of [operation('acc','role_payout',10000),operation('hand','withdrawal',10000,{funding_source:'client',purpose:'cash_handover'})]){
+  const bad=finance.evaluate(markupInput({ledger:[row],costFacts:[costFact('not-cost','ledger',row.id,10000)]}));assert.equal(bad.costs_ok,false);assert(code(bad,'NON_COST_LEDGER_SOURCE'));
+ }
+});
+check('V2: controlled supplier credit reduces the base and markup without creating cash',()=>{
+ const result=finance.evaluate(costBase({costCredits:[credit('credit','fact',10000)]}));
+ assert.equal(result.costs_ok,true);assert.equal(result.summary.gross_confirmed_project_costs,100000);assert.equal(result.summary.project_cost_credits,10000);
+ assert.equal(result.summary.confirmed_project_costs,90000);assert.equal(result.summary.company_fee_total,13500);assert.equal(result.summary.chargeable_cost_total,103500);
+ assert.equal(result.summary.physical_cash_balance,0);assert.equal(result.summary.invoice_net_total,90000);assert.equal(result.summary.unpaid_invoices,90000);
+});
+check('V2: credit on an already paid document is a receivable, never a fictional refund',()=>{
+ const result=finance.evaluate(costBase({ledger:[operation('in','advance',115000),operation('paid','expense',100000,{invoice_id:'cost'})],costCredits:[credit('credit','fact',10000)]}));
+ assert.equal(result.summary.company_fee_total,13500);assert.equal(result.summary.physical_cash_balance,15000);assert.equal(result.summary.client_refunds,0);assert.equal(result.summary.invoice_overpaid,10000);assert(code(result,'CREDIT_REFUND_NOT_YET_RECEIVED'));
+});
+check('V2: a refund to the client is not a supplier credit and does not change the fee base',()=>{
+ const result=finance.evaluate(costBase({ledger:[operation('in','advance',115000),operation('paid','expense',100000,{invoice_id:'cost'}),operation('refund','client_refund',5000)]}));
+ assert.equal(result.summary.confirmed_project_costs,100000);assert.equal(result.summary.company_fee_total,15000);assert.equal(result.summary.physical_cash_balance,10000);assert.equal(result.summary.client_refunds,5000);
+});
+check('V2: an over-credit, missing reference or unconfirmed credit blocks a false lower fee',()=>{
+ for(const value of [credit('bad','fact',100001),credit('bad','missing',1),credit('bad','fact',10000,{confirmed_by:null}),credit('bad','fact',10000,{confirmed_at:null})]){
+  const result=finance.evaluate(costBase({costCredits:[value]}));assert.equal(result.costs_ok,false);assert.equal(result.summary.company_fee_total,null);
+ }
+ const over=finance.evaluate(costBase({costCredits:[credit('one','fact',90000),credit('two','fact',20000)]}));assert.equal(over.costs_ok,false);assert(code(over,'COST_CREDIT_EXCEEDS_SOURCE'));
+});
+check('V2: foreign objects cannot contribute a fact or a cost credit',()=>{
+ const source=finance.evaluate(markupInput({invoices:[invoice('foreign',100000,{project_id:'other'})],costFacts:[costFact('bad','invoice','foreign',100000)]}));
+ assert.equal(source.costs_ok,false);assert(code(source,'COST_SOURCE_OUTSIDE_PROJECT'));
+ const reference=finance.evaluate(costBase({costCredits:[credit('bad','foreign-fact',10000)]}));assert.equal(reference.costs_ok,false);assert(code(reference,'CREDIT_SOURCE_OUTSIDE_PROJECT'));
+});
+check('V2: future facts or credits cannot alter the current base',()=>{
+ const noCost=finance.evaluate(costBase({costFacts:[costFact('fact','invoice','cost',100000,{entry_date:'2026-10-20',confirmed_at:'2026-10-20T10:00:00Z'})]}));assert.equal(noCost.costs_ok,false);
+ const noCredit=finance.evaluate(costBase({costCredits:[credit('future','fact',10000,{entry_date:'2026-10-20',confirmed_at:'2026-10-20T10:00:00Z'})]}));assert.equal(noCredit.summary.company_fee_total,15000);
+});
+check('V2: a company cost credit never reduces the project markup base',()=>{
+ const result=finance.evaluate(costBase({invoices:[invoice('cost',100000),invoice('internal',15000,{funding_source:'company_fee'})],
+  costFacts:[costFact('fact','invoice','cost',100000),costFact('internal-fact','invoice','internal',15000,{cost_scope:'company_fee'})],costCredits:[credit('credit','internal-fact',5000)]}));
+ assert.equal(result.summary.confirmed_project_costs,100000);assert.equal(result.summary.company_fee_total,15000);assert.equal(result.summary.confirmed_company_costs,10000);
+});
+check('V2: shrinking the agreed cost base exposes previously overallocated markup',()=>{
+ const result=finance.evaluate(costBase({allocations:[allocation('allocated',15000)],costCredits:[credit('credit','fact',10000)]}));
+ assert.equal(result.summary.company_fee_total,13500);assert.equal(result.summary.company_fee_allocated,15000);assert.equal(result.summary.company_fee_overallocated,1500);assert.equal(result.allocation_ok,false);
+});
+check('V2: an existing allocation with an unconfirmed base stays recorded and is not legitimized',()=>{
+ const result=finance.evaluate(costBase({costFactsComplete:false,allocations:[allocation('allocated',15000)]}));
+ assert.equal(result.summary.company_fee_total,null);assert.equal(result.summary.company_fee_allocated,15000);assert.equal(result.allocation_ok,false);assert.equal(result.summary.client_cash_balance,null);
+});
+check('V2: rounding applies once to the net confirmed cost total in kopecks',()=>{
+ const documents=[invoice('one','0.05'),invoice('two','0.05'),invoice('three','0.05')],facts=documents.map(row=>costFact('fact-'+row.id,'invoice',row.id,'0.05'));
+ const result=finance.evaluate(markupInput({invoices:documents,costFacts:facts}));assert.equal(result.summary.confirmed_project_costs,0.15);assert.equal(result.summary.company_fee_total,0.02);assert.equal(result.summary.chargeable_cost_total,0.17);
+});
+check('V2: fee allocation only divides existing cash after real costs',()=>{
+ const result=finance.evaluate(costBase({ledger:[operation('in','advance',115000),operation('paid','expense',100000,{invoice_id:'cost'})],allocations:[allocation('fee',15000)]}));
+ assert.equal(result.summary.physical_cash_balance,15000);assert.equal(result.summary.received_by_company,115000);assert.equal(result.summary.client_cash_balance,0);assert.equal(result.summary.company_fee_cash_balance,15000);assert.equal(result.conservation.difference_minor,0);
+});
+check('V2: the same fact and credit IDs survive duplicated snapshots without repeated markup or credit',()=>{
+ const fact=costFact('fact','invoice','cost',100000),adjustment=credit('credit','fact',10000);
+ const result=finance.evaluate(costBase({costFacts:[fact,{...fact}],costCredits:[adjustment,{...adjustment}]}));
+ assert.equal(result.costs_ok,true);assert.equal(result.summary.confirmed_project_costs,90000);assert.equal(result.summary.company_fee_total,13500);
+});
+check('V2: an unconfirmed cost base never masks independently known actual cash',()=>{
+ const result=finance.evaluate(costBase({costFactsComplete:false,ledger:[operation('in','advance',115000),operation('paid','expense',100000,{invoice_id:'cost'})]}));
+ assert.equal(result.summary.company_fee_total,null);assert.equal(result.summary.chargeable_cost_total,null);assert.equal(result.cash_ok,true);assert.equal(result.summary.physical_cash_balance,15000);
+});
+check('V2: deleted sources and conflicting source copies require review instead of a silently reduced fee',()=>{
+ const removed=finance.evaluate(costBase({invoices:[invoice('cost',100000,{deleted_at:'2026-10-19T12:00:00Z'})]}));
+ assert.equal(removed.costs_ok,false);assert.equal(removed.summary.company_fee_total,null);assert(code(removed,'COST_SOURCE_OUTSIDE_PROJECT'));
+ const row=operation('manual','project_expense',100000),bad=finance.evaluate(markupInput({ledger:[row,{...row,amount:200000}],costFacts:[costFact('fact','ledger','manual',100000)]}));
+ assert.equal(bad.costs_ok,false);assert.equal(bad.summary.company_fee_total,null);assert(code(bad,'INVALID_COST_SOURCE'));
+});
+check('V2: crediting the entire accepted cost resets markup to an explicit zero without generating money',()=>{
+ const result=finance.evaluate(costBase({ledger:[operation('in','advance',115000)],costCredits:[credit('cancel-cost','fact',100000)]}));
+ assert.equal(result.costs_ok,true);assert.equal(result.summary.confirmed_project_costs,0);assert.equal(result.summary.company_fee_total,0);assert.equal(result.summary.chargeable_cost_total,0);assert.equal(result.summary.physical_cash_balance,115000);
+});
+check('V2: evaluation is immutable and order independent for facts and distinct credits',()=>{
+ const value=costBase({costCredits:[credit('one','fact',1000),credit('two','fact',2000)]}),snapshot=JSON.stringify(value),one=finance.evaluate(value),two=finance.evaluate({...value,costCredits:[...value.costCredits].reverse()});
+ assert.equal(JSON.stringify(value),snapshot);assert.deepEqual(one.minor,two.minor);assert.equal(one.summary.company_fee_total,14550);
+});
+check('V2: explicit saved legacy rates 0, 10 and 20 are preserved instead of overwritten by the new default 15',()=>{
+ for(const company_fee_rate of [0,10,15,20]){
+  const result=finance.evaluate(costBase({contract:markupContract({company_fee_rate})}));
+  assert.equal(result.contract_ok,true);assert.equal(result.contract.company_fee_rate,company_fee_rate);assert.equal(result.summary.company_fee_total,100000*company_fee_rate/100);assert.equal(result.summary.chargeable_cost_total,100000+100000*company_fee_rate/100);
+ }
+});
+check('V2: fractional percentages use basis points and half-up kopeck rounding on the complete base',()=>{
+ const result=finance.evaluate(markupInput({contract:markupContract({company_fee_rate:'12.50'}),invoices:[invoice('cost','0.04')],costFacts:[costFact('fact','invoice','cost','0.04')]}));
+ assert.equal(result.contract.company_fee_rate,12.5);assert.equal(result.summary.company_fee_total,0.01);assert.equal(result.summary.chargeable_cost_total,0.05);
+ for(const company_fee_rate of [-1,100.01,'15.001',NaN,Infinity,null,''])assert.equal(finance.normalizeContract(markupContract({company_fee_rate})).ok,false);
+});
+// The existing object card is also a consumer of these rules. Exercise its
+// exported function bodies without a browser or a production transport.
+const cardSource=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
+function cardFixture(changes={}){
+ const scope={window:{},Intl,Date,console,state:{projects:[],departments:[{id:'construction',name:'Строительный отдел'}],categories:[{id:'build',name:'Строительство',department_id:'construction'}],ledger:[],invoices:[],...changes},financeToday:()=>day,
+  findCategory:id=>scope.state.categories.find(row=>row.id===id),
+  fmtMoney:value=>Number(value).toLocaleString('ru-RU',{maximumFractionDigits:2})+' ₽'};
+ scope.isInvoiceLinkedExpense=row=>!!scope.window.ARHITTEKCash.invoicePaymentId(row)&&scope.state.invoices.some(invoice=>invoice.project_id===row.project_id&&invoice.id===scope.window.ARHITTEKCash.invoicePaymentId(row)&&!invoice.deleted_at);
+ vm.createContext(scope);
+ vm.runInContext(fs.readFileSync(path.join(__dirname,'..','cash-finance.js'),'utf8'),scope);
+ vm.runInContext(cardSource.slice(cardSource.indexOf('const CONSTRUCTION_INCOME_TYPES ='),cardSource.indexOf('let activeConstrStatusFilter =')),scope);
+ vm.runInContext(cardSource.slice(cardSource.indexOf('function constructionCompanyFeePlanHtml('),cardSource.indexOf('// История поступлений от заказчика по объекту стройки')),scope);
+ return scope;
+}
+const object=(changes={})=>({id:'object',name:'Ремонт',category_id:'build',price:1000000,employee_id:'worker',fee_percent:15,...changes});
+check('Existing card: 100000 documented costs plus 15% is 115000 with or without an employee',()=>{
+ const app=cardFixture({invoices:[invoice('document',100000)]});
+ for(const employee_id of ['worker',null]){const f=app.getConstructionFinancials(object({employee_id}));assert.equal(f.companyMarkupBase,100000);assert.equal(f.companyMarkupAmount,15000);assert.equal(f.totalWithMarkup,115000);}
+});
+check('Existing card: an advance alone or a changed planned budget creates no markup',()=>{
+ const app=cardFixture({ledger:[operation('receipt','advance',100000)]});
+ for(const price of [0,1000000,2000000]){const f=app.getConstructionFinancials(object({price}));assert.equal(f.companyMarkupAmount,0);assert.equal(f.totalWithMarkup,0);assert.equal(f.balance,100000);}
+});
+check('Existing card: unpaid documents affect the calculation but do not spend cash',()=>{
+ const app=cardFixture({ledger:[operation('receipt','advance',115000)],invoices:[invoice('document',100000)]}),f=app.getConstructionFinancials(object());
+ assert.equal(f.balance,115000);assert.equal(f.unpaidInvoices,100000);assert.equal(f.companyMarkupAmount,15000);assert.equal(f.calculatedAdvanceBalance,0);
+});
+check('Existing card: partial payment changes cash once without a second cost or fee',()=>{
+ const app=cardFixture({ledger:[operation('receipt','advance',115000),operation('paid','project_expense',20000,{description:'[invoice-payment:document]'})],invoices:[invoice('document',100000)]}),f=app.getConstructionFinancials(object());
+ assert.equal(f.balance,95000);assert.equal(f.unpaidInvoices,80000);assert.equal(f.companyMarkupBase,100000);assert.equal(f.companyMarkupAmount,15000);assert.equal(f.calculatedAdvanceBalance,0);
+});
+check('Existing card: direct client purchase is included in markup but never deducted twice from the advance',()=>{
+ const app=cardFixture({ledger:[operation('receipt','advance',15000)],invoices:[invoice('direct',100000,{paid_by_client:true})]}),f=app.getConstructionFinancials(object());
+ assert.equal(f.balance,15000);assert.equal(f.directPaid,100000);assert.equal(f.companyMarkupAmount,15000);assert.equal(f.calculatedAdvanceBalance,0);
+});
+check('Existing card: legacy rates and recorded company fee remain intact and generate no employee commission',()=>{
+ const app=cardFixture({invoices:[invoice('document',100000)]});
+ for(const fee_percent of [0,10,20]){
+  const p=object({fee_percent,fee_paid:1234,co_fee_percent:20,co_employee_id:'other',co_fee_paid:55}),before=JSON.stringify(p),f=app.getConstructionFinancials(p),personal=app.calcConstrFee({...p,expenses:f.directCosts});
+  assert.equal(f.companyMarkupAmount,100000*fee_percent/100);assert.equal(f.companyMarkupRecordedPaid,1234);assert.equal(personal.feeAmount,0);assert.equal(personal.paid,0);assert.equal(personal.remaining,0);assert.equal(personal.companyMarkupAmount,f.companyMarkupAmount);assert.equal(JSON.stringify(p),before);
+ }
+});
+check('Existing card: future and removed source documents do not alter today markup or cash',()=>{
+ const app=cardFixture({ledger:[operation('receipt','advance',115000),operation('future-cost','expense',70000,{entry_date:'2099-01-01'}),operation('removed-cost','expense',90000,{deleted_at:'2026-10-19T10:00:00Z'})],invoices:[invoice('today',100000),invoice('future',80000,{invoice_date:'2099-01-01'}),invoice('removed',50000,{deleted_at:'2026-10-19T10:00:00Z'})]}),f=app.getConstructionFinancials(object());
+ assert.equal(f.companyMarkupBase,100000);assert.equal(f.companyMarkupAmount,15000);assert.equal(f.balance,115000);
+});
+check('Existing card: work accruals and salary payments never become a second markup base',()=>{
+ const app=cardFixture({ledger:[operation('labor','role_payout',50000,{payee_employee_id:'worker'}),operation('paid','payment',5000,{payee_employee_id:'worker'})],invoices:[invoice('document',100000)]}),f=app.getConstructionFinancials(object());
+ assert.equal(f.rolePayouts,50000);assert.equal(f.cashOutgoing,5000);assert.equal(f.companyMarkupBase,100000);assert.equal(f.companyMarkupAmount,15000);
+});
+check('Existing card: exact fractional costs round markup on the accumulated base once',()=>{
+ const app=cardFixture({invoices:[invoice('one','0.05'),invoice('two','0.05'),invoice('three','0.05')]}),f=app.getConstructionFinancials(object());
+ assert.equal(f.companyMarkupBase,0.15);assert.equal(f.companyMarkupAmount,0.02);assert.equal(f.totalWithMarkup,0.17);
+ const half=app.constructionCompanyMarkup(object({fee_percent:50}),0.29);assert.equal(half.companyMarkupAmount,0.15);assert.equal(half.totalWithMarkup,0.44);
+ const fractionalRate=app.constructionCompanyMarkup(object({fee_percent:0.29}),50);assert.equal(fractionalRate.companyMarkupAmount,0.15);assert.equal(fractionalRate.totalWithMarkup,50.15);
+});
+check('Existing card: missing percentage stays unknown while explicit zero stays zero',()=>{
+ const app=cardFixture({invoices:[invoice('document',100000)]});
+ for(const fee_percent of [null,undefined,'',-1,101]){const f=app.getConstructionFinancials(object({fee_percent}));assert.equal(f.companyMarkupAmount,null);assert.equal(f.totalWithMarkup,null);assert.equal(f.balance,0);}
+ const zero=app.getConstructionFinancials(object({fee_percent:0}));assert.equal(zero.companyMarkupAmount,0);assert.equal(zero.totalWithMarkup,100000);
+});
+check('Existing card: fee display uses documentary costs, labels cash separately and never changes state',()=>{
+ const app=cardFixture({invoices:[invoice('document',100000)],ledger:[operation('receipt','advance',115000)]}),p=object(),snapshot=JSON.stringify(app.state),html=app.constructionCompanyFeePlanHtml(p);
+ assert(html.includes('Открытая наценка ARHITTEK'));assert(html.includes('Расходы по документам'));assert(html.includes('15% сверх расходов'));assert(html.includes('Расчётный остаток аванса'));assert(!html.includes('бюджета'));assert.equal(JSON.stringify(app.state),snapshot);
 });
 console.log(`Construction finance: ${checks}/${checks} checks passed.`);

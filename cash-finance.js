@@ -13,7 +13,7 @@ function cashEvents(s){
  const out=[],add=(r,kind,date,amount)=>{if(!r.deleted_at&&n(amount)!==0&&date){const imported=isImportedExpense(r),timestamp=Date.parse(r.created_at),unknown=!Number.isFinite(timestamp);out.push({row:r,kind,date,amount:rounded(amount),afterSnapshot:!imported&&date>=OPENING_DAY&&!unknown&&timestamp>Date.parse(CUTOFF),excludedReason:imported?'Перенос старых расходов · не новая оплата':unknown?'Нет даты создания · требуется сверка':'Учтено в стартовой сверке'});}};
  (s.companyIncome||[]).forEach(r=>add(r,'income',r.income_date,n(r.amount)));
  (s.companyExpenses||[]).forEach(r=>add(r,'expense',r.expense_date,-n(r.amount)));
- const incoming=new Set(['advance','final_payment','income','materials_budget','construction_budget']),outgoing=new Set(['expense','project_expense','payment','withdrawal','fee_payment','salary_payment']);
+ const incoming=new Set(['advance','final_payment','income','materials_budget','construction_budget']),outgoing=new Set(['expense','project_expense','payment','withdrawal','fee_payment','salary_payment','client_refund']);
  (s.ledger||[]).forEach(r=>{if(incoming.has(r.type))add(r,'ledger',r.entry_date,n(r.amount));else if(outgoing.has(r.type))add(r,'ledger',r.entry_date,-n(r.amount));});
  return out.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
 }
@@ -44,8 +44,20 @@ function cashStatus(s,until=day()){
  const count=cashCount(s,until),book=bookBalance(s,until),actual=balance(s,until);
  return {count,bookBalance:book,cashBalance:actual,difference:count?rounded(book-actual):0};
 }
-function amortEvents(s,until=day()){return cashEvents(s).filter(x=>x.afterSnapshot&&x.date<=until&&x.amount>0&&!isAdjustment(x.row)).map(x=>({...x,allocation:Math.round(x.amount*5)/100}));}
-function amortization(s,until=day()){return rounded(amortEvents(s,until).reduce((sum,x)=>sum+x.allocation,0));}
+function constructionProject(s,p){
+ if(!p)return false;
+ const category=(s.categories||[]).find(c=>c.id===p.category_id),department=(s.departments||[]).find(d=>d.id===category?.department_id);
+ if(category&&(department?.name==='Строительный отдел'||/строительств|ремонт|монтаж/i.test(category.name||'')))return true;
+ return typeof isConstructionProject==='function'&&isConstructionProject(p);
+}
+function amortEvents(s,until=day(),construction=p=>constructionProject(s,p)){
+ const projects=window.ARHITTEKBudget.projectRows(s);
+ // A client's construction advance is entrusted money, not company revenue.
+ return cashEvents(s).filter(x=>x.afterSnapshot&&x.date<=until&&x.amount>0&&!isAdjustment(x.row)&&
+   !(x.kind==='ledger'&&construction(projects.find(p=>p.id===x.row.project_id))))
+   .map(x=>({...x,allocation:Math.round(x.amount*5)/100}));
+}
+function amortization(s,until=day(),construction){return rounded(amortEvents(s,until,construction).reduce((sum,x)=>sum+x.allocation,0));}
 function projectBudget(s,until=day(),hooks){return window.ARHITTEKBudget.calculate(s,until,hooks);}
 function available(s,until=day()){return projectBudget(s,until).available;}
 function monthSummary(s,month){const current=day().slice(0,7),events=cashEvents(s).filter(x=>x.date.slice(0,7)===month&&x.date<=day()),accounted=events.filter(x=>x.afterSnapshot),previous=shift(month,-1),[y,m]=month.split('-').map(Number),last=new Date(Date.UTC(y,m,0)).toISOString().slice(0,10),prevLast=new Date(Date.UTC(Number(previous.slice(0,4)),Number(previous.slice(5)),0)).toISOString().slice(0,10),until=month===current?day():last;
@@ -58,16 +70,16 @@ function invoicePaymentId(row){return (String(row.description||'').match(/\[invo
 function invoicePaymentState(s,invoice,until=day()){const rows=(s.ledger||[]).filter(r=>invoice.id&&invoice.project_id&&!r.deleted_at&&r.project_id===invoice.project_id&&['expense','project_expense','payment'].includes(r.type)&&invoicePaymentId(r)===invoice.id),paid=rounded(rows.filter(r=>r.entry_date<=until).reduce((sum,r)=>sum+n(r.amount),0));return {rows,paid,remaining:Math.max(0,rounded(n(invoice.amount)-paid)),overpaid:Math.max(0,rounded(paid-n(invoice.amount)))};}
 function auditData(s){
  const pick=(rows,keys)=>(rows||[]).map(row=>Object.fromEntries(keys.filter(key=>row[key]!==undefined).map(key=>[key,row[key]])));
- return {version:3,exportedAt:new Date().toISOString(),asOf:day(),lastSuccessfulLoad:s.financialLoadedAt||null,loadError:s.financialDataError||null,openingSnapshot:{kind:'company-reserve',amount:OPENING,at:CUTOFF,projectAdvancesExcluded:true},calculation:{balance:balance(s),...cashStatus(s),...projectBudget(s)},cashCounts:pick(s.cashCounts,['id','entity_type','entity_name','action','changes','created_at']),
+ return {version:4,constructionPolicy:'client_funds_held_until_explicit_allocation',exportedAt:new Date().toISOString(),asOf:day(),lastSuccessfulLoad:s.financialLoadedAt||null,loadError:s.financialDataError||null,openingSnapshot:{kind:'company-reserve',amount:OPENING,at:CUTOFF,projectAdvancesExcluded:true},calculation:{balance:balance(s),...cashStatus(s),...projectBudget(s)},cashCounts:pick(s.cashCounts,['id','entity_type','entity_name','action','changes','created_at']),
   projects:pick(window.ARHITTEKBudget.projectRows(s),['id','name','category_id','status_id','price','advance','balance','expenses','employee_id','co_employee_id','fee_base','fee_percent','co_fee_percent','fee_paid','co_fee_paid','end_date','created_at','deleted_at']),
-  employees:pick(s.employees,['id','name','role','active','is_salaried','fixed_salary']),categories:pick(s.categories,['id','name','fee_base','fee_percent','department_id']),statuses:pick(s.statuses,['id','name']),
+  employees:pick(s.employees,['id','name','role','active','is_salaried','fixed_salary']),categories:pick(s.categories,['id','name','fee_base','fee_percent','department_id']),departments:pick(s.departments,['id','name']),statuses:pick(s.statuses,['id','name']),
   ledger:pick(s.ledger,['id','project_id','type','amount','entry_date','created_at','description','payee_employee_id','deleted_at']),
   companyIncome:pick(s.companyIncome,['id','category','amount','income_date','created_at','description','deleted_at']),companyExpenses:pick(s.companyExpenses,['id','category','amount','expense_date','created_at','description','deleted_at']),
   invoices:pick(s.invoices,['id','project_id','amount','invoice_date','created_at','item_type','description','paid_by_client','deleted_at']),timesheetPayments:pick(s.timesheetPayments,['id','employee_id','month','paid','paid_at'])};
 }
 function expected(p){const received=typeof isConstructionProject==='function'&&isConstructionProject(p)&&typeof getConstructionFinancials==='function'?getConstructionFinancials(p).received:p.advance;return Math.max(0,n(p.price)-n(received));}
 function dueProjects(s,month){return (s.projects||[]).filter(p=>!p.deleted_at&&String(p.end_date||'').slice(0,7)===month).filter(p=>{const status=(s.statuses||[]).find(x=>x.id===p.status_id);return !/заморож|отмен/i.test(status?.name||'');});}
-window.ARHITTEKCash={day,shift,period,cashEvents,balance,bookBalance,cashCount,cashStatus,isCountedNote,displayNote,amortEvents,amortization,projectBudget,available,monthSummary,flowGroup,flowSummary,isAdjustment,isImportedExpense,invoicePaymentId,invoicePaymentState,auditData,expected,dueProjects,opening:OPENING,cutoff:CUTOFF};
+window.ARHITTEKCash={day,shift,period,constructionProject,cashEvents,balance,bookBalance,cashCount,cashStatus,isCountedNote,displayNote,amortEvents,amortization,projectBudget,available,monthSummary,flowGroup,flowSummary,isAdjustment,isImportedExpense,invoicePaymentId,invoicePaymentState,auditData,expected,dueProjects,opening:OPENING,cutoff:CUTOFF};
 if(typeof document==='undefined')return;
 const $=id=>document.getElementById(id),esc=v=>escapeHtml(String(v??'')),money=v=>v===null?'—':fmtMoney(n(v));let selected=day().slice(0,7),following=true,busy=false,lastDay=day();
 function attachCountField(fieldId){
@@ -102,8 +114,8 @@ function cashPositionHTML(until=day()){
  const difference=status.difference;
  return '<div class="card"><h3>Все деньги компании</h3><strong data-company-total>'+money(status.cashBalance)+'</strong><div class="note">Сверка '+fmtDate(status.count.day)+' и новые оплаты после неё. В этой сумме уже находятся деньги проектов, команды и амортизация.</div>'+rowHTML('Резерв вместе с амортизацией',b.companyReserve+b.amortization)+(difference?'<div data-cash-discrepancy="'+difference+'">'+rowHTML('По денежному журналу',status.bookBalance)+rowHTML('Расхождение, требующее проверки',difference)+'<div class="note" style="color:var(--red)">Журнал и фактические деньги не совпадают. Сверка сохраняет этот вопрос открытым; сумма расхождения не записывается расходом или доходом.</div></div>':'<div class="note">Денежный журнал совпадает со сверкой.</div>')+(status.count.note?'<div class="note">'+esc(status.count.note)+'</div>':'')+'</div>';
 }
-function budgetHTML(b){return '<div class="card"><h3>Распределение денег</h3>'+rowHTML(b.countedCash?'Все деньги по фактической сверке и новым оплатам':'Денежный остаток по журналу · до фактической сверки',b.cashBalance)+rowHTML('− Средства незавершённых проектов',b.projectsHeld)+rowHTML('− Команде по завершённым проектам',b.teamHeld)+rowHTML('− Неоплаченные расходы завершённых проектов',b.costsHeld)+rowHTML('− Амортизация',b.amortization)+rowHTML('= Расчётный свободный резерв',b.companyReserve)+(!b.countedCash&&b.releasedOpeningFunds?'<div class="note">В истории завершённых проектов есть старые авансы '+money(b.releasedOpeningFunds)+'. Они не являются новым приходом и не прибавлены к деньгам. Их остаток требует фактической сверки.</div>':'')+'<div class="note">Распределение рассчитано по обязательствам текущего журнала с 05.10.2026. Старые авансы и выплаты до этой даты требуют отдельной сверки; свободный резерв пока расчётный. Аванс остаётся в бюджете проекта. Доля команды и амортизация выделены внутри общих денег. При фактической сверке старый аванс уже входит в общий остаток. Выплата удержанного гонорара уменьшает деньги и долг одновременно. Общие расходы уменьшают резерв напрямую.</div></div>';}
-function projectBudgetsHTML(b){return '<details class="card"><summary>Распределение по проектам</summary>'+b.projects.map(d=>'<div class="card"><strong>'+esc(d.name)+'</strong>'+(d.archived?'<div class="note">Проект в корзине. Его денежные операции и обязательства сохранены.</div>':'')+'<div class="note">'+(d.completed?'Завершён · остаток передан компании':'Деньги остаются у проекта')+'</div>'+rowHTML('Аванс до 05.10.2026 · история',d.openingProjectFunds)+rowHTML('Поступило по журналу с 05.10.2026',d.receivedAfterSnapshot)+rowHTML('Прямые расходы по журналу с 05.10.2026',d.directPaidAfterSnapshot)+rowHTML('Команде по журналу с 05.10.2026',d.teamPaidAfterSnapshot)+rowHTML('Амортизация из этих поступлений',d.amortization)+rowHTML('Осталось у незавершённого проекта',d.projectHeld)+d.team.map(t=>rowHTML((findEmployee(t.employeeId)?.name||'Сотрудник')+' · '+t.month+' · осталось выплатить',t.remaining)).join('')+(d.costsHeld?rowHTML('Зарезервировано на прямые расходы',d.costsHeld):'')+(d.completed?rowHTML('Доля компании по истории проекта',d.companyContribution):'')+'</div>').join('')+'<div class="note">Начальные 20 000 ₽ — резерв компании. Исторические авансы показаны для проверки. Они не прибавляются к общему остатку при завершении и не отменяют реальные списания. До фактической сверки суммы по прежней стартовой базе предварительные. На амортизацию выделяется 5% прихода; эта часть исключается из удержанных авансов, чтобы не резервировать её дважды. Оклады, премии и будущие гонорары показаны в команде и прогнозе.</div></details>';}
+function budgetHTML(b){return '<div class="card"><h3>Распределение денег</h3>'+rowHTML(b.countedCash?'Все деньги по фактической сверке и новым оплатам':'Денежный остаток по журналу · до фактической сверки',b.cashBalance)+rowHTML('− Средства проектов и заказчиков стройки',b.projectsHeld)+rowHTML('− Команде по завершённым проектам',b.teamHeld)+rowHTML('− Неоплаченные расходы завершённых проектов',b.costsHeld)+rowHTML('− Амортизация',b.amortization)+rowHTML('= Расчётный свободный резерв',b.companyReserve)+(!b.countedCash&&b.releasedOpeningFunds?'<div class="note">В истории завершённых проектов есть старые авансы '+money(b.releasedOpeningFunds)+'. Они не являются новым приходом и не прибавлены к деньгам. Их остаток требует фактической сверки.</div>':'')+'<div class="note">Распределение рассчитано по обязательствам текущего журнала с 05.10.2026. Старые авансы и выплаты до этой даты требуют отдельной сверки; свободный резерв пока расчётный. Аванс остаётся в бюджете проекта. Доля команды и амортизация выделены внутри общих денег. При фактической сверке старый аванс уже входит в общий остаток. Выплата удержанного гонорара уменьшает деньги и долг одновременно. Общие расходы уменьшают резерв напрямую.</div></div>';}
+function projectBudgetsHTML(b){return '<details class="card"><summary>Распределение по проектам</summary>'+b.projects.map(d=>'<div class="card"><strong>'+esc(d.name)+'</strong>'+(d.archived?'<div class="note">Проект в корзине. Его денежные операции и обязательства сохранены.</div>':'')+'<div class="note">'+(d.construction?'Деньги заказчика удерживаются независимо от статуса объекта':d.completed?'Завершён · доля распределена компании':'Деньги остаются у проекта')+'</div>'+rowHTML('Аванс до 05.10.2026 · история',d.openingProjectFunds)+rowHTML('Поступило по журналу с 05.10.2026',d.receivedAfterSnapshot)+rowHTML('Прямые расходы по журналу с 05.10.2026',d.directPaidAfterSnapshot)+rowHTML('Команде по журналу с 05.10.2026',d.teamPaidAfterSnapshot)+rowHTML('Амортизация из этих поступлений',d.amortization)+rowHTML(d.construction?'Средства заказчика стройки · по журналу':'Осталось у незавершённого проекта',d.projectHeld)+d.team.map(t=>rowHTML((findEmployee(t.employeeId)?.name||'Сотрудник')+' · '+t.month+' · осталось выплатить',t.remaining)).join('')+(d.costsHeld?rowHTML('Зарезервировано на прямые расходы',d.costsHeld):'')+(d.completed&&!d.construction?rowHTML('Доля компании по новым операциям · без старых авансов',d.companyContribution):'')+(d.construction?'<div class="note">Накладные и наценка сами по себе не переводят деньги в резерв. Для перечисления вознаграждения компании нужна отдельная подтверждённая операция распределения.</div>':'')+'</div>').join('')+'<div class="note">Начальные 20 000 ₽ — резерв компании. Исторические авансы показаны для проверки. Они не прибавляются к общему остатку при завершении и не отменяют реальные списания. До фактической сверки суммы по прежней стартовой базе предварительные. На амортизацию выделяется 5% поступлений проектного отдела и прочих доходов компании. Авансы на строительство полностью остаются деньгами заказчика; с них амортизация не удерживается. Оклады, премии и будущие гонорары показаны в команде и прогнозе.</div></details>';}
 function flowHTML(events){const f=flowSummary(events);return '<div class="card"><h3>Куда движутся деньги</h3>'+rowHTML('+ От клиентов',f.clients)+rowHTML('+ Доходы компании',f.otherIncome)+rowHTML('− Команде: зарплата и гонорары',f.team)+rowHTML('− По проектам: закупки и прямые расходы',f.projects)+rowHTML('− Компания: офис, связь и прочее',f.company)+rowHTML('− Вывод денег',f.withdrawals)+rowHTML('Сверка остатка',f.adjustments)+'</div>';}
 function payrollHTML(events){
  const payments=events.filter(x=>flowGroup(x)==='team');
@@ -138,13 +150,14 @@ function render(){
  panel('income','<div class="card"><h3>Сдача помещения</h3><div class="fee-row"><div class="fl">Получено за выбранный месяц</div><div class="fv">'+money(sublease.paid)+'</div></div>'+(sublease.left?btn('Получил '+money(sublease.left),'confirm','sublease'): '<div class="note">Доход за месяц подтверждён</div>')+'</div><div class="note">Оплаты проектов автоматически поступают из карточки проекта → Деньги. Учитывается только принятая сумма.</div><div class="section-label">Фактические поступления за месяц</div><div class="card">'+eventsHTML(events.filter(x=>x.amount>0))+'</div>'+btn('Добавить другой доход','income'));
  panel('expense',[rent,internet].map((x,i)=>'<div class="card" style="margin-bottom:12px"><h3>'+esc(x.label)+'</h3><div class="fee-row"><div class="fl">Оплачено</div><div class="fv">'+money(x.paid)+'</div></div><div class="fee-row"><div class="fl">Осталось по плану</div><div class="fv">'+money(x.left)+'</div></div>'+(x.left?btn('Оплатил '+money(x.left),'confirm',i?'internet':'rent'):'<div class="note">Оплачено за месяц</div>')+btn('Частичная оплата','partial',i?'internet':'rent')+'</div>').join('')+invoicesHTML()+'<div class="card">'+eventsHTML(events.filter(x=>x.amount<0))+'</div>'+btn('Добавить расход','expense'));
  panel('reserve',cashPositionHTML()+'<div class="finance-v-hero reserve-hero"><span>Расчётный свободный резерв компании</span><strong data-company-reserve>'+money(budget.companyReserve)+'</strong><small>Доля компании после распределения проектов, команды и амортизации</small></div>'+budgetHTML(budget)+projectBudgetsHTML(budget)+btn('Сверить все деньги компании','balance')+btn('Вывести из свободного резерва','withdraw')+btn('Выгрузить операции для сверки','audit-export')+warning+'<div class="note">Прежняя стартовая база — 20 000 ₽ от 05.10.2026. Старые авансы показаны в истории проектов, но не создают новые деньги при завершении. Новая фактическая сверка включает все деньги компании и сохраняется отдельно от приходов и расходов.</div><details><summary>Расчёт денежного журнала с 05.10.2026</summary>'+rowHTML('Остаток после сверки 05.10.2026',OPENING)+rowHTML('+ Поступления после сверки',receipts)+rowHTML('− Выплаты после сверки',payments)+eventsHTML(accounted)+'<div class="note">Старые операции повторно не учитываются, даже если внесены позже.</div></details>');
- panel('amortization','<div class="finance-kpi-grid">'+kpi('Накоплено на амортизацию',amortization(state))+kpi('Отчислено за месяц',amortEvents(state).filter(x=>x.date.slice(0,7)===selected).reduce((sum,x)=>sum+x.allocation,0))+'</div><div class="note">5% каждого фактического поступления с момента сверки. Это часть денег компании, выделенная в резерв и исключённая из доступного бюджета. Корректировка остатка не является приходом.</div><div class="card">'+(amortEvents(state).filter(x=>x.date.slice(0,7)===selected).map(x=>'<div class="fee-row"><div class="fl">'+fmtDate(x.date)+' · приход '+money(x.amount)+'</div><div class="fv">'+money(x.allocation)+'</div></div>').join('')||'<div class="empty-state">Отчислений за месяц нет</div>')+'</div>');
+ panel('amortization','<div class="finance-kpi-grid">'+kpi('Накоплено на амортизацию',amortization(state))+kpi('Отчислено за месяц',amortEvents(state).filter(x=>x.date.slice(0,7)===selected).reduce((sum,x)=>sum+x.allocation,0))+'</div><div class="note">5% фактических поступлений проектного отдела и прочих доходов компании с момента сверки. Клиентские авансы на стройку и корректировки остатка не создают амортизацию. Выделение наценки компании требует отдельного подтверждения.</div><div class="card">'+(amortEvents(state).filter(x=>x.date.slice(0,7)===selected).map(x=>'<div class="fee-row"><div class="fl">'+fmtDate(x.date)+' · приход '+money(x.amount)+'</div><div class="fv">'+money(x.allocation)+'</div></div>').join('')||'<div class="empty-state">Отчислений за месяц нет</div>')+'</div>');
  panel('team',payrollHTML(events));
  renderForecast();
  // Hide obsolete accrued-finance summaries; keep the previous tabs and payroll UI.
  const old=$('financeObligationsWrap');if(old)old.hidden=true;
 }
 function forecastProject(p,budget=projectBudget(state)){
+ if(constructionProject(state,p))return {project:p,construction:true,incoming:expected(p),reserveIncoming:0,payouts:[],unpaid:0,release:0,net:0,amortization:0};
  const fees=getProjectFee(p),incoming=expected(p),allocation=budget.projects.find(d=>d.id===p.id),rows=p.fee_base==='m2'
    ? projectRolePayoutEntries(p.id).map(r=>({id:r.payee_employee_id,amount:n(r.amount)}))
    : [{id:p.employee_id,amount:n(fees.mainFeeAmount),paid:n(fees.mainPaid)},
@@ -158,9 +171,9 @@ function forecastProject(p,budget=projectBudget(state)){
  return {project:p,incoming,payouts,unpaid,release,net:incoming+release-unpaid,amortization:Math.round(incoming*5)/100};
 }
 function renderForecast(){
- const current=day().slice(0,7),budget=projectBudget(state);let running=budget.available,html='<div class="note">Прогноз свободного резерва: при завершении проекта его удержанный бюджет и остаток оплаты переходят компании за вычетом доли команды. Уже зарезервированные выплаты по завершённым проектам повторно не вычитаются.</div>';
+ const current=day().slice(0,7),budget=projectBudget(state);let running=budget.available,html='<div class="note">Прогноз свободного резерва: сдача проекта АР/ДИ освобождает его долю за вычетом команды. Авансы на стройку и остаток её кассы не становятся доходом компании при завершении. Наценка по стройке здесь не прогнозируется до подтверждённого распределения. Уже зарезервированные выплаты повторно не вычитаются.</div>';
  for(let i=0;i<6;i++){
- const month=shift(current,i),projects=dueProjects(state,month),plans=projects.map(p=>forecastProject(p,budget)),income=plans.reduce((a,p)=>a+p.incoming,0),lease=recurringState('sublease',month),rent=recurringState('rent',month),internet=recurringState('internet',month);
+ const month=shift(current,i),projects=dueProjects(state,month),plans=projects.map(p=>forecastProject(p,budget)),income=plans.reduce((a,p)=>a+(p.reserveIncoming??p.incoming),0),clientFunding=plans.filter(p=>p.construction).reduce((a,p)=>a+p.incoming,0),lease=recurringState('sublease',month),rent=recurringState('rent',month),internet=recurringState('internet',month);
  const range=timesheetMonthRange(month),earned=completedProjectEarningsForRange(range.from,range.to).employees,split=splitPayrollByEmployee(earned).result;
  const due={};Object.entries(split).forEach(([id,row])=>due[id]=n(row.payout));
  plans.forEach(plan=>{
@@ -174,28 +187,66 @@ function renderForecast(){
  const remainingSalaries=Object.entries(due).reduce((sum,[id,amount])=>sum+salaryPaymentState(id,month,amount).remaining,0);
  const alreadyHeld=budget.projects.filter(d=>d.completed).reduce((a,d)=>a+d.team.filter(t=>t.month===month).reduce((b,t)=>b+t.remaining,0),0);
  const salaries=Math.max(0,rounded(remainingSalaries-alreadyHeld)),release=plans.reduce((a,p)=>a+p.release,0);
- const amort=Math.round((income+lease.left)*5)/100,out=rent.left+internet.left+salaries,inc=income+lease.left;
+ const amort=rounded(plans.reduce((sum,p)=>sum+p.amortization,0)+Math.round(lease.left*5)/100),out=rent.left+internet.left+salaries,inc=income+lease.left;
  running+=inc+release-out-amort;
- html+='<div class="card" style="margin-bottom:14px"><h3>'+esc(ruMonthLabel(month))+'</h3><div class="fee-row"><div class="fl">Остатки оплаты от клиентов</div><div class="fv">'+money(income)+'</div></div>'+rowHTML('Удержанный бюджет проектов при завершении',release)+'<div class="fee-row"><div class="fl">Сдача помещения — ожидается</div><div class="fv">'+money(lease.left)+'</div></div><div class="fee-row"><div class="fl">− Зарплаты и новые гонорары</div><div class="fv">'+money(salaries)+'</div></div><div class="fee-row"><div class="fl">− Аренда и интернет</div><div class="fv">'+money(rent.left+internet.left)+'</div></div><div class="fee-row"><div class="fl">− Амортизация · 5% ожидаемых поступлений</div><div class="fv">'+money(amort)+'</div></div><div class="fee-row total"><div class="fl">Прогноз доступного остатка</div><div class="fv" style="color:'+(running<0?'var(--red)':'var(--green)')+'">'+money(running)+'</div></div><details><summary>Проекты и расчёт</summary>'+plans.map(plan=>'<div class="card"><strong>'+esc(plan.project.name)+'</strong><div class="note">Срок: '+fmtDate(plan.project.end_date)+'</div><div class="fee-row"><div class="fl">Клиент доплатит</div><div class="fv">'+money(plan.incoming)+'</div></div>'+plan.payouts.map(row=>'<div class="fee-row"><div class="fl">− '+esc(findEmployee(row.id)?.name||'Сотрудник')+' · '+esc(findEmployee(row.id)?.role||'гонорар')+'</div><div class="fv">'+money(row.amount)+'</div></div>').join('')+'<div class="fee-row total"><div class="fl">Пополнение от проекта до амортизации</div><div class="fv">'+money(plan.net)+'</div></div></div>').join('')+'<div class="note">Уже удержанные гонорары по завершённым проектам исключены из повторного вычета. Выплаты через табель учитываются один раз. В расчёте отдельного проекта отражены гонорары за вычетом выплат, привязанных к карточке. Будущие прямые расходы без графика оплаты не включены.</div></details></div>';
+ html+='<div class="card" style="margin-bottom:14px"><h3>'+esc(ruMonthLabel(month))+'</h3><div class="fee-row"><div class="fl">Остатки оплаты от клиентов</div><div class="fv">'+money(income)+'</div></div>'+(clientFunding?rowHTML('Ожидаемые пополнения стройки · не доход компании',clientFunding):'')+rowHTML('Доля проектов АР/ДИ при завершении',release)+'<div class="fee-row"><div class="fl">Сдача помещения — ожидается</div><div class="fv">'+money(lease.left)+'</div></div><div class="fee-row"><div class="fl">− Зарплаты и новые гонорары</div><div class="fv">'+money(salaries)+'</div></div><div class="fee-row"><div class="fl">− Аренда и интернет</div><div class="fv">'+money(rent.left+internet.left)+'</div></div><div class="fee-row"><div class="fl">− Амортизация · 5% ожидаемых поступлений</div><div class="fv">'+money(amort)+'</div></div><div class="fee-row total"><div class="fl">Прогноз доступного остатка</div><div class="fv" style="color:'+(running<0?'var(--red)':'var(--green)')+'">'+money(running)+'</div></div><details><summary>Проекты и расчёт</summary>'+plans.map(plan=>'<div class="card"><strong>'+esc(plan.project.name)+'</strong><div class="note">Срок: '+fmtDate(plan.project.end_date)+'</div><div class="fee-row"><div class="fl">Клиент доплатит</div><div class="fv">'+money(plan.incoming)+'</div></div>'+(plan.construction?'<div class="note">Пополнение денег заказчика. В прогноз свободного резерва не включено.</div>':'')+plan.payouts.map(row=>'<div class="fee-row"><div class="fl">− '+esc(findEmployee(row.id)?.name||'Сотрудник')+' · '+esc(findEmployee(row.id)?.role||'гонорар')+'</div><div class="fv">'+money(row.amount)+'</div></div>').join('')+'<div class="fee-row total"><div class="fl">Пополнение от проекта до амортизации</div><div class="fv">'+money(plan.net)+'</div></div></div>').join('')+'<div class="note">Уже удержанные гонорары по завершённым проектам исключены из повторного вычета. Выплаты через табель учитываются один раз. В расчёте отдельного проекта отражены гонорары за вычетом выплат, привязанных к карточке. Будущие прямые расходы без графика оплаты не включены.</div></details></div>';
  }
  panel('forecast',html);
 }
 window.ARHITTEKCash.forecastProject=forecastProject;
 
 let invoicePaymentFormGeneration=0;
+const invoicePaymentPending=new Map();
+function invoiceDraftKey(invoice){return 'arhittek_invoice_payment_pending_v1:'+session.employeeId+':'+invoice.project_id+':'+invoice.id;}
+function readInvoiceDraft(key,invoice){
+ try{
+  const value=invoicePaymentPending.get(key)||JSON.parse(sessionStorage.getItem(key)||'null'),p=value?.payload;
+  if(value?.version===1&&['insert','link'].includes(value.mode)&&typeof value.id==='string'&&value.id&&p?.project_id===invoice.project_id&&p.type&&Number.isFinite(p.amount)&&p.amount>0&&typeof p.entry_date==='string'&&typeof p.description==='string'&&invoicePaymentId(p)===invoice.id)return value;
+ }catch(error){console.warn('Не удалось прочитать черновик оплаты накладной',error);}
+ return null;
+}
+function rememberInvoiceDraft(key,draft){
+ invoicePaymentPending.set(key,draft);
+ try{sessionStorage.setItem(key,JSON.stringify(draft));}catch(error){console.warn('Черновик оплаты сохранён до закрытия страницы',error);}
+}
+function forgetInvoiceDraft(key,id){
+ if(invoicePaymentPending.get(key)?.id===id)invoicePaymentPending.delete(key);
+ try{const saved=JSON.parse(sessionStorage.getItem(key)||'null');if(saved?.id===id)sessionStorage.removeItem(key);}catch(error){console.warn('Не удалось убрать подтверждённый черновик оплаты',error);}
+}
+function invoiceDraftMatches(row,draft){
+ const p=draft.payload;
+ return !!row&&!row.deleted_at&&row.id===draft.id&&row.project_id===p.project_id&&row.type===p.type&&rounded(row.amount)===rounded(p.amount)&&row.entry_date===p.entry_date&&String(row.description||'')===p.description;
+}
+function invoicePaymentError(error){
+ const message=String(error?.message||'');
+ if(error?.code==='42501')return 'Недостаточно прав для оплаты. Обновите вход в приложение.';
+ if(error?.code==='23514'&&/exceed|unpaid/i.test(message))return 'Остаток накладной уже изменился. Обновите историю оплаты; повторное списание не создано.';
+ if(error?.code==='23514')return 'Накладная или связанный расход изменены. Проверьте историю перед оплатой.';
+ if(error?.code==='22023')return 'Проверьте сумму, фактическую дату и выбранную накладную.';
+ return /[а-яё]/i.test(message)?message:'Оплата пока не подтверждена. Повторите сохранение после восстановления связи; номер операции останется прежним.';
+}
+async function readInvoicePaymentRow(id){
+ const result=await sb.from('ledger_entries').select('id,project_id,type,amount,entry_date,description,payee_employee_id,deleted_at').eq('id',id).maybeSingle();
+ if(result.error)throw new Error('Не удалось подтвердить предыдущую оплату. Повторите после восстановления связи; новая запись не создана.');
+ return result.data;
+}
 function openInvoicePayment(invoiceId){
  const row=(state.invoices||[]).find(i=>i.id===invoiceId&&!i.deleted_at);if(!row||row.paid_by_client)return;
- const invoice={...row},generation=++invoicePaymentFormGeneration;
+ const invoice={...row},generation=++invoicePaymentFormGeneration,key=invoiceDraftKey(row);
+ let attempt=readInvoiceDraft(key,invoice);
+ const draftId=attempt?.id||crypto.randomUUID();
  const ownsForm=()=>generation===invoicePaymentFormGeneration;
  let overlay=$('cashInvoiceOverlay');if(!overlay){overlay=document.createElement('div');overlay.id='cashInvoiceOverlay';overlay.className='sheet-overlay';document.body.appendChild(overlay);}
- const payment=invoicePaymentState(state,invoice),existing=(state.ledger||[]).filter(r=>!r.deleted_at&&r.project_id===invoice.project_id&&['expense','project_expense','payment'].includes(r.type)&&!invoicePaymentId(r)&&!isImportedExpense(r)&&r.entry_date<=day());
+ const payment=invoicePaymentState(state,invoice),existing=(state.ledger||[]).filter(r=>!r.deleted_at&&r.project_id===invoice.project_id&&['expense','project_expense','payment'].includes(r.type)&&!r.payee_employee_id&&!invoicePaymentId(r)&&!isImportedExpense(r)&&r.entry_date<=day());
+ if(attempt?.mode==='link'&&!existing.some(r=>r.id===attempt.id))existing.push({id:attempt.id,...attempt.payload});
  overlay.innerHTML='<div class="sheet"><h3>Оплата накладной</h3><p>'+esc(invoice.description||invoice.number||invoice.item_type)+'</p>'+rowHTML('Связано оплат',payment.paid)+rowHTML('Осталось подтвердить',payment.remaining)+'<div class="field"><label>Запись оплаты</label><select id="cashInvoiceExisting"><option value="">Новая фактическая оплата</option>'+existing.map(r=>'<option value="'+esc(r.id)+'">Связать: '+esc(fmtDate(r.entry_date)+' · '+money(r.amount)+' · '+r.description)+'</option>').join('')+'</select></div><div class="field"><label>Сумма оплаты, ₽</label><input id="cashInvoiceAmount" type="number" min="0.01" step="0.01" value="'+payment.remaining+'"></div><div class="field"><label>Фактическая дата оплаты</label><input id="cashInvoiceDate" type="date" value="'+day()+'"></div><div class="field"><label>Комментарий</label><input id="cashInvoiceNote"></div><button id="cashInvoiceSave" type="button" class="btn btn-primary">Сохранить оплату</button><button id="cashInvoiceClose" type="button" class="btn btn-secondary">Закрыть</button><div class="card">'+payment.rows.map(r=>'<div class="list-item"><span>'+esc(fmtDate(r.entry_date))+' · '+money(r.amount)+'</span>'+btn('Отменить оплату','cancel-invoice',r.id)+'</div>').join('')+'</div></div>';
+ if(attempt){$('cashInvoiceExisting').value=attempt.mode==='link'?attempt.id:'';$('cashInvoiceAmount').value=attempt.payload.amount;$('cashInvoiceDate').value=attempt.payload.entry_date;$('cashInvoiceNote').value=attempt.note||'';const notice=document.createElement('p');notice.className='note';notice.textContent='Предыдущая попытка пока не подтверждена. Сохранение сначала проверит её номер и не спишет деньги повторно.';$('cashInvoiceSave').before(notice);}
  $('cashInvoiceExisting').onchange=()=>{const r=existing.find(r=>r.id===$('cashInvoiceExisting').value);$('cashInvoiceAmount').disabled=!!r;$('cashInvoiceDate').disabled=!!r;if(r){$('cashInvoiceAmount').value=r.amount;$('cashInvoiceDate').value=r.entry_date;}else{$('cashInvoiceAmount').value=payment.remaining;$('cashInvoiceDate').value=day();}};
  $('cashInvoiceClose').onclick=()=>{if(ownsForm()){invoicePaymentFormGeneration++;overlay.classList.remove('active');}};
  overlay.onclick=e=>{const b=e.target.closest('[data-cash-action="cancel-invoice"]');if(b)cancelInvoicePayment(b.dataset.id,invoiceId);};
  $('cashInvoiceSave').onclick=async()=>{
   if(!ownsForm()||busy||!session?.isAdmin)return;
-  const linked=existing.find(r=>r.id===$('cashInvoiceExisting').value),amount=linked?n(linked.amount):n($('cashInvoiceAmount').value),date=linked?linked.entry_date:$('cashInvoiceDate').value;
+  const linked=existing.find(r=>r.id===$('cashInvoiceExisting').value),amount=attempt?.payload.amount??(linked?n(linked.amount):n($('cashInvoiceAmount').value)),date=attempt?.payload.entry_date??(linked?linked.entry_date:$('cashInvoiceDate').value);
   const note=$('cashInvoiceNote').value.trim(),receivedBy=session.employeeId,saveButton=$('cashInvoiceSave');
   if(amount<=0||!date||date>day()){showToast('Укажите сумму и фактическую дату оплаты');return;}
   busy=true;saveButton.disabled=true;
@@ -204,14 +255,48 @@ function openInvoicePayment(invoiceId){
    const invoiceCheck=await sb.from('invoices').select('*').eq('id',invoiceId).maybeSingle();if(invoiceCheck.error)throw invoiceCheck.error;
    const currentInvoice=invoiceCheck.data;if(!currentInvoice||currentInvoice.deleted_at||currentInvoice.paid_by_client||currentInvoice.project_id!==invoice.project_id)throw new Error('Накладная изменена или удалена. Обновите историю оплаты.');
    const check=await fetchAllRows(()=>sb.from('ledger_entries').select('*',{count:'exact'}).eq('project_id',currentInvoice.project_id).is('deleted_at',null));if(check.error)throw check.error;
-   const fresh=invoicePaymentState({ledger:check.data||[]},currentInvoice);
-   if(amount>fresh.remaining+0.009)throw new Error('Оплата больше неподтверждённого остатка');
-   const marker='[invoice-payment:'+invoiceId+']';
-   if(linked){const row=(check.data||[]).find(r=>r.id===linked.id);if(!row||invoicePaymentId(row))throw new Error('Расход уже изменён');let query=sb.from('ledger_entries').update({description:marker+' '+(row.description||'Оплата накладной')}).eq('id',row.id).is('deleted_at',null);query=row.description==null?query.is('description',null):query.eq('description',row.description);const result=await query.select('id').maybeSingle();if(result.error)throw result.error;if(!result.data)throw new Error('Расход изменён на другом устройстве. Обновите историю оплаты.');}
-   else{const result=await sb.from('ledger_entries').insert({type:'expense',project_id:invoice.project_id,amount,entry_date:date,description:marker+' '+(invoice.description||invoice.number||'Накладная')+(note?' · '+note:''),received_by:receivedBy});if(result.error)throw result.error;}
+   let confirmed=attempt?await readInvoicePaymentRow(attempt.id):null;
+   if(confirmed&&!invoiceDraftMatches(confirmed,attempt)){
+    const canRetryLink=attempt.mode==='link'&&!confirmed.deleted_at&&confirmed.project_id===attempt.payload.project_id&&confirmed.type===attempt.payload.type&&rounded(confirmed.amount)===rounded(attempt.payload.amount)&&confirmed.entry_date===attempt.payload.entry_date&&(confirmed.description??null)===attempt.originalDescription;
+    if(canRetryLink)confirmed=null;else throw new Error('Предыдущая запись изменена или отменена. Повторная оплата не создана; проверьте историю.');
+   }
+   if(!confirmed){
+    const fresh=invoicePaymentState({ledger:check.data||[]},currentInvoice),effectiveAmount=attempt?.payload.amount??amount;
+    if(effectiveAmount>fresh.remaining+0.009)throw new Error('Оплата больше неподтверждённого остатка');
+    if(!attempt){
+     const marker='[invoice-payment:'+invoiceId+']';
+     if(linked){const row=(check.data||[]).find(r=>r.id===linked.id);if(!row||row.project_id!==invoice.project_id||row.payee_employee_id||invoicePaymentId(row))throw new Error('Расход уже изменён');attempt={version:1,mode:'link',id:row.id,note,payload:{type:row.type,project_id:row.project_id,amount:n(row.amount),entry_date:row.entry_date,description:marker+' '+(row.description||'Оплата накладной')},originalDescription:row.description??null};}
+     else attempt={version:1,mode:'insert',id:draftId,note,payload:{type:'expense',project_id:invoice.project_id,amount,entry_date:date,description:marker+' '+(invoice.description||invoice.number||'Накладная')+(note?' · '+note:''),received_by:receivedBy}};
+     rememberInvoiceDraft(key,attempt);
+    }
+    let saveError=null;
+    try{
+     // The server locks the invoice and checks the remaining amount in the
+     // same transaction. Only a missing-function response uses the old path
+     // while the separately deployed server update is being installed.
+     let legacy=typeof sb.rpc!=='function';
+     if(!legacy){
+      const result=await sb.rpc('save_invoice_payment',{p_invoice_id:invoiceId,p_operation_id:attempt.id,p_amount:attempt.payload.amount,p_entry_date:attempt.payload.entry_date,p_description:attempt.payload.description,p_existing_entry_id:attempt.mode==='link'?attempt.id:null});
+      if(result.error?.code==='PGRST202')legacy=true;
+      else if(result.error)throw result.error;
+      else if(!result.data)throw new Error('Сервер не подтвердил оплату. Повторите проверку сохранения.');
+     }
+     if(legacy){
+      if(attempt.mode==='link'){
+       let query=sb.from('ledger_entries').update({description:attempt.payload.description}).eq('id',attempt.id).eq('project_id',invoice.project_id).eq('type',attempt.payload.type).eq('amount',attempt.payload.amount).eq('entry_date',attempt.payload.entry_date).is('deleted_at',null);
+       query=attempt.originalDescription==null?query.is('description',null):query.eq('description',attempt.originalDescription);
+       const result=await query.select('id').maybeSingle();if(result.error)throw result.error;if(!result.data)throw new Error('Расход изменён на другом устройстве.');
+      }else{const result=await sb.from('ledger_entries').insert({id:attempt.id,...attempt.payload});if(result.error)throw result.error;}
+     }
+    }catch(error){saveError=error;}
+    confirmed=await readInvoicePaymentRow(attempt.id);
+    if(!confirmed)throw new Error(invoicePaymentError(saveError));
+    if(!invoiceDraftMatches(confirmed,attempt))throw new Error('Запись изменена или отменена. Повторная оплата не создана; проверьте историю.');
+   }
    persisted=true;
-   await logAudit('project',invoice.project_id,(state.projects||[]).find(p=>p.id===invoice.project_id)?.name||'','update',{invoice_payment:{old:null,new:(linked?'Связан расход: ':'Оплачено: ')+money(amount)}});
-   const refreshed=await loadAll();if(linked?.type==='project_expense')await syncProjectExpensesTotal(invoice.project_id);
+   await logAudit('project',invoice.project_id,(state.projects||[]).find(p=>p.id===invoice.project_id)?.name||'','update',{invoice_payment:{old:null,new:(attempt.mode==='link'?'Связан расход: ':'Оплачено: ')+money(attempt.payload.amount)}});
+   const refreshed=await loadAll();if(attempt.mode==='link'&&attempt.payload.type==='project_expense')await syncProjectExpensesTotal(invoice.project_id);
+   forgetInvoiceDraft(key,attempt.id);
    if(ownsForm())overlay.classList.remove('active');
    render();
    showToast(refreshed===false?'Оплата записана. Не удалось обновить данные — повторите обновление':ownsForm()?(linked?'Расход связан без повторного списания':'Оплата накладной сохранена'):'Оплата накладной «'+(invoice.description||invoice.number||'Накладная')+'» сохранена');
