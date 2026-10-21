@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-access="locked">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
@@ -555,6 +555,18 @@
   .payroll-note{font-size:10px;color:var(--text-dim);line-height:1.45;}
 </style>
 <link rel="stylesheet" href="premium.css">
+<style id="employee-access-visibility">
+html[data-access="locked"] .view,html[data-access="locked"] .nav-btn,
+html:not([data-access="owner"]) #view-finance,html:not([data-access="owner"]) #view-timesheet,
+html:not([data-access="owner"]) #view-overview,html:not([data-access="owner"]) #view-settings,
+html:not([data-access="owner"]) #view-company,html:not([data-access="owner"]) #view-cards,
+html:not([data-access="owner"]) #nav-finance,html:not([data-access="owner"]) #nav-cards,
+html:not([data-access="owner"]) #more-admin-sections,
+html:not([data-access="owner"]) #view-more button:not(#openKpBtn):not(#openContractsBtn),
+html[data-access="staff"] #view-more,html[data-access="staff"] #view-kp,
+html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[data-view="view-more"],
+#ef-card-edit-field {display:none!important}
+</style>
 </head>
 <body>
 
@@ -1967,8 +1979,9 @@
       <input type="text" id="ef-name" placeholder="например: Магомед (Гудермес)">
     </div>
     <div class="field">
-      <label>Роль</label>
-      <input type="text" id="ef-role" placeholder="например: Архитектор">
+      <label for="ef-role">Должность</label>
+      <select id="ef-role"><option value="Сотрудник">Сотрудник</option><option value="Архитектор">Архитектор</option><option value="Ведущий архитектор">Ведущий архитектор</option><option value="Дизайнер">Дизайнер</option><option value="Ведущий дизайнер">Ведущий дизайнер</option><option value="Визуализатор">Визуализатор</option><option value="Чертёжник">Чертёжник</option><option value="Прораб">Прораб</option><option value="Менеджер">Менеджер</option><option value="Комплектатор">Комплектатор</option><option value="Генеральный директор">Генеральный директор</option></select>
+      <div class="hint" id="ef-role-access" style="margin-top:8px;" aria-live="polite"></div>
     </div>
     <div class="field">
       <label>Статус</label>
@@ -2193,16 +2206,20 @@ function animateCountUp(el, duration){
 // ============================================================
 const SUPABASE_URL = 'https://chbkkoxwzpaghanofvqk.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_fOLaPnbXjzQnJwG__wVzzg_D0nMO-n0';
-let sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+function createAppClient(token){
+  return supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{global:{
+    headers:token?{'x-session-token':token}:{},
+    fetch:(input,options)=>fetch(input,{...options,cache:'no-store'})
+  }});
+}
+let sb = createAppClient(null);
     window.sb = sb;
 
 // После входа сервер выдаёт токен сессии — пересобираем клиент так, чтобы
 // каждый запрос нёс его заголовком x-session-token. Без этого заголовка
 // доступ к данным (кроме заведомо публичных, вроде каталога) закрыт политиками RLS.
 function applySessionToken(token){
-  sb = token
-    ? supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { global: { headers: { 'x-session-token': token } } })
-    : supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  sb = createAppClient(token);
   window.sb = sb;
 }
 
@@ -2442,6 +2459,83 @@ function fmtDateTime(iso){
 let session = null; // {employeeId, name, isAdmin}
 let loginSelectedEmployee = null;
 
+// Permissions come only from the current server session, never saved admin flags.
+let verifiedAccess=null;
+function hasVerifiedAccess(){
+  return !!(session?.token&&verifiedAccess&&verifiedAccess.employeeId===session.employeeId&&verifiedAccess.token===session.token);
+}
+function isOwner(){return hasVerifiedAccess()&&verifiedAccess.owner===true;}
+function canUseDocuments(){return hasVerifiedAccess()&&verifiedAccess.documents===true;}
+function canAccessView(id){
+  if(!hasVerifiedAccess())return false;
+  if(isOwner())return true;
+  if(['view-more','view-kp','view-contracts'].includes(id))return canUseDocuments();
+  if(id==='view-projects')return canSeeProjects();
+  if(['view-construction','view-object'].includes(id))return canSeeConstruction();
+  return false;
+}
+function clearPrivateState(){
+  for(const key of ['projects','financialProjects','ledger','photos','history','cashCounts','invoices','tzForms','tzReferences','kpForms','kpCatalog','timesheetPayments','companyExpenses','companyIncome','projectStages','projectMembers'])state[key]=[];
+  state.employees=(state.employees||[]).map(e=>({id:e.id,name:e.name,active:e.active}));
+  state.companyInfo=null;state.financialDataReady=false;state.financialLoadedAt=null;
+  state.trash={projects:[],employees:[],categories:[],ledger:[],companyExpenses:[],companyIncome:[],tariffs:[]};
+  for(const id of ['analyticsContent','timesheetContent','employeesCard','historyCard','trashCard','financeContent']){
+    const el=document.getElementById(id);if(el)el.replaceChildren();
+  }
+  document.querySelectorAll('.sheet-overlay.active').forEach(el=>el.classList.remove('active'));
+  for(const id of ['view-finance','view-timesheet'])document.getElementById(id)?.querySelectorAll('input,textarea').forEach(el=>el.value='');
+}
+function purgePrivateStorage(){
+  for(const storage of [localStorage,sessionStorage]){
+    try{for(const key of Object.keys(storage)){
+      if(/^(forecast_|finance_|arhittek_finance_|arhittek_company_money_pending_)/.test(key))storage.removeItem(key);
+    }}catch(e){}
+  }
+  try{companyMoneyPending.clear();companyMoneyForms.expense=null;companyMoneyForms.income=null;}catch(e){}
+}
+function revokeVerifiedAccess(){
+  verifiedAccess=null;if(session)session.isAdmin=false;
+  document.documentElement.dataset.access='locked';clearPrivateState();
+}
+async function verifyCurrentEmployeeAccess(){
+  const actor={employeeId:session?.employeeId,token:session?.token};
+  const result=await sb.rpc('get_employee_access',{});
+  if(actor.employeeId!==session?.employeeId||actor.token!==session?.token)throw new Error('Учётная запись изменилась');
+  if(result.error)throw result.error;
+  const access=Array.isArray(result.data)?result.data[0]:result.data;
+  if(!access||access.employee_id!==actor.employeeId||access.access_policy!=='owner-only-v1'||
+     typeof access.is_owner!=='boolean'||typeof access.can_documents!=='boolean'){
+    throw new Error('Не удалось подтвердить права доступа');
+  }
+  const role=String(access.role||'').trim().toLowerCase();
+  verifiedAccess={...actor,owner:access.is_owner===true,
+    documents:access.is_owner===true||(access.can_documents===true&&['ведущий архитектор','ведущий дизайнер'].includes(role))};
+  session.isAdmin=verifiedAccess.owner;session.name=access.name;
+  window.session=session;
+  if(!verifiedAccess.owner){
+    for(const key of ['ledger','cashCounts','timesheetPayments','companyExpenses','companyIncome','financialProjects','history'])state[key]=[];
+    state.trash={projects:[],employees:[],categories:[],ledger:[],companyExpenses:[],companyIncome:[],tariffs:[]};
+  }
+  applyAccessVisibility();
+  return actor;
+}
+function applyAccessVisibility(){
+  const mode=isOwner()?'owner':canUseDocuments()?'lead':hasVerifiedAccess()?'staff':'locked';
+  document.documentElement.dataset.access=mode;
+  for(const nav of document.querySelectorAll('.nav-btn[data-view]'))nav.style.display=canAccessView(nav.dataset.view)?'':'none';
+  for(const id of ['openKpBtn','openContractsBtn']){const el=document.getElementById(id);if(el)el.style.display=canUseDocuments()?'':'none';}
+  for(const id of ['openCompanyBtn','openPriceListBtn','exportXlsxBtn','openTimesheetBtn','settingsBtn','more-admin-sections']){
+    const el=document.getElementById(id);if(el)el.style.display=isOwner()?'':'none';
+  }
+  const active=document.querySelector('.view.active');
+  if(!active||!canAccessView(active.id)){
+    document.querySelectorAll('.view.active,.nav-btn.active').forEach(el=>el.classList.remove('active'));
+    const fallback=hasVerifiedAccess()?(isOwner()?'view-overview':canSeeProjects()?'view-projects':canSeeConstruction()?'view-construction':canUseDocuments()?'view-more':null):null;
+    if(fallback){document.getElementById(fallback)?.classList.add('active');document.querySelector('.nav-btn[data-view="'+fallback+'"]')?.classList.add('active');}
+  }
+}
+
+
 function getSession(){
   try{
     const raw = localStorage.getItem('arhittek_session');
@@ -2454,6 +2548,7 @@ function getSession(){
       localStorage.removeItem('arhittek_session');
       return null;
     }
+    s.isAdmin=false;
     window.session = s;
     if(s.token) applySessionToken(s.token);
     return s;
@@ -2461,7 +2556,9 @@ function getSession(){
 }
 
 function setSession(s){
-  session = {...s, createdAt: Date.now()};
+  if(session?.employeeId!==s?.employeeId)purgePrivateStorage();
+  revokeVerifiedAccess();
+  session = {...s, isAdmin:false, createdAt: Date.now()};
   window.session = session;
   if(session.token) applySessionToken(session.token);
   try{ localStorage.setItem('arhittek_session', JSON.stringify(session)); }catch(e){}
@@ -2469,7 +2566,9 @@ function setSession(s){
 
 function clearSession(){
   const token = session && session.token;
-  session = null;
+  purgePrivateStorage();
+  revokeVerifiedAccess();
+  session = null;window.session=null;applySessionToken(null);
   try{ localStorage.removeItem('arhittek_session'); }catch(e){}
   try{ sessionStorage.removeItem('arhittek_ui_route_v1'); }catch(e){}
   // Best-effort: гасим токен на сервере, чтобы им нельзя было воспользоваться повторно
@@ -2625,13 +2724,13 @@ function canSeeProjects(){
 
 function applyRole(){
   const userPill = document.getElementById('userPill');
-  if(!session){ userPill.style.display = 'none'; return; }
+  if(!session){ userPill.style.display = 'none'; applyAccessVisibility(); return; }
 
   userPill.style.display = 'flex';
   const roleLabel = getEmployeeRole() ? ` · ${getEmployeeRole()}` : (session.isAdmin ? '' : ' · исполнитель');
   userPill.innerHTML = `<span style="font-weight:600;">${escapeHtml(session.name)}</span><span style="opacity:0.6;">${escapeHtml(roleLabel)}</span>`;
 
-  const isAdmin = session.isAdmin;
+  const isAdmin = isOwner();
   const seeConstr = canSeeConstruction();
   const seeProj = canSeeProjects();
 
@@ -2688,6 +2787,7 @@ function applyRole(){
   if(deleteBtn) deleteBtn.style.display = isAdmin ? '' : 'none';
   if(empField) empField.style.display = isAdmin ? '' : 'none';
   if(deptField) deptField.style.display = isAdmin ? '' : 'none';
+  applyAccessVisibility();
 }
 
 // Permanently delete trash items older than 2 months (60 days)
@@ -3225,7 +3325,7 @@ function employeeRowsResult(result,fields){
   }
   return {...result,data:result.data.map(row=>{
     const safe={};for(const key of fields)if(Object.hasOwn(row,key))safe[key]=row[key];
-    if(fields===EMPLOYEE_PROFILE_FIELDS&&!session?.isAdmin&&safe.id!==session?.employeeId)safe.fixed_salary=null;
+    if(fields===EMPLOYEE_PROFILE_FIELDS&&!isOwner()){safe.fixed_salary=null;safe.is_salaried=null;safe.is_admin=false;}
     return safe;
   })};
 }
@@ -3276,7 +3376,7 @@ async function loadAllData(){
   if(!session?.token){
     session=null;window.session=null;
     applySessionToken(null);
-    state.financialDataReady=false;
+    revokeVerifiedAccess();applyAccessVisibility();
     try{
       const result=await loadEmployeeLoginOptions();
       if(result.error) throw result.error;
@@ -3285,7 +3385,13 @@ async function loadAllData(){
     }catch(e){setSyncStatus('off','нет связи');showToast('Не удалось загрузить список сотрудников');}
     showLoginScreen();loadAllInFlight=false;return;
   }
+  const accessActor={employeeId:session.employeeId,token:session.token};
+  let accessConfirmed=false;
   try{
+    await verifyCurrentEmployeeAccess();
+    accessConfirmed=true;
+    const ownerRead=read=>isOwner()?read():Promise.resolve({data:[],error:null,count:0});
+    const documentRead=read=>canUseDocuments()?read():Promise.resolve({data:[],error:null,count:0});
     const stageRead=beginStageRead();
     const [proj, emp, cat, st, dept, led, photos, invs, tzForms, tzRefs, company, kpForms, stages, members, kpCat, tsPay, compExp, compInc, counts] = await Promise.all([
       fetchAllRows(()=>sb.from('projects').select('*',{count:'exact'}).order('created_at', {ascending:true})),
@@ -3293,26 +3399,31 @@ async function loadAllData(){
       fetchAllRows(()=>sb.from('categories').select('*',{count:'exact'}).is('deleted_at', null).order('sort_order')),
       fetchAllRows(()=>sb.from('statuses').select('*',{count:'exact'}).order('sort_order')),
       fetchAllRows(()=>sb.from('departments').select('*',{count:'exact'}).order('sort_order')),
-      fetchAllRows(()=>sb.from('ledger_entries').select('*',{count:'exact'}).is('deleted_at', null).order('created_at', {ascending:false})),
+      ownerRead(()=>fetchAllRows(()=>sb.from('ledger_entries').select('*',{count:'exact'}).is('deleted_at', null).order('created_at', {ascending:false}))),
       fetchAllRows(()=>sb.from('expense_photos').select('*',{count:'exact'}).order('created_at', {ascending:false})),
       fetchAllRows(()=>sb.from('invoices').select('*',{count:'exact'}).order('invoice_date', {ascending:true})),
       fetchAllRows(()=>sb.from('tz_forms').select('*',{count:'exact'}).order('created_at', {ascending:false})),
       fetchAllRows(()=>sb.from('tz_references').select('*',{count:'exact'})),
-      sb.from('company_info').select('*').limit(1).maybeSingle(),
-      fetchAllRows(()=>sb.from('kp_forms').select('*',{count:'exact'}).order('created_at', {ascending:false})),
+      canUseDocuments()?sb.from('company_info').select('*').limit(1).maybeSingle():Promise.resolve({data:null,error:null}),
+      documentRead(()=>fetchAllRows(()=>sb.from('kp_forms').select('*',{count:'exact'}).order('created_at', {ascending:false}))),
       fetchAllRows(()=>sb.from('project_stages').select('*',{count:'exact'}).order('sort_order', {ascending:true})),
       fetchAllRows(()=>sb.from('project_members').select('*',{count:'exact'})),
-      fetchAllRows(()=>sb.from('kp_catalog').select('*',{count:'exact'}).is('deleted_at', null).order('sort_order', {ascending:true})),
-      fetchAllRows(()=>sb.from('timesheet_payments').select('*',{count:'exact'})),
-      fetchAllRows(()=>sb.from('company_expenses').select('*',{count:'exact'}).is('deleted_at', null)),
-      fetchAllRows(()=>sb.from('company_income').select('*',{count:'exact'}).is('deleted_at', null)),
-      fetchAllRows(()=>sb.from('audit_log').select('id,entity_type,entity_id,entity_name,action,changes,created_at',{count:'exact'}).eq('entity_type','reserve').eq('action','cash_count').order('created_at',{ascending:false})),
+      documentRead(()=>fetchAllRows(()=>sb.from('kp_catalog').select('*',{count:'exact'}).is('deleted_at', null).order('sort_order', {ascending:true}))),
+      ownerRead(()=>fetchAllRows(()=>sb.from('timesheet_payments').select('*',{count:'exact'}))),
+      ownerRead(()=>fetchAllRows(()=>sb.from('company_expenses').select('*',{count:'exact'}).is('deleted_at', null))),
+      ownerRead(()=>fetchAllRows(()=>sb.from('company_income').select('*',{count:'exact'}).is('deleted_at', null))),
+      ownerRead(()=>fetchAllRows(()=>sb.from('audit_log').select('id,entity_type,entity_id,entity_name,action,changes,created_at',{count:'exact'}).eq('entity_type','reserve').eq('action','cash_count').order('created_at',{ascending:false}))),
     ]);
 
+    if(accessActor.employeeId!==session?.employeeId||accessActor.token!==session?.token||!hasVerifiedAccess())return;
     // kpForms and stages are optional — may not exist until migrations run
     const errs = [proj,emp,cat,st,dept,led,photos,invs,tzForms,tzRefs,company,tsPay,compExp,compInc,counts].map(r=>r.error).filter(Boolean);
     if(errs.length) throw errs[0];
-    state.kpForms = kpForms.error ? [] : (kpForms.data || []);
+    const freshEmployee=(emp.data||[]).find(e=>e.id===session.employeeId);
+    if(!freshEmployee||freshEmployee.active===false)throw new Error('Учётная запись недоступна');
+    if(!isOwner()&&!['ведущий архитектор','ведущий дизайнер'].includes(String(freshEmployee.role||'').trim().toLowerCase()))verifiedAccess.documents=false;
+    applyAccessVisibility();
+    state.kpForms = !canUseDocuments()||kpForms.error ? [] : (kpForms.data || []);
     if(stages.error)failStageRead(stageRead,stages.error);
     else state.projectStages=mergeStageRead(stages.data,stageRead);
     // Membership affects visibility and edits: a failed read is not an empty team.
@@ -3327,14 +3438,16 @@ async function loadAllData(){
         projectMembersDraftUnverified=false;
       }
     }
-    state.kpCatalog = kpCat.error ? [] : (kpCat.data || []);
+    state.kpCatalog = !canUseDocuments()||kpCat.error ? [] : (kpCat.data || []);
     state.timesheetPayments = tsPay.error ? [] : (tsPay.data || []);
     state.companyExpenses = compExp.error ? [] : (compExp.data || []);
     state.companyIncome = compInc.error ? [] : (compInc.data || []);
     state.cashCounts = counts.data || [];
 
-    state.financialProjects=proj.data||[];
-    state.projects=state.financialProjects.filter(p=>!p.deleted_at);
+    const projectRows=proj.data||[];
+    state.financialProjects=isOwner()?projectRows:[];
+    state.projects=projectRows.filter(p=>!p.deleted_at&&(isOwner()||p.employee_id===session.employeeId||p.co_employee_id===session.employeeId||
+      (state.projectMembers||[]).some(m=>m.project_id===p.id&&m.employee_id===session.employeeId)));
     state.employees = emp.data || [];
     state.categories = cat.data || [];
     state.statuses = st.data || [];
@@ -3372,7 +3485,7 @@ async function loadAllData(){
     state.invoices = invs.data || [];
     state.tzForms = tzForms.data || [];
     state.tzReferences = tzRefs.data || [];
-    state.companyInfo = company.data || null;
+    state.companyInfo = canUseDocuments()?(company.data||null):null;
     state.financialDataReady=true;state.financialDataError=null;state.financialLoadedAt=new Date().toISOString();
 
     // Показываем live-статус если realtime канал активен
@@ -3399,7 +3512,7 @@ async function loadAllData(){
         clearSession();
         return;
       }
-      session.isAdmin=!!emp.is_admin;
+      session.isAdmin=isOwner();
       session.name=emp.name;
       document.getElementById('loginOverlay').style.display = 'none';
       applyRole();
@@ -3412,6 +3525,10 @@ async function loadAllData(){
     }
   }catch(e){
     console.error(e);
+    if(accessActor.employeeId===session?.employeeId&&accessActor.token===session?.token){
+      if(accessConfirmed)clearPrivateState();else revokeVerifiedAccess();
+      applyRole();
+    }
     const wasOk = document.getElementById('syncDot').classList.contains('off') === false;
     setSyncStatus('off', 'нет связи');
     state.financialDataReady=false;
@@ -3430,6 +3547,8 @@ async function loadAllData(){
 // loadAll() и не задерживают первую отрисовку приложения. Перерисовывает те же
 // (обычно скрытые) секции, что и renderAll(), когда данные приходят.
 async function loadDeferredData(){
+  if(!isOwner())return;
+  const actor={employeeId:session.employeeId,token:session.token};
   try{
     const [hist, trashProj, trashEmp, trashCat, trashLed, trashCompanyExpenses, trashCompanyIncome, trashTariffs] = await Promise.all([
       fetchAllRows(()=>sb.from('audit_log').select('*',{count:'exact'}).order('created_at', {ascending:false}),{maxRows:5000}),
@@ -3441,6 +3560,7 @@ async function loadDeferredData(){
       fetchAllRows(()=>sb.from('company_income').select('*',{count:'exact'}).not('deleted_at', 'is', null).order('deleted_at', {ascending:false})),
       fetchAllRows(()=>sb.from('kp_catalog').select('*',{count:'exact'}).not('deleted_at', 'is', null).order('deleted_at', {ascending:false})),
     ]);
+    if(!isOwner()||actor.employeeId!==session.employeeId||actor.token!==session.token)return;
     state.history = hist.error ? [] : (hist.data || []);
     state.trash = {
       projects: trashProj.error ? [] : (trashProj.data || []),
@@ -3458,8 +3578,7 @@ async function loadDeferredData(){
   }catch(e){ console.error('loadDeferredData error', e); }
 }
 function renderAll(){
-  renderOverview();
-  renderAnalytics();
+  if(isOwner()){renderOverview();renderAnalytics();}
   renderCategoryFilters();
   renderStatusFilters();
   renderPaymentFilters();
@@ -3467,15 +3586,9 @@ function renderAll(){
   renderConstrStatusFilters();
   renderProjects();
   renderConstruction();
-  renderFeeCalc();
-  renderEmployeeFeeSummary();
+  if(isOwner()){renderFeeCalc();renderEmployeeFeeSummary();}
   // renderLedger убран — раздел Финансы удалён
-  renderEmployees();
-  renderCategories();
-  renderTariffs();
-  renderStatuses();
-  renderHistory();
-  renderTrash();
+  if(isOwner()){renderEmployees();renderCategories();renderTariffs();renderStatuses();renderHistory();renderTrash();}
   if(!document.getElementById('projectSheetOverlay').classList.contains('active')) populateProjectFormSelects();
   populateEmployeeFormSelects();
   if(document.getElementById('view-timesheet').classList.contains('active')) renderTimesheet();
@@ -4593,6 +4706,7 @@ document.addEventListener('change', (e)=>{
 });
 
 function openProjectSheet(id){
+  if(id&&!isProjectMember(id)){showToast("Нет доступа к этому проекту");return;}
   editingProjectId = id;
   projectMembersDraftUnverified=!!state.projectMembersDataError;
   const overlay = document.getElementById('projectSheetOverlay');
@@ -5292,6 +5406,7 @@ function toggleTimesheetRow(employeeId){
 }
 
 function renderTimesheet(){
+  if(!isOwner())return;
   const monthInput = document.getElementById('ts-month');
   if(!monthInput) return;
   if(!monthInput.value){
@@ -6734,6 +6849,7 @@ function populateEmployeeFormSelects(){
 }
 
 function openEmployeeSheet(id){
+  if(!isOwner())return;
   employeeFormGeneration++;
   editingEmployeeId = id;
   const overlay = document.getElementById('empSheetOverlay');
@@ -6752,7 +6868,12 @@ function openEmployeeSheet(id){
     deleteBtn.textContent = linkedCount ? 'В архив' : 'Удалить';
     deleteBtn.title = linkedCount ? 'Сохранит сотрудника в истории проектов, но уберёт из активной команды' : 'Переместить сотрудника в корзину';
     document.getElementById('ef-name').value = e.name || '';
-    document.getElementById('ef-role').value = e.role || '';
+    const roleSelect=document.getElementById('ef-role');
+    roleSelect.querySelectorAll('[data-legacy-role]').forEach(el=>el.remove());
+    if(e.role&&![...roleSelect.options].some(o=>o.value===e.role)){
+      const option=new Option(e.role,e.role);option.dataset.legacyRole='true';roleSelect.add(option);
+    }
+    roleSelect.value=e.role||'Сотрудник';
     document.getElementById('ef-active').value = e.active===false ? 'false' : 'true';
     document.getElementById('ef-pin').value = '';
     document.getElementById('ef-can-edit-cards').checked = !!e.can_edit_cards;
@@ -6773,7 +6894,7 @@ function openEmployeeSheet(id){
     deleteBtn.style.display = 'none';
     deleteBtn.textContent = 'Удалить';
     document.getElementById('ef-name').value = '';
-    document.getElementById('ef-role').value = '';
+    document.getElementById('ef-role').value = 'Сотрудник';
     document.getElementById('ef-active').value = 'true';
     document.getElementById('ef-pin').value = '';
     document.getElementById('ef-can-edit-cards').checked = false;
@@ -6790,6 +6911,7 @@ function openEmployeeSheet(id){
     if(salaryField2) salaryField2.style.display = isAdmin ? '' : 'none';
   }
   document.getElementById('ef-save').disabled = employeeSavesInFlight.has(id || 'new:'+employeeFormGeneration);
+  window.updateEmployeeAccessSummary?.();
   overlay.classList.add('active');
 }
 
@@ -8576,6 +8698,7 @@ function buildExportRows(){
 }
 
 function exportToXlsx(){
+  if(!isOwner())return;
   const sheets = buildExportRows();
   const wb = XLSX.utils.book_new();
   Object.entries(sheets).forEach(([name, rows])=>{
@@ -9203,6 +9326,7 @@ function fillContractDefaults(){
 }
 
 function openContractsView(){
+  if(!canUseDocuments())return;
   const sel = document.getElementById('ct-project');
   sel.innerHTML = '<option value="">— не выбран —</option>' +
     state.projects.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
@@ -9584,6 +9708,7 @@ document.getElementById('ct-export-pdf').addEventListener('click', exportContrac
 // КОМПАНИЯ (реквизиты)
 // ============================================================
 function openCompanyView(){
+  if(!isOwner())return;
   const c = state.companyInfo || {};
   document.getElementById('co-full-name').value = c.full_name || '';
   document.getElementById('co-short-name').value = c.short_name || '';
@@ -10138,6 +10263,7 @@ function exportKpToXlsx(){
 }
 
 function openKpView(){
+  if(!canUseDocuments())return;
   if(!kpServices.length) addKpService();
   if(!document.getElementById('kp-date').value) document.getElementById('kp-date').value = financeToday();
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
@@ -10566,19 +10692,8 @@ document.getElementById('userPill').addEventListener('click', ()=>{
 // КАРТОЧКИ ПРОЕКТОВ
 // ============================================================
 
-// Резервный список редакторов карточек (фоллбэк если поле can_edit_cards не задано в БД)
-const CARD_EDITORS_FALLBACK = ['мансур', 'ислам'];
-
-function canEditCards(){
-  if(!session) return false;
-  if(session.isAdmin) return true; // админ всегда имеет доступ к каталогу
-  // Затем проверяем поле can_edit_cards в записи сотрудника (из БД)
-  const emp = state.employees.find(e=>e.id===session.employeeId);
-  if(emp && emp.can_edit_cards === true) return true;
-  if(emp && emp.can_edit_cards === false) return false;
-  // Фоллбэк на список имён (пока поле не добавлено в БД через миграцию)
-  return CARD_EDITORS_FALLBACK.includes((session.name||'').trim().toLowerCase());
-}
+// Catalogue administration belongs only to the verified owner.
+function canEditCards(){return isOwner();}
 
 // State карточек
 let cardsData = [];
@@ -12362,3 +12477,5 @@ showNotifPrompt();
 <script src="construction-finance.js"></script>
 <script src="construction-workflow.js"></script>
 <script src="construction-operations.js"></script>
+
+<script src="employee-access.js"></script>

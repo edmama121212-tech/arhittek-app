@@ -7,8 +7,7 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
 (async()=>{
  const browser=await chromium.launch({executablePath:process.env.BROWSER_EXECUTABLE||undefined,args:['--no-sandbox','--disable-gpu','--disable-dev-shm-usage'],headless:true});
  const context=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
- await context.addInitScript({path:path.join(__dirname,'mock.js')});
- await context.addInitScript(()=>{
+ const moneyFixture=()=>{
   // Model a UUID primary key, lost commit responses, failed verification reads,
   // and a slow response while the user opens another money form.
   window.__moneyAttempts=[];window.__moneyHeld=[];window.__moneyFault=null;window.__moneyHold=null;
@@ -39,7 +38,10 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
    };return client;
   };
   window.__releaseMoneyQueries=()=>{for(const release of __moneyHeld.splice(0))release();};
- });
+ };
+ // A blank viewer frame shares storage with the app but is not a second app
+ // instance. Seed the server fixture and session only in the top-level page.
+ await context.addInitScript({content:'if(window===window.top){\n'+fs.readFileSync(path.join(__dirname,'mock.js'),'utf8')+'\n;('+moneyFixture.toString()+')();\n}'});
  await context.route('**/*',route=>{
   const u=new URL(route.request().url());
   if(u.hostname==='app.test'){
@@ -61,9 +63,9 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
   __rowLimit=200;__db.ledger_entries=Array.from({length:705},(_,i)=>({id:'entry-'+String(i).padStart(4,'0'),type:'income',amount:1,entry_date:'2026-10-10',created_at:'2026-10-10T10:00:00Z'}));
   await loadAll();return [state.ledger.length,state.financialDataReady];
  },[705,true]);
- await check('Late page failure hides an old financial snapshot instead of publishing a partial one',async()=>{
+ await check('Late page failure clears the old financial snapshot without publishing partial rows',async()=>{
   __rowLimit=200;__fail={table:'ledger_entries',op:'select',offset:400};await loadAll();const r=[state.financialDataReady,!!state.financialDataError,state.ledger.length];__fail=null;return r;
- },[false,true,705]);
+ },[false,true,0]);
  await fresh();
  await check('Cash-count read failure also hides all unconfirmed financial totals',async()=>{
   __fail={table:'audit_log',op:'select'};await loadAll();const r=[state.financialDataReady,!!state.financialDataError];__fail=null;return r;

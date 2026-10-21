@@ -190,7 +190,7 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
   await fresh();
   await page.evaluate(async()=>{
    __db.employees.push({id:'audit-lead',name:'Lead designer',role:'Ведущий дизайнер',is_admin:false,active:true,is_salaried:true,fixed_salary:50000,can_see_projects:true,can_see_construction:true,can_edit_cards:false});
-   await loadAll();setSession({employeeId:'audit-lead',name:'Lead designer',isAdmin:false,token:'isolated-lead'});applyRole();
+   await loadAll();setSession({employeeId:'audit-lead',name:'Lead designer',isAdmin:false,token:'isolated-lead'});await loadAll();applyRole();
    document.querySelector('.nav-btn[data-view="view-projects"]').click();
   });
  }

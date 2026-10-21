@@ -40,7 +40,7 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
   await page.goto('https://app.test/');await page.waitForFunction(()=>typeof loadAll==='function'&&state.financialDataReady);await page.waitForTimeout(50);
   await page.evaluate(async profile=>{
    const employee={id:'lead-designer',name:'Ведущий дизайнер',role:'Ведущий дизайнер',is_admin:false,active:true,can_edit_cards:false,can_see_projects:true,can_see_construction:true,is_salaried:true,fixed_salary:50000,...profile};
-   __db.employees.push(employee);await loadAll();setSession({employeeId:employee.id,name:employee.name,isAdmin:!!employee.is_admin,token:'isolated-test'});applyRole();
+   __db.employees.push(employee);await loadAll();setSession({employeeId:employee.id,name:employee.name,isAdmin:!!employee.is_admin,token:'isolated-test'});await loadAll();applyRole();
    document.querySelector('.nav-btn[data-view="view-projects"]').click();__writes.length=0;
   },profile);
  }
@@ -73,7 +73,7 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
   const name='A late create response never closes or replaces another opened card';
   try{
    await page.evaluate(async()=>{
-    __db.projects=[{id:'other-open-card',name:'Other card',category_id:'arch',status_id:'active',employee_id:'architect',price:100000,fee_percent:40,fee_base:'profit'}];await loadAll();
+    __db.projects=[{id:'other-open-card',name:'Other card',category_id:'arch',status_id:'active',employee_id:'lead-designer',price:100000,fee_percent:40,fee_base:'profit'}];await loadAll();
     openProjectSheet(null);document.getElementById('pf-name').value='Slow created card';__holdProjectInsert=true;window.__creating=saveProject();
    });
    await page.waitForFunction(()=>window.__projectInsertHeld===true);
@@ -118,7 +118,7 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
  },[0,true]);
  await fresh();
  await check('Declining a duplicate-address warning keeps one project and the unsaved card',async()=>{
-  __db.projects=[{id:'same-address',name:'Existing address',category_id:'arch',status_id:'active',address:'Test address'}];await loadAll();
+  __db.projects=[{id:'same-address',name:'Existing address',category_id:'arch',status_id:'active',employee_id:'lead-designer',address:'Test address'}];await loadAll();
   openProjectSheet(null);document.getElementById('pf-name').value='Duplicate address';document.getElementById('pf-address').value='  TEST  ADDRESS ';window.confirm=()=>false;await saveProject();window.confirm=()=>true;
   return [__db.projects.length,document.getElementById('projectSheetOverlay').classList.contains('active')];
  },[1,true]);
@@ -127,8 +127,8 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
   openProjectSheet(null);document.getElementById('pf-name').value='Saved without history';__fail={table:'audit_log',op:'insert'};await saveProject();__fail=null;await saveProject();return [__db.projects.length,__db.projects[0]?.name];
  },[1,'Saved without history']);
  await fresh();
- await check('Lead designer cannot overwrite an existing project contract',async()=>{
-  __db.projects=[{id:'existing',name:'Contract',category_id:'arch',status_id:'active',employee_id:'architect',price:100000,advance:30000,balance:70000,fee_percent:40,fee_base:'profit',updated_at:'2026-10-19T00:00:00Z'}];await loadAll();openProjectSheet('existing');document.getElementById('pf-name').value='Forbidden edit';document.getElementById('pf-price').value='1';const n=__writes.length;await saveProject();return [__db.projects[0].name,__db.projects[0].price,__writes.length===n];
+ await check("Lead designer cannot overwrite an assigned project's financial conditions",async()=>{
+  __db.projects=[{id:'existing',name:'Contract',category_id:'arch',status_id:'active',employee_id:'lead-designer',price:100000,advance:30000,balance:70000,fee_percent:40,fee_base:'profit',updated_at:'2026-10-19T00:00:00Z'}];await loadAll();openProjectSheet('existing');document.getElementById('pf-name').value='Forbidden edit';document.getElementById('pf-price').value='1';const n=__writes.length;await saveProject();return [__db.projects[0].name,__db.projects[0].price,__writes.length===n];
  },['Contract',100000,true]);
  for(const [label,profile]of [
   ['ordinary employee',{role:'Сотрудник',is_salaried:false}],
@@ -146,18 +146,18 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
  await check('An unauthenticated client cannot save a project',async()=>{setSession(null);openProjectSheet(null);document.getElementById('pf-name').value='Client request';await saveProject();return __db.projects.length;},0);
  await fresh();
  await check('Director keeps the existing financial project-save path',async()=>{
-  setSession({employeeId:'admin',name:'Director',isAdmin:true,token:'isolated-admin'});applyRole();openProjectSheet(null);document.getElementById('pf-name').value='Director card';document.getElementById('pf-price').value='200000';await saveProject();return [__db.projects.length,__db.projects[0]?.price,__db.projects[0]?.fee_base];
+  setSession({employeeId:'admin',name:'Director',isAdmin:true,token:'isolated-admin'});await loadAll();applyRole();openProjectSheet(null);document.getElementById('pf-name').value='Director card';document.getElementById('pf-price').value='200000';await saveProject();return [__db.projects.length,__db.projects[0]?.price,__db.projects[0]?.fee_base];
  },[1,200000,'m2']);
  await fresh();
  await check('A membership read failure preserves the prior team and assigned employee visibility',async()=>{
   __db.projects=[{id:'member-visible',name:'Member visible project',category_id:'arch',status_id:'active',employee_id:'architect',price:100000,fee_percent:40,fee_base:'profit'}];
   __db.project_members=[{id:'existing-member',project_id:'member-visible',employee_id:'visual'}];await loadAll();
-  setSession({employeeId:'visual',name:'Visualizer',isAdmin:false,token:'isolated-visual'});applyRole();__fail={table:'project_members',op:'select'};await loadAll();__fail=null;
+  setSession({employeeId:'visual',name:'Visualizer',isAdmin:false,token:'isolated-visual'});await loadAll();applyRole();__fail={table:'project_members',op:'select'};await loadAll();__fail=null;
   return [state.projectMembers.map(m=>m.id),!!state.projectMembersDataError,isProjectMember('member-visible'),document.getElementById('projectsCard').textContent.includes('Member visible project'),state.financialDataReady,document.getElementById('syncDot').classList.contains('off')];
  },[['existing-member'],true,true,true,true,true]);
  await fresh();
  await check('An administrator cannot save an unverified empty team or remove its last-known member',async()=>{
-  setSession({employeeId:'admin',name:'Director',isAdmin:true,token:'isolated-admin'});applyRole();
+  setSession({employeeId:'admin',name:'Director',isAdmin:true,token:'isolated-admin'});await loadAll();applyRole();
   __db.projects=[{id:'member-safe',name:'Safe team',category_id:'arch',status_id:'active',employee_id:'architect',price:100000,fee_percent:40,fee_base:'profit'}];
   __db.project_members=[{id:'safe-member',project_id:'member-safe',employee_id:'visual'}];await loadAll();state.projectMembers=[];
   __fail={table:'project_members',op:'select'};await loadAll();__fail=null;openProjectSheet('member-safe');document.getElementById('pf-name').value='Must not save';
@@ -166,7 +166,7 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
  },['Safe team',['visual'],true,1,true,true]);
  await fresh();
  await check('Recovery rehydrates a card opened without a verified team before saving is enabled',async()=>{
-  setSession({employeeId:'admin',name:'Director',isAdmin:true,token:'isolated-admin'});applyRole();
+  setSession({employeeId:'admin',name:'Director',isAdmin:true,token:'isolated-admin'});await loadAll();applyRole();
   __db.projects=[{id:'recover-team',name:'Recover team',category_id:'arch',status_id:'active',employee_id:'architect',price:100000,fee_percent:40,fee_base:'profit'}];
   __db.project_members=[{id:'recovered-member',project_id:'recover-team',employee_id:'visual'}];state.projectMembers=[];__fail={table:'project_members',op:'select'};await loadAll();__fail=null;
   openProjectSheet('recover-team');await loadAll();const recovered=[state.projectMembersDataError,currentProjectMembers.map(m=>m.employee_id),document.getElementById('pf-members-add').disabled,!!document.querySelector('#pf-members-list [role="alert"]')];
@@ -174,7 +174,7 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
  },[null,['visual'],false,false,['visual'],'Recovered metadata']);
  await fresh();
  await check('Recovery preserves a deliberate team draft made before the read failed',async()=>{
-  setSession({employeeId:'admin',name:'Director',isAdmin:true,token:'isolated-admin'});applyRole();
+  setSession({employeeId:'admin',name:'Director',isAdmin:true,token:'isolated-admin'});await loadAll();applyRole();
   __db.projects=[{id:'draft-team',name:'Draft team',category_id:'arch',status_id:'active',employee_id:'architect',price:100000,fee_percent:40,fee_base:'profit'}];
   __db.project_members=[{id:'draft-member',project_id:'draft-team',employee_id:'visual'}];await loadAll();openProjectSheet('draft-team');removeProjectMember('visual');
   __fail={table:'project_members',op:'select'};await loadAll();__fail=null;await loadAll();const draft=currentProjectMembers.map(m=>m.employee_id);await saveProject();return [draft,__db.project_members.length];
@@ -191,7 +191,7 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
   const name='A team read failure arriving during a project update blocks the later member delete';
   try{
    await page.evaluate(async()=>{
-    setSession({employeeId:'admin',name:'Director',isAdmin:true,token:'isolated-admin'});applyRole();
+    setSession({employeeId:'admin',name:'Director',isAdmin:true,token:'isolated-admin'});await loadAll();applyRole();
     __db.projects=[{id:'late-team-error',name:'Before accepted metadata',category_id:'arch',status_id:'active',employee_id:'architect',price:100000,fee_percent:40,fee_base:'profit'}];
     __db.project_members=[{id:'late-member',project_id:'late-team-error',employee_id:'visual'}];await loadAll();openProjectSheet('late-team-error');removeProjectMember('visual');document.getElementById('pf-name').value='Accepted metadata';
     __holdProjectWriteOperation='update';window.__updating=saveProject();

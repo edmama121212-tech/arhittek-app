@@ -120,10 +120,10 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
   __employeeRPCMode='extra-fields';const r=await loadEmployeesSafe();return [r.error,r.data.some(e=>'pin_code'in e||'session_token'in e),r.data.some(e=>e.id==='archived-employee')];
  },[null,false,false]);
  await fresh();
- await check('Employees retain their own salary and salaried flags while colleague salaries stay masked',async()=>{
+ await check('Payroll amounts and salaried flags are unavailable to every non-owner profile',async()=>{
   setSession({employeeId:'designer',name:'Lead',isAdmin:false,token:'isolated-designer'});await loadAll();const own=state.employees.find(e=>e.id==='designer'),other=state.employees.find(e=>e.id==='admin');
   return [own.fixed_salary,other.fixed_salary,other.is_salaried,projectFeePercent({category_id:'arch',employee_id:'admin',fee_percent:null}),state.employees.some(e=>'pin_code'in e),state.trash.employees.length];
- },[50000,null,true,0,false,0]);
+ },[null,null,null,40,false,0]);
  for(const mode of ['forbidden','forbidden-404','network','invalid']){
   await fresh();
   await check(mode+' profile failure never falls back to employee table reads',async mode=>{
