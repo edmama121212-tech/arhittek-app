@@ -59,6 +59,14 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
  }
  async function check(name,fn,expected,args){try{const actual=await page.evaluate(fn,args);assert.deepEqual(actual,expected);results.push({name,pass:true});}catch(e){results.push({name,pass:false,error:e.message});}finally{await page.evaluate(()=>{__moneyFault=null;__moneyHold=null;__releaseMoneyQueries();}).catch(()=>{});}}
  await fresh();
+ await check('Editing only a completed project name cannot change reserve or create money operations',async()=>{
+  __db.projects=[{id:'old-completed-project',name:'Old completed project',category_id:'arch',status_id:'done',employee_id:'visual',price:100000,advance:0,balance:100000,expenses:0,fee_percent:40,fee_base:'profit',fee_paid:0,end_date:'2026-10-10',created_at:'2026-09-01T09:00:00Z',updated_at:'2026-10-01T09:00:00Z'}];
+  __db.audit_log=[{id:'old-completion',entity_type:'project',entity_id:'old-completed-project',action:'update',created_at:'2026-10-01T09:00:00Z',changes:{status_id:{old:'active',new:'done'}}}];
+  await loadAll();const before=getCompanyReserveBalance();__writes=[];
+  openProjectSheet('old-completed-project');document.getElementById('pf-name').value='Renamed completed project';await saveProject();
+  return [before,getCompanyReserveBalance(),__db.projects[0].name,__writes.filter(w=>['ledger_entries','company_income','company_expenses','timesheet_payments'].includes(w.table)).length];
+ },[20000,20000,'Renamed completed project',0]);
+ await fresh();
  await check('Critical tables load past a server cap below page size',async()=>{
   __rowLimit=200;__db.ledger_entries=Array.from({length:705},(_,i)=>({id:'entry-'+String(i).padStart(4,'0'),type:'income',amount:1,entry_date:'2026-10-10',created_at:'2026-10-10T10:00:00Z'}));
   await loadAll();return [state.ledger.length,state.financialDataReady];
@@ -208,3 +216,4 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
  results.push({name:'No uncaught browser exceptions',pass:errors.length===0,...(errors.length?{error:errors.join('; ')}:{})});
  await browser.close();const failed=results.filter(r=>!r.pass);console.log(JSON.stringify({passed:results.length-failed.length,total:results.length,failed,results},null,2));if(failed.length)process.exitCode=1;
 })().catch(e=>{console.error(e);process.exitCode=1});
+

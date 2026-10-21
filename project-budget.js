@@ -29,19 +29,21 @@ function calculate(s,until,hooks={}){
  const details=[],items=[],warnings=[];
  for(const p of projects){
   const isConstruction=construction(p);
-  const statusChanges=(s.history||[]).filter(a=>a.entity_id===p.id&&a.changes?.status_id&&Number.isFinite(Date.parse(a.created_at))).sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)));
+  const statusChanges=(s.financialStatusHistory||s.history||[]).filter(a=>a.entity_id===p.id&&a.changes?.status_id&&Number.isFinite(Date.parse(a.created_at))).sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)));
   let statusId=p.status_id;
   statusChanges.filter(a=>cash.day(new Date(a.created_at))>until).forEach(a=>statusId=a.changes.status_id.old);
   const completion=statusChanges.find(a=>a.changes.status_id.new===statusId&&cash.day(new Date(a.created_at))<=until);
-  const updated=p.updated_at||p.created_at,updatedDay=Number.isFinite(Date.parse(updated))?cash.day(new Date(updated)):null;
-  const completionDay=completion?cash.day(new Date(completion.created_at)):p.end_date>=cash.cutoff.slice(0,10)&&updatedDay?updatedDay:p.end_date;
-  const completed=/заверш/i.test((s.statuses||[]).find(x=>x.id===statusId)?.name||'')&&(!completionDay||completionDay<=until);
+  // updated_at changes for names, notes, contracts and stages too; it is not
+  // evidence that a project was completed or that money was released.
+  const completionDay=completion?cash.day(new Date(completion.created_at)):p.end_date;
+  const completed=/заверш/i.test((s.statuses||[]).find(x=>x.id===statusId)?.name||'')&&(until===cash.day()||!completionDay||completionDay<=until);
   const movements=post.filter(e=>e.row.project_id===p.id);
   const receipts=round(movements.filter(e=>e.amount>0).reduce((a,e)=>a+e.amount,0));
   const projectAmort=isConstruction?0:round(movements.filter(e=>e.amount>0&&!cash.isAdjustment(e.row)).reduce((a,e)=>a+Math.round(e.amount*5)/100,0));
   const directPayments=round(movements.filter(e=>e.amount<0&&cash.flowGroup(e)!=='team').reduce((a,e)=>a-e.amount,0));
-  const recentClosure=completion&&Date.parse(completion.created_at)>Date.parse(cash.cutoff);
-  const closingAfterSnapshot=completed&&(recentClosure||(p.end_date>=cash.cutoff.slice(0,10)&&Date.parse(updated)>Date.parse(cash.cutoff)&&updatedDay<=until));
+  const closingAfterSnapshot=completed&&(completion
+   ?Date.parse(completion.created_at)>Date.parse(cash.cutoff)
+   :!!p.end_date&&p.end_date>=cash.cutoff.slice(0,10)&&p.end_date<=until);
   const invoiceRows=(s.invoices||[]).filter(i=>!i.deleted_at&&i.project_id===p.id&&!i.paid_by_client&&Date.parse(i.created_at)>Date.parse(cash.cutoff)&&String(i.invoice_date||i.created_at).slice(0,10)<=until);
   const eligible=movements.length>0||closingAfterSnapshot||invoiceRows.length>0;
   const projectInvoices=(s.invoices||[]).filter(i=>!i.deleted_at&&i.project_id===p.id&&String(i.invoice_date||i.created_at||'').slice(0,10)<=until);
@@ -125,3 +127,4 @@ function calculate(s,until,hooks={}){
 }
 window.ARHITTEKBudget={calculate,projectRows};
 })();
+

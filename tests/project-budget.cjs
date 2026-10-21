@@ -107,4 +107,24 @@ check('Cash is conserved for legacy advances, actual costs, accruals and subsequ
   assert.equal(x.companyReserve+x.amortization+x.projectsHeld+x.teamHeld+x.costsHeld,x.cashBalance);
  }
 });
+check('Renaming an old completed project cannot create a new fee hold',()=>{
+ const s=fresh(),p={id:'p',status_id:'done',employee_id:'executor',mainFee:40000,end_date:'2026-10-10',created_at:'2026-09-01T09:00:00Z',updated_at:'2026-10-01T09:00:00Z'};s.projects=[p];
+ s.history=[{entity_id:'p',created_at:'2026-10-01T09:00:00Z',changes:{status_id:{old:'active',new:'done'}}}];
+ const before=b.calculate(s,undefined,hooks);p.name='A new name';p.notes='A new note';p.updated_at='2026-10-11T09:00:00Z';
+ const after=b.calculate(s,undefined,hooks);assert.equal(before.available,20000);assert.equal(after.available,before.available);assert.equal(after.teamHeld,0);
+});
+check('Missing old history never turns updated_at into a completion event',()=>{
+ const s=fresh(),p={id:'p',status_id:'done',employee_id:'executor',mainFee:40000,end_date:'2026-10-10',updated_at:'2026-10-01T09:00:00Z'};s.projects=[p];
+ const before=b.calculate(s,undefined,hooks);p.updated_at='2026-10-11T09:00:00Z';assert.equal(b.calculate(s,undefined,hooks).available,before.available);
+});
+check('Background audit refresh cannot replace the confirmed financial status history',()=>{
+ const s=fresh();s.projects=[{id:'p',status_id:'done',employee_id:'executor',mainFee:40000,end_date:'2026-10-10',updated_at:'2026-10-11T09:00:00Z'}];
+ s.financialStatusHistory=[{entity_id:'p',created_at:'2026-10-01T09:00:00Z',changes:{status_id:{old:'active',new:'done'}}}];
+ const before=b.calculate(s,undefined,hooks);s.history=[{entity_id:'p',created_at:'2026-10-10T09:00:00Z',changes:{status_id:{old:'active',new:'done'}}}];
+ assert.equal(b.calculate(s,undefined,hooks).available,before.available);assert.equal(before.available,20000);
+});
+check('A later unrelated card edit cannot rewrite the reserve of a past day',()=>{
+ const s=fresh(),p={id:'p',status_id:'done',employee_id:'executor',mainFee:40000,end_date:'2026-10-10',updated_at:'2026-10-10T09:00:00Z'};s.projects=[p];
+ const before=b.calculate(s,'2026-10-10',hooks);p.updated_at='2026-10-11T09:00:00Z';assert.equal(b.calculate(s,'2026-10-10',hooks).available,before.available);
+});
 console.log('PASS: '+count+' project budget scenarios');
