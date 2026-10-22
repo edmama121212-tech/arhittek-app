@@ -21,7 +21,7 @@ const eq=(a,b)=>{assert.deepEqual(a,b);checks++};
 await role(2);await denied(snapshot);await denied(()=>cmd('activate',{},20,0));await role(0);await denied(snapshot);
 await role(1);let snap=await snapshot();eq(snap.active,false);
 const opening={reason:'Actual count confirmed',confirmed:true,fingerprint:snap.fingerprint,cash:100000,amortization:5000,projects:[{id:U(10),funds:60000,costs:0,team:[]},{id:U(11),funds:10000,costs:0,team:[]}]};
-await denied(()=>cmd('activate',{...opening,fingerprint:'stale'},20,0));await cmd('activate',opening,20,0);eq((await snapshot()).balances.reserve,25000);
+await denied(()=>cmd('activate',{...opening,fingerprint:'stale'},20,0));await denied(()=>cmd('activate',{...opening,confirmed:null},20,0));await cmd('activate',opening,20,0);eq((await snapshot()).balances.reserve,25000);
 await cmd('activate',opening,20,0);eq((await snapshot()).revision,1);await denied(()=>cmd('activate',{...opening,cash:200000},20,0));
 const before=await snapshot();await db.query("update public.projects set name='Renamed',end_date=current_date+10,notes='Note',price=200000 where id=$1",[U(10)]);eq((await snapshot()).balances,before.balances);
 let review=(await db.query('select public.review_financial_project($1) j',[U(10)])).rows[0].j;
@@ -45,6 +45,14 @@ await role(1,false);await denied(()=>db.query("insert into public.company_expens
 for(const amount of ['0.001','NaN','Infinity','-1'])await denied(()=>db.query("insert into public.company_expenses(category,amount,expense_date) values('Invalid',$1,$2)",[amount,today]));
 await denied(()=>db.query("insert into public.company_expenses(category,amount,expense_date) values('Future',100,'2099-01-01')"));await denied(()=>cmd('transfer',{reason:'Bad allocation',from:'reserve',to:'amortization',amount:1},26,0));
 snap=await snapshot();eq(Object.values(snap.balances).reduce((a,b)=>a+Number(b),0),snap.operations.reduce((a,b)=>a+Number(b.cash_delta),0));
+// Reconciliation is explicit and zero-sum transfers do not manufacture cash.
+snap=await snapshot();const beforeTransfer=Object.values(snap.balances).reduce((a,b)=>a+Number(b),0);
+await cmd('transfer',{reason:'Company remuneration approved',from:'project:'+U(11),to:'reserve',amount:5000},60,snap.revision);snap=await snapshot();eq(Object.values(snap.balances).reduce((a,b)=>a+Number(b),0),beforeTransfer);eq(snap.balances.reserve,50000);
+await cmd('reconcile',{reason:'Cash and bank count verified',confirmed:true,cash:90000},61,snap.revision);snap=await snapshot();eq(Object.values(snap.balances).reduce((a,b)=>a+Number(b),0),90000);
+const reverseTarget=snap.operations.find(o=>o.source_id===U(30));await cmd('reverse',{reason:'Wrong employee payment',operation:reverseTarget.id},62,snap.revision);snap=await snapshot();eq(snap.balances['team:'+U(10)+':'+U(2)+':2026-10'],15000);
+eq((await db.query('select deleted_at is not null canceled from public.ledger_entries where id=$1',[U(30)])).rows[0].canceled,true);
+// Unrelated invoice and accrual edits cannot alter a fixed balance.
+const fixed=snap.balances;await db.query("insert into public.invoices(project_id,amount,description) values($1,99999,'Accrual only')",[U(11)]);await ledger(70,U(10),'role_payout',5000,U(2),'Accrual only');eq((await snapshot()).balances,fixed);
 await role(2);await denied(snapshot);await denied(()=>db.query("insert into public.company_expenses(category,amount,expense_date) values('Staff',1,current_date)"));
 console.log(checks+' financial journal invariants passed');await db.close();
 })().catch(e=>{console.error(e);process.exitCode=1});

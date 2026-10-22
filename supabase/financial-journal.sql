@@ -60,7 +60,10 @@ create or replace function arhittek_finance.fingerprint() returns text language 
  (select coalesce(jsonb_agg(to_jsonb(x) order by id),'[]') from public.invoices x),
  (select coalesce(jsonb_agg(jsonb_build_array(id,role,is_salaried,fixed_salary,active,deleted_at) order by id),'[]') from public.employees),
  (select coalesce(jsonb_agg(to_jsonb(x) order by id),'[]') from public.categories x),
- (select coalesce(jsonb_agg(to_jsonb(x) order by id),'[]') from public.timesheet_payments x)
+ (select coalesce(jsonb_agg(to_jsonb(x) order by id),'[]') from public.timesheet_payments x),
+ (select coalesce(jsonb_agg(to_jsonb(x) order by id),'[]') from public.statuses x),
+ (select coalesce(jsonb_agg(to_jsonb(x) order by id),'[]') from public.departments x),
+ (select coalesce(jsonb_agg(jsonb_build_array(id,entity_id,changes,created_at) order by id),'[]') from public.audit_log where changes ? 'status_id' or action='cash_count')
  )::text)
 $$;
 create or replace function arhittek_finance.post(op uuid,kind text,reason text,delta numeric,changes jsonb,request jsonb default '{}',src text default null,sid uuid default null,rev uuid default null) returns uuid language plpgsql set search_path='' as $$
@@ -240,6 +243,7 @@ begin
   for v in select key,value::numeric as amount from jsonb_each_text(b) where key='costs:'||project_id_value or key like 'team:'||project_id_value||':%' loop ch:=ch||jsonb_build_object(v.key,-v.amount);end loop;
   a:=arhittek_finance.money((p->>'costs')::numeric);if a<0 then raise sqlstate '22023' using message='Отрицательные расходы';end if;
   ch:=arhittek_finance.add(ch,'costs:'||project_id_value,a);
+  if jsonb_typeof(p->'team') is distinct from 'array' then raise sqlstate '22023' using message='Проверьте обязательства перед командой';end if;
   for team in select value from jsonb_array_elements(p->'team') loop
    emp:=(team->>'employee')::uuid;m:=team->>'month';a:=arhittek_finance.money((team->>'amount')::numeric);
    if a<0 or m is null or m!~'^[0-9]{4}-(0[1-9]|1[0-2])$' or not exists(select 1 from public.employees where employees.id=emp) then raise sqlstate '22023' using message='Проверьте сотрудника, сумму и месяц';end if;
@@ -249,7 +253,7 @@ begin
  elsif cmd='transfer' then
   -- Explicit owner-approved allocation; never creates or removes cash.
   k:=p->>'from';m:=p->>'to';a:=arhittek_finance.money((p->>'amount')::numeric);
-  if a<=0 or k=m or not (b?k) then raise sqlstate '22023' using message='Проверьте источник, назначение и сумму';end if;
+  if a<=0 or k is null or m is null or k=m or not (b?k) then raise sqlstate '22023' using message='Проверьте источник, назначение и сумму';end if;
   if m not in ('reserve','amortization') then
    if m!~'^project:[0-9a-f-]{36}$' then raise sqlstate '22023' using message='Неизвестное назначение';end if;
    perform arhittek_finance.construction(split_part(m,':',2)::uuid);

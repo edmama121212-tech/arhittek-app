@@ -23,21 +23,28 @@ function sheet(title,html,save){
  if(modal)modal.remove();modal=document.createElement('div');modal.className='sheet-overlay active';modal.id='financialJournalSheet';
  modal.innerHTML='<div class="sheet" style="max-width:760px"><h3>'+esc(title)+'</h3>'+html+'<p id="journalFormError" role="alert" style="color:var(--red)"></p><button class="btn btn-primary" id="journalConfirm">Подтвердить</button><button class="btn btn-secondary" id="journalCancel">Закрыть</button></div>';
  document.body.appendChild(modal);$('journalCancel').onclick=()=>{if(!busy){modal.remove();modal=null;}};
- const operation=crypto.randomUUID();let lockedPayload=null;
- $('journalConfirm').onclick=async()=>{if(busy||!ready())return;busy=true;$('journalConfirm').disabled=true;$('journalFormError').textContent='';try{
+ const operation=crypto.randomUUID(),actor={employee:session.employeeId,token:session.token};let lockedPayload=null;
+ $('journalConfirm').onclick=async()=>{if(busy||!ready()||actor.employee!==session?.employeeId||actor.token!==session?.token)return;busy=true;$('journalConfirm').disabled=true;$('journalFormError').textContent='';try{
   const proposal=await save();
   // Keep the same request through uncertain delivery; changed payload requires a new review.
   if(lockedPayload&&JSON.stringify(lockedPayload)!==JSON.stringify(proposal))throw new Error('Предыдущая отправка могла сохраниться. Закройте форму и обновите журнал перед изменением суммы.');
   lockedPayload=proposal;
   const j=await rpc('confirm_financial_operation',{p_command:proposal.command,p_payload:proposal.payload,p_operation:operation,p_revision:proposal.revision});
+  if(actor.employee!==session?.employeeId||actor.token!==session?.token||!owner())return;
   if(!valid(j))throw new Error('Сервер не подтвердил полный остаток');state.financialJournal=j;
   modal.remove();modal=null;await loadAll();showToast('Финансовая операция подтверждена');
- }catch(e){if($('journalFormError'))$('journalFormError').textContent=e.message;}finally{busy=false;if($('journalConfirm'))$('journalConfirm').disabled=false;}};
+ }catch(e){if(actor.employee===session?.employeeId&&actor.token===session?.token&&$('journalFormError'))$('journalFormError').textContent=e.message;}finally{busy=false;if($('journalConfirm'))$('journalConfirm').disabled=false;}};
 }
 const reasonField=()=>field('Причина / комментарий','journalReason','','text');
 function positive(id){const raw=$(id).value;if(raw==='')throw new Error('Заполните все суммы');const v=Number(raw);if(!Number.isFinite(v)||v<0||Math.abs(round(v)-v)>1e-8)throw new Error('Суммы должны быть неотрицательными, до копейки');return v;}
 function reason(){const s=$('journalReason').value.trim();if(s.length<3)throw new Error('Укажите причину');return s;}
 function teamFields(rows,prefix){return rows.map((r,i)=>'<div class="card">'+esc(findEmployee(r.employee)?.name||'Сотрудник')+' · '+esc(r.month)+field('Осталось зарезервировать',prefix+i,r.amount)+'</div>').join('');}
+function extraTeamEditor(projects){
+ const host=$('journalExtraTeam');if(!host)return ()=>[];
+ const add=document.createElement('button');add.type='button';add.className='btn btn-secondary';add.textContent='Добавить обязательство сотруднику';host.appendChild(add);
+ add.onclick=()=>{const row=document.createElement('div');row.className='card journal-extra-team';row.innerHTML='<label class="field">Проект<select data-team-project>'+projects.map(p=>'<option value="'+esc(p.id)+'">'+esc(p.name)+'</option>').join('')+'</select></label><label class="field">Сотрудник<select data-team-employee>'+state.employees.map(e=>'<option value="'+esc(e.id)+'">'+esc(e.name)+'</option>').join('')+'</select></label><label class="field">Месяц<input data-team-month type="month" value="'+ARHITTEKCash.day().slice(0,7)+'"></label><label class="field">Осталось выплатить<input data-team-amount type="number" min="0" step="0.01"></label><button type="button" class="btn btn-secondary" data-team-remove>Убрать строку</button>';host.insertBefore(row,add);row.querySelector('[data-team-remove]').onclick=()=>row.remove();};
+ return ()=>[...host.querySelectorAll('.journal-extra-team')].map(row=>{const raw=row.querySelector('[data-team-amount]').value,amount=Number(raw),month=row.querySelector('[data-team-month]').value;if(raw===''||!Number.isFinite(amount)||amount<0||round(amount)!==amount||!month)throw new Error('Заполните месяц и сумму добавленных обязательств');return {project:row.querySelector('[data-team-project]').value,employee:row.querySelector('[data-team-employee]').value,month,amount};});
+}
 function pendingButton(){return '<div class="card" id="journalPending"><h3>Переход на подтверждённый журнал</h3><p class="note">Сначала сверьте все деньги и обязательства. Показанный сейчас резерв расчётный. Новая схема начнёт работать после вашего подтверждения.</p><button class="btn btn-primary" data-journal="activate">Сверить и включить журнал</button></div>';}
 async function activate(){
  if(!ready())return;
@@ -46,12 +53,14 @@ async function activate(){
  const old=ARHITTEKBudget.calculate(state,ARHITTEKCash.day());
  const projects=(state.financialProjects||state.projects).map(p=>{const d=old.projects.find(d=>d.id===p.id);return {id:p.id,name:p.name,funds:d?.projectHeld||0,costs:d?.costsHeld||0,team:(d?.team||[]).filter(t=>t.remaining>0&&d.teamHeld>0).map(t=>({employee:t.employeeId,month:t.month,amount:t.remaining}))};});
  const html='<p>Укажите все фактические деньги на счетах и наличными, включая средства заказчиков. Ниже — предварительные обязательства из прежнего расчёта: проверьте их, в том числе старые авансы.</p>'+field('Все деньги фактически, ₽','journalCash')+field('Амортизация','journalAmort',old.amortization)+
- '<details open><summary>Деньги и обязательства по проектам</summary>'+projects.map((p,i)=>'<details class="card" '+((p.funds||p.costs||p.team.length)?'open':'')+'><summary>'+esc(p.name)+'</summary>'+field('Деньги, оставшиеся у проекта','journalFunds'+i,p.funds)+field('Неоплаченные прямые расходы','journalCosts'+i,p.costs)+teamFields(p.team,'journalTeam'+i+'-')+'</details>').join('')+'</details>'+reasonField()+'<label><input type="checkbox" id="journalChecked"> Я сверил деньги, авансы и обязательства по всем проектам</label><p id="journalOpeningPreview" class="note"></p>';
+ '<details open><summary>Деньги и обязательства по проектам</summary>'+projects.map((p,i)=>'<details class="card" '+((p.funds||p.costs||p.team.length)?'open':'')+'><summary>'+esc(p.name)+'</summary>'+field('Деньги, оставшиеся у проекта','journalFunds'+i,p.funds)+field('Неоплаченные прямые расходы','journalCosts'+i,p.costs)+teamFields(p.team,'journalTeam'+i+'-')+'</details>').join('')+'</details><div id="journalExtraTeam"></div>'+reasonField()+'<label><input type="checkbox" id="journalChecked"> Я сверил деньги, авансы и обязательства по всем проектам</label><p id="journalOpeningPreview" class="note"></p>';
+ let extra=()=>[];
  sheet('Начальная сверка',html,async()=>{
   if(!$('journalChecked').checked)throw new Error('Подтвердите сверку денег и обязательств');
-  return {command:'activate',revision:snap.revision,payload:{reason:reason(),confirmed:true,fingerprint:snap.fingerprint,cash:positive('journalCash'),amortization:positive('journalAmort'),projects:projects.map((p,i)=>({id:p.id,funds:positive('journalFunds'+i),costs:positive('journalCosts'+i),team:p.team.map((t,j)=>({...t,amount:positive('journalTeam'+i+'-'+j)}))}))}};
+  return {command:'activate',revision:snap.revision,payload:{reason:reason(),confirmed:true,fingerprint:snap.fingerprint,cash:positive('journalCash'),amortization:positive('journalAmort'),projects:projects.map((p,i)=>({id:p.id,funds:positive('journalFunds'+i),costs:positive('journalCosts'+i),team:p.team.map((t,j)=>({...t,amount:positive('journalTeam'+i+'-'+j)})).concat(extra().filter(t=>t.project===p.id).map(({project,...t})=>t))}))}};
  });
- const preview=()=>{try{let held=positive('journalAmort');projects.forEach((p,i)=>{held+=positive('journalFunds'+i)+positive('journalCosts'+i);p.team.forEach((t,j)=>held+=positive('journalTeam'+i+'-'+j));});$('journalOpeningPreview').textContent='Свободный резерв после сверки: '+money(positive('journalCash')-held);}catch(_){$('journalOpeningPreview').textContent='Введите фактическую сумму всех денег';}};modal.addEventListener('input',preview);preview();
+ extra=extraTeamEditor(projects);
+ const preview=()=>{try{let held=positive('journalAmort')+extra().reduce((a,t)=>a+t.amount,0);projects.forEach((p,i)=>{held+=positive('journalFunds'+i)+positive('journalCosts'+i);p.team.forEach((t,j)=>held+=positive('journalTeam'+i+'-'+j));});$('journalOpeningPreview').textContent='Свободный резерв после сверки: '+money(positive('journalCash')-held);}catch(_){$('journalOpeningPreview').textContent='Введите фактическую сумму всех денег';}};modal.addEventListener('input',preview);preview();
 }
 async function closeProject(id){
  const first=await rpc('review_financial_project',{p_id:id});await loadAll();const check=await rpc('review_financial_project',{p_id:id});
@@ -61,8 +70,10 @@ async function closeProject(id){
  const b=state.financialJournal.balances,team=(d?.team||[]).map(t=>({employee:t.employeeId,month:t.month,amount:t.remaining}));
  // Keep already frozen obligations visible even if the work card was changed.
  for(const [key,value] of Object.entries(b)){const parts=key.split(':');if(parts[0]==='team'&&parts[1]===id&&!team.some(t=>t.employee===parts[2]&&t.month===parts[3]))team.push({employee:parts[2],month:parts[3],amount:num(value)});}
- sheet('Финансовое закрытие · '+p.name,'<p>Проверьте оставшиеся обязательства. Эти суммы фиксируются отдельно от статуса, сроков и дальнейших правок карточки.</p><p>Деньги проекта: <strong>'+money(b['project:'+id])+'</strong></p>'+teamFields(team,'journalCloseTeam')+field('Осталось оплатить прямые расходы','journalCloseCosts',d?.costsHeld||num(b['costs:'+id]))+reasonField()+'<p id="journalClosePreview"></p>',async()=>({command:'close',revision:check.revision,payload:{project:id,project_fingerprint:check.fingerprint,reason:reason(),costs:positive('journalCloseCosts'),team:team.map((t,i)=>({...t,amount:positive('journalCloseTeam'+i)}))}}));
- const preview=()=>{try{const existing=Object.entries(b).filter(([k])=>k==='costs:'+id||k.startsWith('team:'+id+':')).reduce((a,[,v])=>a+num(v),0);const held=positive('journalCloseCosts')+team.reduce((a,t,i)=>a+positive('journalCloseTeam'+i),0);$('journalClosePreview').textContent='Изменение свободного резерва: '+money(num(b['project:'+id])+existing-held)+'. Общая сумма денег не изменится.';}catch(_){}};modal.addEventListener('input',preview);preview();
+ let extra=()=>[];
+ sheet('Финансовое закрытие · '+p.name,'<p>Проверьте оставшиеся обязательства. Эти суммы фиксируются отдельно от статуса, сроков и дальнейших правок карточки.</p><p>Деньги проекта: <strong>'+money(b['project:'+id])+'</strong></p>'+teamFields(team,'journalCloseTeam')+'<div id="journalExtraTeam"></div>'+field('Осталось оплатить прямые расходы','journalCloseCosts',d?.costsHeld||num(b['costs:'+id]))+reasonField()+'<p id="journalClosePreview"></p>',async()=>({command:'close',revision:check.revision,payload:{project:id,project_fingerprint:check.fingerprint,reason:reason(),costs:positive('journalCloseCosts'),team:team.map((t,i)=>({...t,amount:positive('journalCloseTeam'+i)})).concat(extra().map(({project,...t})=>t))}}));
+ extra=extraTeamEditor([p]);
+ const preview=()=>{try{const existing=Object.entries(b).filter(([k])=>k==='costs:'+id||k.startsWith('team:'+id+':')).reduce((a,[,v])=>a+num(v),0);const held=extra().reduce((a,t)=>a+t.amount,0)+positive('journalCloseCosts')+team.reduce((a,t,i)=>a+positive('journalCloseTeam'+i),0);$('journalClosePreview').textContent='Изменение свободного резерва: '+money(num(b['project:'+id])+existing-held)+'. Общая сумма денег не изменится.';}catch(_){}};modal.addEventListener('input',preview);preview();
 }
 function accountName(k){if(k==='reserve')return 'Свободный резерв';if(k==='amortization')return 'Амортизация';const [kind,p,e,m]=k.split(':');const name=(state.financialProjects||state.projects).find(x=>x.id===p)?.name||p;return (kind==='project'?'Деньги проекта':kind==='costs'?'Расходы проекта':'Гонорар '+(findEmployee(e)?.name||'')+' '+m)+' · '+name;}
 function transfer(){const snap=state.financialJournal,b=snap.balances;const destinations=['reserve','amortization',...(state.projects||[]).map(p=>'project:'+p.id)];
@@ -114,5 +125,6 @@ document.addEventListener('click',async e=>{const button=e.target.closest('[data
  const action=button.dataset.journal,id=button.dataset.id;
  if(action==='activate')await activate();else if(action==='close')await closeProject(id);else if(action==='transfer')transfer();else if(action==='reconcile')reconcile();else if(action==='reverse')reverse(id);else if(action==='income')openCompanyIncomeSheet(null);else if(action==='expense')openCompanyExpenseSheet(null);
  }catch(error){showToast(error.message);}finally{button.disabled=false;}});
-window.ARHITTEKJournal={active,valid,budget,renderFinance,salaryField,salaryDescription,safeFetch};
+function clear(){modal?.remove();modal=null;$('journalSalaryField')?.remove();}
+window.ARHITTEKJournal={clear,active,valid,budget,renderFinance,salaryField,salaryDescription,safeFetch};
 })();
