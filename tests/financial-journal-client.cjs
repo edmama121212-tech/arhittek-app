@@ -9,6 +9,8 @@ ctx.fetch=async(...args)=>{calls.push(args);return args[1]?.method==='POST'?new 
 const replay=await api.safeFetch(input,options);eq(replay.status,200);eq((await replay.json()).id,first.id);eq(JSON.parse(calls[1][1].body).id,first.id);eq(storage.size,0);
 ctx.fetch=async(...args)=>{calls.push(args);return new Response('{}',{status:201})};await api.safeFetch(input,options);assert.notEqual(JSON.parse(calls.at(-1)[1].body).id,first.id);checks++;
 eq(calls.at(-1)[1].headers.get('x-finance-client'),'1');
+ctx.fetch=async(...args)=>{calls.push(args);throw Error('Lost again')};await assert.rejects(api.safeFetch(input,options));const postCount=calls.filter(x=>x[1]?.method==='POST').length;
+ctx.fetch=async(...args)=>{calls.push(args);return new Response('[]',{status:200})};await assert.rejects(api.safeFetch(input,{...options,body:JSON.stringify({type:'advance',amount:2000,project_id:'p'})}),/предыдущей отправки/);eq(calls.filter(x=>x[1]?.method==='POST').length,postCount);
 ctx.ARHITTEKCash={constructionProject:()=>false};ctx.state={projects:[{id:'p',name:'Project',status_id:'done'}],statuses:[{id:'done',name:'Завершён'}],financialJournal:{active:true,balances:{reserve:42300,amortization:19500,'project:p':21000,'team:p:e:2026-10':32600}}};
 const b=api.budget(ctx.state);eq(b.cashBalance,115400);eq(b.companyReserve,42300);eq(b.teamHeld,32600);
 ctx.state.projects[0].status_id='other';ctx.state.projects[0].price=999999;ctx.state.projects[0].end_date='2030-01-01';eq(api.budget(ctx.state).companyReserve,42300);

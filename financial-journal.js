@@ -88,8 +88,8 @@ const row=(label,value)=>'<div class="fee-row"><div class="fl">'+esc(label)+'</d
 function renderFinance(){
  if(!owner())return;const snap=state.financialJournal;
  if(!snap?.active){const el=$('cash-panel-reserve');if(el&&!$('journalPending'))el.insertAdjacentHTML('afterbegin',pendingButton());return;}
- if($('cashMonthPicker'))$('cashMonthPicker').hidden=true;
- const b=budget(state),summary='<div class="card">'+row('Все деньги',b.cashBalance)+row('Деньги проектов и заказчиков',b.projectsHeld)+row('Зарезервировано команде',b.teamHeld)+row('Зарезервировано на расходы',b.costsHeld)+row('Амортизация',b.amortization)+row('Свободный резерв',b.companyReserve)+'<p class="note">Подтверждено сервером · запись №'+snap.revision+'. Обычные правки карточек не изменяют эти суммы.</p></div>';
+ if($('cashMonthPicker')){$('cashMonthPicker').hidden=false;if(!$('journalPeriodNote')){const note=document.createElement('p');note.id='journalPeriodNote';note.className='note';note.textContent='Месяц относится к спискам поступлений и выплат. Подтверждённые остатки показаны на текущий момент.';$('cashMonthPicker').appendChild(note);}}
+ const b=budget(state),summary='<div class="card"><h3>Текущие подтверждённые остатки</h3>'+row('Все деньги',b.cashBalance)+row('Деньги проектов и заказчиков',b.projectsHeld)+row('Зарезервировано команде',b.teamHeld)+row('Зарезервировано на расходы',b.costsHeld)+row('Амортизация',b.amortization)+row('Свободный резерв',b.companyReserve)+'<p class="note">Подтверждено сервером · запись №'+snap.revision+'. Обычные правки карточек не изменяют эти суммы.</p></div>';
  const operations=[...snap.operations,...(snap.history||[])],reversed=new Set(operations.map(o=>o.reverses).filter(Boolean));
  const history='<details class="card"><summary>Журнал · '+operations.length+' записей</summary>'+operations.map(o=>'<div class="card"><strong>'+esc(o.reason)+'</strong><p class="note">'+esc(new Date(o.created_at).toLocaleString('ru-RU'))+' · '+esc(findEmployee(o.actor)?.name||'Владелец')+'</p>'+row('Изменение всех денег',o.cash_delta)+row('Изменение свободного резерва',o.changes.reserve||0)+row('Резерв до операции',num(o.balances_after.reserve)-num(o.changes.reserve))+row('Резерв после операции',o.balances_after.reserve)+(o.kind!=='activate'&&!o.reverses&&!o.is_reversed&&!reversed.has(o.id)?btn('Отменить с причиной','reverse',o.id):'<p class="note">'+(o.is_reversed||reversed.has(o.id)?'Отменено отдельной записью':'Зафиксировано')+'</p>')+'</div>').join('')+(snap.moreHistory===false||operations.length<100?'':btn('Показать более ранние операции','history'))+'</details>';
  panel('overview',summary+btn('Добавить доход компании','income')+btn('Добавить расход компании','expense')+history);
@@ -118,14 +118,23 @@ async function safeFetch(input,options={}){
  const list=Array.isArray(body)?body:[body];if(!list.length)return fetch(input,{...options,cache:'no-store'});
  const signature=JSON.stringify([match[1],body]),digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(signature));
  const key='arhittek-money-pending-'+Array.from(new Uint8Array(digest)).map(x=>x.toString(16).padStart(2,'0')).join('');
- let ids=JSON.parse(sessionStorage.getItem(key)||'null')||list.map(r=>r.id||crypto.randomUUID());sessionStorage.setItem(key,JSON.stringify(ids));
+ const pendingKey='arhittek-money-unconfirmed-'+match[1],pending=JSON.parse(sessionStorage.getItem(pendingKey)||'null');
+ if(pending&&pending.key!==key){
+  const checkUrl=new URL(url);checkUrl.search='';checkUrl.searchParams.set('id','eq.'+pending.ids[0]);checkUrl.searchParams.set('select','id');const h=new Headers(options.headers||{});h.delete('Prefer');h.set('Accept','application/json');
+  const verification=await fetch(checkUrl,{headers:h,cache:'no-store'});
+  if(verification.ok&&pending.ids.length===1&&(await verification.json()).some(r=>r.id===pending.ids[0])){sessionStorage.removeItem(pending.key);sessionStorage.removeItem(pendingKey);throw new Error('Предыдущая денежная запись сохранена. Обновите журнал перед новой оплатой.');}
+  throw new Error('Результат предыдущей отправки не подтверждён. Повторите её без изменения суммы и даты; затем при необходимости отмените запись в журнале.');
+ }
+ let ids=JSON.parse(sessionStorage.getItem(key)||'null')||list.map(r=>r.id||crypto.randomUUID());sessionStorage.setItem(key,JSON.stringify(ids));sessionStorage.setItem(pendingKey,JSON.stringify({key,ids}));
+ const confirmed=()=>{sessionStorage.removeItem(key);sessionStorage.removeItem(pendingKey);};
  list.forEach((r,i)=>r.id=ids[i]);const headers=new Headers(options.headers||{});headers.set('x-finance-client','1');
  const res=await fetch(input,{...options,headers,body:JSON.stringify(Array.isArray(body)?list:list[0]),cache:'no-store'});
- if(res.ok){sessionStorage.removeItem(key);return res;}
+ if(res.ok){confirmed();return res;}
  // Primary-key conflict after uncertain delivery: verify exact monetary payload.
  if(res.status===409&&list.length===1){const u=new URL(url);u.search='';u.searchParams.set('id','eq.'+ids[0]);u.searchParams.set('select','*');const readHeaders=new Headers(headers);readHeaders.delete('Prefer');readHeaders.set('Accept','application/json');const check=await fetch(u,{headers:readHeaders,cache:'no-store'});
- if(check.ok){const rows=await check.json(),r=rows[0];if(r&&Object.keys(list[0]).every(k=>k==='created_at'||String(r[k]??'')===String(list[0][k]??''))){sessionStorage.removeItem(key);const one=(headers.get('Accept')||'').includes('vnd.pgrst.object');return new Response(JSON.stringify(one?r:[r]),{status:200,headers:{'Content-Type':'application/json'}});}}
+ if(check.ok){const rows=await check.json(),r=rows[0];if(r&&Object.keys(list[0]).every(k=>k==='created_at'||String(r[k]??'')===String(list[0][k]??''))){confirmed();const one=(headers.get('Accept')||'').includes('vnd.pgrst.object');return new Response(JSON.stringify(one?r:[r]),{status:200,headers:{'Content-Type':'application/json'}});}}
  }
+ if(res.status>=400&&res.status<500&&![408,409,429].includes(res.status))confirmed();
  return res;
 }
 document.addEventListener('click',async e=>{const button=e.target.closest('[data-journal]');if(!button||!ready())return;button.disabled=true;try{
