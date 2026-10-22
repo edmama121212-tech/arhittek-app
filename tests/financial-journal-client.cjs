@@ -1,0 +1,15 @@
+const vm=require('vm'),fs=require('fs'),assert=require('node:assert/strict'),{webcrypto}=require('crypto');
+const storage=new Map(),listeners={};let calls=[];
+const ctx={console,Intl,URL,Response,Headers,TextEncoder,crypto:webcrypto,Number,Date,Set,Map,JSON,document:{addEventListener:(n,f)=>listeners[n]=f},sessionStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},state:{financialJournal:null},fetch:async(...args)=>{calls.push(args);return new Response('[]',{status:201})}};ctx.window=ctx;vm.createContext(ctx);vm.runInContext(fs.readFileSync('financial-journal.js','utf8'),ctx);const api=ctx.ARHITTEKJournal;
+(async()=>{let checks=0;const eq=(a,b)=>{assert.deepEqual(a,b);checks++};
+eq(api.valid(null),false);eq(api.valid({version:1,active:false,revision:0,balances:{},operations:[]}),true);
+const input='https://fixture.invalid/rest/v1/ledger_entries?select=*',options={method:'POST',body:JSON.stringify({type:'advance',amount:1000,project_id:'p'}),headers:{Accept:'application/vnd.pgrst.object+json'}};
+ctx.fetch=async(...args)=>{calls.push(args);throw Error('Response lost')};await assert.rejects(api.safeFetch(input,options));const first=JSON.parse(calls[0][1].body);assert.ok(first.id);checks++;
+ctx.fetch=async(...args)=>{calls.push(args);return args[1]?.method==='POST'?new Response('{"code":"23505"}',{status:409}):new Response(JSON.stringify([first]),{status:200})};
+const replay=await api.safeFetch(input,options);eq(replay.status,200);eq((await replay.json()).id,first.id);eq(JSON.parse(calls[1][1].body).id,first.id);eq(storage.size,0);
+ctx.fetch=async(...args)=>{calls.push(args);return new Response('{}',{status:201})};await api.safeFetch(input,options);assert.notEqual(JSON.parse(calls.at(-1)[1].body).id,first.id);checks++;
+eq(calls.at(-1)[1].headers.get('x-finance-client'),'1');
+ctx.ARHITTEKCash={constructionProject:()=>false};ctx.state={projects:[{id:'p',name:'Project',status_id:'done'}],statuses:[{id:'done',name:'Завершён'}],financialJournal:{active:true,balances:{reserve:42300,amortization:19500,'project:p':21000,'team:p:e:2026-10':32600}}};
+const b=api.budget(ctx.state);eq(b.cashBalance,115400);eq(b.companyReserve,42300);eq(b.teamHeld,32600);
+ctx.state.projects[0].status_id='other';ctx.state.projects[0].price=999999;ctx.state.projects[0].end_date='2030-01-01';eq(api.budget(ctx.state).companyReserve,42300);
+console.log(checks+' journal client checks passed');})().catch(e=>{console.error(e);process.exitCode=1});

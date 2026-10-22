@@ -2620,6 +2620,7 @@ function renderSalaryPaymentSheet(){
   $('salaryPaymentDate').value=edit?.entry_date||todayISO();
   $('salaryPaymentNote').value=edit?salaryPaymentNote(edit):'';
   window.ARHITTEKCash?.attachCountField('salaryPaymentNote');
+  window.ARHITTEKJournal?.salaryField(salarySheetEmployeeId,salarySheetMonth);
   $('salaryPaymentSave').textContent=edit?'Сохранить изменение':'Сохранить выплату';
   $('salaryPaymentSave').disabled=!edit&&st.remaining<=0.009;
   $('salaryPaymentCancelEdit').style.display=edit?'':'none';
@@ -2648,7 +2649,8 @@ async function saveSalaryPayment(){
   if(!date){showToast('Укажите дату выплаты');return;}
   if(date>todayISO()){showToast('Фактическая выплата не может быть в будущем');return;}
   const paymentNote=window.ARHITTEKCash?.operationDescription?ARHITTEKCash.operationDescription('salaryPaymentNote',note):note;
-  const description='[salary:'+salarySheetMonth+']'+(paymentNote?' '+paymentNote:'');
+  let description='[salary:'+salarySheetMonth+']'+(paymentNote?' '+paymentNote:'');
+  try{description=window.ARHITTEKJournal?.salaryDescription(description,amount)||description;}catch(e){showToast(e.message);return;}
   salarySaveInFlight=true;$('salaryPaymentSave').disabled=true;
   try{
     let savedId=edit?.id||null;

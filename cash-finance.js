@@ -34,8 +34,9 @@ function afterCashCount(event,count){
  return Number.isFinite(created)&&(event.date>count.day||(event.date===count.day&&created>count.at));
 }
 function isCountedNote(note,count){return !!count&&String(note||'').includes('[cash:counted:'+encodeURIComponent(count.id)+']');}
-function displayNote(note){return String(note||'').replace(/\s*\[cash:counted:[^\]]+\]/g,'').trim();}
+function displayNote(note){return String(note||'').replace(/\s*\[funded:[^\]]+\]/g,'').replace(/\s*\[cash:counted:[^\]]+\]/g,'').trim();}
 function balance(s,until=day()){
+ if(s.financialJournal?.active&&until===day())return ARHITTEKJournal.budget(s).cashBalance;
  if(until<OPENING_DAY)return null;
  const count=cashCount(s,until);if(!count)return bookBalance(s,until);
  return rounded(count.total+total(cashEvents(s).filter(event=>event.date<=until&&afterCashCount(event,count))));
@@ -57,8 +58,8 @@ function amortEvents(s,until=day(),construction=p=>constructionProject(s,p)){
    !(x.kind==='ledger'&&construction(projects.find(p=>p.id===x.row.project_id))))
    .map(x=>({...x,allocation:Math.round(x.amount*5)/100}));
 }
-function amortization(s,until=day(),construction){return rounded(amortEvents(s,until,construction).reduce((sum,x)=>sum+x.allocation,0));}
-function projectBudget(s,until=day(),hooks){return window.ARHITTEKBudget.calculate(s,until,hooks);}
+function amortization(s,until=day(),construction){if(s.financialJournal?.active&&until===day())return Number(s.financialJournal.balances.amortization)||0;return rounded(amortEvents(s,until,construction).reduce((sum,x)=>sum+x.allocation,0));}
+function projectBudget(s,until=day(),hooks){if(s.financialJournal?.active&&until===day())return ARHITTEKJournal.budget(s);return window.ARHITTEKBudget.calculate(s,until,hooks);}
 function available(s,until=day()){return projectBudget(s,until).available;}
 function monthSummary(s,month){const current=day().slice(0,7),events=cashEvents(s).filter(x=>x.date.slice(0,7)===month&&x.date<=day()),accounted=events.filter(x=>x.afterSnapshot),previous=shift(month,-1),[y,m]=month.split('-').map(Number),last=new Date(Date.UTC(y,m,0)).toISOString().slice(0,10),prevLast=new Date(Date.UTC(Number(previous.slice(0,4)),Number(previous.slice(5)),0)).toISOString().slice(0,10),until=month===current?day():last;
  const movements=month<OPENING_DAY.slice(0,7)?events:accounted;
@@ -155,6 +156,7 @@ function render(){
  renderForecast();
  // Hide obsolete accrued-finance summaries; keep the previous tabs and payroll UI.
  const old=$('financeObligationsWrap');if(old)old.hidden=true;
+ window.ARHITTEKJournal?.renderFinance();
 }
 function forecastProject(p,budget=projectBudget(state)){
  if(constructionProject(state,p))return {project:p,construction:true,incoming:expected(p),reserveIncoming:0,payouts:[],unpaid:0,release:0,net:0,amortization:0};
