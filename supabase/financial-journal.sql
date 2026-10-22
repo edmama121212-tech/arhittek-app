@@ -300,9 +300,18 @@ begin
 end $$;
 create or replace function public.review_financial_project(p_id uuid) returns jsonb language sql security invoker set search_path='' as $$ select arhittek_finance.project_review(p_id) $$;
 
+create or replace function arhittek_finance.history(before_revision bigint) returns jsonb language plpgsql security definer set search_path='' as $$
+begin
+ perform arhittek_finance.actor();
+ return coalesce((select jsonb_agg(to_jsonb(o) order by o.revision desc) from (
+ select x.id,x.revision,x.kind,x.reason,x.actor,x.created_at,x.cash_delta,x.changes,x.balances_after,x.source_table,x.source_id,x.reverses,
+ exists(select 1 from arhittek_finance.operations r where r.reverses=x.id) as is_reversed
+ from arhittek_finance.operations x where before_revision is null or x.revision<before_revision order by x.revision desc limit 100) o),'[]'::jsonb);
+end $$;
+create or replace function public.get_financial_journal_history(p_before bigint default null) returns jsonb language sql security invoker set search_path='' as $$ select arhittek_finance.history(p_before) $$;
 revoke execute on all functions in schema arhittek_finance from public,anon,authenticated;
 grant usage on schema arhittek_finance to anon,authenticated;
-grant execute on function arhittek_finance.snapshot(),arhittek_finance.command(text,jsonb,uuid,bigint),arhittek_finance.project_review(uuid) to anon,authenticated;
-revoke all on function public.get_financial_journal(),public.confirm_financial_operation(text,jsonb,uuid,bigint),public.review_financial_project(uuid) from public,anon,authenticated;
-grant execute on function public.get_financial_journal(),public.confirm_financial_operation(text,jsonb,uuid,bigint),public.review_financial_project(uuid) to anon,authenticated;
+grant execute on function arhittek_finance.snapshot(),arhittek_finance.command(text,jsonb,uuid,bigint),arhittek_finance.project_review(uuid),arhittek_finance.history(bigint) to anon,authenticated;
+revoke all on function public.get_financial_journal(),public.confirm_financial_operation(text,jsonb,uuid,bigint),public.review_financial_project(uuid),public.get_financial_journal_history(bigint) from public,anon,authenticated;
+grant execute on function public.get_financial_journal(),public.confirm_financial_operation(text,jsonb,uuid,bigint),public.review_financial_project(uuid),public.get_financial_journal_history(bigint) to anon,authenticated;
 commit;

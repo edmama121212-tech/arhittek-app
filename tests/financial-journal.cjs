@@ -53,6 +53,8 @@ const reverseTarget=snap.operations.find(o=>o.source_id===U(30));await cmd('reve
 eq((await db.query('select deleted_at is not null canceled from public.ledger_entries where id=$1',[U(30)])).rows[0].canceled,true);
 // Unrelated invoice and accrual edits cannot alter a fixed balance.
 const fixed=snap.balances;await db.query("insert into public.invoices(project_id,amount,description) values($1,99999,'Accrual only')",[U(11)]);await ledger(70,U(10),'role_payout',5000,U(2),'Accrual only');eq((await snapshot()).balances,fixed);
-await role(2);await denied(snapshot);await denied(()=>db.query("insert into public.company_expenses(category,amount,expense_date) values('Staff',1,current_date)"));
+const history=(await db.query('select public.get_financial_journal_history(null) j')).rows[0].j;eq(history[0].revision,(await snapshot()).revision);eq(history.find(o=>o.source_id===U(30)).is_reversed,true);
+const older=(await db.query('select public.get_financial_journal_history($1) j',[history[2].revision])).rows[0].j;eq(older.every(o=>o.revision<history[2].revision),true);
+await role(2);await denied(()=>db.query('select public.get_financial_journal_history(null)'));await denied(snapshot);await denied(()=>db.query("insert into public.company_expenses(category,amount,expense_date) values('Staff',1,current_date)"));
 console.log(checks+' financial journal invariants passed');await db.close();
 })().catch(e=>{console.error(e);process.exitCode=1});
