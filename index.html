@@ -1156,13 +1156,29 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
     <div class="card">
       <div class="field" style="margin-bottom:0;">
         <label>Подставить данные из проекта</label>
-        <select id="ct-project"><option value="">— не выбран —</option></select>
+        <select id="ct-project" hidden aria-hidden="true" tabindex="-1"><option value="">— не выбран —</option></select>
+        <button type="button" id="ct-project-picker" class="btn btn-secondary" aria-haspopup="dialog" style="width:100%;text-align:left;white-space:normal">— не выбран —</button>
+        <dialog id="ct-project-dialog" aria-labelledby="ct-project-title">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px">
+            <h2 id="ct-project-title" style="margin:0;font-size:18px">Выбрать проект</h2>
+            <button type="button" class="icon-btn" id="ct-project-close" aria-label="Закрыть поиск проектов">✕</button>
+          </div>
+          <label for="ct-project-search">Поиск по проекту, заказчику или адресу</label>
+          <input type="search" id="ct-project-search" placeholder="Начните вводить название…" autocomplete="off">
+          <div id="ct-project-results" aria-label="Найденные проекты"></div>
+          <div id="ct-project-count" class="hint" role="status" aria-live="polite"></div>
+        </dialog>
         <div class="hint" style="margin-top:6px;">Подставит тип договора, заказчика, телефон, объект, цену и даты из карточки проекта.</div>
       </div>
     </div>
 
     <div class="section-label"><span class="lbl-text">Заказчик</span><span class="section-label-line"></span></div>
     <div class="card">
+      <div class="field">
+        <label for="ct-customer-type">Договор с</label>
+        <select id="ct-customer-type"><option value="individual">Физлицом</option><option value="legal">Юрлицом</option></select>
+      </div>
+      <div id="ct-individual-fields">
       <div class="field">
         <label>ФИО заказчика</label>
         <input type="text" id="ct-client-name" placeholder="Иванов Иван Иванович">
@@ -1191,10 +1207,26 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
         <label>Адрес регистрации (прописка)</label>
         <input type="text" id="ct-address" placeholder="г. ..., ул. ..., д. ...">
       </div>
+      </div>
+      <div id="ct-legal-fields" hidden>
+        <div class="field"><label for="ct-legal-company-name">Полное название организации</label><input type="text" id="ct-legal-company-name" placeholder="ООО «Компания»"></div>
+        <div class="field"><label for="ct-legal-inn">ИНН</label><input type="text" id="ct-legal-inn" placeholder="10 цифр"></div>
+        <div class="field"><label for="ct-legal-kpp">КПП</label><input type="text" id="ct-legal-kpp" placeholder="9 цифр"></div>
+        <div class="field"><label for="ct-legal-ogrn">ОГРН</label><input type="text" id="ct-legal-ogrn" placeholder="13 цифр"></div>
+        <div class="field"><label for="ct-legal-legal-address">Юридический адрес</label><input type="text" id="ct-legal-legal-address" placeholder="Адрес организации"></div>
+        <div class="field"><label for="ct-legal-representative">ФИО представителя</label><input type="text" id="ct-legal-representative" placeholder="Иванов Иван Иванович"></div>
+        <div class="field"><label for="ct-legal-representative-role">Должность представителя</label><input type="text" id="ct-legal-representative-role" placeholder="Генеральный директор"></div>
+        <div class="field"><label for="ct-legal-authority">Основание полномочий</label><input type="text" id="ct-legal-authority" placeholder="Устав / доверенность № и дата"></div>
+        <div class="field"><label for="ct-legal-bank-name">Банк</label><input type="text" id="ct-legal-bank-name" placeholder="Название банка"></div>
+        <div class="field"><label for="ct-legal-bank-account">Расчётный счёт</label><input type="text" id="ct-legal-bank-account" placeholder="20 цифр"></div>
+        <div class="field"><label for="ct-legal-bik">БИК</label><input type="text" id="ct-legal-bik" placeholder="9 цифр"></div>
+        <div class="field"><label for="ct-legal-corr-account">Корреспондентский счёт</label><input type="text" id="ct-legal-corr-account" placeholder="20 цифр"></div>
+      </div>
       <div class="field">
         <label>Телефон</label>
         <input type="text" id="ct-phone" placeholder="+7 900 000-00-00">
       </div>
+      <div class="field"><label for="ct-email">Электронная почта</label><input type="email" id="ct-email" placeholder="mail@example.ru"></div>
     </div>
 
     <div class="section-label"><span class="lbl-text">Условия договора</span><span class="section-label-line"></span></div>
@@ -2506,6 +2538,9 @@ function canAccessView(id){
 function clearPrivateState(){
   for(const key of ['projects','financialProjects','financialStatusHistory','ledger','photos','history','cashCounts','invoices','tzForms','tzReferences','kpForms','kpCatalog','timesheetPayments','companyExpenses','companyIncome','projectStages','projectMembers'])state[key]=[];
   state.employees=(state.employees||[]).map(e=>({id:e.id,name:e.name,active:e.active}));
+  if(typeof resetContractCustomer==='function')resetContractCustomer();
+  document.getElementById('ct-project-dialog')?.close();
+  document.getElementById('ct-project-results')?.replaceChildren();
   window.ARHITTEKJournal?.clear();state.companyInfo=null;state.financialJournal=null;state.financialDataReady=false;state.financialLoadedAt=null;
   state.trash={projects:[],employees:[],categories:[],ledger:[],companyExpenses:[],companyIncome:[],tariffs:[]};
   for(const id of ['analyticsContent','timesheetContent','employeesCard','historyCard','trashCard','financeContent']){
@@ -9373,6 +9408,7 @@ function openContractsView(){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-contracts').classList.add('active');
   renderContractTariffs();
+  syncContractProjectPicker();
   window.scrollTo(0,0);
 }
 
@@ -9386,6 +9422,8 @@ document.querySelectorAll('#contract-type .yn-btn').forEach(btn=>{
 });
 
 document.getElementById('ct-project').addEventListener('change', (e)=>{
+  syncContractProjectPicker();
+  resetContractCustomer();
   const p = state.projects.find(x=>x.id===e.target.value);
   if(!p){ resetContractPricing(); return; }
 
@@ -9435,6 +9473,9 @@ async function saveContractFields(){
     contract_advance_pct: document.getElementById('ct-advance-pct').value,
     contract_number: document.getElementById('ct-number').value,
   };
+  if(document.getElementById('ct-customer-type').value==='legal'){
+    for(const key of ['contract_client_name','contract_passport','contract_birthdate','contract_passport_issuer','contract_passport_date','contract_address']) delete fields[key];
+  }
   await sb.from('projects').update(fields).eq('id', projectId);
 }
 function scheduleContractSave(){
@@ -9451,7 +9492,8 @@ function exportContractToPdf(){
   const t = CONTRACT_TYPES[contractType];
   const c = state.companyInfo || {};
 
-  const clientName = document.getElementById('ct-client-name').value.trim() || '_____________________';
+  const customer = contractCustomerSnapshot();
+  const clientName = customer.client_name || '_____________________';
   const passport = document.getElementById('ct-passport').value.trim();
   const birthdate = document.getElementById('ct-birthdate').value;
   const passportIssuer = document.getElementById('ct-passport-issuer').value.trim();
@@ -9562,7 +9604,7 @@ function exportContractToPdf(){
   y += 30;
 
   const companyShort = c.short_name || c.full_name || 'Исполнитель';
-  const intro = companyShort + ', именуемое в дальнейшем «Исполнитель», в лице ' + (c.director || 'Генерального директора') + ', действующего на основании Устава, с одной стороны, и гражданин(ка) РФ ' + clientName + ', именуемый(ая) в дальнейшем «Заказчик», с другой стороны, далее совместно именуемые «Стороны», заключили настоящий Договор о нижеследующем:';
+  const intro = companyShort + ', именуемое в дальнейшем «Исполнитель», в лице ' + (c.director || 'Генерального директора') + ', действующего на основании Устава, с одной стороны, и ' + contractCustomerIntro(customer) + ', именуемый(ая) в дальнейшем «Заказчик», с другой стороны, далее совместно именуемые «Стороны», заключили настоящий Договор о нижеследующем:';
   addLine(intro, {gap:5.5});
   addSpacer(3);
 
@@ -9639,14 +9681,7 @@ function exportContractToPdf(){
   const colGap = 6;
   const colWidth = (contentWidth - colGap) / 2;
   const boxTopY = y;
-  const customerLines = [];
-  customerLines.push(clientName);
-  if(passport) customerLines.push('Паспорт: ' + passport);
-  if(birthdate) customerLines.push('Дата рождения: ' + fmtDate(birthdate));
-  if(passportIssuer) customerLines.push('Выдан: ' + passportIssuer);
-  if(passportDate) customerLines.push('Дата выдачи: ' + fmtDate(passportDate));
-  if(address) customerLines.push('Адрес рег.: ' + address);
-  if(phone) customerLines.push('Телефон: ' + phone);
+  const customerLines = contractCustomerLines(customer);
 
   const executorLines = [];
   if(c.full_name) executorLines.push(c.full_name);
@@ -9667,7 +9702,7 @@ function exportContractToPdf(){
       const wrapped = doc.splitTextToSize(line, width - 6);
       h += wrapped.length * 4.6;
     });
-    return h + 4;
+    return h + 10;
   }
   const custH = measureLines(customerLines, colWidth);
   const execH = measureLines(executorLines, colWidth);
@@ -9695,10 +9730,15 @@ function exportContractToPdf(){
     });
   }
 
-  drawPartyBox('ЗАКАЗЧИК', customerLines, margin);
-  drawPartyBox('ИСПОЛНИТЕЛЬ', executorLines, margin + colWidth + colGap);
-
-  y = finalBoxTopY + boxH + 14;
+  if(boxH>230){
+    addLine('ЗАКАЗЧИК',{bold:true});customerLines.forEach(line=>addLine(line));
+    addSpacer(4);addLine('ИСПОЛНИТЕЛЬ',{bold:true});executorLines.forEach(line=>addLine(line));
+    addSpacer(14);
+  }else{
+    drawPartyBox('ЗАКАЗЧИК', customerLines, margin);
+    drawPartyBox('ИСПОЛНИТЕЛЬ', executorLines, margin + colWidth + colGap);
+    y = finalBoxTopY + boxH + 14;
+  }
   checkPage(265);
 
   // Signatures
@@ -9707,7 +9747,10 @@ function exportContractToPdf(){
   doc.line(margin + colWidth + colGap, y, margin + colWidth + colGap + 70, y);
   y += 5;
   doc.setFont('Roboto','normal'); doc.setFontSize(9);
-  doc.text('Заказчик / ' + (clientName.split(' ')[0] !== '_____________________' ? clientName : '____________'), margin, y);
+  const signatureName=customer.customer_type==='legal'?(customer.legal_entity.representative||'____________'):clientName;
+  const signatureLines=doc.splitTextToSize('Заказчик / '+signatureName,colWidth);
+  if(y+signatureLines.length*4>pageHeight-22){newPage();}
+  doc.text(signatureLines, margin, y);
   doc.text('Исполнитель / ' + (c.director || '____________'), margin + colWidth + colGap, y);
 
   // ============================================================
@@ -12509,6 +12552,7 @@ showNotifPrompt();
 </script>
 
 <script src="contract-pricing.js"></script>
+<script src="contract-customer.js"></script>
 <script src="premium.js"></script>
 <script src="project-budget.js"></script>
 <script src="cash-finance.js"></script>

@@ -45,7 +45,7 @@ jobs:
 
       - name: Check contract tariffs, discounts and document exports
         if: ${{ !cancelled() }}
-        run: node tests/contract-pricing.cjs && node tests/contract-pricing-ui.cjs
+        run: node tests/contract-pricing.cjs && node tests/contract-pricing-ui.cjs && node tests/contract-customer.cjs && node tests/contract-customer-ui.cjs
 
       - name: Check cash accounting and payroll
         if: ${{ !cancelled() }}

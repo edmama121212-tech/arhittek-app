@@ -1312,13 +1312,7 @@ function contractSnapshotFromForm(){
   return {
     contract_type: typeof contractType!=='undefined' ? contractType : 'ar',
     project_id: $('ct-project')?.value || null,
-    client_name: $('ct-client-name')?.value.trim() || '',
-    passport: $('ct-passport')?.value.trim() || '',
-    birthdate: $('ct-birthdate')?.value || '',
-    passport_issuer: $('ct-passport-issuer')?.value.trim() || '',
-    passport_date: $('ct-passport-date')?.value || '',
-    address: $('ct-address')?.value.trim() || '',
-    phone: $('ct-phone')?.value.trim() || '',
+    ...contractCustomerSnapshot(),
     number: $('ct-number')?.value.trim() || '',
     date: $('ct-date')?.value || financeToday(),
     object: $('ct-object')?.value.trim() || '',
@@ -1350,6 +1344,8 @@ function applyContractSnapshot(s){
   };
   Object.entries(map).forEach(([id,v])=>{const el=$(id); if(el) el.value=v;});
   applyContractPricing(s.pricing);
+  applyContractCustomer(s);
+  syncContractProjectPicker();
 }
 function contractRowSnapshot(row){ return row?.changes?.snapshot?.new || row?.changes?.snapshot || null; }
 
@@ -1540,6 +1536,8 @@ function newContractDraft(){
   if($('ct-date')) $('ct-date').value=financeToday();
   if($('ct-advance-pct')) $('ct-advance-pct').value=50;
   resetContractPricing();
+  resetContractCustomer();
+  syncContractProjectPicker();
   contractType='ar';
   document.querySelectorAll('#contract-type .yn-btn').forEach(b=>b.classList.toggle('selected',b.dataset.value==='ar'));
   if(typeof fillContractDefaults==='function') fillContractDefaults();
@@ -1562,7 +1560,7 @@ function wordContractHtml(s){
   <h1>ДОГОВОР № ${escDoc(s.number||'____')}</h1>
   <p style="text-align:center">${escDoc(contractLabel(s.contract_type))} · ${escDoc(dateFmt(s.date))}</p>
   <p><b>Исполнитель:</b> ${escDoc(c.full_name||c.short_name||'ARHITTEK')}, в лице ${escDoc(c.director||'руководителя')}.</p>
-  <p><b>Заказчик:</b> ${escDoc(s.client_name||'________________')}.</p>
+  <p><b>Заказчик:</b> ${escDoc(contractCustomerIntro(s))}.</p>
   <h2>1. Предмет договора</h2>
   <p>Исполнитель обязуется выполнить работы по объекту: <b>${escDoc(s.object||'________________')}</b>, а Заказчик обязуется принять и оплатить результат работ.</p>
   <ul>${scope||'<li>Состав работ определяется сторонами.</li>'}</ul>
@@ -1577,7 +1575,7 @@ function wordContractHtml(s){
   <p>Изменения объёма, стоимости и сроков фиксируются сторонами дополнительно. Стороны несут ответственность в соответствии с условиями договора и применимым законодательством.</p>
   <h2>6. Реквизиты и подписи</h2>
   <table><tr><td><b>Исполнитель</b><br>${escDoc(c.full_name||c.short_name||'ARHITTEK')}<br>ИНН: ${escDoc(c.inn||'')}<br>ОГРН: ${escDoc(c.ogrn||'')}<br>${escDoc(c.legal_address||'')}<br>${escDoc(c.phone||'')}</td>
-  <td><b>Заказчик</b><br>${escDoc(s.client_name||'')}<br>Паспорт: ${escDoc(s.passport||'')}<br>Дата рождения: ${escDoc(dateFmt(s.birthdate))}<br>Выдан: ${escDoc(s.passport_issuer||'')} ${escDoc(dateFmt(s.passport_date))}<br>Адрес: ${escDoc(s.address||'')}<br>Тел.: ${escDoc(s.phone||'')}</td></tr></table>
+  <td><b>Заказчик</b><br>${contractCustomerLines(s).map(escDoc).join('<br>')}</td></tr></table>
   <p style="margin-top:40px">Исполнитель ____________________ &nbsp;&nbsp;&nbsp; Заказчик ____________________</p>
   <p class="muted">Документ сформирован в ARHITTEK. Файл можно редактировать в Microsoft Word.</p>
   </body></html>`;

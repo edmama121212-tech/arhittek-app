@@ -21,7 +21,7 @@ const {chromium}=require('playwright');const root=path.resolve(__dirname,'..');
    state.projects.push({id:'contract-project',name:'Квартира',area:100,price:200000,category_id:'design'});
    openContractsView();
   });
-  await page.selectOption('#ct-project','contract-project');assert.equal(await page.inputValue('#ct-area'),'100');
+  await page.click('#ct-project-picker');await page.fill('#ct-project-search','Квартира');await page.locator('#ct-project-results button').filter({hasText:'Квартира'}).click();assert.equal(await page.inputValue('#ct-area'),'100');
   await page.selectOption('#ct-tariff','catalog:0');assert.equal(await page.inputValue('#ct-price'),'160000');
   await page.selectOption('#ct-discount-mode','discount');await page.fill('#ct-discount-pct','10');
   assert.equal(await page.inputValue('#ct-price'),'144000');
