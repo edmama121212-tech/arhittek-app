@@ -1324,6 +1324,7 @@ function contractSnapshotFromForm(){
     object: $('ct-object')?.value.trim() || '',
     scope: $('ct-scope')?.value || '',
     price: Number($('ct-price')?.value)||0,
+    pricing: contractPricingSnapshot(),
     advance_pct: Number($('ct-advance-pct')?.value)||0,
     start_date: $('ct-start')?.value || '',
     end_date: $('ct-end')?.value || '',
@@ -1348,6 +1349,7 @@ function applyContractSnapshot(s){
     'ct-start':s.start_date||'','ct-end':s.end_date||''
   };
   Object.entries(map).forEach(([id,v])=>{const el=$(id); if(el) el.value=v;});
+  applyContractPricing(s.pricing);
 }
 function contractRowSnapshot(row){ return row?.changes?.snapshot?.new || row?.changes?.snapshot || null; }
 
@@ -1468,6 +1470,7 @@ async function deleteSavedContract(rowId){
   }
 }
 async function saveContractVersion(){
+  if(!validateContractPricing()) return;
   const s=contractSnapshotFromForm();
   if(!s.client_name && !s.object && !s.number){showToast('Заполните хотя бы заказчика, объект или номер договора');return;}
   await queryContractHistory();
@@ -1536,6 +1539,7 @@ function newContractDraft(){
   if($('ct-project')) $('ct-project').value='';
   if($('ct-date')) $('ct-date').value=financeToday();
   if($('ct-advance-pct')) $('ct-advance-pct').value=50;
+  resetContractPricing();
   contractType='ar';
   document.querySelectorAll('#contract-type .yn-btn').forEach(b=>b.classList.toggle('selected',b.dataset.value==='ar'));
   if(typeof fillContractDefaults==='function') fillContractDefaults();
@@ -1550,8 +1554,8 @@ function newContractDraft(){
 function wordContractHtml(s){
   const c=(typeof state!=='undefined'&&state.companyInfo)||{};
   const scope=String(s.scope||'').split(/\n+/).filter(Boolean).map(x=>`<li>${escDoc(x.replace(/^[-—]\s*/,''))}</li>`).join('');
-  const price=(typeof fmtMoney==='function'?fmtMoney(s.price):s.price+' ₽');
-  const advance=Math.round((Number(s.price)||0)*(Number(s.advance_pct)||0)/100);
+  const price=ctNumber(s.price)+' ₽';
+  const advance=ctRound((Number(s.price)||0)*(Number(s.advance_pct)||0)/100);
   const dateFmt=v=>(typeof fmtDate==='function'?fmtDate(v):v)||'';
   return `<!doctype html><html><head><meta charset="utf-8"><title>Договор</title>
   <style>body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.45;color:#111;margin:32px}h1{text-align:center;font-size:16pt}h2{font-size:12pt;margin-top:22px}table{width:100%;border-collapse:collapse;margin:10px 0}td{vertical-align:top;padding:5px;border:1px solid #bbb}.muted{color:#555}</style></head><body>
@@ -1563,7 +1567,8 @@ function wordContractHtml(s){
   <p>Исполнитель обязуется выполнить работы по объекту: <b>${escDoc(s.object||'________________')}</b>, а Заказчик обязуется принять и оплатить результат работ.</p>
   <ul>${scope||'<li>Состав работ определяется сторонами.</li>'}</ul>
   <h2>2. Стоимость и порядок оплаты</h2>
-  <p>Стоимость работ: <b>${escDoc(price)}</b>. Аванс: <b>${escDoc(String(s.advance_pct||0))}% (${escDoc(typeof fmtMoney==='function'?fmtMoney(advance):advance+' ₽')})</b>.</p>
+  ${contractPricingLines(s.pricing).map(line=>`<p>${escDoc(line)}</p>`).join('')}
+  <p>Стоимость работ: <b>${escDoc(price)}</b>. Аванс: <b>${escDoc(String(s.advance_pct||0))}% (${escDoc(ctNumber(advance)+' ₽')})</b>.</p>
   <h2>3. Сроки</h2>
   <p>Начало работ: ${escDoc(dateFmt(s.start_date)||'по согласованию')}. Завершение: ${escDoc(dateFmt(s.end_date)||'по согласованию')}.</p>
   <h2>4. Права, обязанности и приёмка</h2>
@@ -1578,6 +1583,7 @@ function wordContractHtml(s){
   </body></html>`;
 }
 function exportContractToWord(){
+  if(!validateContractPricing()) return;
   const s=contractSnapshotFromForm();
   const blob=new Blob(['\ufeff',wordContractHtml(s)],{type:'application/msword;charset=utf-8'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
