@@ -1217,6 +1217,33 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
         <label>Состав работ (каждый пункт с новой строки)</label>
         <textarea id="ct-scope" style="min-height:120px;"></textarea>
       </div>
+      <div class="field">
+        <label for="ct-tariff">Тариф</label>
+        <select id="ct-tariff"><option value="manual">Общая стоимость вручную</option></select>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="ct-area">Площадь, м²</label>
+          <input type="number" id="ct-area" min="0.01" step="0.01" inputmode="decimal" placeholder="Например: 100">
+        </div>
+        <div class="field" id="ct-rate-field" hidden>
+          <label for="ct-rate">Тариф без скидки, ₽/м²</label>
+          <input type="number" id="ct-rate" min="0" step="0.01" inputmode="decimal" placeholder="0">
+        </div>
+      </div>
+      <div id="ct-discount-fields" hidden>
+        <div class="field-row">
+          <div class="field">
+            <label for="ct-discount-mode">Цена по тарифу</label>
+            <select id="ct-discount-mode"><option value="none">Без скидки</option><option value="discount">Со скидкой</option></select>
+          </div>
+          <div class="field" id="ct-discount-value-field" hidden>
+            <label for="ct-discount-pct">Скидка, %</label>
+            <input type="number" id="ct-discount-pct" min="0" max="100" step="0.01" inputmode="decimal" placeholder="Например: 10">
+          </div>
+        </div>
+        <div class="note" id="ct-price-preview" aria-live="polite" style="margin-bottom:12px"></div>
+      </div>
       <div class="field-row">
         <div class="field">
           <label>Стоимость работ, ₽</label>
@@ -9345,6 +9372,7 @@ function openContractsView(){
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-contracts').classList.add('active');
+  renderContractTariffs();
   window.scrollTo(0,0);
 }
 
@@ -9359,7 +9387,7 @@ document.querySelectorAll('#contract-type .yn-btn').forEach(btn=>{
 
 document.getElementById('ct-project').addEventListener('change', (e)=>{
   const p = state.projects.find(x=>x.id===e.target.value);
-  if(!p) return;
+  if(!p){ resetContractPricing(); return; }
 
   // Тип договора определяем по направлению проекта.
   const cat = findCategory(p.category_id);
@@ -9372,7 +9400,8 @@ document.getElementById('ct-project').addEventListener('change', (e)=>{
   document.querySelectorAll('#contract-type .yn-btn').forEach(b=>b.classList.toggle('selected',b.dataset.value===contractType));
 
   document.getElementById('ct-object').value = p.address || p.name || '';
-  if(p.price) document.getElementById('ct-price').value = p.price;
+  resetContractPricing(p.area);
+  document.getElementById('ct-price').value = p.price ?? '';
   if(p.start_date) document.getElementById('ct-start').value = p.start_date;
   if(p.end_date) document.getElementById('ct-end').value = p.end_date;
   if(p.phone) document.getElementById('ct-phone').value = p.phone;
@@ -9414,10 +9443,11 @@ function scheduleContractSave(){
 }
 
 function numToWordsRub(n){
-  return fmtMoney(n) + ' руб.';
+  return ctNumber(n) + ' руб.';
 }
 
 function exportContractToPdf(){
+  if(!validateContractPricing()) return;
   const t = CONTRACT_TYPES[contractType];
   const c = state.companyInfo || {};
 
@@ -9434,7 +9464,7 @@ function exportContractToPdf(){
   const object = document.getElementById('ct-object').value.trim();
   const scope = document.getElementById('ct-scope').value.trim();
   const price = parseFloat(document.getElementById('ct-price').value) || 0;
-  const advancePct = parseFloat(document.getElementById('ct-advance-pct').value) || 50;
+  const advancePct = Number(document.getElementById('ct-advance-pct').value);
   const start = document.getElementById('ct-start').value;
   const end = document.getElementById('ct-end').value;
 
@@ -9551,6 +9581,7 @@ function exportContractToPdf(){
 
   sectionHeader('2. СТОИМОСТЬ РАБОТ И ПОРЯДОК ОПЛАТЫ');
   addLine('2.1. Стоимость работ по настоящему Договору составляет ' + numToWordsRub(price) + ', НДС не облагается в связи с применением Исполнителем упрощённой системы налогообложения.', {gap:5.5});
+  contractPricingLines(contractPricingSnapshot()).forEach(line=>addLine(line,{gap:5.5}));
   addLine('2.2. Стоимость работ может быть увеличена при внесении изменений в Техническое задание Заказчиком.', {gap:5.5});
   addLine('2.3. Заказчик оплачивает Исполнителю аванс в размере ' + advancePct + '% от стоимости работ, указанной в п.2.1 настоящего Договора, перед началом выполнения работ. Оставшаяся сумма оплачивается после завершения работ согласно Акту приёма-передачи.', {gap:5.5});
   if(contractType === 'st'){
@@ -12477,6 +12508,7 @@ showNotifPrompt();
 })();
 </script>
 
+<script src="contract-pricing.js"></script>
 <script src="premium.js"></script>
 <script src="project-budget.js"></script>
 <script src="cash-finance.js"></script>
