@@ -39,6 +39,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: node tests/session-security.cjs && node tests/invoice-payment-atomic.cjs && node tests/employees-server-access.cjs
 
+      - name: Check confirmed journal transactions, retries and mobile UI
+        if: ${{ !cancelled() }}
+        run: node tests/financial-journal.cjs && node tests/financial-journal-client.cjs && node tests/financial-journal-ui.cjs
+
       - name: Check cash accounting and payroll
         if: ${{ !cancelled() }}
         run: timeout 240s npm run test:finance
@@ -58,4 +62,5 @@ jobs:
       - name: Check construction accounting, access and customer portal
         if: ${{ !cancelled() }}
         run: timeout 240s npm run test:construction
+
 

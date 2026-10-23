@@ -22,6 +22,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="data-access.js"></script>
+<script src="financial-journal.js"></script>
 <script src="landscape-brief.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
@@ -2208,8 +2209,8 @@ const SUPABASE_URL = 'https://chbkkoxwzpaghanofvqk.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_fOLaPnbXjzQnJwG__wVzzg_D0nMO-n0';
 function createAppClient(token){
   return supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{global:{
-    headers:token?{'x-session-token':token}:{},
-    fetch:(input,options)=>fetch(input,{...options,cache:'no-store'})
+    headers:token?{'x-session-token':token,'x-finance-client':'1'}:{},
+    fetch:(input,options)=>ARHITTEKJournal.safeFetch(input,options)
   }});
 }
 let sb = createAppClient(null);
@@ -2227,7 +2228,7 @@ function applySessionToken(token){
 // STATE
 // ============================================================
 let state = {
-  financialDataReady:false,financialDataError:null,financialLoadedAt:null,
+  financialDataReady:false,financialDataError:null,financialLoadedAt:null,financialJournal:null,
   projects: [],
   financialProjects: [],
   financialStatusHistory: [],
@@ -2478,7 +2479,7 @@ function canAccessView(id){
 function clearPrivateState(){
   for(const key of ['projects','financialProjects','financialStatusHistory','ledger','photos','history','cashCounts','invoices','tzForms','tzReferences','kpForms','kpCatalog','timesheetPayments','companyExpenses','companyIncome','projectStages','projectMembers'])state[key]=[];
   state.employees=(state.employees||[]).map(e=>({id:e.id,name:e.name,active:e.active}));
-  state.companyInfo=null;state.financialDataReady=false;state.financialLoadedAt=null;
+  window.ARHITTEKJournal?.clear();state.companyInfo=null;state.financialJournal=null;state.financialDataReady=false;state.financialLoadedAt=null;
   state.trash={projects:[],employees:[],categories:[],ledger:[],companyExpenses:[],companyIncome:[],tariffs:[]};
   for(const id of ['analyticsContent','timesheetContent','employeesCard','historyCard','trashCard','financeContent']){
     const el=document.getElementById(id);if(el)el.replaceChildren();
@@ -3394,7 +3395,7 @@ async function loadAllData(){
     const ownerRead=read=>isOwner()?read():Promise.resolve({data:[],error:null,count:0});
     const documentRead=read=>canUseDocuments()?read():Promise.resolve({data:[],error:null,count:0});
     const stageRead=beginStageRead();
-    const [proj, emp, cat, st, dept, led, photos, invs, tzForms, tzRefs, company, kpForms, stages, members, kpCat, tsPay, compExp, compInc, counts, statusHistory] = await Promise.all([
+    const [proj, emp, cat, st, dept, led, photos, invs, tzForms, tzRefs, company, kpForms, stages, members, kpCat, tsPay, compExp, compInc, counts, statusHistory, journal] = await Promise.all([
       fetchAllRows(()=>sb.from('projects').select('*',{count:'exact'}).order('created_at', {ascending:true})),
       loadEmployeesSafe(),
       fetchAllRows(()=>sb.from('categories').select('*',{count:'exact'}).is('deleted_at', null).order('sort_order')),
@@ -3415,12 +3416,15 @@ async function loadAllData(){
       ownerRead(()=>fetchAllRows(()=>sb.from('company_income').select('*',{count:'exact'}).is('deleted_at', null))),
       ownerRead(()=>fetchAllRows(()=>sb.from('audit_log').select('id,entity_type,entity_id,entity_name,action,changes,created_at',{count:'exact'}).eq('entity_type','reserve').eq('action','cash_count').order('created_at',{ascending:false}))),
       ownerRead(()=>fetchAllRows(()=>sb.from('audit_log').select('id,entity_id,changes,created_at',{count:'exact'}).eq('entity_type','project').order('created_at',{ascending:false}))),
+      isOwner()?sb.rpc('get_financial_journal'):Promise.resolve({data:null,error:null}),
     ]);
 
     if(accessActor.employeeId!==session?.employeeId||accessActor.token!==session?.token||!hasVerifiedAccess())return;
     // kpForms and stages are optional — may not exist until migrations run
-    const errs = [proj,emp,cat,st,dept,led,photos,invs,tzForms,tzRefs,company,tsPay,compExp,compInc,counts,statusHistory].map(r=>r.error).filter(Boolean);
+    const errs = [proj,emp,cat,st,dept,led,photos,invs,tzForms,tzRefs,company,tsPay,compExp,compInc,counts,statusHistory,journal].map(r=>r.error).filter(Boolean);
     if(errs.length) throw errs[0];
+    if(isOwner()&&!ARHITTEKJournal.valid(journal.data))throw new Error("Сервер не подтвердил финансовый журнал");
+    state.financialJournal=isOwner()?journal.data:null;
     const freshEmployee=(emp.data||[]).find(e=>e.id===session.employeeId);
     if(!freshEmployee||freshEmployee.active===false)throw new Error('Учётная запись недоступна');
     if(!isOwner()&&!['ведущий архитектор','ведущий дизайнер'].includes(String(freshEmployee.role||'').trim().toLowerCase()))verifiedAccess.documents=false;
