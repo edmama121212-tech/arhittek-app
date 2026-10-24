@@ -1,0 +1,18 @@
+const fs=require('fs'),path=require('path'),assert=require('node:assert/strict');
+const {JSDOM}=require('jsdom'),root=path.resolve(__dirname,'..');
+const w=new JSDOM(fs.readFileSync(path.join(root,'index.html'),'utf8'),{runScripts:'outside-only'}).window;
+w.state={projects:[{id:'p',name:'Дом',client_name:'Али',address:'Мира'},{id:'q',name:'Другой дом'}]};w.fmtDate=x=>x;
+w.eval(fs.readFileSync(path.join(root,'contract-customer.js'),'utf8'));
+const f=id=>w.document.getElementById('ct-'+id);
+f('client-name').value='Иван';f('passport').value='private';
+f('customer-type').value='legal';w.setContractCustomerType();
+f('legal-company-name').value='ООО Тест';f('legal-inn').value='0123456789';f('legal-representative').value='Пётр';f('legal-authority').value='Доверенность 12';
+const saved=w.contractCustomerSnapshot();assert.equal(saved.client_name,'ООО Тест');assert.equal(saved.passport,'');assert.equal(saved.legal_entity.inn,'0123456789');
+assert.ok(w.contractCustomerIntro(saved).includes('Доверенность 12'));assert.ok(!w.contractCustomerLines(saved).join().includes('private'));
+w.resetContractCustomer();assert.equal(f('customer-type').value,'individual');assert.equal(f('legal-inn').value,'');
+w.applyContractCustomer(saved);assert.equal(f('customer-type').value,'legal');assert.equal(f('legal-inn').value,'0123456789');assert.equal(f('passport').disabled,true);
+w.applyContractCustomer({client_name:'Старый договор',passport:'1234'});assert.equal(f('passport').value,'1234');assert.equal(f('legal-fields').hidden,true);
+f('project').innerHTML='<option value="">— не выбран —</option><option value="p">Дом</option><option value="q">Другой дом</option>';
+f('project-search').value='али мира';w.renderContractProjectResults();assert.equal(f('project-results').children.length,2);
+f('project-search').value='не найден';w.renderContractProjectResults();assert.equal(f('project-results').children.length,1);assert.match(f('project-count').textContent,/Ничего не найдено/);
+console.log('Customer type isolation, saved legal details, legacy documents and project filtering passed');

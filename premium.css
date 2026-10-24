@@ -248,3 +248,11 @@ html{background:var(--bg)!important}body{max-width:none!important;margin:0!impor
  .construction-object-head #objPdfBtn{grid-column:2;grid-row:2;justify-self:start}
  .construction-object-head #objEditBtn{grid-column:3;grid-row:2}
 }
+
+/* Search stays inside the project picker on mobile, including iOS. */
+#ct-project-dialog{box-sizing:border-box;width:calc(100% - 24px);max-width:560px;max-height:80vh;max-height:80dvh;overflow:auto;border:1px solid var(--line);border-radius:16px;padding:20px;background:var(--card);color:var(--text)}
+#ct-project-dialog::backdrop{background:#11213970}
+#ct-project-search{box-sizing:border-box;width:100%;font-size:16px!important;margin-bottom:12px}
+#ct-project-results{max-height:46vh;max-height:46dvh;overflow:auto;overscroll-behavior:contain}
+#ct-project-results button{display:block;width:100%;text-align:left;white-space:normal;overflow-wrap:anywhere;margin:0 0 6px;min-height:44px}
+#ct-project-dialog [hidden],#ct-individual-fields[hidden],#ct-legal-fields[hidden],#ct-project[hidden]{display:none!important}

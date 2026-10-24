@@ -7,7 +7,7 @@ const ctNumber = n => Number(n).toLocaleString('ru-RU', {maximumFractionDigits:2
 function renderContractTariffs(){
   const select=ctField('tariff');
   const mode=select.value;
-  select.innerHTML='<option value="manual">Общая стоимость вручную</option><option value="custom">Свой тариф за м²</option>';
+  select.innerHTML='<option value="manual">Договорная сумма — за весь объём работ</option><option value="custom">Свой тариф за м²</option>';
   if(contractTariff){
     select.add(new Option(contractTariff.name,'selected'));
   }
@@ -48,6 +48,8 @@ function updateContractPricing(){
   ctField('discount-fields').hidden=!rated;
   ctField('discount-value-field').hidden=p.discount_mode!=='discount';
   ctField('price').readOnly=rated;
+  ctField('price-label').textContent=rated?'Стоимость работ, ₽':'Договорная сумма, ₽';
+  ctField('fixed-price-hint').hidden=rated;
   ctField('area').required=rated;
   ctField('rate').required=rated;
   ctField('discount-pct').required=rated&&p.discount_mode==='discount';
@@ -68,6 +70,10 @@ function validateContractPricing(){
   }
   if(p.area!==null&&(!Number.isFinite(p.area)||p.area<=0)){
     showToast('Площадь должна быть больше нуля');return false;
+  }
+  const total=Number(ctField('price').value);
+  if(p.mode==='manual'&&ctField('price').value!==''&&(!Number.isFinite(total)||total<0||ctRound(total)!==total||!Number.isSafeInteger(Math.round(total*100)))){
+    showToast('Укажите неотрицательную договорную сумму с точностью до копеек');return false;
   }
   return true;
 }
@@ -100,6 +106,10 @@ function contractPricingLines(p){
   if(!p) return [];
   const lines=[];
   if(Number(p.area)>0) lines.push('Площадь объекта: '+ctNumber(p.area)+' м².');
+  if(p.mode==='manual'){
+    lines.push('Стоимость работ установлена по соглашению сторон за весь объём работ, без расчёта по тарифу за квадратный метр.');
+    return lines;
+  }
   const r=contractPricingResult(p);
   if(!r) return lines;
   lines.push('Тариф «'+(p.tariff?.name||'Индивидуальный тариф')+'»: '+ctNumber(p.base_rate)+' ₽/м² без скидки.');
