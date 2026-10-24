@@ -1250,8 +1250,8 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
         <textarea id="ct-scope" style="min-height:120px;"></textarea>
       </div>
       <div class="field">
-        <label for="ct-tariff">Тариф</label>
-        <select id="ct-tariff"><option value="manual">Общая стоимость вручную</option></select>
+        <label for="ct-tariff">Способ расчёта / тариф</label>
+        <select id="ct-tariff"><option value="manual">Договорная сумма — за весь объём работ</option></select>
       </div>
       <div class="field-row">
         <div class="field">
@@ -1278,8 +1278,9 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
       </div>
       <div class="field-row">
         <div class="field">
-          <label>Стоимость работ, ₽</label>
-          <input type="number" id="ct-price" placeholder="0">
+          <label id="ct-price-label" for="ct-price">Договорная сумма, ₽</label>
+          <input type="number" id="ct-price" min="0" step="0.01" inputmode="decimal" placeholder="0">
+          <div class="hint" id="ct-fixed-price-hint">Укажите согласованную общую сумму. Площадь отображается в договоре отдельно и не меняет стоимость.</div>
         </div>
         <div class="field">
           <label>Аванс, %</label>
@@ -2539,7 +2540,7 @@ function clearPrivateState(){
   for(const key of ['projects','financialProjects','financialStatusHistory','ledger','photos','history','cashCounts','invoices','tzForms','tzReferences','kpForms','kpCatalog','timesheetPayments','companyExpenses','companyIncome','projectStages','projectMembers'])state[key]=[];
   state.employees=(state.employees||[]).map(e=>({id:e.id,name:e.name,active:e.active}));
   if(typeof resetContractCustomer==='function')resetContractCustomer();
-  document.getElementById('ct-project-dialog')?.close();
+  document.getElementById('ct-project-dialog')?.close?.();
   document.getElementById('ct-project-results')?.replaceChildren();
   window.ARHITTEKJournal?.clear();state.companyInfo=null;state.financialJournal=null;state.financialDataReady=false;state.financialLoadedAt=null;
   state.trash={projects:[],employees:[],categories:[],ledger:[],companyExpenses:[],companyIncome:[],tariffs:[]};

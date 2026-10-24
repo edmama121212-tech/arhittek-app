@@ -28,3 +28,8 @@ field('price').value='87654';w.applyContractPricing();assert.equal(field('price'
 w.resetContractPricing(75);assert.equal(field('area').value,'75');assert.equal(field('discount-mode').value,'none');
 assert.equal(w.contractPricingLines(undefined).length,0);
 console.log('Contract catalogue prices, discount toggles, decimal rounding, validation and frozen snapshots passed');
+
+input('tariff','manual','change');input('area','450');input('price','185000');
+assert.equal(field('price').value,'185000');input('area','451');assert.equal(field('price').value,'185000');
+assert.ok(w.contractPricingLines(w.contractPricingSnapshot()).join(' ').includes('по соглашению сторон'));
+input('price','-1');assert.equal(w.validateContractPricing(),false);

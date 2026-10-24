@@ -87,3 +87,5 @@ document.getElementById('ct-project-dialog').addEventListener('click',e=>{
   if(e.target===e.currentTarget){const r=e.currentTarget.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.currentTarget.close();}
 });
 syncContractProjectPicker();
+
+document.getElementById('ct-project-dialog').addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();e.currentTarget.close();}});

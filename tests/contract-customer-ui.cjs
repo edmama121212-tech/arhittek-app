@@ -54,6 +54,18 @@ const {chromium}=require('playwright');const root=path.resolve(__dirname,'..');
   await page.evaluate(()=>{__pdfText=[];exportContractToPdf();exportContractToWord();});
   const personal=await page.evaluate(async()=>[__pdfText.join('\n'),await __contractBlob.text()]);
   for(const text of personal){assert.ok(text.includes('Петров'));assert.ok(text.includes('1234 567890'));assert.ok(!text.includes(fields.inn));}
+
+  // A negotiated total is independent of area in both exported formats and saved documents.
+  await page.selectOption('#ct-tariff','manual');await page.fill('#ct-area','450');await page.fill('#ct-price','185000');
+  await page.fill('#ct-area','451');assert.equal(await page.inputValue('#ct-price'),'185000');await page.fill('#ct-area','450');
+  await page.evaluate(()=>{__pdfText=[];exportContractToPdf();exportContractToWord();});
+  const agreed=await page.evaluate(async()=>[__pdfText.join('\n'),await __contractBlob.text()]);
+  for(const text of agreed){assert.match(text,/450 м²/);assert.match(text,/185\s*000/);assert.ok(!text.includes('₽/м²'));assert.ok(!text.includes('Расчёт стоимости:'));}
+  await page.click('#ct-save-history');
+  await page.waitForFunction(()=>__db.audit_log.some(r=>r.entity_type==='contract'&&r.changes.snapshot.new.pricing?.area===450&&r.changes.snapshot.new.price===185000));
+  await page.waitForFunction(()=>document.querySelector('#view-contracts').dataset.dirty==='0');
+  await page.evaluate(()=>{document.getElementById('ct-new').click();document.querySelector('[data-contract-history-id]').click();});
+  assert.equal(await page.inputValue('#ct-area'),'450');assert.equal(await page.inputValue('#ct-price'),'185000');assert.equal(await page.inputValue('#ct-tariff'),'manual');
   for(const width of [360,390,1440]){
    await page.setViewportSize({width,height:900});await page.click('#ct-project-picker');
    assert.equal(await page.evaluate(()=>{const d=document.getElementById('ct-project-dialog');return d.scrollWidth<=d.clientWidth+1&&d.getBoundingClientRect().right<=innerWidth;}),true);
