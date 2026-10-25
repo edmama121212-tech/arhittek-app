@@ -45,6 +45,13 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
   },profile);
  }
  async function check(name,fn,expected){try{const actual=await page.evaluate(fn);assert.deepEqual(actual,expected);results.push({name,pass:true});}catch(e){results.push({name,pass:false,error:e.message});}}
+ for(const role of ['Ведущий дизайнер','Ведущий архитектор']){
+  await fresh({role});await page.locator('#addProjectFab').click();
+  await page.locator('#pf-name').fill('Created by button '+role);
+  await page.locator('#pf-save').click();
+  await page.waitForFunction(()=>__db.projects.length===1);
+  await check(role+' saves via real button without hidden fees',()=>[__db.projects[0].employee_id,__db.projects[0].price,__db.projects[0].fee_percent],['lead-designer',0,0]);
+ }
  await fresh();
  await check('Lead designer sees the new-project action without company finances',()=>[getComputedStyle(document.getElementById('addProjectFab')).display!=='none',getComputedStyle(document.getElementById('nav-finance')).display,canEditCards()], [true,'none',false]);
  await page.locator('#addProjectFab').click();

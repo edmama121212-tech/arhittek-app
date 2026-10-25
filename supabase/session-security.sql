@@ -209,7 +209,7 @@ begin
   if v_actor.employee_id is null then return false; end if;
   if v_actor.is_admin then return true; end if;
   select * into v_emp from public.employees e where e.id=v_actor.employee_id;
-  if lower(btrim(coalesce(v_emp.role,'')))<>'ведущий дизайнер' or not coalesce(v_emp.can_see_projects,true) then return false; end if;
+  if lower(btrim(coalesce(v_emp.role,''))) not in ('ведущий дизайнер','ведущий архитектор') or not coalesce(v_emp.can_see_projects,true) then return false; end if;
   if p.employee_id is distinct from v_actor.employee_id or p.co_employee_id is not null or p.deleted_at is not null
     or coalesce(p.price,0)<>0 or coalesce(p.advance,0)<>0 or coalesce(p.balance,0)<>0 or coalesce(p.expenses,0)<>0
     or coalesce(p.fee_percent,0)<>0 or coalesce(p.co_fee_percent,0)<>0 or coalesce(p.fee_paid,0)<>0 or coalesce(p.co_fee_paid,0)<>0

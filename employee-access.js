@@ -9,7 +9,7 @@ window.updateEmployeeAccessSummary=function(){
   const owner=!!(editingEmployeeId&&(state.employees||[]).find(e=>e.id===editingEmployeeId)?.is_admin);
   const lead=rolesWithDocuments.has(select.value.trim().toLowerCase());
   summary.textContent=owner?'Мансур: все проекты и все разделы. Должность не ограничивает владельца.':
-    lead?'Только свои проекты. В «Ещё» доступны КП и Договор. Финансы и табель закрыты.':
+    lead?'Создание и просмотр своих проектов. В «Ещё» доступны КП и Договор. Финансы и табель закрыты.':
     'Только свои проекты. Раздел «Ещё», финансы и табель закрыты.';
   const active=document.getElementById('ef-active'),del=document.getElementById('ef-delete');
   if(active)active.disabled=owner;

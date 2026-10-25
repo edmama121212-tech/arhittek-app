@@ -193,11 +193,16 @@ create or replace function public.get_financial_journal() returns jsonb language
 
 create or replace function arhittek_finance.command(cmd text,p jsonb,op uuid,expected bigint) returns jsonb language plpgsql security definer set search_path='' as $$
 declare s arhittek_finance.settings; existing arhittek_finance.operations; request jsonb:=jsonb_build_object('command',cmd,'payload',p);
- b jsonb; ch jsonb:='{}'; item jsonb; team jsonb; project_id_value uuid; emp uuid; m text; k text; a numeric; cash numeric:=0; total numeric:=0; reason text:=trim(p->>'reason'); v record; original arhittek_finance.operations;
+ b jsonb; ch jsonb:='{}'; item jsonb; team jsonb; project_id_value uuid; emp uuid; m text; k text; a numeric; cash numeric:=0; total numeric:=0; reason text:=trim(p->>'reason'); v record; original arhittek_finance.operations; prior jsonb;
 begin
  perform arhittek_finance.actor();
  -- All journal writers take this lock. Source tables are read only after it.
  select * into s from arhittek_finance.settings where singleton for update;
+ select changes->'reserve_adjustment' into prior from public.audit_log where id=op and action='cash_count';
+ if found then
+  if prior->'request' is distinct from request then raise sqlstate '23514' using message='Повтор операции с другими данными'; end if;
+  return arhittek_finance.snapshot();
+ end if;
  select * into existing from arhittek_finance.operations where operations.id=op;
  if found then
   if existing.request<>request then raise sqlstate '23514' using message='Повтор операции с другими данными'; end if;
@@ -230,6 +235,20 @@ begin
   select coalesce(sum(value::numeric),0) into total from jsonb_each_text(ch);
   ch:=ch||jsonb_build_object('reserve',cash-total);
   update arhittek_finance.settings set active=true,activated_at=clock_timestamp() where singleton;
+ elsif cmd='adjust_reserve_legacy' then
+  if s.active then raise sqlstate '40001' using message='Журнал уже включён. Обновите данные'; end if;
+  lock table public.projects,public.employees,public.categories,public.invoices,public.timesheet_payments,public.statuses,public.departments,public.audit_log in share mode;
+  if p->>'fingerprint' is distinct from arhittek_finance.fingerprint() then raise sqlstate '40001' using message='Данные изменились. Обновите резерв'; end if;
+  a:=arhittek_finance.money((p->>'target')::numeric);
+  cash:=arhittek_finance.money((p->>'cash')::numeric)+a-arhittek_finance.money((p->>'before')::numeric);
+  perform arhittek_finance.money(cash);
+  if cash<0 or (p->>'confirmed') is distinct from 'true' then raise sqlstate '22023' using message='Проверьте сумму и подтвердите корректировку'; end if;
+  insert into public.audit_log(id,entity_type,entity_id,entity_name,action,changes)
+  values(op,'reserve',op,'Корректировка резерва','cash_count',jsonb_build_object(
+   'cash_count',jsonb_build_object('old',null,'new',jsonb_build_object('version',1,'total',cash,'counted_at',clock_timestamp(),'note',reason,'source','reserve-correction')),
+   'reserve_adjustment',jsonb_build_object('before',(p->>'before')::numeric,'after',a,'delta',a-(p->>'before')::numeric,'request',request),
+   '_actor',arhittek_finance.actor()));
+  return arhittek_finance.snapshot();
  elsif not s.active then raise sqlstate '23514' using message='Сначала подтвердите начальную сверку';
  elsif cmd='close' then
   lock table public.projects,public.employees,public.categories,public.invoices in share mode;
@@ -282,6 +301,13 @@ begin
    end if;
   end if;
   return arhittek_finance.snapshot();
+ elsif cmd='adjust_reserve' then
+  a:=arhittek_finance.money((p->>'target')::numeric);
+  if (p->>'confirmed') is distinct from 'true' then raise sqlstate '22023' using message='Подтвердите корректировку'; end if;
+  cash:=a-arhittek_finance.amount(b,'reserve');
+  select cash+coalesce(sum(value::numeric),0) into total from jsonb_each_text(b);
+  if total<0 then raise sqlstate '22023' using message='Общая сумма денег не может быть отрицательной'; end if;
+  ch:=jsonb_build_object('reserve',cash);
  elsif cmd='reconcile' then
   cash:=arhittek_finance.money((p->>'cash')::numeric);
   if cash<0 or (p->>'confirmed') is distinct from 'true' then raise sqlstate '22023' using message='Подтвердите фактическую сумму всех денег';end if;

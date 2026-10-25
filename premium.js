@@ -177,7 +177,7 @@ function defaults(){
  $('pf-feebase').value=$('pf-compensation-method').value==='m2'?'m2':$('pf-compensation-method').value==='percent_profit'?'profit':'price';
  renderCompensationMethodUI();
 }
-const oldOpen=openProjectSheet;openProjectSheet=function(id){if(!id&&!canCreateProjectCard()){showToast('Создание проекта доступно ведущему дизайнеру и администратору');return;}basicProjectDraftVersion++;oldOpen(id);$('projectSheetTitle').textContent=id?'Карточка проекта':'Новый проект';coDetails.hidden=!$('pf-co-employee').value;addSecond.hidden=!coDetails.hidden;special.open=false;contactDetails.open=false;defaults();$('pf-rp-rate').value='400';$('pf-rp-area').value=$('pf-area').value;$('pf-employee-fee').value=$('pf-employee').value;$('pf-co-employee-fee').value=$('pf-co-employee').value;selectTab('overview');refresh();sheet.scrollTop=0;};
+const oldOpen=openProjectSheet;openProjectSheet=function(id){if(!id&&!canCreateProjectCard()){showToast('Создание проекта доступно ведущему дизайнеру, ведущему архитектору и Мансуру');return;}basicProjectDraftVersion++;oldOpen(id);$('projectSheetTitle').textContent=id?'Карточка проекта':'Новый проект';coDetails.hidden=!$('pf-co-employee').value;addSecond.hidden=!coDetails.hidden;special.open=false;contactDetails.open=false;defaults();$('pf-rp-rate').value='400';$('pf-rp-area').value=$('pf-area').value;$('pf-employee-fee').value=$('pf-employee').value;$('pf-co-employee-fee').value=$('pf-co-employee').value;selectTab('overview');refresh();sheet.scrollTop=0;};
 const oldRole=applyRole;applyRole=function(){oldRole();refresh();};
 const oldRecalc=recalcLiveFeeSummary;recalcLiveFeeSummary=function(){oldRecalc();refresh();};
 const oldRenderRoles=renderProjectRolePayouts;renderProjectRolePayouts=function(id){oldRenderRoles(id);refresh();};
@@ -214,10 +214,10 @@ sheet.addEventListener('input',e=>{if(e.target.id!=='team-deduct-costs')refresh(
 // Keep this path separate from the administrator's financial form: those hidden
 // fields may contain defaults or values from a previously opened project.
 function canCreateProjectCard(){
- if(!session)return false;
- if(session.isAdmin)return true;
+ if(!hasVerifiedAccess())return false;
+ if(isOwner())return true;
  const employee=findEmployee(session.employeeId);
- return !!(employee&&employee.active!==false&&!employee.deleted_at&&canSeeProjects()&&String(employee.role||'').trim().toLowerCase()==='ведущий дизайнер');
+ return !!(employee&&employee.active!==false&&!employee.deleted_at&&canSeeProjects()&&['ведущий дизайнер','ведущий архитектор'].includes(String(employee.role||'').trim().toLowerCase()));
 }
 window.canCreateProjectCard=canCreateProjectCard;
 let basicProjectSaveInFlight=false,basicProjectDraftVersion=0;

@@ -1,5 +1,5 @@
 // ARHITTEK: complete reads, consistent budgets and safe app updates.
-const CACHE = 'arhittek-v3.25-contract-customers';
+const CACHE = 'arhittek-v3.26-leads-reserve';
 const ASSETS = ['./index.html','./premium.css','./premium.js','./contract-pricing.js','./contract-customer.js','./employee-access.js','./data-access.js','./financial-journal.js','./project-budget.js','./cash-finance.js','./app-refresh.js','./construction-finance.js','./construction-workflow.js','./construction-operations.js','./client.css','./catalog.html','./tz.html','./landscape-brief.js','./manifest.json','./icon-192.png','./icon-512.png'];
 const APP_BASE = new URL('./', self.location.href);
 // CDN-библиотеки — кэшируем отдельно от основных ASSETS: если jsdelivr на

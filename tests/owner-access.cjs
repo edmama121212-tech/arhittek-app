@@ -33,6 +33,7 @@ const root=path.resolve(__dirname,'..'),U=n=>'10000000-0000-4000-8000-'+String(n
  }
  async function eq(actual,expected,label){assert.deepEqual(await actual,expected,label);checks++;}
  const rows=async(n,sql,p=[],x={})=>(await as(n,sql,p,x)).rows;
+ for(const n of [2,3])await eq((async()=>(await rows(n,"insert into public.projects(name,category_id,status_id,employee_id,fee_percent) values('New lead project',$1,$2,$3,0) returning employee_id",[U(11),U(12),U(n)]))[0].employee_id)(),U(n),'Both leads create self-assigned cards');
  for(const n of [null,'invalid-token-with-more-than-thirty-two-characters',2,3,4,5]){
   for(const table of ['company_expenses','company_income','timesheet_payments','ledger_entries','audit_log'])
    await eq(rows(n,'select * from public.'+table),[],table+' hidden from '+n);
