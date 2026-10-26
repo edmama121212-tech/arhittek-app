@@ -295,7 +295,7 @@ const root = path.resolve(__dirname, '..');
   await page.evaluate(()=>{__clockNow='2026-10-17T14:00:00Z';renderCashFinance();});
   await check('A physical cash count records all money separately from receipts and payments',async()=>{
     const before=[__db.company_income.length,__db.company_expenses.length,__db.ledger_entries.length];
-    openReserveCorrection();document.getElementById('cashBalanceValue').value='158000';document.getElementById('cashBalanceNote').value='Тестовая сверка кассы и счетов';
+    document.querySelector('[data-cash-action="balance"]').click();document.getElementById('cashBalanceValue').value='158000';document.getElementById('cashBalanceNote').value='Тестовая сверка кассы и счетов';
     document.getElementById('cashBalanceSave').click();document.getElementById('cashBalanceSave').click();
     await new Promise(resolve=>setTimeout(resolve,220));await loadAll();renderCashFinance();
     const counts=__db.audit_log.filter(r=>r.action==='cash_count');
@@ -319,7 +319,7 @@ const root = path.resolve(__dirname, '..');
   },true);
   await check('A failed count save leaves cash and all monetary records unchanged',async()=>{
     const before=[__db.company_income.length,__db.company_expenses.length,__db.ledger_entries.length,__db.audit_log.length];
-    openReserveCorrection();document.getElementById('cashBalanceValue').value='150000';__fail={table:'audit_log',op:'insert'};
+    document.querySelector('[data-cash-action="balance"]').click();document.getElementById('cashBalanceValue').value='150000';__fail={table:'audit_log',op:'insert'};
     document.getElementById('cashBalanceSave').click();await new Promise(resolve=>setTimeout(resolve,180));__fail=null;
     return [ARHITTEKCash.balance(state),JSON.stringify(before)===JSON.stringify([__db.company_income.length,__db.company_expenses.length,__db.ledger_entries.length,__db.audit_log.length])];
   },[158000,true]);

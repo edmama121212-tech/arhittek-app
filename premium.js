@@ -279,7 +279,7 @@ const oldSave=saveProject;saveProject=async function(){
  if(!session?.isAdmin){showToast('Условия проекта изменяет администратор');return;}
  $('pf-save').disabled=true;try{await oldSave();}finally{$('pf-save').disabled=false;}
 };
-$('pf-save').removeEventListener('click',oldSave);$('pf-save').addEventListener('click',()=>saveProject());
+// The index button resolves saveProject at click time, including this wrapper.
 const oldDelete=deleteProjectRolePayout;deleteProjectRolePayout=async function(id,pid){if(!session?.isAdmin){showToast('Расчёт команды изменяет администратор');return;}if(editingRolePayoutId===id){resetRolePayoutEditor();}await oldDelete(id,pid);refresh();};
 const oldAdd=addProjectRolePayout;let adding=false,editingRolePayoutId=null;
 let payoutCancel=$('pf-rp-cancel-edit');
