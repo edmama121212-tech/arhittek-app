@@ -10601,7 +10601,7 @@ document.getElementById('pf-open-as-object').addEventListener('click', ()=>{
 
 document.getElementById('projectSheetClose').addEventListener('click', closeProjectSheet);
 document.getElementById('pf-cancel').addEventListener('click', closeProjectSheet);
-document.getElementById('pf-save').addEventListener('click', saveProject);
+document.getElementById('pf-save').addEventListener('click', ()=>saveProject());
 document.getElementById('pf-delete').addEventListener('click', ()=>{
   if(confirm('Переместить этот проект в корзину?')) deleteProject();
 });
