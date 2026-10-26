@@ -256,3 +256,6 @@ html{background:var(--bg)!important}body{max-width:none!important;margin:0!impor
 #ct-project-results{max-height:46vh;max-height:46dvh;overflow:auto;overscroll-behavior:contain}
 #ct-project-results button{display:block;width:100%;text-align:left;white-space:normal;overflow-wrap:anywhere;margin:0 0 6px;min-height:44px}
 #ct-project-dialog [hidden],#ct-individual-fields[hidden],#ct-legal-fields[hidden],#ct-project[hidden]{display:none!important}
+
+/* Journal buttons share the cash panel spacing without overflowing phones. */
+.cash-panel [data-journal]{width:auto;max-width:calc(100% - 6px);white-space:normal;overflow-wrap:anywhere}
