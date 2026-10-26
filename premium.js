@@ -177,7 +177,7 @@ function defaults(){
  $('pf-feebase').value=$('pf-compensation-method').value==='m2'?'m2':$('pf-compensation-method').value==='percent_profit'?'profit':'price';
  renderCompensationMethodUI();
 }
-const oldOpen=openProjectSheet;openProjectSheet=function(id){if(!id&&!canCreateProjectCard()){showToast('Создание проекта доступно ведущему дизайнеру, ведущему архитектору и Мансуру');return;}basicProjectDraftVersion++;oldOpen(id);$('projectSheetTitle').textContent=id?'Карточка проекта':'Новый проект';coDetails.hidden=!$('pf-co-employee').value;addSecond.hidden=!coDetails.hidden;special.open=false;contactDetails.open=false;defaults();$('pf-rp-rate').value='400';$('pf-rp-area').value=$('pf-area').value;$('pf-employee-fee').value=$('pf-employee').value;$('pf-co-employee-fee').value=$('pf-co-employee').value;selectTab('overview');refresh();sheet.scrollTop=0;};
+const oldOpen=openProjectSheet;openProjectSheet=function(id){if(!id&&!canCreateProjectCard()){showToast('Создание проекта доступно ведущему дизайнеру, ведущему архитектору и Мансуру');return;}basicProjectDraftVersion++;oldOpen(id);if(!id)window.ARHITTEKPreferences?.newProject();$('projectSheetTitle').textContent=id?'Карточка проекта':'Новый проект';coDetails.hidden=!$('pf-co-employee').value;addSecond.hidden=!coDetails.hidden;special.open=false;contactDetails.open=false;defaults();$('pf-rp-rate').value=window.ARHITTEKPreferences?.get('team_rate',400)??400;$('pf-rp-area').value=$('pf-area').value;$('pf-employee-fee').value=$('pf-employee').value;$('pf-co-employee-fee').value=$('pf-co-employee').value;selectTab('overview');refresh();sheet.scrollTop=0;};
 const oldRole=applyRole;applyRole=function(){oldRole();refresh();};
 const oldRecalc=recalcLiveFeeSummary;recalcLiveFeeSummary=function(){oldRecalc();refresh();};
 const oldRenderRoles=renderProjectRolePayouts;renderProjectRolePayouts=function(id){oldRenderRoles(id);refresh();};
@@ -293,7 +293,7 @@ if(!payoutCancel){
 function resetRolePayoutEditor(){
  editingRolePayoutId=null;
  $('pf-rp-employee').value='';
- $('pf-rp-rate').value='400';
+ $('pf-rp-rate').value=window.ARHITTEKPreferences?.get('team_rate',400)??400;
  const p=state.projects.find(x=>x.id===editingProjectId);
  if(p)$('pf-rp-area').value=p.area||'';
  $('pf-rp-add-btn').textContent='Добавить сотрудника';
@@ -342,7 +342,7 @@ addProjectRolePayout=async function(){
   editingRolePayoutId=null;
   payoutCancel.style.display='none';
   await loadAll();
-  if(editingProjectId===projectId){renderProjectRolePayouts(projectId);$('pf-rp-rate').value='400';$('pf-rp-area').value=p.area;$('pf-rp-employee').value='';$('pf-rp-add-btn').textContent='Добавить сотрудника';refresh();}
+  if(editingProjectId===projectId){renderProjectRolePayouts(projectId);$('pf-rp-rate').value=window.ARHITTEKPreferences?.get('team_rate',400)??400;$('pf-rp-area').value=p.area;$('pf-rp-employee').value='';$('pf-rp-add-btn').textContent='Добавить сотрудника';refresh();}
   showToast(wasEditing?'Начисление изменено':'В расчёт добавлено '+fmtMoney(amount)+'. В табель — после завершения проекта.');
  }catch(e){console.error(e);showToast('Не удалось завершить сохранение. Обновите расчёт перед повторной попыткой.');}
  finally{adding=false;$('pf-rp-add-btn').disabled=false;}
@@ -1545,6 +1545,7 @@ function newContractDraft(){
     $('ct-project').value=keepProjectId;
     $('ct-project').dispatchEvent(new Event('change',{bubbles:true}));
   }
+  window.ARHITTEKPreferences?.newContract(keepProjectId);
   if(contractView) contractView.dataset.dirty='0';
   showToast('Новый договор');
 }

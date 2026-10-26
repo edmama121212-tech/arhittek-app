@@ -98,7 +98,7 @@ function operationDescription(fieldId,note){
 }
 window.ARHITTEKCash.attachCountField=attachCountField;window.ARHITTEKCash.operationDescription=operationDescription;
 const recurring={rent:{label:'Аренда офиса',category:'Аренда',amount:110000,table:'company_expenses'},internet:{label:'Интернет',category:'Связь и интернет',amount:2500,table:'company_expenses'},sublease:{label:'Сдача помещения',category:'Аренда помещений',amount:20000,table:'company_income'}};
-function recurringState(kind,month){const def=recurring[kind],list=kind==='sublease'?state.companyIncome:state.companyExpenses,rows=(list||[]).filter(r=>!r.deleted_at&&r.category===def.category&&period(r)===month&&(r.income_date||r.expense_date)<=day()),paid=rounded(rows.reduce((a,r)=>a+n(r.amount),0)),plan=kind==='sublease'?20000:Math.max(0,n(localStorage.getItem('forecast_'+kind)??def.amount));return {...def,rows,paid,plan,left:Math.max(0,plan-paid)};}
+function recurringState(kind,month){const def=recurring[kind],list=kind==='sublease'?state.companyIncome:state.companyExpenses,rows=(list||[]).filter(r=>!r.deleted_at&&r.category===def.category&&period(r)===month&&(r.income_date||r.expense_date)<=day()),paid=rounded(rows.reduce((a,r)=>a+n(r.amount),0)),plan=window.ARHITTEKPreferences?.get('plan_'+kind,kind==='sublease'?20000:Math.max(0,n(localStorage.getItem('forecast_'+kind)??def.amount)))??def.amount;return {...def,rows,paid,plan,left:Math.max(0,plan-paid)};}
 function btn(label,action,id=''){return '<button type="button" class="btn btn-secondary" data-cash-action="'+action+'" data-id="'+esc(id)+'" style="width:auto">'+label+'</button>';}
 function eventsHTML(events){return events.length?events.map(x=>{
  const r=x.row,p=(state.projects||[]).find(p=>p.id===r.project_id),team=flowGroup(x)==='team',employee=team?findEmployee(r.payee_employee_id||p?.employee_id):null;
@@ -174,7 +174,7 @@ function forecastProject(p,budget=projectBudget(state)){
 }
 function renderForecast(){
  const current=day().slice(0,7),budget=projectBudget(state);let running=budget.available,html='<div class="note">Прогноз свободного резерва: сдача проекта АР/ДИ освобождает его долю за вычетом команды. Авансы на стройку и остаток её кассы не становятся доходом компании при завершении. Наценка по стройке здесь не прогнозируется до подтверждённого распределения. Уже зарезервированные выплаты повторно не вычитаются.</div>';
- for(let i=0;i<6;i++){
+ for(let i=0;i<(window.ARHITTEKPreferences?.get('forecast_months',6)??6);i++){
  const month=shift(current,i),projects=dueProjects(state,month),plans=projects.map(p=>forecastProject(p,budget)),income=plans.reduce((a,p)=>a+(p.reserveIncoming??p.incoming),0),clientFunding=plans.filter(p=>p.construction).reduce((a,p)=>a+p.incoming,0),lease=recurringState('sublease',month),rent=recurringState('rent',month),internet=recurringState('internet',month);
  const range=timesheetMonthRange(month),earned=completedProjectEarningsForRange(range.from,range.to).employees,split=splitPayrollByEmployee(earned).result;
  const due={};Object.entries(split).forEach(([id,row])=>due[id]=n(row.payout));
