@@ -23,6 +23,9 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="data-access.js"></script>
 <script src="financial-journal.js"></script>
+<script src="app-preferences-schema.js"></script>
+<script src="app-preferences.js"></script>
+<link rel="stylesheet" href="app-preferences.css">
 <script src="landscape-brief.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
@@ -2537,6 +2540,7 @@ function canAccessView(id){
   return false;
 }
 function clearPrivateState(){
+  window.ARHITTEKPreferences?.clear();
   for(const key of ['projects','financialProjects','financialStatusHistory','ledger','photos','history','cashCounts','invoices','tzForms','tzReferences','kpForms','kpCatalog','timesheetPayments','companyExpenses','companyIncome','projectStages','projectMembers'])state[key]=[];
   state.employees=(state.employees||[]).map(e=>({id:e.id,name:e.name,active:e.active}));
   if(typeof resetContractCustomer==='function')resetContractCustomer();
@@ -3454,6 +3458,7 @@ async function loadAllData(){
   let accessConfirmed=false;
   try{
     await verifyCurrentEmployeeAccess();
+    await window.ARHITTEKPreferences?.load();
     accessConfirmed=true;
     const ownerRead=read=>isOwner()?read():Promise.resolve({data:[],error:null,count:0});
     const documentRead=read=>canUseDocuments()?read():Promise.resolve({data:[],error:null,count:0});
@@ -6971,7 +6976,7 @@ function openEmployeeSheet(id){
     document.getElementById('ef-see-projects').checked = true;
     document.getElementById('ef-see-construction').checked = false;
     document.getElementById('ef-is-salaried').checked = false;
-    document.getElementById('ef-fixed-salary').value = '';
+    document.getElementById('ef-fixed-salary').value = window.ARHITTEKPreferences?.get('employee_salary',0)||'';
     document.getElementById('ef-fixed-salary-row').style.display = 'none';
     pinField.style.display = isAdmin ? '' : 'none';
     if(cardEditField) cardEditField.style.display = isAdmin ? '' : 'none';
@@ -9392,7 +9397,7 @@ let contractType = 'ar';
 
 function fillContractDefaults(){
   const t = CONTRACT_TYPES[contractType];
-  document.getElementById('ct-scope').value = t.defaultScope.map(s=>'— '+s).join('\n');
+  document.getElementById('ct-scope').value = window.ARHITTEKPreferences?.get('scope_'+contractType,'') || t.defaultScope.map(s=>'— '+s).join('\n');
 }
 
 function openContractsView(){
@@ -10367,12 +10372,12 @@ function resetKpForm(){
   document.getElementById('kp-client-phone').value = '';
   document.getElementById('kp-object').value = '';
   document.getElementById('kp-date').value = financeToday();
-  document.getElementById('kp-deadline').value = '';
-  document.getElementById('kp-start').value = '';
+  document.getElementById('kp-deadline').value = window.ARHITTEKPreferences?.get('kp_deadline','')||'';
+  document.getElementById('kp-start').value = window.ARHITTEKPreferences?.get('kp_start','')||'';
   document.getElementById('kp-discount-type').value = 'percent';
-  document.getElementById('kp-discount-value').value = '';
-  kpPaymentMethod = 'account';
-  document.querySelectorAll('#kp-payment-method .yn-btn').forEach(b=>b.classList.toggle('selected', b.dataset.value==='account'));
+  document.getElementById('kp-discount-value').value = window.ARHITTEKPreferences?.get('kp_discount',0)||'';
+  kpPaymentMethod = window.ARHITTEKPreferences?.get('kp_payment','account')||'account';
+  document.querySelectorAll('#kp-payment-method .yn-btn').forEach(b=>b.classList.toggle('selected', b.dataset.value===kpPaymentMethod));
   addKpService();
 }
 
@@ -12363,7 +12368,7 @@ function checkOverdueNotifications(){
   const lastNotif = localStorage.getItem(lastNotifKey);
   if(lastNotif === today) return; // уже отправляли сегодня
 
-  if(overdueStages.length || overdueProjects.length){
+  if(window.ARHITTEKPreferences?.get('notify_overdue',true)!==false && (overdueStages.length || overdueProjects.length)){
     let body = '';
     if(overdueProjects.length) body += `Просрочено проектов: ${overdueProjects.length}. `;
     if(overdueStages.length) body += `Просроченных этапов: ${overdueStages.length}.`;
@@ -12376,7 +12381,7 @@ function checkOverdueNotifications(){
   const rentNotifKey = 'arhittek_last_rent_notif';
   const lastRentDay = now.getDate();
   const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
-  if(lastRentDay === lastDayOfMonth && localStorage.getItem(rentNotifKey) !== today){
+  if(window.ARHITTEKPreferences?.get('notify_rent',true)!==false && lastRentDay === lastDayOfMonth && localStorage.getItem(rentNotifKey) !== today){
     const monthPrefix = today.slice(0,7); // YYYY-MM
     const hasRentThisMonth = (state.companyIncome||[]).some(i =>
       i.category === 'Аренда помещений' && !i.deleted_at && (i.income_date||'').slice(0,7) === monthPrefix
@@ -12390,6 +12395,7 @@ function checkOverdueNotifications(){
 
 // Кнопка запроса разрешения в приложении
 function showNotifPrompt(){
+  if(window.ARHITTEKPreferences?.get("notify_prompts",true)===false)return;
   if(!('Notification' in window)) return;
   if(Notification.permission === 'granted') return;
   // Показываем тост с предложением
