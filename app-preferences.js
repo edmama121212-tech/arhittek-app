@@ -1,7 +1,7 @@
 /* Owner-managed defaults. Access rights and recorded financial terms are not configurable here. */
 (()=>{'use strict';
 const spec=globalThis.ARHITTEKPreferencesSchema,$=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let current={version:1,revision:0,values:{},history:[]},loaded=false,error='',pending=null,busy=false;
+let current={version:1,revision:0,values:{},history:[]},loaded=false,error='',pending=null,busy=false,formRevision=0;
 const get=(key,fallback)=>Object.hasOwn(current.values,key)?current.values[key]:fallback;
 function clear(){current={version:1,revision:0,values:{},history:[]};loaded=false;pending=null;error='';$('specialSettingsBody')?.replaceChildren();applyAppearance();}
 function applyAppearance(){const root=document.documentElement;root.dataset.density=get('density','comfortable');root.dataset.reduceMotion=String(get('reduce_motion',false));root.style.setProperty('--app-text-scale',get('text_scale',100)/100);}
@@ -27,7 +27,7 @@ function changes(values){return Object.keys(spec).filter(k=>value(k,values)!==va
 function preview(){try{const keys=changes(readForm());$('prefsPreview').textContent=keys.length?'Будут изменены '+keys.length+' параметров: '+keys.map(k=>spec[k].label).join('; ')+'. Сохранённые договоры, платежи и резерв не пересчитываются.':'Изменений нет';}catch(e){$('prefsPreview').textContent=e.message;}}
 function fill(values){for(const [k,d]of Object.entries(spec)){const el=$('pref-'+k);if(!el)continue;const v=value(k,values);if(d.type==='boolean')el.checked=v;else el.value=v;}preview();}
 async function save(){if(busy||!isOwner()||!loaded)return;try{const values=readForm(),reason=$('prefsReason').value.trim();if(!changes(values).length){showToast('Изменений нет');return;}if(reason.length<3)throw new Error('Укажите причину изменения');
- const request={p_values:values,p_revision:current.revision,p_reason:reason};const signature=JSON.stringify(request);if(pending&&pending.signature!==signature)throw new Error('Сначала обновите настройки: предыдущая отправка могла сохраниться');
+ const request={p_values:values,p_revision:formRevision,p_reason:reason};const signature=JSON.stringify(request);if(pending&&pending.signature!==signature)throw new Error('Сначала обновите настройки: предыдущая отправка могла сохраниться');
  pending=pending||{signature,id:crypto.randomUUID()};busy=true;$('prefsSave').disabled=true;
  const actor=session.employeeId,token=session.token;const r=await sb.rpc('save_app_preferences',{...request,p_operation:pending.id});if(r.error)throw r.error;
  if(actor!==session?.employeeId||token!==session?.token||!isOwner())return;
@@ -35,6 +35,7 @@ async function save(){if(busy||!isOwner()||!loaded)return;try{const values=readF
  }catch(e){if($('prefsError'))$('prefsError').textContent=e.message||'Не удалось сохранить';}finally{busy=false;if($('prefsSave'))$('prefsSave').disabled=false;}}
 function render(){if(!isOwner())return;const body=$('specialSettingsBody');if(!body)return;
  if(!loaded){body.innerHTML='<p role="alert">'+esc(error||'Загрузка настроек…')+'</p><button class="btn btn-secondary" data-prefs="reload">Повторить загрузку</button>';return;}
+ formRevision=current.revision;
  const groups=[...new Set(Object.values(spec).map(d=>d.group))];
  body.innerHTML='<p class="note">Значения по умолчанию для новых форм. Действующие договоры и проведённые операции сохраняются. Общие настройки применяются на устройствах после обновления данных.</p><div class="prefs-links">'+[['employeesCard','Сотрудники и должности'],['categoriesCard','Категории и условия'],['tariffsCard','Тарифы и услуги КП'],['notifSettingsCard','Устройства и push-уведомления'],['catalogPriceCard','Цена каталога'],['company','Реквизиты компании'],['finance','Финансы и резерв'],['timesheet','Табель'],['export','Экспорт Excel']].map(([id,label])=>'<button type="button" class="btn btn-secondary" data-pref-link="'+id+'">'+label+'</button>').join('')+'</div><label class="field">Поиск настройки<input id="prefsSearch" type="search" placeholder="Например: аванс, аренда, размер текста"></label>'+groups.map(group=>'<details class="card prefs-group" open><summary>'+esc(group)+'</summary>'+(group==='Уведомления'?'<p class="note">Локальные напоминания при открытом приложении. Разрешение на push-уведомления настраивается для каждого устройства отдельно.</p>':'')+Object.entries(spec).filter(([k,d])=>d.group===group).map(([k,d])=>'<div class="pref-row" data-search="'+esc((group+' '+d.label).toLowerCase())+'">'+input(k,d,value(k))+'</div>').join('')+'</details>').join('')+
  '<details class="card"><summary>Этапы, задачи и правила доступа</summary><p>Этапы и задачи настраиваются в карточке конкретного проекта. Шаблон ремонта добавляется в карточке объекта отдельной кнопкой. Настройки здесь не заменяют уже созданные этапы.</p><p>Мансур: все разделы. Ведущий архитектор и дизайнер: создание своих проектов, КП и договоры. Остальные сотрудники: свои проекты. Финансы, табель и специальные настройки доступны только Мансуру.</p></details>'+ 
