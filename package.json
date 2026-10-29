@@ -10,14 +10,16 @@
     "test:app": "node tests/application-units.cjs && node tests/application-audit.cjs",
     "test:ux": "node tests/stage-responsiveness.cjs && node tests/pull-refresh.cjs && node tests/interaction-audit.cjs && node tests/project-permissions.cjs && node tests/data-integrity-audit.cjs && node tests/workflow-mobile-audit.cjs && node tests/background-sync.cjs",
     "test:construction": "node tests/construction-finance.cjs && node tests/construction-stage-template.cjs && node tests/construction-access.cjs && node tests/construction-cash-ui.cjs && node tests/client-portal.cjs && node tests/construction-operational-audit.cjs && node tests/construction-reserve-invariants.cjs && node tests/client-portal-gateway.cjs && node tests/client-portal-sql.cjs && node tests/invoice-payment-rpc-ui.cjs",
-    "test:security": "node tests/owner-access.cjs && node tests/owner-access-ui.cjs && node tests/session-security.cjs && node tests/invoice-payment-atomic.cjs && node tests/employees-server-access.cjs"
+    "test:security": "node tests/owner-access.cjs && node tests/owner-access-ui.cjs && node tests/session-security.cjs && node tests/invoice-payment-atomic.cjs && node tests/employees-server-access.cjs",
+    "test:catalog:pdf": "node tests/catalog-pdf.cjs"
   },
   "devDependencies": {
-    "playwright": "1.62.1",
-    "xlsx": "0.18.5",
+    "@electric-sql/pglite": "0.5.10",
+    "jsdom": "30.1.2",
     "jspdf": "2.5.1",
     "jspdf-autotable": "3.8.2",
-    "jsdom": "30.1.2",
-    "@electric-sql/pglite": "0.5.10"
+    "pdfjs-dist": "6.4.299",
+    "playwright": "1.62.1",
+    "xlsx": "0.18.5"
   }
 }

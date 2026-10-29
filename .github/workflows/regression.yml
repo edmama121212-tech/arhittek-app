@@ -63,6 +63,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: timeout 120s npm run test:catalog
 
+      - name: Check PDF extraction, automatic import and duplicate protection
+        if: ${{ !cancelled() }}
+        run: timeout 180s npm run test:catalog:pdf
+
       - name: Check responsive interactions and audit regressions
         if: ${{ !cancelled() }}
         run: timeout 240s npm run test:ux

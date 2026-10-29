@@ -24,6 +24,9 @@
 <script src="data-access.js"></script>
 <script src="catalog-floors.js"></script>
 <link rel="stylesheet" href="catalog-floors.css">
+<script src="catalog-pdf-core.js"></script>
+<script src="catalog-pdf.js"></script>
+<link rel="stylesheet" href="catalog-pdf.css">
 <script src="financial-journal.js"></script>
 <script src="landscape-brief.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -723,6 +726,9 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
         <button class="btn btn-primary" style="flex:1;" onclick="openCardEditor(null)">+ Добавить проект</button>
         <button class="btn btn-secondary" style="flex:1;" onclick="createShareLink()">+ Ссылка клиенту</button>
       </div>
+      <button class="btn btn-primary" id="cards-pdf-button" style="width:100%;margin-top:8px;min-height:44px" onclick="document.getElementById('catalog-pdf-file').click()">📄 Создать карточку из PDF</button>
+      <input id="catalog-pdf-file" type="file" accept="application/pdf,.pdf" hidden onchange="CatalogPdfImport.start(this)">
+      <div id="cards-pdf-result" role="status" hidden></div>
     </div>
 
     <div class="section-label" style="margin-top:8px;">
@@ -1323,6 +1329,12 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
       <div style="flex:1;overflow-y:auto;padding:14px;">
 
         <div style="margin-bottom:14px;">
+          <section id="ce-pdf-import" class="catalog-pdf-import">
+            <button type="button" class="btn btn-primary" onclick="document.getElementById('catalog-pdf-file').click()">📄 Заполнить из PDF</button>
+            <p id="ce-pdf-status" role="status" aria-live="polite">Загрузите альбом — приложение заполнит и создаст карточку</p>
+            <progress id="ce-pdf-progress" max="100" value="0" hidden aria-label="Обработка PDF"></progress>
+            <button type="button" id="ce-pdf-cancel" hidden onclick="CatalogPdfImport.cancel()">Отменить импорт</button>
+          </section>
           <div style="font-size:10px;color:#6b7280;letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:8px;">ЭТАЖНОСТЬ</div>
           <div style="display:flex;gap:6px;">
             <button id="floors-btn-1" onclick="selectFloors(1)" style="flex:1;padding:9px;border-radius:9px;border:1px solid #374151;background:transparent;color:#6b7280;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">1 этаж</button>
@@ -10714,6 +10726,7 @@ let currentFeatureFilter = 'all';
 let ceStyleSelected = '';
 let ceFeatureSelected = [];
 let ceCurrentId = null;
+let cePdfImportMeta = null;
 let cardEditorGeneration = 0;
 const cardSavesInFlight = new Set();
 const cardImageSelections = new Map();
@@ -10946,8 +10959,11 @@ function renderCardsList(){
 // ── Открыть редактор карточки ──
 function openCardEditor(id){
   if(!canEditCards()){ showToast('Нет доступа'); return; }
+  CatalogPdfImport.cancel();
   cardEditorGeneration++;
   ceCurrentId = id || null;
+  cePdfImportMeta = null;
+  CatalogPdfImport.reset();
   initCardFloorEditor();
   ceImages = CatalogFloors.slots();
   ceThumbs = CatalogFloors.slots();
@@ -11048,6 +11064,7 @@ function openCardEditor(id){
 }
 
 function closeCardEditor(){
+  CatalogPdfImport.cancel();
   document.getElementById('cardEditorOverlay').style.display = 'none';
 }
 
@@ -11534,7 +11551,9 @@ async function uploadCardImages(images,targetId=ceCurrentId){
 
 async function saveCard(){
   if(!canEditCards()){showToast('Нет доступа к редактированию каталога');return;}
+  if(CatalogPdfImport.busyReading()){showToast('Дождитесь завершения чтения PDF');return;}
   const cardId=ceCurrentId,generation=cardEditorGeneration,saveKey=cardId || 'new:'+generation;
+  const importMeta=cePdfImportMeta?JSON.parse(JSON.stringify(cePdfImportMeta)):null;
   if(cardSavesInFlight.has(saveKey))return;
   const images=ceImages.slice(),thumbs=ceThumbs.slice();
   const btn = document.getElementById('ce-save-btn');
@@ -11580,10 +11599,14 @@ async function saveCard(){
       if(thumbs.length===ceThumbs.length&&thumbs.every((image,index)=>image===ceThumbs[index]))ceThumbs=payload.thumbnails.slice();
     }
 
-    let result;
+    let result,duplicate=false;
     let savedId = cardId;
     if(cardId){
       result = await sb.from('project_cards').update(payload).eq('id', cardId).select('id').maybeSingle();
+    } else if(importMeta){
+      payload.pdf_import_meta=importMeta;
+      result=await sb.rpc('import_catalog_pdf',{p_card:payload});
+      if(result.data){savedId=result.data.id;duplicate=result.data.created===false;}
     } else {
       payload.created_at = new Date().toISOString();
       result = await sb.from('project_cards').insert(payload).select('id').single();
@@ -11598,7 +11621,7 @@ async function saveCard(){
     // Синхронизация с WordPress
     let siteSyncFailed=false;
     try {
-      await syncCardToWordPress(payload, savedId);
+      if(!duplicate)await syncCardToWordPress(payload, savedId);
     } catch(wpErr) {
       siteSyncFailed=true;
       console.warn('WordPress sync error:', wpErr.message);
@@ -11609,10 +11632,12 @@ async function saveCard(){
       closeCardEditor();
     }
     await loadCards();
-    showToast(siteSyncFailed?'Карточка сохранена. Не удалось обновить сайт':cardId?'Проект обновлён':'Проект создан');
+    showToast(duplicate?'Проект уже есть в каталоге. Повторная карточка не создана':siteSyncFailed?'Карточка сохранена. Не удалось обновить сайт':cardId?'Проект обновлён':'Проект создан');
+    return {ok:true,id:savedId,duplicate};
   } catch(e){
     console.error('saveCard error', e);
     showToast(persisted?'Карточка сохранена. Не удалось обновить список — повторите обновление':'Ошибка сохранения: '+(e.message||e));
+    return {ok:false,error:e.message||String(e)};
   } finally{
     cardSavesInFlight.delete(saveKey);
     const saving=cardSavesInFlight.has(ceCurrentId || 'new:'+cardEditorGeneration);
