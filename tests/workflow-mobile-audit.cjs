@@ -157,7 +157,7 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
   const pending=ceLoadImg({files:[new File(['A'],'A.jpg',{type:'image/jpeg'})]},'ce-facade-preview',0,'ce-f1-name');
   openCardEditor('card-b');release();await pending;loadOrientedImage=original;
   return [ceCurrentId,ceImages,ceThumbs];
- },['card-b',[null,null,null,null],[null,null,null,null]]);
+ },['card-b',[null,null,null,null,null,null],[null,null,null,null,null,null]]);
  await fresh();
  await check('Invoice insertion failure preserves its input and creates no record',async()=>{
   openObjectView('workflow-build');switchObjTab('add');document.getElementById('inv-desc-obj').value='Unsaved invoice';document.getElementById('inv-amount-obj').value='9000';
