@@ -22,6 +22,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="data-access.js"></script>
+<script src="catalog-floors.js"></script>
+<link rel="stylesheet" href="catalog-floors.css">
 <script src="financial-journal.js"></script>
 <script src="landscape-brief.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -1325,8 +1327,9 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
           <div style="display:flex;gap:6px;">
             <button id="floors-btn-1" onclick="selectFloors(1)" style="flex:1;padding:9px;border-radius:9px;border:1px solid #374151;background:transparent;color:#6b7280;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">1 этаж</button>
             <button id="floors-btn-2" onclick="selectFloors(2)" style="flex:1;padding:9px;border-radius:9px;border:1px solid #374151;background:transparent;color:#6b7280;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">2 этажа</button>
-            <button id="floors-btn-3" onclick="selectFloors(3)" style="flex:1;padding:9px;border-radius:9px;border:1px solid #374151;background:transparent;color:#6b7280;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">3+ этажей</button>
+            <button id="floors-btn-3" onclick="selectFloors(3)" style="flex:1;padding:9px;border-radius:9px;border:1px solid #374151;background:transparent;color:#6b7280;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">3 этажа</button>
           </div>
+          <div style="margin-top:7px;font-size:11px;color:#9ca3af;">Надземные этажи. Цоколь добавляется отдельно.</div>
         </div>
         <div style="margin-bottom:14px;">
           <div style="font-size:10px;color:#6b7280;letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:8px;">ОСОБЕННОСТИ</div>
@@ -1356,8 +1359,7 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
         </div>
         <div style="margin-bottom:10px;"><div style="font-size:10px;color:#6b7280;letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:6px;">Цена, ₽</div><input class="ce-inp" id="ce-price" placeholder="89 000" oninput="cePreview()"/></div>
         <div style="margin-bottom:10px;"><div style="font-size:10px;color:#6b7280;letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:6px;">Теги (через запятую)</div><input class="ce-inp" id="ce-tags" placeholder="🧱 Газоблок, 🏗️ Лент. фундамент" oninput="cePreview()"/></div>
-        <div style="margin-bottom:10px;"><div style="font-size:10px;color:#6b7280;letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:6px;">Площадь 1-го этажа, м²</div><input class="ce-inp" id="ce-area1" placeholder="321,50" oninput="cePreview()"/></div>
-        <div id="ce-floor2-fields" style="margin-bottom:10px;"><div style="font-size:10px;color:#6b7280;letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:6px;">Площадь 2-го этажа, м²</div><input class="ce-inp" id="ce-area2" placeholder="171,64" oninput="cePreview()"/></div>
+
 
         <div style="margin-bottom:10px;">
           <div style="font-size:10px;color:#6b7280;letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:6px;">Фото фасада 1</div>
@@ -1375,46 +1377,8 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
           </label>
           <img id="ce-facade2-preview" style="display:none;width:100%;height:80px;object-fit:cover;border-radius:8px;margin-top:6px;"/>
         </div>
-        <div style="margin-bottom:10px;">
-          <div style="font-size:10px;color:#6b7280;letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:6px;">План 1-го этажа</div>
-          <label style="display:flex;align-items:center;gap:8px;background:#1f2937;border:1.5px dashed #374151;border-radius:9px;padding:11px 14px;color:#6b7280;cursor:pointer;font-size:12px;position:relative;overflow:hidden;">
-            📐 <span id="ce-p1-name">Загрузить план</span>
-            <input type="file" accept="image/*" style="position:absolute;inset:0;opacity:0;cursor:pointer;" onchange="ceLoadImg(this,'ce-plan1-preview',2,'ce-p1-name')"/>
-          </label>
-          <img id="ce-plan1-preview" style="display:none;width:100%;height:60px;object-fit:contain;border-radius:8px;margin-top:6px;background:rgba(255,255,255,0.03);"/>
-        </div>
-        <div id="ce-plan2-field" style="margin-bottom:10px;">
-          <div style="font-size:10px;color:#6b7280;letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:6px;">План 2-го этажа</div>
-          <label style="display:flex;align-items:center;gap:8px;background:#1f2937;border:1.5px dashed #374151;border-radius:9px;padding:11px 14px;color:#6b7280;cursor:pointer;font-size:12px;position:relative;overflow:hidden;">
-            📐 <span id="ce-p2-name">Загрузить план 2</span>
-            <input type="file" accept="image/*" style="position:absolute;inset:0;opacity:0;cursor:pointer;" onchange="ceLoadImg(this,'ce-plan2-preview',3,'ce-p2-name')"/>
-          </label>
-          <img id="ce-plan2-preview" style="display:none;width:100%;height:60px;object-fit:contain;border-radius:8px;margin-top:6px;background:rgba(255,255,255,0.03);"/>
-        </div>
+        <div id="ce-floor-sections"></div>
 
-        <div style="margin-bottom:10px;">
-          <div style="font-size:10px;color:#6b7280;letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:4px;">Экспликация 1-го этажа</div>
-          <div style="font-size:10px;color:#4b5563;margin-bottom:6px;">Каждая строка: Название: площадь — или отсканируйте таблицу</div>
-          <textarea class="ce-inp" id="ce-expl1" rows="5" placeholder="Прихожая: 20.40&#10;Коридор: 24.79&#10;Зал: 36.90" style="resize:vertical;font-size:11px;" oninput="cePreview()"></textarea>
-          <div style="display:flex;gap:8px;margin-top:6px;">
-            <label class="ce-scan-btn" for="ce-expl1-scan-photo">🖼 Фото таблицы</label>
-            <label class="ce-scan-btn" for="ce-expl1-scan-camera">📷 Сканировать</label>
-          </div>
-          <input type="file" id="ce-expl1-scan-photo" accept="image/*" style="display:none;" onchange="scanExplication(this,'ce-expl1')">
-          <input type="file" id="ce-expl1-scan-camera" accept="image/*" capture="environment" style="display:none;" onchange="scanExplication(this,'ce-expl1')">
-          <div id="ce-expl1-scan-status"></div>
-        </div>
-        <div id="ce-expl2-field" style="margin-bottom:20px;">
-          <div style="font-size:10px;color:#6b7280;letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:4px;">Экспликация 2-го этажа</div>
-          <textarea class="ce-inp" id="ce-expl2" rows="5" placeholder="Спальня: 23.25&#10;Спальня: 22.60&#10;Гардероб: 10.00" style="resize:vertical;font-size:11px;" oninput="cePreview()"></textarea>
-          <div style="display:flex;gap:8px;margin-top:6px;">
-            <label class="ce-scan-btn" for="ce-expl2-scan-photo">🖼 Фото таблицы</label>
-            <label class="ce-scan-btn" for="ce-expl2-scan-camera">📷 Сканировать</label>
-          </div>
-          <input type="file" id="ce-expl2-scan-photo" accept="image/*" style="display:none;" onchange="scanExplication(this,'ce-expl2')">
-          <input type="file" id="ce-expl2-scan-camera" accept="image/*" capture="environment" style="display:none;" onchange="scanExplication(this,'ce-expl2')">
-          <div id="ce-expl2-scan-status"></div>
-        </div>
       </div>
 
       <div style="padding:12px;border-top:1px solid #1f2937;background:#0d1117;flex-shrink:0;">
@@ -1438,8 +1402,7 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
 
           <div id="prev-tabs" style="display:flex;background:#F2F2F2;border-bottom:2px solid #D0D0D0;">
             <div onclick="cePrevTab('prev-facade',this)" style="flex:1;padding:11px 8px;text-align:center;font-size:12px;font-weight:600;color:#3D8FE0;border-bottom:2px solid #3D8FE0;margin-bottom:-2px;cursor:pointer;">Фасад</div>
-            <div onclick="cePrevTab('prev-floor1',this)" style="flex:1;padding:11px 8px;text-align:center;font-size:12px;font-weight:500;color:#888;border-bottom:2px solid transparent;margin-bottom:-2px;cursor:pointer;">1-й этаж</div>
-            <div id="prev-tab-floor2" onclick="cePrevTab('prev-floor2',this)" style="flex:1;padding:11px 8px;text-align:center;font-size:12px;font-weight:500;color:#888;border-bottom:2px solid transparent;margin-bottom:-2px;cursor:pointer;">2-й этаж</div>
+
           </div>
 
           <div id="prev-facade" style="display:block;">
@@ -1452,41 +1415,7 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
             </div>
           </div>
 
-          <div id="prev-floor1" style="display:none;">
-            <div style="padding:12px;background:#E8E8E8;">
-              <div style="font-size:9px;font-weight:700;color:#BBB;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px;display:flex;justify-content:space-between;">1-й этаж <span id="prev-a1-badge" style="background:#E8F3FC;color:#3D8FE0;padding:2px 8px;border-radius:20px;">— м²</span></div>
-              <div style="background:#E8EDF4;border:1px solid #D0D0D0;border-radius:10px;padding:10px;min-height:70px;display:flex;align-items:center;justify-content:center;">
-                <img id="prev-plan1-img" src="" style="width:100%;height:auto;border-radius:4px;display:none;"/>
-                <span id="prev-plan1-ph" style="font-size:11px;color:#aaa;">📐 загрузите план</span>
-              </div>
-            </div>
-            <div style="margin:0 12px;border:1px solid #D0D0D0;border-radius:10px;overflow:hidden;">
-              <div style="background:#3D8FE0;padding:8px 12px;display:flex;justify-content:space-between;">
-                <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,.8);letter-spacing:.08em;text-transform:uppercase;">Экспликация</span>
-                <span id="prev-total1" style="font-size:12px;font-weight:700;color:#fff;">— м²</span>
-              </div>
-              <div id="prev-expl1-rows"></div>
-            </div>
-            <div style="height:12px;"></div>
-          </div>
-
-          <div id="prev-floor2" style="display:none;">
-            <div style="padding:12px;background:#E8E8E8;">
-              <div style="font-size:9px;font-weight:700;color:#BBB;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px;display:flex;justify-content:space-between;">2-й этаж <span id="prev-a2-badge" style="background:#E8F3FC;color:#3D8FE0;padding:2px 8px;border-radius:20px;">— м²</span></div>
-              <div style="background:#E8EDF4;border:1px solid #D0D0D0;border-radius:10px;padding:10px;min-height:70px;display:flex;align-items:center;justify-content:center;">
-                <img id="prev-plan2-img" src="" style="width:100%;height:auto;border-radius:4px;display:none;"/>
-                <span id="prev-plan2-ph" style="font-size:11px;color:#aaa;">📐 загрузите план</span>
-              </div>
-            </div>
-            <div style="margin:0 12px;border:1px solid #D0D0D0;border-radius:10px;overflow:hidden;">
-              <div style="background:#3D8FE0;padding:8px 12px;display:flex;justify-content:space-between;">
-                <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,.8);letter-spacing:.08em;text-transform:uppercase;">Экспликация</span>
-                <span id="prev-total2" style="font-size:12px;font-weight:700;color:#fff;">— м²</span>
-              </div>
-              <div id="prev-expl2-rows"></div>
-            </div>
-            <div style="height:12px;"></div>
-          </div>
+          <div id="prev-floor-panels"></div>
 
           <div style="padding:14px 12px 0;">
             <div id="prev-title" style="font-size:16px;font-weight:700;color:#1A1A1A;margin-bottom:12px;line-height:1.3;">Проект №— — —</div>
@@ -10788,8 +10717,8 @@ let ceCurrentId = null;
 let cardEditorGeneration = 0;
 const cardSavesInFlight = new Set();
 const cardImageSelections = new Map();
-let ceImages = [null, null, null, null]; // [facade1, facade2, plan1, plan2]
-let ceThumbs = [null, null, null, null]; // маленькие превью тех же 4 фото — для быстрого каталога
+let ceImages = CatalogFloors.slots(); // facade1, facade2, floor1, floor2, floor3, basement
+let ceThumbs = CatalogFloors.slots();
 let ceFloorsSelected = 2;
 
 // Показ/скрытие adminbar при смене view
@@ -10999,7 +10928,7 @@ function renderCardsList(){
             ${card.floors} эт. · ${card.total_area||'—'} м² · ${card.footprint||''}
           </div>
           <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
-            <span style="font-size:10px;background:rgba(0,113,235,0.15);color:var(--blue);padding:2px 8px;border-radius:20px;font-weight:600;">${card.floors === 1 ? '1 этаж' : card.floors === 2 ? '2 этажа' : card.floors+'+ эт.'}</span>
+            <span style="font-size:10px;background:rgba(0,113,235,0.15);color:var(--blue);padding:2px 8px;border-radius:20px;font-weight:600;">${CatalogFloors.label(card)}</span>
             ${card.beds ? `<span style="font-size:10px;background:rgba(22,35,58,0.08);color:var(--text-dim);padding:2px 8px;border-radius:20px;">${card.beds} спал.</span>` : ''}
           </div>
         </div>
@@ -11019,24 +10948,27 @@ function openCardEditor(id){
   if(!canEditCards()){ showToast('Нет доступа'); return; }
   cardEditorGeneration++;
   ceCurrentId = id || null;
-  ceImages = [null, null, null, null];
-  ceThumbs = [null, null, null, null];
+  initCardFloorEditor();
+  ceImages = CatalogFloors.slots();
+  ceThumbs = CatalogFloors.slots();
   ceScanPending = {};
-  ['ce-expl1-scan-status','ce-expl2-scan-status'].forEach(id2=>{ const el=document.getElementById(id2); if(el) el.innerHTML=''; });
+  CatalogFloors.definitions.map(f=>'ce-expl'+f.suffix+'-scan-status').forEach(id2=>{ const el=document.getElementById(id2); if(el) el.innerHTML=''; });
 
   // Reset form
-  ['ce-num','ce-title','ce-area','ce-footprint','ce-beds','ce-baths','ce-price','ce-tags','ce-area1','ce-area2','ce-expl1','ce-expl2'].forEach(f=>{
+  ['ce-num','ce-title','ce-area','ce-footprint','ce-beds','ce-baths','ce-price','ce-tags',...CatalogFloors.definitions.flatMap(f=>['ce-area'+f.suffix,'ce-expl'+f.suffix])].forEach(f=>{
     const el = document.getElementById(f);
     if(el) el.value = '';
   });
-  ['ce-facade-preview','ce-facade2-preview','ce-plan1-preview','ce-plan2-preview'].forEach(id=>{
+  ['ce-facade-preview','ce-facade2-preview',...CatalogFloors.definitions.map(f=>'ce-plan'+f.suffix+'-preview')].forEach(id=>{
     const el = document.getElementById(id);
     if(el){ el.src=''; el.style.display='none'; }
   });
 
-  selectFloors(2);
   ceStyleSelected = '';
   ceFeatureSelected = [];
+  selectStyle('');
+  ['basement','mansard','flat'].forEach(id=>{const b=document.getElementById('feature-btn-'+id);b.style.borderColor='#374151';b.style.background='transparent';b.style.color='#6b7280';b.setAttribute('aria-pressed','false');});
+  selectFloors(2);
 
   if(id){
     // Edit mode
@@ -11060,10 +10992,10 @@ function openCardEditor(id){
       setVal('ce-baths', card.baths||'');
       setVal('ce-price', card.price||'');
       setVal('ce-tags', (card.tags||[]).join(', '));
-      setVal('ce-area1', card.floor1_area||'');
-      setVal('ce-area2', card.floor2_area||'');
-      setVal('ce-expl1', (card.expl1||[]).map(r=>`${r.name}: ${r.area}`).join('\n'));
-      setVal('ce-expl2', (card.expl2||[]).map(r=>`${r.name}: ${r.area}`).join('\n'));
+      CatalogFloors.definitions.forEach(f=>{
+        setVal('ce-area'+f.suffix,card[f.area]||'');
+        setVal('ce-expl'+f.suffix,(card[f.rooms]||[]).map(r=>`${r.name}: ${r.area}`).join('\n'));
+      });
       selectFloors(card.floors||2);
       // Load style and features from tags
       const cardTags = Array.isArray(card.tags) ? card.tags : (card.tags||'').split(',').map(t=>t.trim());
@@ -11077,15 +11009,15 @@ function openCardEditor(id){
       if(cardTags.includes('Плоская кровля')){ceFeatureSelected.push('flat');const b=document.getElementById('feature-btn-flat');if(b){b.style.borderColor='#3b82f6';b.style.background='rgba(59,130,246,0.15)';b.style.color='#3b82f6';}}
       // Show stored images as previews
       if(card.images){
-        const previews = ['ce-facade-preview','ce-facade2-preview','ce-plan1-preview','ce-plan2-preview'];
+        const previews = ['ce-facade-preview','ce-facade2-preview','ce-plan1-preview','ce-plan2-preview','ce-plan3-preview','ce-planb-preview'];
         card.images.forEach((src,i)=>{
           if(src && previews[i]){
             const el = document.getElementById(previews[i]);
             if(el){ el.src=src; el.style.display='block'; }
           }
         });
-        ceImages = [...card.images, null, null, null, null].slice(0,4);
-        ceThumbs = card.thumbnails ? [...card.thumbnails, null, null, null, null].slice(0,4) : [null, null, null, null];
+        ceImages = CatalogFloors.slots(card.images);
+        ceThumbs = CatalogFloors.slots(card.thumbnails);
       }
     }
   } else {
@@ -11110,6 +11042,8 @@ function openCardEditor(id){
   const saving=cardSavesInFlight.has(ceCurrentId || 'new:'+cardEditorGeneration);
   document.getElementById('ce-save-btn').disabled=saving;
   document.getElementById('ce-save-btn').textContent=saving?'Сохранение…':'Сохранить проект';
+  cePrevTab('prev-facade',document.querySelector('#prev-tabs > div'));
+  cePreview();
   overlay.style.display = 'flex';
 }
 
@@ -11120,8 +11054,9 @@ function closeCardEditor(){
 function setVal(id, val){ const el=document.getElementById(id); if(el) el.value=val; }
 
 function selectFloors(n){
-  n = parseInt(n) || n;
+  n = Math.max(1,Math.min(3,parseInt(n)||1));
   ceFloorsSelected = n;
+  markCardEditorDirty();
   [1,2,3].forEach(i=>{
     const btn = document.getElementById('floors-btn-'+i);
     if(!btn) return;
@@ -11161,6 +11096,8 @@ function toggleFeature(f, el){
       btn.style.borderColor='#374151';btn.style.background='transparent';btn.style.color='#6b7280';
     }
   });
+  markCardEditorDirty();
+  cePreview();
 }
 
 // ============================================================
@@ -11278,9 +11215,7 @@ function ceLoadImg(input, previewId, idx, nameId){
     ceThumbs[idx] = thumb;
     const el = document.getElementById(previewId);
     if(el){ el.src = compressed; el.style.display = 'block'; }
-    if(idx===0){ const pi=document.getElementById('prev-facade-img'); if(pi){pi.src=compressed;pi.style.display='block';} const ph=document.getElementById('prev-facade-ph'); if(ph)ph.style.display='none'; }
-    if(idx===2){ const pi=document.getElementById('prev-plan1-img');  if(pi){pi.src=compressed;pi.style.display='block';} const ph=document.getElementById('prev-plan1-ph');  if(ph)ph.style.display='none'; }
-    if(idx===3){ const pi=document.getElementById('prev-plan2-img');  if(pi){pi.src=compressed;pi.style.display='block';} const ph=document.getElementById('prev-plan2-ph');  if(ph)ph.style.display='none'; }
+    cePreview();
   }).catch(error=>{
     console.error('Catalogue image decode failed',error);
     if(generation===cardEditorGeneration&&selection===cardImageSelections.get(idx))showToast('Не удалось обработать фото. Попробуйте загрузить его ещё раз');
@@ -11288,8 +11223,8 @@ function ceLoadImg(input, previewId, idx, nameId){
 }
 
 function cePrevTab(panelId,tabEl){
-  ['prev-facade','prev-floor1','prev-floor2'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
-  document.getElementById('prev-tabs').querySelectorAll('div').forEach(t=>{t.style.color='#888';t.style.borderBottomColor='transparent';t.style.fontWeight='500';});
+  ['prev-facade',...CatalogFloors.definitions.map(f=>'prev-'+f.key)].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
+  document.getElementById('prev-tabs').querySelectorAll(':scope > div').forEach(t=>{t.style.color='#888';t.style.borderBottomColor='transparent';t.style.fontWeight='500';});
   const panel=document.getElementById(panelId); if(panel) panel.style.display='block';
   tabEl.style.color='#3D8FE0'; tabEl.style.borderBottomColor='#3D8FE0'; tabEl.style.fontWeight='600';
 }
@@ -11505,28 +11440,50 @@ function cancelScannedExplication(fieldId){
   if(statusEl) statusEl.innerHTML = '';
 }
 
+function initCardFloorEditor(){
+  const container=document.getElementById('ce-floor-sections');
+  if(!container||container.dataset.ready)return;
+  container.innerHTML=CatalogFloors.editor();
+  document.getElementById('prev-tabs').insertAdjacentHTML('beforeend',CatalogFloors.previewTabs());
+  document.getElementById('prev-floor-panels').innerHTML=CatalogFloors.previewPanels();
+  container.dataset.ready='1';
+}
+function markCardEditorDirty(){
+  const overlay=document.getElementById('cardEditorOverlay');
+  if(overlay&&overlay.style.display!=='none')overlay.dataset.dirty='1';
+}
 function cePreview(){
-  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const v=id=>(document.getElementById(id)||{}).value||'';
-  const num=v('ce-num'),title=v('ce-title'),area=v('ce-area')||'—',beds=v('ce-beds')||'—',fp=v('ce-footprint')||'—',price=v('ce-price')||'—',a1=v('ce-area1')||'—',a2=v('ce-area2')||'—';
-  const tags=(v('ce-tags')).split(',').map(t=>t.trim()).filter(Boolean);
+  initCardFloorEditor();
+  const v=id=>document.getElementById(id)?.value||'';
   const set=(id,val)=>{const el=document.getElementById(id);if(el)el.textContent=val;};
+  const num=v('ce-num'),title=v('ce-title');
+  const card={floors:ceFloorsSelected,tags:ceFeatureSelected.includes('basement')?['Цокольный этаж']:[]};
   set('prev-title',num?`Проект №${num}${title?' — '+title:''}`:'Проект №—');
   set('prev-num',num?'№ '+num:'№ —');
-  set('prev-area',area); set('prev-beds',beds); set('prev-footprint',fp);
-  set('prev-floors-stat',ceFloorsSelected);
-  set('prev-price',(price!=='—'?price:'—')+' ₽');
-  set('prev-a1-badge',a1+' м²'); set('prev-total1',a1+' м²');
-  set('prev-a2-badge',a2+' м²'); set('prev-total2',a2+' м²');
-  const tEl=document.getElementById('prev-tags');
-  if(tEl) tEl.innerHTML=tags.map(t=>`<div style="background:#E8F3FC;border:1px solid #C8DFF5;border-radius:20px;padding:4px 10px;font-size:11px;color:#2A72C0;font-weight:500;">${esc(t)}</div>`).join('');
-  const parseE=txt=>(txt||'').split('\n').filter(l=>l.trim()).map(l=>{const p=l.split(':');const ar=p.pop().trim().replace('.',',');return{name:p.join(':').trim(),area:ar};});
-  const renderE=(rows,containerId)=>{
-    const el=document.getElementById(containerId); if(!el) return;
-    el.innerHTML=rows.map((r,i)=>`<div style="display:flex;align-items:center;padding:6px 12px;border-top:1px solid #DCDCDC;${i%2===1?'background:#EBEBEB;':''}"><div style="width:18px;height:18px;background:#E8F3FC;color:#3D8FE0;border-radius:50%;font-size:8px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-right:8px;">${i+1}</div><div style="flex:1;font-size:12px;color:#1A1A1A;">${esc(r.name)}</div><div style="font-size:12px;font-weight:600;color:#1A1A1A;">${esc(r.area)}<sup style="font-size:8px;color:#888;"> м²</sup></div></div>`).join('');
-  };
-  renderE(parseE(v('ce-expl1')),'prev-expl1-rows');
-  renderE(parseE(v('ce-expl2')),'prev-expl2-rows');
+  set('prev-area',v('ce-area')||'—');set('prev-beds',v('ce-beds')||'—');set('prev-footprint',v('ce-footprint')||'—');
+  set('prev-floors-stat',ceFloorsSelected);set('prev-price',(v('ce-price')||'—')+' ₽');
+  const tags=v('ce-tags').split(',').map(t=>t.trim()).filter(t=>t&&t!=='Цокольный этаж');
+  if(ceFeatureSelected.includes('basement')&&!tags.includes('Цокольный этаж'))tags.push('Цокольный этаж');
+  document.getElementById('prev-tags').innerHTML=tags.map(t=>`<div class="tag" style="color:#2a72c0">${escapeHtml(t)}</div>`).join('');
+  CatalogFloors.definitions.forEach(f=>{
+    const visible=CatalogFloors.enabled(f,card);
+    document.getElementById('ce-section-'+f.key).style.display=visible?'':'none';
+    document.getElementById('prev-tab-'+f.key).style.display=visible?'':'none';
+    const panel=document.getElementById('prev-'+f.key);
+    if(!visible&&panel.style.display==='block')cePrevTab('prev-facade',document.querySelector('#prev-tabs > div'));
+    const area=v('ce-area'+f.suffix)||'—';
+    set('prev-a'+f.suffix+'-badge',area+' м²');set('prev-total'+f.suffix,area+' м²');
+    document.getElementById('prev-expl'+f.suffix+'-rows').innerHTML=CatalogFloors.rows(parseExpl(v('ce-expl'+f.suffix)));
+    const img=document.getElementById('prev-plan'+f.suffix+'-img'),src=ceImages[f.image];
+    if(src)img.src=src;else img.removeAttribute('src');
+    img.style.display=src?'block':'none';
+    document.getElementById('prev-plan'+f.suffix+'-ph').style.display=src?'none':'block';
+  });
+  const facade=document.getElementById('prev-facade-img');
+  if(ceImages[0])facade.src=ceImages[0];else facade.removeAttribute('src');
+  facade.style.display=ceImages[0]?'block':'none';
+  document.getElementById('prev-facade-ph').style.display=ceImages[0]?'none':'flex';
+  ['basement','mansard','flat'].forEach(id=>document.getElementById('feature-btn-'+id)?.setAttribute('aria-pressed',String(ceFeatureSelected.includes(id))));
 }
 
 function parseExpl(text){
@@ -11608,10 +11565,10 @@ async function saveCard(){
         if(ceFeatureSelected.includes('flat')) userTags.push('Плоская кровля');
         return userTags;
       })(),
-      floor1_area: document.getElementById('ce-area1').value.trim(),
-      floor2_area: ceFloorsSelected >= 2 ? document.getElementById('ce-area2').value.trim() : null,
-      expl1: parseExpl(document.getElementById('ce-expl1').value),
-      expl2: ceFloorsSelected >= 2 ? parseExpl(document.getElementById('ce-expl2').value) : [],
+      ...Object.fromEntries(CatalogFloors.definitions.flatMap(f=>[
+        [f.area,document.getElementById('ce-area'+f.suffix).value.trim()],
+        [f.rooms,parseExpl(document.getElementById('ce-expl'+f.suffix).value)]
+      ])),
       images,
       thumbnails: thumbs,
       updated_at: new Date().toISOString(),
@@ -11887,37 +11844,7 @@ function buildCardHTML(card){
   const images = card.images || [];
   const facade1 = images[0] || '';
   const facade2 = images[1] || '';
-  const plan1   = images[2] || '';
-  const plan2   = images[3] || '';
   const tags = (card.tags||[]).map(t=>`<div class="tag">${escapeHtml(t)}</div>`).join('');
-  const expl1rows = (card.expl1||[]).map((r,i)=>`
-    <div class="expl-row">
-      <div class="expl-num">${i+1}</div>
-      <div class="expl-name">${escapeHtml(r.name)}</div>
-      <div class="expl-area">${escapeHtml(r.area)} <sup>м²</sup></div>
-    </div>`).join('');
-  const expl2rows = (card.expl2||[]).map((r,i)=>`
-    <div class="expl-row">
-      <div class="expl-num">${i+1}</div>
-      <div class="expl-name">${escapeHtml(r.name)}</div>
-      <div class="expl-area">${escapeHtml(r.area)} <sup>м²</sup></div>
-    </div>`).join('');
-
-  const has2ndFloor = (card.floors||1) >= 2;
-  const tab2 = has2ndFloor ? `<div class="tab" onclick="showTab('floor2',this)">2-й этаж</div>` : '';
-  const panel2 = has2ndFloor ? `
-    <div class="panel" id="floor2">
-      <div class="plan-wrap">
-        <div class="plan-label">Планировочное решение · 2-й этаж <span>${escapeHtml(card.floor2_area||'')} м²</span></div>
-        <div class="plan-img-container">${plan2?`<img class="plan-img" src="${escapeHtml(plan2)}" loading="lazy" style="width:100%;height:auto;border-radius:4px;"/>`:''}</div>
-      </div>
-      <div class="explication">
-        <div class="expl-header"><span class="expl-header-title">Экспликация</span><span class="expl-header-total">${escapeHtml(card.floor2_area||'')} м²</span></div>
-        ${expl2rows}
-      </div>
-      <div style="height:14px;"></div>
-    </div>` : '';
-
   return `<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Проект №${escapeHtml(card.project_number||'')} — ARHITTEK</title>
@@ -11925,11 +11852,11 @@ function buildCardHTML(card){
 :root{--blue:#3D8FE0;--blue-dark:#2A72C0;--blue-light:#E8F3FC;--black:#0A0A0A;--border:#D0D0D0;--border-soft:#DCDCDC;--text-primary:#1A1A1A;--text-sub:#888;--text-label:#BBB;}
 *{margin:0;padding:0;box-sizing:border-box;}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#C8C8C8;min-height:100vh;display:flex;justify-content:center;align-items:flex-start;padding:24px 16px;}
-.card{background:#F2F2F2;border-radius:20px;width:390px;box-shadow:0 12px 60px rgba(0,0,0,.18);overflow:hidden;}
+.card{background:#F2F2F2;border-radius:20px;width:390px;max-width:100%;box-shadow:0 12px 60px rgba(0,0,0,.18);overflow:hidden;}
 .card-header{background:var(--black);padding:13px 16px 11px;display:flex;align-items:center;justify-content:space-between;}
 .header-badge{font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.4);}
-.tabs{display:flex;background:#F2F2F2;border-bottom:2px solid var(--border);}
-.tab{flex:1;padding:12px 8px;text-align:center;font-size:13px;font-weight:500;color:var(--text-sub);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .2s;user-select:none;}
+.tabs{display:flex;flex-wrap:wrap;background:#F2F2F2;border-bottom:2px solid var(--border);}
+.tab{flex:1 1 72px;min-height:44px;white-space:nowrap;padding:12px 8px;text-align:center;font-size:13px;font-weight:500;color:var(--text-sub);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .2s;user-select:none;}
 .tab.active{color:var(--blue);border-bottom-color:var(--blue);font-weight:600;}
 .panel{display:none;}.panel.active{display:block;}
 .swiper-wrap{position:relative;overflow:hidden;background:#000;cursor:grab;transition:height .25s ease;}
@@ -11949,7 +11876,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .plan-label{font-size:10px;font-weight:700;color:var(--text-label);letter-spacing:.12em;text-transform:uppercase;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;}
 .plan-label span{background:var(--blue-light);color:var(--blue);font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;}
 .plan-img-container{background:#E8EDF4;border:1px solid var(--border);border-radius:12px;padding:12px;}
-.plan-img{width:100%;height:auto;display:block;border-radius:4px;}
+.catalog-plan-empty{padding:22px 8px;text-align:center;color:#888;font-size:12px}.plan-img{width:100%;height:auto;display:block;border-radius:4px;}
 .explication{margin:10px 14px 0;border:1px solid var(--border);border-radius:12px;overflow:hidden;}
 .expl-header{background:var(--blue);padding:9px 14px;display:flex;justify-content:space-between;align-items:center;}
 .expl-header-title{font-size:10px;font-weight:700;color:rgba(255,255,255,.8);letter-spacing:.08em;text-transform:uppercase;}
@@ -11990,8 +11917,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </div>
 <div class="tabs">
   <div class="tab active" onclick="showTab('facade',this)">Фасад</div>
-  <div class="tab" onclick="showTab('floor1',this)">1-й этаж</div>
-  ${tab2}
+  ${CatalogFloors.tabs(card)}
 </div>
 <div class="panel active" id="facade">
   <div class="swiper-wrap" id="swiperWrap">
@@ -12004,18 +11930,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     ${facade2?`<button class="swiper-arrow left" onclick="swGo(si-1)">‹</button><button class="swiper-arrow right" onclick="swGo(si+1)">›</button><div class="swiper-dots"><div class="swiper-dot active" id="dot-0"></div><div class="swiper-dot" id="dot-1"></div></div>`:''}
   </div>
 </div>
-<div class="panel" id="floor1">
-  <div class="plan-wrap">
-    <div class="plan-label">Планировочное решение · 1-й этаж <span>${escapeHtml(card.floor1_area||'')} м²</span></div>
-    <div class="plan-img-container">${plan1?`<img class="plan-img" src="${escapeHtml(plan1)}" loading="lazy" style="width:100%;height:auto;border-radius:4px;"/>`:''}</div>
-  </div>
-  <div class="explication">
-    <div class="expl-header"><span class="expl-header-title">Экспликация</span><span class="expl-header-total">${escapeHtml(card.floor1_area||'')} м²</span></div>
-    ${expl1rows}
-  </div>
-  <div style="height:14px;"></div>
-</div>
-${panel2}
+${CatalogFloors.panels(card)}
 <div class="info-block">
   <div class="project-title">${escapeHtml(card.title||'')}</div>
   <div class="stats">
