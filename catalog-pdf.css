@@ -1,0 +1,7 @@
+.catalog-pdf-import{padding:12px;margin-bottom:16px;border:1px solid #31577f;background:#12243a;border-radius:12px;overflow-wrap:anywhere}
+.catalog-pdf-import button{width:100%;min-height:44px}
+.catalog-pdf-import p{color:#b7c9dd;font-size:12px;line-height:1.5;margin:10px 0 0}
+.catalog-pdf-import progress{width:100%;margin-top:10px;accent-color:#3d8fe0}
+#ce-pdf-cancel{margin-top:8px;background:transparent;color:#c9d8eb;border:1px solid #45617f;border-radius:8px}
+#cards-pdf-result{padding:12px;margin:8px 0;background:var(--blue-light,#e8f3fc);border:1px solid var(--line,#c8dff5);border-radius:10px;font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+[hidden]{display:none!important}
