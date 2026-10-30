@@ -91,6 +91,9 @@ function coreTests(){
  });
  await context.route('**/*',route=>{
   const u=new URL(route.request().url());let file;
+  // WebKit exposes PDF.js's generated module-worker blob to routing.
+  // Let it load its actual script instead of fulfilling it as an empty stub.
+  if(u.protocol==='blob:')return route.continue();
   if(u.hostname==='app.test')file=path.join(root,u.pathname==='/'?'index.html':u.pathname.slice(1));
   if(u.href.includes('/pdfjs-dist@6.4.299/'))file=path.join(root,'node_modules/pdfjs-dist',u.pathname.split('/pdfjs-dist@6.4.299/')[1]);
   for(const [key,p]of[['xlsx@','xlsx/dist/xlsx.full.min.js'],['jspdf@','jspdf/dist/jspdf.umd.min.js'],['jspdf-autotable@','jspdf-autotable/dist/jspdf.plugin.autotable.min.js']])if(u.href.includes(key))file=path.join(root,'node_modules',p);
