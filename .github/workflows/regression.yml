@@ -69,7 +69,7 @@ jobs:
 
       - name: Check responsive interactions and audit regressions
         if: ${{ !cancelled() }}
-        run: timeout 240s npm run test:ux
+        run: timeout 240s npm run test:ux && timeout 90s node tests/navigation-performance.cjs
 
       - name: Check construction accounting, access and customer portal
         if: ${{ !cancelled() }}
