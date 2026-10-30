@@ -135,6 +135,7 @@ function invoicesHTML(){
 }
 function panel(id,html){const p=document.querySelector('.finance-visual-panel[data-fin-panel="'+id+'"]');if(!p)return;let el=$('cash-panel-'+id);if(!el){el=document.createElement('section');el.id='cash-panel-'+id;el.className='cash-panel';p.appendChild(el);}p.classList.add('cash-managed');el.innerHTML=html;}
 function render(){
+ if(window.ARHITTEKFinanceWorkspace?.enabled()){window.ARHITTEKFinanceWorkspace.schedule();return;}
  if(!session?.isAdmin||!$('view-finance'))return;
  const tabs=$('financeVisualTabs');if(!tabs)return;
  if(state.financialDataReady===false){['overview','income','expense','reserve','team','amortization','forecast'].forEach(id=>panel(id,'<div class="card">'+(state.financialDataError?'Не удалось обновить операции. Остаток пока не подтверждён.':'Загружаются финансовые операции…')+'</div>'));return;}
