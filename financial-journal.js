@@ -13,7 +13,7 @@ function budget(s){
  const b=s.financialJournal.balances,sum=prefix=>round(Object.entries(b).filter(([k])=>k.startsWith(prefix)).reduce((a,[,v])=>a+num(v),0));
  const projects=(s.financialProjects||s.projects||[]).map(p=>({id:p.id,name:p.name,projectHeld:num(b['project:'+p.id]),costsHeld:num(b['costs:'+p.id]),teamHeld:sum('team:'+p.id+':'),
   construction:window.ARHITTEKCash.constructionProject(s,p),completed:/заверш/i.test((s.statuses||[]).find(x=>x.id===p.status_id)?.name||''),team:Object.entries(b).filter(([k])=>k.startsWith('team:'+p.id+':')).map(([k,v])=>({employeeId:k.split(':')[2],month:k.split(':')[3],remaining:num(v),due:num(v),paid:0})),companyContribution:0,openingProjectFunds:0,receivedAfterSnapshot:0,amortization:0,directPaidAfterSnapshot:0,teamPaidAfterSnapshot:0}));
- return {cashBalance:total(b),companyReserve:num(b.reserve),available:num(b.reserve),amortization:num(b.amortization),projectsHeld:sum('project:'),teamHeld:sum('team:'),costsHeld:sum('costs:'),constructionHeld:projects.filter(p=>p.construction).reduce((a,p)=>a+p.projectHeld,0),projects,warnings:[],countedCash:true,releasedOpeningFunds:0,openingFundsUsed:0};
+ return {cashBalance:total(b),companyReserve:num(b.reserve),available:num(b.reserve),amortization:num(b.amortization),projectsHeld:sum('project:'),teamHeld:sum('team:'),costsHeld:round(sum('costs:')+sum('obligation:')),constructionHeld:projects.filter(p=>p.construction).reduce((a,p)=>a+p.projectHeld,0),projects,warnings:[],countedCash:true,releasedOpeningFunds:0,openingFundsUsed:0};
 }
 async function rpc(name,args){const r=await sb.rpc(name,args);if(r.error)throw new Error(r.error.message||'Не удалось подтвердить операцию');return r.data;}
 let modal=null,busy=false;
@@ -78,7 +78,7 @@ async function closeProject(id){
 function accountName(k){if(k==='reserve')return 'Свободный резерв';if(k==='amortization')return 'Амортизация';const [kind,p,e,m]=k.split(':');const name=(state.financialProjects||state.projects).find(x=>x.id===p)?.name||p;return (kind==='project'?'Деньги проекта':kind==='costs'?'Расходы проекта':'Гонорар '+(findEmployee(e)?.name||'')+' '+m)+' · '+name;}
 function transfer(){const snap=state.financialJournal,b=snap.balances;const destinations=['reserve','amortization',...(state.projects||[]).map(p=>'project:'+p.id)];
  const select=(id,keys)=>'<select id="'+id+'">'+keys.map(k=>'<option value="'+esc(k)+'">'+esc(accountName(k))+(id==='journalFrom'?' · '+money(b[k]):'')+'</option>').join('')+'</select>';
- sheet('Распределить имеющиеся деньги','<p>Это перевод между назначениями внутри общей суммы. Для стройки укажите договорное основание вознаграждения компании.</p><label class="field">Откуда'+select('journalFrom',Object.keys(b).filter(k=>num(b[k])>0))+'</label><label class="field">Куда'+select('journalTo',destinations)+'</label>'+field('Сумма','journalTransferAmount')+reasonField(),async()=>({command:'transfer',revision:snap.revision,payload:{from:$('journalFrom').value,to:$('journalTo').value,amount:positive('journalTransferAmount'),reason:reason()}}));
+ sheet('Распределить имеющиеся деньги','<p>Это перевод между назначениями внутри общей суммы. Для стройки укажите договорное основание вознаграждения компании.</p><label class="field">Откуда'+select('journalFrom',Object.keys(b).filter(k=>num(b[k])>0&&!k.startsWith('obligation:')))+'</label><label class="field">Куда'+select('journalTo',destinations)+'</label>'+field('Сумма','journalTransferAmount')+reasonField(),async()=>({command:'transfer',revision:snap.revision,payload:{from:$('journalFrom').value,to:$('journalTo').value,amount:positive('journalTransferAmount'),reason:reason()}}));
 }
 function reconcile(){const snap=state.financialJournal;sheet('Повторная сверка','<p>Все деньги по журналу: '+money(total(snap.balances))+'. Разница будет отдельной записью с вашей причиной и изменит свободный резерв.</p>'+field('Все деньги фактически','journalCash')+reasonField()+'<label><input type="checkbox" id="journalChecked"> Фактическую сумму проверил</label>',async()=>{if(!$('journalChecked').checked)throw new Error('Подтвердите сверку');return {command:'reconcile',revision:snap.revision,payload:{cash:positive('journalCash'),reason:reason(),confirmed:true}};});}
 async function adjustReserve(){
@@ -131,11 +131,12 @@ function salaryField(employee,month){
 function salaryDescription(description,amount){if(!active())return description;const funded=positive('journalSalaryFunded');if(funded>amount||funded>num($('journalSalaryFunded').max))throw new Error('Проверьте часть выплаты из зарезервированных гонораров');return description.replace(/\s*\[funded:[^\]]*\]/g,'')+' [funded:'+funded+']';}
 // Stable source UUIDs survive a lost response. No retry manufactures another debit.
 async function safeFetch(input,options={}){
+ const chosenWallet=window.ARHITTEKFinanceWorkspace?.selectedWallet();if(chosenWallet){const h=new Headers(options.headers||{});h.set('x-finance-wallet',chosenWallet);options={...options,headers:h};}
  const url=String(input?.url||input),method=(options.method||'GET').toUpperCase();const match=url.match(/\/rest\/v1\/(ledger_entries|company_income|company_expenses)(?:\?|$)/);
  if(method!=='POST'||!match||!options.body)return fetch(input,{...options,cache:'no-store'});
  let body;try{body=JSON.parse(options.body);}catch(_){return fetch(input,{...options,cache:'no-store'});}
  const list=Array.isArray(body)?body:[body];if(!list.length)return fetch(input,{...options,cache:'no-store'});
- const signature=JSON.stringify([match[1],body]),digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(signature));
+ const walletHeader=new Headers(options.headers||{}).get('x-finance-wallet');const signature=JSON.stringify(walletHeader?[match[1],body,walletHeader]:[match[1],body]),digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(signature));
  const key='arhittek-money-pending-'+Array.from(new Uint8Array(digest)).map(x=>x.toString(16).padStart(2,'0')).join('');
  const pendingKey='arhittek-money-unconfirmed-'+match[1],pending=JSON.parse(sessionStorage.getItem(pendingKey)||'null');
  if(pending&&pending.key!==key){
