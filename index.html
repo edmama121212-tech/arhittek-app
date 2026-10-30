@@ -3589,7 +3589,7 @@ async function loadDeferredData(){
   }catch(e){ console.error('loadDeferredData error', e); }
 }
 function renderAll(){
-  if(isOwner()){renderOverview();renderAnalytics();}
+  if(isOwner())renderOverview();
   renderCategoryFilters();
   renderStatusFilters();
   renderPaymentFilters();
@@ -10486,8 +10486,10 @@ document.getElementById('objBack').addEventListener('click', ()=>{
   requestAnimationFrame(()=>window.scrollTo(0,y));
 });
 
+let navigationRenderVersion=0;
 document.querySelectorAll('.nav-btn').forEach(btn=>{
   btn.addEventListener('click', ()=>{
+    const navigationVersion=++navigationRenderVersion;
     document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
     document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
     btn.classList.add('active');
@@ -10503,7 +10505,13 @@ document.querySelectorAll('.nav-btn').forEach(btn=>{
     // В Готовые проекты — загружаем карточки
     if(btn.dataset.view === 'view-cards') loadCards();
     // В Финансы — рендерим зарплаты и P&L (раньше это делал отдельный openFinanceBtn)
-    if(btn.dataset.view === 'view-finance'){ renderFinanceSalaries(); renderAnalytics(); }
+    if(btn.dataset.view === 'view-finance'){
+      // Paint the selected page before synchronous financial calculations.
+      requestAnimationFrame(()=>setTimeout(()=>{
+        if(navigationVersion!==navigationRenderVersion||!document.getElementById('view-finance').classList.contains('active'))return;
+        renderFinanceSalaries();renderAnalytics();
+      },0));
+    }
   });
 });
 
@@ -10748,13 +10756,18 @@ function applyCardsRole(){
 }
 
 // ── Загрузка карточек из Supabase ──
-async function loadCards(){
+let cardsLoadPromise=null;
+function loadCards(){
+  if(cardsLoadPromise)return cardsLoadPromise;
+  const actor=session?.token;
+  cardsLoadPromise=(async()=>{
   try{
     const { data, error } = await fetchAllRows(()=>sb.from('project_cards')
       .select('*',{count:'exact'})
       .is('deleted_at', null)
       .order('created_at', { ascending: false }));
     if(error) throw error;
+    if(actor!==session?.token)return;
     cardsData = data || [];
     applyCardsRole();
     renderCardsStats();
@@ -10764,6 +10777,8 @@ async function loadCards(){
   } catch(e){
     console.error('loadCards error', e);
   }
+  })().finally(()=>{cardsLoadPromise=null;});
+  return cardsLoadPromise;
 }
 
 // Декодирует картинку (data: или https:) в маленький JPEG-превью через canvas.
@@ -12025,10 +12040,6 @@ let swGo=function(){};
 <\/script></body></html>`;
 }
 
-// Загрузка карточек при переходе на вкладку
-document.querySelector('.nav-btn[data-view="view-cards"]')?.addEventListener('click', ()=>{
-  loadCards();
-});
 
 loadAll();
 
