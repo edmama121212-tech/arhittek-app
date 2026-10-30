@@ -65,7 +65,7 @@ jobs:
 
       - name: Check PDF extraction, automatic import and duplicate protection
         if: ${{ !cancelled() }}
-        run: timeout 180s npm run test:catalog:pdf
+        run: timeout 180s npm run test:catalog:pdf && CATALOG_NO_STREAM_ITERATOR=1 timeout 180s npm run test:catalog:pdf
 
       - name: Check responsive interactions and audit regressions
         if: ${{ !cancelled() }}
@@ -75,4 +75,23 @@ jobs:
         if: ${{ !cancelled() }}
         run: timeout 240s npm run test:construction
 
+  catalog-pdf-webkit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Install WebKit
+        run: npx playwright install --with-deps webkit
+      - name: Check mobile PDF import without stream async iteration
+        env:
+          CATALOG_BROWSER: webkit
+          CATALOG_NO_STREAM_ITERATOR: '1'
+        run: timeout 180s npm run test:catalog:pdf
 

@@ -17,6 +17,23 @@
       return {text:i.str,x0:Math.min(...points.map(p=>p[0])),x1:Math.max(...points.map(p=>p[0])),y0:Math.min(...points.map(p=>p[1])),y1:Math.max(...points.map(p=>p[1])),vertical:Math.abs(dy)>.7};
     });
   }
+  async function readTextContent(page,job){
+    check(job);
+    // PDF.js getTextContent() uses ReadableStream async iteration, absent in
+    // shipping Safari versions. The reader API works there without global patches.
+    const reader=page.streamTextContent().getReader(),content={items:[],styles:Object.create(null),lang:null};
+    let finished=false;job.textReader=reader;
+    try{
+      for(;;){
+        check(job);const {value,done}=await reader.read();check(job);
+        if(done){finished=true;return content;}
+        content.lang??=value.lang;Object.assign(content.styles,value.styles);content.items.push(...value.items);
+      }
+    }finally{
+      if(!finished)await reader.cancel().catch(()=>{});
+      reader.releaseLock();if(job.textReader===reader)job.textReader=null;
+    }
+  }
   async function render(doc,n,side,job){
     check(job);const page=await doc.getPage(n),base=page.getViewport({scale:1}),v=page.getViewport({scale:side/Math.max(base.width,base.height)});
     const canvas=document.createElement('canvas');canvas.width=Math.ceil(v.width);canvas.height=Math.ceil(v.height);
@@ -87,7 +104,7 @@
       let pages=[];
       for(let n=1;n<=doc.numPages;n++){
         progress(job,'Читаю листы: '+n+' из '+doc.numPages,5+n/doc.numPages*30);
-        const page=await doc.getPage(n),v=page.getViewport({scale:1}),content=await page.getTextContent();check(job);
+        const page=await doc.getPage(n),v=page.getViewport({scale:1}),content=await readTextContent(page,job);check(job);
         pages.push(CatalogPdfCore.pageFromItems(pdfItems(pdfjs,page,content),v.width,v.height,n));page.cleanup();
       }
       const meaningful=p=>p.text.replace(/GSPublisherVersion[^\n]*/g,'').trim().length>80;
@@ -128,7 +145,7 @@
     const job=active;if(!job)return;
     // A database save has its own snapshot/confirmation guard and must finish.
     if(job.saving)return;
-    job.cancelled=true;unlock(job);active=null;job.renderTask?.cancel();job.loadingTask?.destroy().catch(()=>{});job.ocrWorker?.terminate().catch(()=>{});status('Импорт отменён. Можно выбрать другой PDF',null);
+    job.cancelled=true;unlock(job);active=null;job.textReader?.cancel().catch(()=>{});job.renderTask?.cancel();job.loadingTask?.destroy().catch(()=>{});job.ocrWorker?.terminate().catch(()=>{});status('Импорт отменён. Можно выбрать другой PDF',null);
   }
   function apply(result){
     const d=result.data;
@@ -166,5 +183,5 @@
     finally{if(generation===cardEditorGeneration)unlock(job);if(active===job)active=null;}
   }
   function reset(){cancel();status('Загрузите альбом — приложение заполнит и создаст карточку',null);const block=document.getElementById('ce-pdf-import');if(block)block.hidden=!!ceCurrentId;}
-  root.CatalogPdfImport=Object.freeze({read,start,cancel,reset,busyReading:()=>!!active&&!active.saving,apply,pdfItems,exportImage});
+  root.CatalogPdfImport=Object.freeze({read,start,cancel,reset,busyReading:()=>!!active&&!active.saving,apply,pdfItems,exportImage,readTextContent});
 })(window);

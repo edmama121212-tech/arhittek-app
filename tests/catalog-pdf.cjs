@@ -1,6 +1,6 @@
 // Synthetic albums and isolated databases only. No real catalogue writes.
 const fs=require('fs'),path=require('path'),assert=require('node:assert/strict');
-const {PGlite}=require('@electric-sql/pglite'),{chromium}=require('playwright'),{jsPDF}=require('jspdf');
+const {PGlite}=require('@electric-sql/pglite'),{chromium,webkit}=require(process.env.CATALOG_PLAYWRIGHT_MODULE||'playwright'),{jsPDF}=require('jspdf');
 const core=require('../catalog-pdf-core'),root=path.resolve(__dirname,'..');
 let passed=0;const eq=(a,b,label)=>{assert.deepEqual(a,b,label);passed++};
 function fixture({number='00157-A',floors=3,basement=true}={}){
@@ -80,21 +80,44 @@ function coreTests(){
  eq(core.repairText('Ïðîåêò ¹00157-A'),'Проект №00157-A','Archicad encoding repaired');
  coreTests();
  await sqlTests();
- const browser=await chromium.launch({executablePath:process.env.BROWSER_EXECUTABLE||undefined,headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
+ const safari=process.env.CATALOG_BROWSER==='webkit';
+ const browser=await (safari?webkit:chromium).launch({executablePath:process.env.BROWSER_EXECUTABLE||undefined,headless:true,...(!safari?{args:['--no-sandbox','--disable-dev-shm-usage']}: {})});
  try{
- const context=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
+ const context=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block',...(safari?{isMobile:true,hasTouch:true}: {})});
  await context.addInitScript({content:fs.readFileSync(path.join(__dirname,'mock.js'),'utf8')});
+ // Shipping Safari can lack this API even when Playwright's newer WebKit supports it.
+ if(process.env.CATALOG_NO_STREAM_ITERATOR==='1')await context.addInitScript(()=>{
+  Object.defineProperty(ReadableStream.prototype,Symbol.asyncIterator,{value:undefined,configurable:true});
+ });
  await context.route('**/*',route=>{
   const u=new URL(route.request().url());let file;
+  // WebKit exposes PDF.js's generated module-worker blob to routing.
+  // Let it load its actual script instead of fulfilling it as an empty stub.
+  if(u.protocol==='blob:')return route.continue();
   if(u.hostname==='app.test')file=path.join(root,u.pathname==='/'?'index.html':u.pathname.slice(1));
   if(u.href.includes('/pdfjs-dist@6.4.299/'))file=path.join(root,'node_modules/pdfjs-dist',u.pathname.split('/pdfjs-dist@6.4.299/')[1]);
   for(const [key,p]of[['xlsx@','xlsx/dist/xlsx.full.min.js'],['jspdf@','jspdf/dist/jspdf.umd.min.js'],['jspdf-autotable@','jspdf-autotable/dist/jspdf.plugin.autotable.min.js']])if(u.href.includes(key))file=path.join(root,'node_modules',p);
+  if(file?.endsWith('pdf.worker.min.mjs')&&process.env.CATALOG_NO_STREAM_ITERATOR==='1')return route.fulfill({body:'Object.defineProperty(ReadableStream.prototype,Symbol.asyncIterator,{value:undefined,configurable:true});\n'+fs.readFileSync(file,'utf8'),contentType:'text/javascript',headers:{'Access-Control-Allow-Origin':'*'}});
   if(file&&fs.existsSync(file))return route.fulfill({path:file,contentType:/\.m?js$/.test(file)?'text/javascript':file.endsWith('.html')?'text/html':file.endsWith('.css')?'text/css':file.endsWith('.wasm')?'application/wasm':'application/octet-stream',headers:{'Access-Control-Allow-Origin':'*'}});
   if(route.request().resourceType()==='image')return route.fulfill({body:'<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"/>',contentType:'image/svg+xml'});
   return route.fulfill({body:'',contentType:'text/javascript',headers:{'Access-Control-Allow-Origin':'*'}});
  });
  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ if(safari){page.on('console',m=>{if(m.text().startsWith('PDF_TEST'))console.log(m.text())});page.on('requestfailed',r=>console.log('PDF_TEST request failed',r.url(),r.failure()?.errorText));}
  await page.goto('https://app.test/');await page.waitForFunction(()=>typeof isOwner==='function'&&isOwner()&&state.financialDataReady);
+ if(process.env.CATALOG_NO_STREAM_ITERATOR==='1')eq(await page.evaluate(()=>typeof ReadableStream.prototype[Symbol.asyncIterator]),'undefined','Safari missing stream iterator reproduced');
+ const streamChecks=await page.evaluate(async()=>{
+  const read=CatalogPdfImport.readTextContent;
+  const success=new ReadableStream({start(c){c.enqueue({items:[{str:'First'}],styles:{first:{fontFamily:'serif'}},lang:'ru'});c.enqueue({items:[{str:'Second'}],styles:{second:{fontFamily:'sans-serif'}},lang:null});c.close();}});
+  const job={cancelled:false},content=await read({streamTextContent:()=>success},job);
+  const failure=new ReadableStream({start(c){c.error(new Error('Text stream failed'));}});
+  let message;try{await read({streamTextContent:()=>failure},{cancelled:false})}catch(e){message=e.message}
+  const waiting=new ReadableStream(),cancelJob={cancelled:false};
+  const cancelled=read({streamTextContent:()=>waiting},cancelJob).then(()=>null,e=>e.name);
+  cancelJob.cancelled=true;await cancelJob.textReader.cancel();const cancelledName=await cancelled;
+  return {text:content.items.map(i=>i.str),fonts:Object.keys(content.styles),lang:content.lang,successUnlocked:!success.locked&&job.textReader===null,error:message,errorUnlocked:!failure.locked,cancelledName,cancelUnlocked:!waiting.locked&&cancelJob.textReader===null};
+ });
+ eq(streamChecks,{text:['First','Second'],fonts:['first','second'],lang:'ru',successUnlocked:true,error:'Text stream failed',errorUnlocked:true,cancelledName:'AbortError',cancelUnlocked:true},'Chunked text, failed streams and cancellation release their readers');
  await page.evaluate(()=>{
   window.__imports=[];window.__syncs=0;
   const original=sb.rpc.bind(sb);sb.rpc=async(n,a)=>{
@@ -110,11 +133,14 @@ function coreTests(){
   await page.evaluate(()=>{let e=document.getElementById('test-pdf');if(!e){e=document.createElement('input');e.type='file';e.id='test-pdf';document.body.append(e)}});
   await page.locator('#test-pdf').setInputFiles(typeof buffer==='string'?buffer:{name,mimeType:'application/pdf',buffer});
   return page.evaluate(async()=>{
-   const r=await CatalogPdfImport.read(document.getElementById('test-pdf').files[0]);window.__parsed=r;
+   let stage='starting',timer;
+   const operation=CatalogPdfImport.read(document.getElementById('test-pdf').files[0],{onProgress:text=>{stage=text;console.log('PDF_TEST '+text)}});
+   let r;try{r=await Promise.race([operation,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('PDF stalled: '+stage)),60000)})]);}finally{clearTimeout(timer)}window.__parsed=r;
    return {...r,images:r.images.map(x=>x?x.slice(0,23):null),thumbnails:[]};
   });
  }
  const album=fixture(),r=await read(album);
+ if(process.env.CATALOG_NO_STREAM_ITERATOR==='1')eq(await page.evaluate(()=>typeof ReadableStream.prototype[Symbol.asyncIterator]),'undefined','Import succeeds without patching browser prototypes');
  eq([r.data.project_number,r.data.floors,r.data.total_area,r.data.beds,r.data.baths],['00157-A',3,'400,00',4,4],'Real PDF.js extracts number, 3 floors, basement and room counts');
  eq(r.blocking,[],'Complete album has no blockers');eq(r.images.every(Boolean),true,'Facade and all four floor image slots populated');
  eq(r.data.tags.includes('Цокольный этаж'),true,'Basement comes from its actual plan');
