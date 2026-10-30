@@ -100,6 +100,7 @@ function coreTests(){
   return route.fulfill({body:'',contentType:'text/javascript',headers:{'Access-Control-Allow-Origin':'*'}});
  });
  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ if(safari){page.on('console',m=>{if(m.text().startsWith('PDF_TEST'))console.log(m.text())});page.on('requestfailed',r=>console.log('PDF_TEST request failed',r.url(),r.failure()?.errorText));}
  await page.goto('https://app.test/');await page.waitForFunction(()=>typeof isOwner==='function'&&isOwner()&&state.financialDataReady);
  if(process.env.CATALOG_NO_STREAM_ITERATOR==='1')eq(await page.evaluate(()=>typeof ReadableStream.prototype[Symbol.asyncIterator]),'undefined','Safari missing stream iterator reproduced');
  const streamChecks=await page.evaluate(async()=>{
@@ -129,7 +130,9 @@ function coreTests(){
   await page.evaluate(()=>{let e=document.getElementById('test-pdf');if(!e){e=document.createElement('input');e.type='file';e.id='test-pdf';document.body.append(e)}});
   await page.locator('#test-pdf').setInputFiles(typeof buffer==='string'?buffer:{name,mimeType:'application/pdf',buffer});
   return page.evaluate(async()=>{
-   const r=await CatalogPdfImport.read(document.getElementById('test-pdf').files[0]);window.__parsed=r;
+   let stage='starting',timer;
+   const operation=CatalogPdfImport.read(document.getElementById('test-pdf').files[0],{onProgress:text=>{stage=text;console.log('PDF_TEST '+text)}});
+   let r;try{r=await Promise.race([operation,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('PDF stalled: '+stage)),60000)})]);}finally{clearTimeout(timer)}window.__parsed=r;
    return {...r,images:r.images.map(x=>x?x.slice(0,23):null),thumbnails:[]};
   });
  }
