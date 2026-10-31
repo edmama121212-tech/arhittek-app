@@ -30,6 +30,7 @@
 <script src="catalog-pdf.js"></script>
 <link rel="stylesheet" href="catalog-pdf.css">
 <script src="financial-journal.js"></script>
+<script src="project-money.js"></script>
 <script src="landscape-brief.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
@@ -2212,7 +2213,7 @@ const SUPABASE_URL = 'https://chbkkoxwzpaghanofvqk.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_fOLaPnbXjzQnJwG__wVzzg_D0nMO-n0';
 function createAppClient(token){
   return supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{global:{
-    headers:token?{'x-session-token':token,'x-finance-client':'1'}:{},
+    headers:token?{'x-session-token':token,'x-finance-client':'1','x-project-money-client':'2'}:{},
     fetch:(input,options)=>ARHITTEKJournal.safeFetch(input,options)
   }});
 }
@@ -2371,7 +2372,8 @@ function getProjectExpenses(p){
     .reduce((sum,e)=>sum + Number(e.amount||0),0);
 
   // Старые проекты могли хранить расходы только в projects.expenses.
-  return manual > 0 ? manual : Math.max(0, Number(p.expenses)||0);
+  const documents=(state.invoices||[]).filter(i=>i.project_id===p.id&&!i.deleted_at&&!i.paid_by_client).reduce((sum,i)=>sum+Number(i.amount||0),0);
+  return p.expenses_opening!==undefined?Math.round((Number(p.expenses_opening||0)+manual+documents)*100)/100:Math.max(manual+documents,Number(p.expenses)||0);
 }
 function isInvoiceLinkedExpense(entry){
   const id=typeof ARHITTEKCash!=='undefined'?ARHITTEKCash.invoicePaymentId(entry):null;
@@ -4962,6 +4964,8 @@ async function saveProject(){
     return;
   }
 
+  if(editingProjectId){for(const field of ['advance','balance','expenses','fee_paid','co_fee_paid'])delete payload[field];}
+  else{payload.advance=0;payload.balance=isConstr?0:price;payload.expenses=0;payload.fee_paid=0;payload.co_fee_paid=0;}
   projectSaveInFlight=true;
   let mainRecordSaved=false;
   try{
@@ -4996,24 +5000,7 @@ async function saveProject(){
       await logAudit('project', data.id, payload.name, 'create', {});
       showToast('Проект добавлен');
     }
-    // Для строительного объекта баланс и расходы — производные значения.
-    // Пересчитываем их только после успешного сохранения основной записи.
-    if(savedProjectId && isConstr){
-      await loadAll();
-      const saved = state.projects.find(x=>x.id===savedProjectId);
-      if(saved){
-        const fin = getConstructionFinancials(saved);
-        const financialUpdatedAt=new Date().toISOString();
-        const {error: finErr} = await sb.from('projects').update({
-          expenses: fin.directCosts,
-          advance: fin.received,
-          balance: fin.balance,
-          updated_at: financialUpdatedAt
-        }).eq('id', savedProjectId);
-        if(finErr) throw finErr;
-        editingProjectLoadedAt=financialUpdatedAt;
-      }
-    }
+    // Server source projections own the financial fields.
 
     // Добавляем новых участников до удаления прежних: сбой вставки не стирает команду.
     if(savedProjectId){
@@ -5069,28 +5056,13 @@ async function deleteProject(){
 // ============================================================
 // QUICK BALANCE EDIT (from debt list on overview)
 // ============================================================
-async function updateProjectBalance(id, newBalance){
-  try{
-    const p = state.projects.find(x=>x.id===id);
-    if(p && isConstructionProject(p)){
-      showToast('Для строительного объекта остаток рассчитывается автоматически по приходам и расходам.');
-      return;
-    }
-    const advance = p ? (Number(p.advance)||0) : 0;
-    let payment_status;
-    if(newBalance <= 0) payment_status = 'Оплачен';
-    else if(advance > 0) payment_status = 'Частично оплачен';
-    else payment_status = 'Ждём оплату';
-
-    const {error} = await sb.from('projects').update({balance: newBalance, payment_status, updated_at: new Date().toISOString()}).eq('id', id);
-    if(error) throw error;
-    await logAudit('project', id, p ? p.name : '', 'update', {balance: {old: p?p.balance:null, new: newBalance}, payment_status: {old: p?p.payment_status:null, new: payment_status}});
-    showToast(newBalance === 0 ? 'Отмечено как оплачено' : 'Остаток обновлён');
-    await loadAll();
-  }catch(e){
-    console.error(e);
-    showToast('Ошибка сохранения');
-  }
+async function updateProjectBalance(id,newBalance){
+  const p=state.projects.find(x=>x.id===id);if(!p)return;
+  if(isConstructionProject(p)){showToast('Остаток объекта рассчитывается по операциям');return;}
+  const due=Number(p.balance)||0,amount=Math.round((due-Number(newBalance))*100)/100;
+  if(amount<=0){showToast('Долг меняется оплатой, возвратом или изменением цены договора');return;}
+  openPaymentSheet(id);document.getElementById('payment-amount').value=amount;
+  document.getElementById('payment-note').value='Оплата долга по проекту';
 }
 
 function editBalance(id, el){
@@ -5249,8 +5221,8 @@ function financeDeptOf(p){
 // Current salary rates; partial months use calendar days from employee creation.
 function salaryForRange(emp, from, to){
   const rate=Math.max(0,Number(emp.fixed_salary)||0);
-  if(!rate || !from || !to || from>to) return 0;
-  const hired=(emp.created_at||'').slice(0,10), start=hired&&hired>from?hired:from;
+  if(!from || !to || from>to) return 0;
+  const hired=emp.created_at&&typeof ARHITTEKCash!=='undefined'?ARHITTEKCash.day(new Date(emp.created_at)):(emp.created_at||'').slice(0,10), start=hired&&hired>from?hired:from;
   if(start>to) return 0;
   const [sy,sm]=start.split('-').map(Number),[ey,em]=to.split('-').map(Number);
   let total=0;
@@ -5258,7 +5230,8 @@ function salaryForRange(emp, from, to){
     const y=Math.floor(i/12),m=i%12+1,month=`${y}-${String(m).padStart(2,'0')}`,days=new Date(y,m,0).getDate();
     const first=month===start.slice(0,7)?Number(start.slice(8,10)):1;
     const last=month===to.slice(0,7)?Number(to.slice(8,10)):days;
-    total+=rate*Math.max(0,last-first+1)/days;
+    const periodRate=typeof ProjectMoney==='undefined'?rate:ProjectMoney.salaryRate(emp,month);
+    total+=periodRate*Math.max(0,last-first+1)/days;
   }
   return Math.round(total*100)/100;
 }
@@ -5350,7 +5323,7 @@ function completedProjectEarningsForRange(from, to){
 
   // Гарантированный оклад всегда присутствует в табеле текущего месяца,
   // даже если сотрудник не участвовал ни в одном завершённом проекте.
-  state.employees.filter(e=>e.active!==false && e.is_salaried).forEach(emp=>{
+  state.employees.filter(e=>e.active!==false&&e.is_salaried||(typeof ProjectMoney!=='undefined'&&ProjectMoney.hasSalaryPeriod(e.id,from,to))).forEach(emp=>{
     if(!employees[emp.id]) employees[emp.id] = {earned:0, items:[]};
     employees[emp.id].salary = salaryForRange(emp, from, to);
   });
@@ -5365,9 +5338,9 @@ function splitPayrollByEmployee(employeesEarned){
   let payrollPaidOut = 0, companyRetained = 0;
   // Гарантированный оклад выплачивается независимо от количества завершённых проектов.
   // Проектные начисления добавляются сверху, если они есть.
-  state.employees.filter(e=>e.active!==false || employeesEarned[e.id]?.earned).forEach(emp=>{
+  state.employees.filter(e=>e.active!==false || employeesEarned[e.id]?.earned || employeesEarned[e.id]?.salary).forEach(emp=>{
     const earned = employeesEarned[emp.id]?.earned || 0;
-    const salary = emp.is_salaried && emp.active!==false ? (employeesEarned[emp.id]?.salary ?? (Number(emp.fixed_salary)||0)) : 0;
+    const salary = employeesEarned[emp.id]?.salary ?? (emp.is_salaried&&emp.active!==false?(Number(emp.fixed_salary)||0):0);
     const payout = salary + earned;
     result[emp.id] = {earned, payout, retained:0, isSalaried:!!emp.is_salaried, salary};
     payrollPaidOut += payout;
@@ -6219,16 +6192,7 @@ function renderProjectExpenses(projectId){
 // Считаем и обычные расходы (project_expense), и начисления исполнителям по м² (role_payout) —
 // последние тоже уменьшают прибыль/остаток компании по проекту.
 async function syncProjectExpensesTotal(projectId){
-  const p = state.projects.find(x=>x.id===projectId);
-  if(!p) return 0;
-  // role_payout — ФОТ, а не прямой расход проекта. Не записываем его в
-  // projects.expenses, иначе он попадает в себестоимость и затем повторно в ФОТ.
-  const total = isConstructionProject(p)?getProjectExpenses({...p,expenses:0}):(state.ledger||[]).filter(e=>e.project_id===projectId&&e.type==='project_expense'&&!e.deleted_at).reduce((sum,e)=>sum+(Number(e.amount)||0),0);
-  const {error} = await sb.from('projects')
-    .update({expenses: total, updated_at:new Date().toISOString()})
-    .eq('id', projectId);
-  if(error) throw error;
-  return total;
+ const p=state.projects.find(x=>x.id===projectId);return p?getProjectExpenses(p):0;
 }
 
 // ============================================================
@@ -6609,12 +6573,19 @@ function openPaymentSheet(projectId){
   const ids=[...new Set([p?.employee_id,p?.co_employee_id,...projectRolePayoutEntries(paymentProjectId).map(r=>r.payee_employee_id)].filter(Boolean))];
   document.getElementById('payment-payee').innerHTML=ids.map(id=>`<option value="${escapeHtml(id)}">${escapeHtml(findEmployee(id)?.name||'Сотрудник')}</option>`).join('');
   document.getElementById('payment-payee-field').hidden=true;
+  window.ProjectMoney?.lockForm(paymentProjectId);
   document.getElementById('paymentSheetOverlay').classList.add('active');
   window.ARHITTEKCash?.attachCountField('payment-note');
+  const pendingPayment=window.ProjectMoney?.pending('create',paymentProjectId)?.payload;
+  if(pendingPayment){paymentType=pendingPayment.type;document.getElementById('payment-amount').value=pendingPayment.amount;document.getElementById('payment-date').value=pendingPayment.entry_date;document.getElementById('payment-note').value=pendingPayment.description;
+   document.querySelectorAll('#payment-type .yn-btn').forEach(b=>b.classList.toggle('selected',b.dataset.value===paymentType));
+   document.getElementById('payment-payee-field').hidden=paymentType!=='fee_payment';if(pendingPayment.payee_employee_id)document.getElementById('payment-payee').value=pendingPayment.payee_employee_id;
+  }
 }
 
 document.querySelectorAll('#payment-type .yn-btn').forEach(btn=>{
   btn.addEventListener('click', ()=>{
+    if(window.ProjectMoney?.pending('create',paymentProjectId))return;
     document.querySelectorAll('#payment-type .yn-btn').forEach(b=>b.classList.remove('selected'));
     btn.classList.add('selected');
     paymentType = btn.dataset.value;
@@ -6645,45 +6616,17 @@ async function savePayment(){
   const payeeEmployeeId=paymentType==='fee_payment'?document.getElementById('payment-payee').value:null;
   if(paymentType==='fee_payment'&&!payeeEmployeeId){showToast('Укажите сотрудника в команде проекта');return;}
 
-  const updates = {};
-  if(paymentType === 'fee_payment'){
-    const field=projectFeePaidField(p,{payee_employee_id:payeeEmployeeId});
-    if(field)updates[field]=(Number(p[field])||0)+amount;
-  }else if(paymentType === 'withdrawal'){
-    // No effect on project financial fields — purely a journal record with a reason
-  }else{
-    const newAdvance = (Number(p.advance)||0) + amount;
-    updates.advance = newAdvance;
-    updates.balance = Math.max(0, (Number(p.price)||0) - newAdvance);
-  }
-
   paymentSaveInFlight=true;
   document.getElementById('payment-save').disabled=true;
   showToast('Сохранение…');
-  let insertedPayment=null,projectSynced=false;
+  let projectSynced=false;
   try{
     const t = ledgerTypeLabels[paymentType];
     const description = window.ARHITTEKCash?.operationDescription ? ARHITTEKCash.operationDescription('payment-note',note || t?.label || 'Платёж') : note || t?.label || 'Платёж';
-    const {data, error} = await sb.from('ledger_entries').insert({
-      type: paymentType, project_id: projectId, description, amount, entry_date,
-      ...(paymentType==='fee_payment'?{payee_employee_id:payeeEmployeeId}:{}),
-      received_by: session ? session.employeeId : null,
-    }).select().single();
-    if(error) throw error;
-    insertedPayment=data;
-
-    if(isConstructionProject(p)){
-      const finAfterPayment = getConstructionFinancials(p, [...(state.ledger||[]), data]);
-      updates.balance=finAfterPayment.balance;
-      if(CONSTRUCTION_INCOME_TYPES.includes(paymentType))updates.advance=finAfterPayment.received;
-    }
-    if(Object.keys(updates).length){
-      let query=sb.from('projects').update(updates).eq('id',projectId);
-      for(const field of Object.keys(updates)) query=p[field]==null?query.is(field,null):query.eq(field,p[field]);
-      const {data:updated,error:projErr}=await query.select().maybeSingle();
-      if(projErr) throw projErr;
-      if(!updated) throw new Error('Проект изменился на другом устройстве. Обновите данные перед повтором.');
-    }
+    const accepted=await ProjectMoney.confirm('create',ProjectMoney.pending('create',projectId)?.payload||{
+      type:paymentType,project_id:projectId,description,amount,entry_date,
+      payee_employee_id:paymentType==='fee_payment'?payeeEmployeeId:null,wallet_id:window.ARHITTEKFinanceWorkspace?.selectedWallet()||null
+    },projectId);
     projectSynced=true;
 
     await logAudit('project', projectId, p.name, 'update', {
@@ -6698,6 +6641,7 @@ async function savePayment(){
     if(editingProjectId === projectId){
       const updated = state.projects.find(x=>x.id===projectId);
       if(updated){
+        ProjectMoney.advanceEditorVersion(p,updated);
         document.getElementById('pf-advance').value = updated.advance ?? '';
         document.getElementById('pf-balance').value = updated.balance ?? '';
         document.getElementById('pf-feepaid').value = updated.fee_paid ?? '';
@@ -6713,14 +6657,11 @@ async function savePayment(){
     }
   }catch(e){
     console.error(e);
-    if(insertedPayment&&!projectSynced){
-      const rollback=await sb.from('ledger_entries').update({deleted_at:new Date().toISOString()}).eq('id',insertedPayment.id);
-      showToast(rollback.error?'Не удалось завершить платёж. Проверьте журнал перед повтором':'Платёж не сохранён: данные проекта изменились или недоступны');
-    }else showToast(projectSynced?'Платёж сохранён. Обновите страницу для проверки':'Платёж не сохранён. Проверьте журнал перед повтором');
+    showToast(projectSynced?'Платёж сохранён. Обновите страницу для проверки':e.message||'Не получено подтверждение платежа. Повторите проверку прежней отправки');
     await loadAll();
   }finally{
     paymentSaveInFlight=false;
-    document.getElementById('payment-save').disabled=false;
+    ProjectMoney.lockForm(projectId);document.getElementById('payment-save').disabled=false;
   }
 }
 
@@ -6758,43 +6699,13 @@ async function cancelPayment(entryId){
   if(paymentCancellationsInFlight.has(entryId))return;
   if(!confirm('Отменить этот платёж? Сумма будет возвращена в расчёты проекта.')) return;
   paymentCancellationsInFlight.add(entryId);
-  let cancelledEntry=null,projectSynced=false;
+  let projectSynced=false;
   try{
     const e = state.ledger.find(x => x.id === entryId);
     if(!e){ showToast('Запись не найдена'); return; }
     const p = state.projects.find(x => x.id === e.project_id);
 
-    // Soft-delete the ledger entry
-    const {data:cancelled,error} = await sb.from('ledger_entries').update({deleted_at: new Date().toISOString()}).eq('id', entryId).is('deleted_at',null).select().maybeSingle();
-    if(error) throw error;
-    if(!cancelled){await loadAll();return;}
-    cancelledEntry=e;
-
-    // Reverse the project financial fields
-    const updates = {};
-    if(p && isConstructionProject(p)){
-      const ledgerAfterCancel = (state.ledger||[]).map(x=>x.id===entryId ? {...x, deleted_at:new Date().toISOString()} : x);
-      const finAfterCancel = getConstructionFinancials(p, ledgerAfterCancel);
-      updates.balance = finAfterCancel.balance;
-      if(CONSTRUCTION_INCOME_TYPES.includes(e.type))updates.advance=finAfterCancel.received;
-      if(e.type==='fee_payment'){
-        const field=projectFeePaidField(p,e);if(field)updates[field]=Math.max(0,(Number(p[field])||0)-(Number(e.amount)||0));
-      }
-    }else if(e.type === 'fee_payment'){
-      const field=projectFeePaidField(p,e);if(field)updates[field]=Math.max(0,(Number(p?.[field])||0)-(Number(e.amount)||0));
-    } else if(e.type !== 'withdrawal'){
-      const newAdvance = Math.max(0, (Number(p?.advance)||0) - (Number(e.amount)||0));
-      updates.advance = newAdvance;
-      updates.balance = Math.max(0, (Number(p?.price)||0) - newAdvance);
-    }
-
-    if(p && Object.keys(updates).length){
-      let query=sb.from('projects').update(updates).eq('id',p.id);
-      for(const field of Object.keys(updates))query=p[field]==null?query.is(field,null):query.eq(field,p[field]);
-      const {data:updated,error:projErr}=await query.select().maybeSingle();
-      if(projErr) throw projErr;
-      if(!updated)throw new Error('Проект изменился на другом устройстве');
-    }
+    const accepted=await ProjectMoney.confirm('cancel',{entry_id:entryId,reason:'Отмена платежа проекта'},entryId);
     projectSynced=true;
 
     if(p) await logAudit('project', p.id, p.name, 'update', {
@@ -6807,6 +6718,7 @@ async function cancelPayment(entryId){
     if(editingProjectId === e.project_id){
       const updated = state.projects.find(x => x.id === e.project_id);
       if(updated){
+        ProjectMoney.advanceEditorVersion(p,updated);
         document.getElementById('pf-advance').value = updated.advance||0;
         document.getElementById('pf-balance').value = updated.balance||0;
       }
@@ -6819,10 +6731,7 @@ async function cancelPayment(entryId){
     }
   }catch(err){
     console.error(err);
-    if(cancelledEntry&&!projectSynced){
-      const rollback=await sb.from('ledger_entries').update({deleted_at:null}).eq('id',entryId);
-      showToast(rollback.error?'Отмена не завершена. Проверьте историю перед повтором':'Платёж сохранён: отмена не завершена');
-    }else showToast(projectSynced?'Платёж отменён. Обновите страницу':'Ошибка отмены платежа');
+    showToast(projectSynced?'Платёж отменён. Обновите страницу':err.message||'Не получено подтверждение отмены. Повторите проверку');
     await loadAll();
   }finally{
     paymentCancellationsInFlight.delete(entryId);
@@ -7316,13 +7225,14 @@ function isConstructionProject(p){
     if(constrDept && cat.department_id === constrDept.id) return true;
     const nm = (cat.name||'').toLowerCase();
     if(nm.includes('строительств') || nm.includes('ремонт') || nm.includes('монтаж')) return true;
+    return false;
   }
   return (state.invoices||[]).some(inv=>inv.project_id===p.id&&!inv.deleted_at);
 }
 
 function getConstructionReceived(projectId, ledgerOverride=null){
   const ledger = ledgerOverride || state.ledger || [];
-  return ledger
+  return Number(state.projects.find(p=>p.id===projectId)?.received_opening||0)+ledger
     .filter(e => e.project_id === projectId && CONSTRUCTION_INCOME_TYPES.includes(e.type) && !e.deleted_at)
     .reduce((s,e) => s + Number(e.amount||0), 0);
 }
@@ -7583,7 +7493,7 @@ function constructionCompanyFeePlanHtml(p,fin=null){
     '<div class="fee-row"><div class="fl">Расходы по документам</div><div class="fv">'+constructionMoney(f.companyMarkupBase)+'</div></div>'+
     '<div class="fee-row"><div class="fl">Расчётная наценка компании</div><div class="fv">'+constructionMoney(f.companyMarkupAmount)+'</div></div>'+
     '<div class="fee-row total"><div class="fl">Расходы с наценкой</div><div class="fv">'+constructionMoney(f.totalWithMarkup)+'</div></div>'+
-    '<div class="fee-row"><div class="fl">Гонорар компании, записанный ранее</div><div class="fv">'+constructionMoney(f.companyMarkupRecordedPaid)+'</div></div>'+
+    '<div class="fee-row"><div class="fl">Историческая отметка выплат (не доход компании)</div><div class="fv">'+constructionMoney(f.companyMarkupRecordedPaid)+'</div></div>'+
     '<div class="fee-row"><div class="fl">Расчётный остаток аванса после расходов и наценки</div><div class="fv" style="color:'+(f.isCalculatedDeficit?'var(--red)':'var(--text)')+'">'+constructionMoney(f.calculatedAdvanceBalance)+'</div></div>'+
     '<p class="note">Прямые оплаты заказчика учтены в расходах и наценке, но не вычитаются повторно из переданного нам аванса. Оплата накладных подтверждается отдельно. Этот расчёт не изменяет деньги по журналу и свободный резерв.</p>'+legacyNote+'</div>';
 }
@@ -8070,15 +7980,7 @@ async function saveInvoiceSheet(){
     if(!data)throw new Error('Накладная не найдена. Обновите список перед повтором');
     persisted=true;
 
-    // Read the complete server total: another invoice may have changed while
-    // this photo was uploading. Never copy the amount into the next open row.
-    const totals=await fetchAllRows(()=>sb.from('invoices').select('id,amount',{count:'exact'}).eq('project_id',inv.project_id).order('id'));
-    if(totals.error)throw totals.error;
-    const newTotal=(totals.data||[]).reduce((sum,row)=>sum+Number(row.amount||0),0)+getConstructionExpenses(state.projects.find(p=>p.id===inv.project_id)).manualTotal;
-    if(!canAccessConstructionProject(inv.project_id,actor))throw new Error('Сеанс или доступ к объекту изменился');
-    const update=await sb.from('projects').update({expenses: newTotal}).eq('id', inv.project_id);
-    if(update.error)throw update.error;
-
+    // Invoice mutation and project totals are committed by the server together.
     if(!canAccessConstructionProject(inv.project_id,actor))throw new Error('Сеанс или доступ к объекту изменился');
     await logAudit('project', inv.project_id, (state.projects.find(p=>p.id===inv.project_id)||{}).name||'', 'update', {invoice_edited:{old:`${inv.number}—${fmtMoney(inv.amount)}`, new:`${number}—${fmtMoney(amount)}`}});
 
@@ -8116,12 +8018,7 @@ async function deleteInvoiceSheet(){
     if(error) throw error;
     persisted=true;
 
-    // Пересчитываем p.expenses
-    const projInvs = state.invoices.filter(i=>i.project_id===inv.project_id && i.id!==invoiceId);
-    const newTotal  = projInvs.reduce((s,i)=>s+Number(i.amount||0),0)+getConstructionExpenses(state.projects.find(p=>p.id===inv.project_id)).manualTotal;
-    if(!canAccessConstructionProject(inv.project_id,actor))throw new Error('Сеанс или доступ к объекту изменился');
-    await sb.from('projects').update({expenses: newTotal}).eq('id', inv.project_id);
-
+    // Source deletion already refreshed project totals in its transaction.
     if(invSheetCurrentId===invoiceId&&invoiceFormGeneration===generation)closeInvoiceSheet();
     await loadAll();
     if(currentObjectId === inv.project_id){ const p=state.projects.find(x=>x.id===inv.project_id); if(p) renderObjectSummary(p); renderObjTabContent(); }
@@ -8183,7 +8080,7 @@ async function exportConstrPdf(projectId){
     ['Расходы по документам:', `${constructionAmount(constrFin.companyMarkupBase)} руб.`],
     ['Расчётная наценка ARHITTEK'+(constrFin.companyMarkupRate===null?'':` ${constructionAmount(constrFin.companyMarkupRate)}%`)+':', constrFin.companyMarkupAmount===null?'Ставка не указана':`${constructionAmount(constrFin.companyMarkupAmount)} руб.`],
     ['Расходы с наценкой:', constrFin.totalWithMarkup===null?'Не определены':`${constructionAmount(constrFin.totalWithMarkup)} руб.`],
-    ['Гонорар компании, записанный ранее:', `${constructionAmount(constrFin.companyMarkupRecordedPaid)} руб.`],
+    ['Историческая отметка выплат (не доход компании):', `${constructionAmount(constrFin.companyMarkupRecordedPaid)} руб.`],
     ['Расчётный остаток аванса:', constrFin.calculatedAdvanceBalance===null?'Не определён':`${constructionAmount(constrFin.calculatedAdvanceBalance)} руб.`],
   ];
   summaryRows.forEach(([lbl,val])=>{
@@ -8583,27 +8480,7 @@ async function restoreItem(table, id, name){
       if(!state.financialDataReady)throw new Error('Не удалось проверить восстановленный платёж. Повторите обновление.');
       const p=getFinancialProjects().find(x=>x.id===restoredLedger.project_id);
       if(!p)throw new Error('Проект восстановленного платежа не найден');
-      const amount=Number(restoredLedger.amount)||0,updates={};
-      if(restoredLedger.type==='project_expense'){
-        const total=isConstructionProject(p)?getProjectExpenses({...p,expenses:0}):(state.ledger||[]).filter(e=>e.project_id===p.id&&e.type==='project_expense'&&!e.deleted_at).reduce((sum,e)=>sum+(Number(e.amount)||0),0);
-        updates.expenses=total;
-      }else if(restoredLedger.type==='fee_payment'){
-        const field=projectFeePaidField(p,restoredLedger);if(field)updates[field]=(Number(p[field])||0)+amount;
-      }else if(['advance','final_payment','materials_budget','construction_budget','income'].includes(restoredLedger.type)){
-        if(isConstructionProject(p)){const fin=getConstructionFinancials(p);updates.balance=fin.balance;updates.advance=fin.received;}
-        else{
-          updates.advance=(Number(p.advance)||0)+amount;
-          updates.balance=Math.max(0,(Number(p.price)||0)-updates.advance);
-        }
-      }
-      if(isConstructionProject(p))updates.balance=getConstructionFinancials(p).balance;
-      if(Object.keys(updates).length){
-        let query=sb.from('projects').update(updates).eq('id',p.id);
-        for(const field of Object.keys(updates))query=p[field]==null?query.is(field,null):query.eq(field,p[field]);
-        const update=await query.select('id').maybeSingle();
-        if(update.error)throw update.error;
-        if(!update.data)throw new Error('Суммы проекта изменились на другом устройстве. Повторите восстановление после обновления.');
-      }
+      // No extra increment: source restoration already refreshed project totals atomically.
     }
     dependentSynced=true;
     await logAudit(entityTypeMap[table],id,name,'restore',{});

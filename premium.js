@@ -2521,6 +2521,7 @@ function salaryPaymentRows(employeeId,month){
     .sort((a,b)=>String(b.entry_date||'').localeCompare(String(a.entry_date||''))||String(b.created_at||'').localeCompare(String(a.created_at||'')));
 }
 function salaryDueDay(){
+  if(state.financialJournal?.active&&state.financialJournal.workspace?.salary_due_day)return Number(state.financialJournal.workspace.salary_due_day);
   return Math.min(28,Math.max(1,parseInt(localStorage.getItem('finance_salary_due_day')||'10',10)||10));
 }
 function officeDueDay(kind){
@@ -2550,7 +2551,7 @@ function salaryPaymentState(employeeId,month,dueOverride){
   const legacyMarked=!rows.length&&!projectFeeRows.length&&LEGACY_PAID_FN(employeeId,month);
   const paid=Math.max(0,Math.round((legacyMarked?due:actualPaid)*100)/100);
   const remaining=Math.max(0,due-paid);
-  const dueDate=salaryDueDate(month);
+  const dueDate=(typeof ProjectMoney!=='undefined'?ProjectMoney.salaryDue(employeeId,month):null)||salaryDueDate(month);
   const overdue=remaining>0.009&&todayISO()>dueDate;
   return {due,paid,actualPaid,legacyMarked,overpaid:Math.max(0,paid-due),remaining,dueDate,overdue,rows,full:due>0&&remaining<=0.009};
 }

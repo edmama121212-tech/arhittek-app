@@ -113,11 +113,11 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
   return [__db.invoices.find(i=>i.id==='invoice-a').description,document.getElementById('invSheet-desc').value,invSheetCurrentId,document.querySelector('#invoiceSheetOverlay button[onclick="saveInvoiceSheet()"]').disabled];
  },['Материал A','Retry material','invoice-a',false]);
  await fresh();
- await check('Project-total failure accurately reports an already saved invoice',async()=>{
+ await check('Project projection failure rejects the entire invoice update without claiming success',async()=>{
   openInvoiceSheet('invoice-a');document.getElementById('invSheet-desc').value='Confirmed material';
   __fail={table:'projects',op:'update'};await saveInvoiceSheet();__fail=null;
-  return [__db.invoices.find(i=>i.id==='invoice-a').description,document.getElementById('toast').textContent.includes('Накладная сохранена'),document.getElementById('toast').textContent.includes('Не удалось')];
- },['Confirmed material',true,true]);
+  return [__db.invoices.find(i=>i.id==='invoice-a').description,document.getElementById('toast').textContent.includes('Накладная сохранена'),document.getElementById('toast').textContent.includes('Ошибка сохранения')];
+ },['Материал A',false,true]);
  await fresh();
  await check('A late employee audit confirmation cannot close another employee draft',async()=>{
   openEmployeeSheet('architect');document.getElementById('ef-name').value='Updated architect';
