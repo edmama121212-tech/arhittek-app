@@ -26,4 +26,17 @@ assert(result.blocking.some(s=>s.includes('2-й этаж')));passed++;
 result=core.analyze([title(),p1(),page(3,[...plan(2),...table()]),page(4,[w('Общая площадь дома: 45,00 м²',20,20)])]);
 eq(result.data.total_area,'45,00','Explicit whole-house area takes priority');
 eq(core.floorIn('План II этажа'),'floor2','Roman floor heading');
+
+eq(core.floorIn('План 2-го этажа. Стены подвала'),'floor2','Basement note cannot override named second floor');
+eq(core.floorIn('Кладочный план. Стены подвала'),null,'Basement wall legend cannot fabricate a level');
+eq(core.floorIn('Экспликация подвала'),'basement','Explicit basement explication remains supported');
+let skipped=table({caption:'Экспликация 1-го этажа'});skipped.find(w=>w.text==='2').text='7';
+result=core.analyze([page(1,[w('Проект №11525',20,20),w('Одноэтажный дом',20,50)]),page(2,[...plan(1),...skipped])]);
+eq(result.blocking,[],'Non-contiguous identifiers pass when printed total matches');
+let broken=table({caption:'Экспликация 1-го этажа'});broken.find(w=>w.text==='25.00').text='30.00';
+result=core.analyze([page(1,[w('Проект №11525',20,20),w('Одноэтажный дом',20,50)]),page(2,[...plan(1),...broken])]);
+eq([result.data.total_area,result.data.beds],[undefined,undefined],'Mismatched table cannot fabricate validated totals or room counts');
+let split=table({caption:'Экспликация 1-го этажа'});split=split.flatMap(item=>item.text==='20.00'?[w('20,',720,item.y0),w('00',740,item.y0)]:[item]);
+result=core.analyze([page(1,[w('Проект №11525',20,20),w('Одноэтажный дом',20,50)]),page(2,[...plan(1),...split])]);
+eq([result.data.total_area,result.blocking],['25,00',[]],'Split decimal PDF cells join before arithmetic validation');
 console.log(JSON.stringify({passed,failed:[]}));

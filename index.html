@@ -26,6 +26,7 @@
 <link rel="stylesheet" href="catalog-floors.css">
 <script src="catalog-pdf-core.js"></script>
 <script src="catalog-pdf-io.js"></script>
+<script src="catalog-ocr.js"></script>
 <script src="catalog-pdf.js"></script>
 <link rel="stylesheet" href="catalog-pdf.css">
 <script src="financial-journal.js"></script>
@@ -11283,7 +11284,8 @@ function ceAutoPrice(){
 // ============================================================
 // СКАНИРОВАНИЕ ЭКСПЛИКАЦИИ (OCR) — фото/камера → список комнат с площадями
 // ============================================================
-let ceScanPending = {}; // fieldId -> распознанные строки, ждут подтверждения
+let ceScanPending = {};
+let ceScanTokens = {}; // fieldId -> распознанные строки, ждут подтверждения
 
 // Библиотека распознавания грузится только когда реально нужна — не тормозит
 // обычную загрузку приложения (Tesseract.js — это ~500КБ+ данные языка).
@@ -11303,7 +11305,7 @@ function loadTesseractScript(){
 // на фото с телефона) по сравнению с сырым фото без обработки.
 async function preprocessForOcr(file){
   const {source, width, height} = await loadOrientedImage(file);
-  const TARGET_SIDE = 2000;
+  const TARGET_SIDE = 3200;
   const scale = TARGET_SIDE / Math.max(width, height);
   const w = Math.round(width * scale), h = Math.round(height * scale);
   const canvas = document.createElement('canvas');
@@ -11317,7 +11319,7 @@ async function preprocessForOcr(file){
   const d = imgData.data;
   for(let i=0;i<d.length;i+=4){
     const gray = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
-    const contrasted = Math.min(255, Math.max(0, (gray-128)*1.6 + 128));
+    const contrasted = Math.min(255, Math.max(0, (gray-128)*1.2 + 128));
     d[i] = d[i+1] = d[i+2] = contrasted;
   }
   ctx.putImageData(imgData, 0, 0);
@@ -11330,21 +11332,7 @@ async function preprocessForOcr(file){
 // Поэтому строку с raw text не используем вообще: берём слова с их
 // координатами (bbox) и сами группируем их в строки по вертикали, а внутри
 // строки сортируем по горизонтали — это даёт правильный порядок «слева направо».
-function extractOcrWords(data){
-  const words = [];
-  for(const block of (data && data.blocks) || []){
-    for(const para of block.paragraphs || []){
-      for(const line of para.lines || []){
-        for(const word of line.words || []){
-          const text = (word.text||'').trim();
-          if(!text || !word.bbox) continue;
-          words.push({ text, confidence: word.confidence, x0: word.bbox.x0, x1: word.bbox.x1, y0: word.bbox.y0, y1: word.bbox.y1 });
-        }
-      }
-    }
-  }
-  return words;
-}
+function extractOcrWords(data){ return CatalogOcr.words(data); }
 
 function wordsToRowLines(words, minConfidence){
   const kept = words.filter(w => w.confidence == null || w.confidence >= minConfidence);
@@ -11369,28 +11357,7 @@ function wordsToRowLines(words, minConfidence){
 // «название комнаты — площадь». Рассчитано на строки вида «1 Кухня 12,5»,
 // «Спальня: 14.0 м²» и т.п. — реальный OCR по table-фото шумный, поэтому
 // результат всегда показывается на подтверждение, а не вставляется молча.
-function parseOcrExplicationText(text){
-  // Строки-итоги (не комнаты) — пропускаем всегда, даже с цифрой в конце.
-  // \b не работает с кириллицей в JS-регекспах, поэтому граница слова — через lookahead.
-  const TOTAL_WORDS = /^(итого|всего|общая\s+площадь|сумма)(?=[\s:.,]|$)/i;
-  // Заголовки таблицы — пропускаем, только если в строке вообще нет цифр
-  // (иначе так же отфильтровали бы настоящую комнату с похожим словом).
-  const HEADER_WORDS = /наименование|площадь,?\s*м|экспликац|помещен|поз\.?$/i;
-  const lines = (text||'').split('\n').map(l=>l.trim()).filter(Boolean);
-  const results = [];
-  for(const line of lines){
-    if(TOTAL_WORDS.test(line)) continue;
-    if(HEADER_WORDS.test(line) && !/\d/.test(line)) continue;
-    const m = line.match(/^(.*?)[\s:.\-–—]*?(\d{1,3}[.,]\d{1,2}|\d{1,3})\s*(?:м\s*[²2]|кв\.?\s*м\.?)?\.?\s*$/iu);
-    if(!m) continue;
-    let name = m[1].replace(/^\s*(?:№\s*)?\d{1,2}[.)]?\s+/, '').replace(/[\s:.\-–—]+$/, '').trim();
-    let area = m[2].replace(',', '.');
-    const areaNum = parseFloat(area);
-    if(!name || name.length < 2 || !areaNum || areaNum <= 0 || areaNum > 300) continue;
-    results.push({name, area});
-  }
-  return results;
-}
+function parseOcrExplicationText(text){ return CatalogOcr.parse(text); }
 
 async function scanExplication(input, fieldId){
   const file = input.files[0];
@@ -11399,11 +11366,12 @@ async function scanExplication(input, fieldId){
   statusEl.className = 'ce-scan-status';
   statusEl.innerHTML = '⏳ Загружаем распознавание…';
 
-  let worker = null;
+  let worker = null,prepared=null;const generation=cardEditorGeneration,scanToken=(ceScanTokens[fieldId]||0)+1;ceScanTokens[fieldId]=scanToken;ceScanPending[fieldId]=null;
+  const check=()=>{if(generation!==cardEditorGeneration||ceScanTokens[fieldId]!==scanToken||!statusEl.isConnected)throw new DOMException('Отменено','AbortError');};
   try{
-    await loadTesseractScript();
+    await loadTesseractScript();check();
     statusEl.innerHTML = '⏳ Готовим фото…';
-    const prepared = await preprocessForOcr(file);
+    prepared = await preprocessForOcr(file);check();
 
     statusEl.innerHTML = '⏳ Распознаём текст на фото…';
     // Важно: НЕ используем Tesseract.recognize() напрямую — у него нет доступа
@@ -11413,34 +11381,26 @@ async function scanExplication(input, fieldId){
     // поэтому строки мы собираем сами из координат слов (см. wordsToRowLines).
     worker = await Tesseract.createWorker('rus', Tesseract.OEM.LSTM_ONLY, {
       logger: m => {
-        if(m.status === 'recognizing text' && m.progress != null){
+        if(generation===cardEditorGeneration&&ceScanTokens[fieldId]===scanToken&&m.status === 'recognizing text' && m.progress != null){
           statusEl.innerHTML = `⏳ Распознаём… ${Math.round(m.progress*100)}%`;
         }
       }
     });
-    await worker.setParameters({
-      tessedit_pageseg_mode: Tesseract.PSM.AUTO,
-      preserve_interword_spaces: '1',
-    });
-    const { data } = await worker.recognize(prepared, {}, { blocks: true, text: true });
-
-    const words = extractOcrWords(data);
-    const rowLines = wordsToRowLines(words, 35);
-    const rebuiltText = rowLines.join('\n');
-    const rows = parseOcrExplicationText(rebuiltText);
+    const recognized=await CatalogOcr.recognize(worker,prepared,{check,onProgress:pass=>{statusEl.textContent='⏳ Распознаём таблицу: проход '+pass+' из 3…';}});
+    check();const rows=recognized.rows,rebuiltText=recognized.text;
     if(!rows.length){
       ceScanPending[fieldId] = null;
-      const fallbackText = rebuiltText || data.text || '';
+      const fallbackText = rebuiltText || '';
       statusEl.innerHTML = `
         <div class="ce-scan-preview">
-          Не удалось разобрать таблицу на комнаты и площади. Распознанный текст (проверьте и впишите вручную):<br>
+          Не найдены пары «комната — площадь». Нужна вся таблица, включая правый столбец с числами; снимите её крупнее. Распознанный текст:<br>
           <div style="margin-top:4px;color:#9ca3af;white-space:pre-wrap;">${escapeHtml(fallbackText.trim().slice(0,400)) || '(пусто)'}</div>
         </div>`;
     } else {
       ceScanPending[fieldId] = rows;
       statusEl.innerHTML = `
         <div class="ce-scan-preview">
-          Распознано комнат: ${rows.length}
+          Распознано комнат: ${rows.length}${recognized.table&&!recognized.table.verified?'<div>⚠ Сумма комнат не совпала с итогом таблицы. Проверьте числа перед добавлением.</div>':''}
           ${rows.map(r=>`<div class="row"><span>${escapeHtml(r.name)}</span><span>${escapeHtml(r.area)}</span></div>`).join('')}
           <div class="ce-scan-actions">
             <button type="button" class="ce-scan-add" onclick="applyScannedExplication('${fieldId}')">Добавить в список</button>
@@ -11449,10 +11409,12 @@ async function scanExplication(input, fieldId){
         </div>`;
     }
   }catch(e){
+    if(e.name==='AbortError')return;
     console.error('OCR error', e);
     statusEl.innerHTML = '⚠ Не удалось распознать фото — попробуйте другое фото или впишите вручную';
   }finally{
-    if(worker) await worker.terminate();
+    if(worker) await worker.terminate().catch(()=>{});
+    if(prepared)prepared.width=prepared.height=0;
     input.value = '';
   }
 }
@@ -11463,7 +11425,9 @@ function applyScannedExplication(fieldId){
   const ta = document.getElementById(fieldId);
   const newLines = rows.map(r=>`${r.name}: ${r.area}`).join('\n');
   ta.value = ta.value.trim() ? ta.value.trim()+'\n'+newLines : newLines;
-  cancelScannedExplication(fieldId);
+  const areaId=fieldId.replace('ce-expl','ce-area'),sum=parseExpl(ta.value).reduce((s,r)=>s+CatalogPdfCore.number(r.area),0);
+  if(sum>0)setVal(areaId,CatalogPdfCore.area(sum));
+  cancelScannedExplication(fieldId);markCardEditorDirty();
   cePreview();
 }
 
