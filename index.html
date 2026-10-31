@@ -7980,15 +7980,7 @@ async function saveInvoiceSheet(){
     if(!data)throw new Error('Накладная не найдена. Обновите список перед повтором');
     persisted=true;
 
-    // Read the complete server total: another invoice may have changed while
-    // this photo was uploading. Never copy the amount into the next open row.
-    const totals=await fetchAllRows(()=>sb.from('invoices').select('id,amount',{count:'exact'}).eq('project_id',inv.project_id).order('id'));
-    if(totals.error)throw totals.error;
-    const newTotal=(totals.data||[]).reduce((sum,row)=>sum+Number(row.amount||0),0)+getConstructionExpenses(state.projects.find(p=>p.id===inv.project_id)).manualTotal;
-    if(!canAccessConstructionProject(inv.project_id,actor))throw new Error('Сеанс или доступ к объекту изменился');
-    const update=await sb.from('projects').update({expenses: newTotal}).eq('id', inv.project_id);
-    if(update.error)throw update.error;
-
+    // Invoice mutation and project totals are committed by the server together.
     if(!canAccessConstructionProject(inv.project_id,actor))throw new Error('Сеанс или доступ к объекту изменился');
     await logAudit('project', inv.project_id, (state.projects.find(p=>p.id===inv.project_id)||{}).name||'', 'update', {invoice_edited:{old:`${inv.number}—${fmtMoney(inv.amount)}`, new:`${number}—${fmtMoney(amount)}`}});
 
@@ -8026,12 +8018,7 @@ async function deleteInvoiceSheet(){
     if(error) throw error;
     persisted=true;
 
-    // Пересчитываем p.expenses
-    const projInvs = state.invoices.filter(i=>i.project_id===inv.project_id && i.id!==invoiceId);
-    const newTotal  = projInvs.reduce((s,i)=>s+Number(i.amount||0),0)+getConstructionExpenses(state.projects.find(p=>p.id===inv.project_id)).manualTotal;
-    if(!canAccessConstructionProject(inv.project_id,actor))throw new Error('Сеанс или доступ к объекту изменился');
-    await sb.from('projects').update({expenses: newTotal}).eq('id', inv.project_id);
-
+    // Source deletion already refreshed project totals in its transaction.
     if(invSheetCurrentId===invoiceId&&invoiceFormGeneration===generation)closeInvoiceSheet();
     await loadAll();
     if(currentObjectId === inv.project_id){ const p=state.projects.find(x=>x.id===inv.project_id); if(p) renderObjectSummary(p); renderObjTabContent(); }
