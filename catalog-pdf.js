@@ -93,12 +93,12 @@
     const job=options.job||{...options,cancelled:false};let task;
     try{
       if(!file||file.size===0)throw new Error('PDF-файл пуст');
-      if(file.size>350*1024*1024)throw new Error('PDF больше 350 МБ. Сохраните уменьшенную копию альбома');
       if(!(await file.slice(0,1024).text()).includes('%PDF-'))throw new Error('Выберите PDF-файл архитектурного альбома');
       progress(job,'Открываю PDF…',2);const pdfjs=await library();check(job);
-      const bytes=await file.arrayBuffer();check(job);
-      const digest=await crypto.subtle.digest('SHA-256',bytes),sha256=[...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,'0')).join('');
-      task=pdfjs.getDocument({data:new Uint8Array(bytes),isEvalSupported:false,enableXfa:false,stopAtErrors:true,canvasMaxAreaInBytes:16*1024*1024,standardFontDataUrl:PDF_BASE+'standard_fonts/',cMapUrl:PDF_BASE+'cmaps/',cMapPacked:true,wasmUrl:PDF_BASE+'wasm/'});job.loadingTask=task;
+      const prepared=await CatalogPdfIO.prepare(file,job);check(job);
+      progress(job,'Проверяю альбом…',3);const sha256=await CatalogPdfIO.hash(file,job);
+      const source=await CatalogPdfIO.rangeSource(pdfjs,prepared.file,job);check(job);
+      task=pdfjs.getDocument({...source,isEvalSupported:false,enableXfa:false,stopAtErrors:true,canvasMaxAreaInBytes:16*1024*1024,standardFontDataUrl:PDF_BASE+'standard_fonts/',cMapUrl:PDF_BASE+'cmaps/',cMapPacked:true,wasmUrl:PDF_BASE+'wasm/'});job.loadingTask=task;
       const doc=await task.promise;check(job);
       if(doc.numPages>160)throw new Error('В альбоме больше 160 страниц. Загрузите отдельно архитектурную часть');
       let pages=[];
@@ -128,13 +128,14 @@
         try{const item=exportImage(canvas,pages[asset.page-1],asset.plan);images[asset.index]=item.image;thumbnails[asset.index]=item.thumbnail;}
         finally{canvas.width=canvas.height=0;}
       }
-      result.sources.facades=facades;result.images=images;result.thumbnails=thumbnails;result.sha256=sha256;
+      result.sources.facades=facades;result.sources.file={originalBytes:file.size,workingBytes:prepared.file.size,optimized:prepared.optimized,lossless:true};result.images=images;result.thumbnails=thumbnails;result.sha256=sha256;
       progress(job,'Карточка заполнена',95);return result;
     }catch(e){
+      if(job.readError)e=job.readError;
       if(e.name==='PasswordException')throw new Error('PDF защищён паролем. Загрузите копию без пароля');
       if(e.name==='InvalidPDFException')throw new Error('Не удалось открыть PDF. Проверьте файл или экспортируйте альбом повторно');
       throw e;
-    }finally{job.loadingTask=null;if(job.ocrWorker){await job.ocrWorker.terminate().catch(()=>{});job.ocrWorker=null;}if(task)await task.destroy().catch(()=>{});}
+    }finally{job.loadingTask=null;if(job.ocrWorker){await job.ocrWorker.terminate().catch(()=>{});job.ocrWorker=null;}if(task)await task.destroy().catch(()=>{});job.fileTransport?.abort();job.fileTransport=null;await CatalogPdfIO.cleanup(job);}
   }
   function status(text,value){
     const label=document.getElementById('ce-pdf-status'),bar=document.getElementById('ce-pdf-progress');
@@ -145,7 +146,7 @@
     const job=active;if(!job)return;
     // A database save has its own snapshot/confirmation guard and must finish.
     if(job.saving)return;
-    job.cancelled=true;unlock(job);active=null;job.textReader?.cancel().catch(()=>{});job.renderTask?.cancel();job.loadingTask?.destroy().catch(()=>{});job.ocrWorker?.terminate().catch(()=>{});status('Импорт отменён. Можно выбрать другой PDF',null);
+    job.cancelled=true;job.optimizeReject?.(abort());job.fileTransport?.abort();unlock(job);active=null;job.textReader?.cancel().catch(()=>{});job.renderTask?.cancel();job.loadingTask?.destroy().catch(()=>{});job.ocrWorker?.terminate().catch(()=>{});status('Импорт отменён. Можно выбрать другой PDF',null);
   }
   function apply(result){
     const d=result.data;
