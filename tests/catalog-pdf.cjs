@@ -3,8 +3,9 @@ const fs=require('fs'),path=require('path'),assert=require('node:assert/strict')
 const {PGlite}=require('@electric-sql/pglite'),{chromium,webkit}=require(process.env.CATALOG_PLAYWRIGHT_MODULE||'playwright'),{jsPDF}=require('jspdf');
 const core=require('../catalog-pdf-core'),root=path.resolve(__dirname,'..');
 let passed=0;const eq=(a,b,label)=>{assert.deepEqual(a,b,label);passed++};
-function fixture({number='00157-A',floors=3,basement=true}={}){
+function fixture({number='00157-A',floors=3,basement=true,padding=0}={}){
  const pdf=new jsPDF({unit:'pt',format:[900,640],orientation:'landscape'});
+ if(padding)pdf.internal.write('%'+'x'.repeat(padding));
  const legacy=s=>s.replace(/[А-Яа-яЁё№]/g,c=>c==='№'?'¹':c==='Ё'?'¨':c==='ё'?'¸':String.fromCharCode(c.charCodeAt(0)-0x410+0xc0));
  const text=(s,x,y,size=12)=>{pdf.setTextColor(0);pdf.setFontSize(size);pdf.text(legacy(s),x,y)};
  text('Проект №'+number,60,70,24);text(floors+'-х этажный жилой дом',60,110,18);
@@ -83,7 +84,7 @@ function coreTests(){
  const safari=process.env.CATALOG_BROWSER==='webkit';
  const browser=await (safari?webkit:chromium).launch({executablePath:process.env.BROWSER_EXECUTABLE||undefined,headless:true,...(!safari?{args:['--no-sandbox','--disable-dev-shm-usage']}: {})});
  try{
- const context=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block',...(safari?{isMobile:true,hasTouch:true}: {})});
+ const context=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block',hasTouch:true});
  await context.addInitScript({content:fs.readFileSync(path.join(__dirname,'mock.js'),'utf8')});
  // Shipping Safari can lack this API even when Playwright's newer WebKit supports it.
  if(process.env.CATALOG_NO_STREAM_ITERATOR==='1')await context.addInitScript(()=>{
@@ -95,6 +96,8 @@ function coreTests(){
   // Let it load its actual script instead of fulfilling it as an empty stub.
   if(u.protocol==='blob:')return route.continue();
   if(u.hostname==='app.test')file=path.join(root,u.pathname==='/'?'index.html':u.pathname.slice(1));
+  if(u.href.includes('/js-sha256@0.11.1/'))file=path.join(root,'node_modules/js-sha256',u.pathname.split('/js-sha256@0.11.1/')[1]);
+  if(u.href.includes('/@neslinesli93/qpdf-wasm@0.3.0/'))file=path.join(root,'node_modules/@neslinesli93/qpdf-wasm',u.pathname.split('/@neslinesli93/qpdf-wasm@0.3.0/')[1]);
   if(u.href.includes('/pdfjs-dist@6.4.299/'))file=path.join(root,'node_modules/pdfjs-dist',u.pathname.split('/pdfjs-dist@6.4.299/')[1]);
   for(const [key,p]of[['xlsx@','xlsx/dist/xlsx.full.min.js'],['jspdf@','jspdf/dist/jspdf.umd.min.js'],['jspdf-autotable@','jspdf-autotable/dist/jspdf.plugin.autotable.min.js']])if(u.href.includes(key))file=path.join(root,'node_modules',p);
   if(file?.endsWith('pdf.worker.min.mjs')&&process.env.CATALOG_NO_STREAM_ITERATOR==='1')return route.fulfill({body:'Object.defineProperty(ReadableStream.prototype,Symbol.asyncIterator,{value:undefined,configurable:true});\n'+fs.readFileSync(file,'utf8'),contentType:'text/javascript',headers:{'Access-Control-Allow-Origin':'*'}});
@@ -139,7 +142,41 @@ function coreTests(){
    return {...r,images:r.images.map(x=>x?x.slice(0,23):null),thumbnails:[]};
   });
  }
- const album=fixture(),r=await read(album);
+ const album=fixture();
+ await page.evaluate(()=>{const e=document.createElement('input');e.type='file';e.id='io-pdf';document.body.append(e)});
+ await page.locator('#io-pdf').setInputFiles({name:'io.pdf',mimeType:'application/pdf',buffer:album});
+ const io=await page.evaluate(async()=>{
+  const file=document.getElementById('io-pdf').files[0],smallJob={},small=await CatalogPdfIO.prepare(file,smallJob);
+  const job={onProgress:t=>console.log('PDF_TEST '+t)},large=await CatalogPdfIO.prepare(file,job,{limitBytes:1});
+  if(!navigator.storage?.getDirectory){
+   return {unsupportedFallback:large.file===file&&!large.optimized&&!job.optimizeWorker&&!job.optimizedFileName,untouched:small.file===file&&!small.optimized};
+  }
+  const optimizedName=job.optimizedFileName;
+  const pdfjs=await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@6.4.299/legacy/build/pdf.min.mjs');pdfjs.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@6.4.299/legacy/build/pdf.worker.min.mjs';
+  const visual=async file=>{
+   const task=pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer()),standardFontDataUrl:'https://cdn.jsdelivr.net/npm/pdfjs-dist@6.4.299/standard_fonts/'}),doc=await task.promise,out=[];
+   try{for(let i=1;i<=doc.numPages;i++){
+    const p=await doc.getPage(i),v=p.getViewport({scale:.4}),c=document.createElement('canvas');c.width=Math.ceil(v.width);c.height=Math.ceil(v.height);
+    await p.render({canvasContext:c.getContext('2d'),viewport:v}).promise;
+    const reader=p.streamTextContent().getReader(),texts=[];for(;;){const {done,value}=await reader.read();if(done)break;texts.push(...value.items.map(i=>i.str))}reader.releaseLock();
+    out.push({text:texts,pixels:c.toDataURL('image/png')});c.width=c.height=0;
+   }return JSON.stringify(out)}finally{await task.destroy()}
+  };
+  const samePixelsAndText=await visual(file)===await visual(large.file),digest=await CatalogPdfIO.hash(file,{});
+  const NativeWorker=window.Worker;let fallback,cancelled;
+  try{
+   window.Worker=class{postMessage(){queueMicrotask(()=>this.onerror())}terminate(){}};
+   const fjob={},f=await CatalogPdfIO.prepare(file,fjob,{limitBytes:1});fallback=f.file===file&&!f.optimized&&!fjob.optimizedFileName;
+   window.Worker=class{postMessage(){}terminate(){}};
+   const cjob={},pending=CatalogPdfIO.prepare(file,cjob,{limitBytes:1});cjob.cancelled=true;cjob.optimizeReject(new DOMException('Cancelled','AbortError'));
+   cancelled=await pending.then(()=>false,e=>e.name==='AbortError'&&!cjob.optimizeWorker&&!cjob.optimizedFileName);
+  }finally{window.Worker=NativeWorker;}
+  const d=await navigator.storage.getDirectory();await CatalogPdfIO.cleanup(job);
+  let removed=false;try{await d.getFileHandle(optimizedName)}catch(e){removed=e.name==='NotFoundError'}
+  return {untouched:small.file===file&&!small.optimized&&!smallJob.optimizeWorker&&!smallJob.optimizedFileName,optimized:large.optimized,smaller:large.file.size<file.size,removed,samePixelsAndText,digest,fallback,cancelled};
+ });
+ eq(io,io.unsupportedFallback!==undefined?{unsupportedFallback:true,untouched:true}:{untouched:true,optimized:true,smaller:true,removed:true,samePixelsAndText:true,digest:require('node:crypto').createHash('sha256').update(album).digest('hex'),fallback:true,cancelled:true},'Small files stay identical; forced lossless QPDF optimisation succeeds and removes temporary file');
+ const r=await read(album);
  if(process.env.CATALOG_NO_STREAM_ITERATOR==='1')eq(await page.evaluate(()=>typeof ReadableStream.prototype[Symbol.asyncIterator]),'undefined','Import succeeds without patching browser prototypes');
  eq([r.data.project_number,r.data.floors,r.data.total_area,r.data.beds,r.data.baths],['00157-A',3,'400,00',4,4],'Real PDF.js extracts number, 3 floors, basement and room counts');
  eq(r.blocking,[],'Complete album has no blockers');eq(r.images.every(Boolean),true,'Facade and all four floor image slots populated');
@@ -152,12 +189,26 @@ function coreTests(){
  await page.locator('#catalog-pdf-file').setInputFiles({name:'renamed.pdf',mimeType:'application/pdf',buffer:album});
  await page.waitForFunction(()=>document.getElementById('cards-pdf-result').textContent.includes('уже есть'),null,{timeout:60000});
  eq(await page.evaluate(()=>[__db.project_cards.length,__syncs]),[1,1],'Repeated upload does not create or sync duplicate');
+ const ranged=await read(fixture({number:'00003',floors:1,basement:false,padding:2*1024*1024}));eq([ranged.data.project_number,ranged.data.total_area,ranged.blocking],['00003','100,00',[]],'Multi-chunk PDF.js range is delivered in one complete callback');
  const one=await read(fixture({number:'00002',floors:1,basement:false}));eq([one.data.floors,one.data.tags.includes('Цокольный этаж')],[1,false],'Legend alone cannot enable basement');
  await page.evaluate(()=>{openCardEditor();CatalogPdfImport.apply(__parsed);window.__importFailure=true;});
  const failed=await page.evaluate(()=>saveCard());eq(failed.ok,false,'Failed import reports failure');
  eq(await page.locator('#ce-num').inputValue(),'00002','Failed save preserves extracted draft');
  await page.evaluate(()=>{window.__importFailure=false;});eq((await page.evaluate(()=>saveCard())).ok,true,'Draft can retry saving');
- for(const width of [320,390]){await page.setViewportSize({width,height:844});await page.evaluate(()=>openCardEditor());eq(await page.locator('#cardEditorOverlay').evaluate(e=>e.scrollWidth<=e.clientWidth+1),true,'No editor overflow at '+width)}
+ for(const width of [320,390]){
+  await page.setViewportSize({width,height:844});await page.evaluate(()=>openCardEditor());
+  eq(await page.locator('#cardEditorOverlay').evaluate(e=>e.scrollWidth<=e.clientWidth+1),true,'No editor overflow at '+width);
+  eq(await page.locator('#cardEditorOverlay>div').evaluate(e=>getComputedStyle(e).overflowY),'auto','Editor enables native vertical scrolling at '+width);
+  if(safari){await page.mouse.move(width/2,600);await page.mouse.wheel(0,650)}
+  else{
+   const cdp=await context.newCDPSession(page);
+   await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:width/2,y:700}]});
+   for(let y=650;y>=200;y-=50)await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:width/2,y}]});
+   await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp.detach();
+  }
+  await page.waitForFunction(()=>document.querySelector('#cardEditorOverlay>div').scrollTop>100);
+  passed++;
+ }
  // Cancellation while PDF.js is reading must not modify a subsequent draft.
  await page.locator('#catalog-pdf-file').setInputFiles({name:'cancel.pdf',mimeType:'application/pdf',buffer:album});
  await page.evaluate(()=>{CatalogPdfImport.cancel();openCardEditor();setVal('ce-num','KEEP');});

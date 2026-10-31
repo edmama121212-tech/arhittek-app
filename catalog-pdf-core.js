@@ -20,7 +20,7 @@
   function pageFromItems(items,width,height,page,ocr=false){
     const words=items.filter(w=>clean(w.text)).map(w=>({...w,text:repairText(w.text),cx:(w.x0+w.x1)/2,cy:(w.y0+w.y1)/2,h:Math.max(1,w.y1-w.y0)}));
     const lines=rows(words),phrases=[];
-    if(ocr)for(const line of lines){
+    for(const line of lines){
       let group=[];
       const flush=()=>{if(!group.length)return;const x0=group[0].x0,x1=group.at(-1).x1,y0=Math.min(...group.map(w=>w.y0)),y1=Math.max(...group.map(w=>w.y1));phrases.push({text:group.map(w=>w.text).join(' '),x0,x1,y0,y1,cx:(x0+x1)/2,cy:(y0+y1)/2,h:y1-y0});group=[];};
       for(const word of line.items){if(group.length&&word.x0-group.at(-1).x1>line.h*3)flush();group.push(word);}flush();
@@ -32,7 +32,8 @@
     const m=text.match(/(?:этаж[а-я]*\s*([1-9])|([1-9])\s*(?:[-–]?\s*(?:й|ый|ой|го))?\s*этаж)/iu);
     if(m)return 'floor'+(m[1]||m[2]);
     const verbal=text.match(/(перв|втор|трет)[а-яё]*\s+этаж/iu);
-    return verbal?'floor'+({перв:1,втор:2,трет:3}[verbal[1].toLowerCase()]):null;
+    if(verbal)return 'floor'+({перв:1,втор:2,трет:3}[verbal[1].toLowerCase()]);
+    const roman=text.match(/(?:^|[\s(])(IV|III|II|I)\s*[-–]?\s*(?:этаж[а-яё]*|эт\.?)(?:\s|$)/iu);return roman?'floor'+({I:1,II:2,III:3,IV:4}[roman[1].toUpperCase()]):null;
   }
   function tables(page){
     const result=[];
@@ -49,36 +50,69 @@
         const value=number(cell.text.replace(/\s*м\s*[²2]/iu,''));
         if(!(value>0&&value<100000))continue;
         const same=page.items.filter(w=>!w.vertical&&Math.abs(w.cy-cell.cy)<Math.max(w.h,cell.h)*.65&&w.x0>=left&&w.x1<cell.x0);
-        const index=id?same.find(w=>Math.abs(w.cx-id.cx)<header.h&&/^\d{1,3}$/.test(w.text)):null;
+        const index=id?same.find(w=>Math.abs(w.cx-id.cx)<header.h&&/^\d{1,3}(?:[.:-]\d{1,3})?$/.test(w.text)):null;
         const name=clean(same.filter(w=>w!==index&&w.x0>(id?id.x1: left)&&!/^\d+$/.test(w.text)).sort((x,y)=>x.x0-y.x0).map(w=>w.text).join(' '));
         if(!name||/^(итого|всего|общая\s+площадь|сумма)/iu.test(name)){
           if(entries.length){total=value;bottom=cell.y1;break;}continue;
         }
         if(!/[а-яёa-z]/iu.test(name)||/наименование|условные|стадия|экспликац/iu.test(name))break;
         if(id&&!index)break;
-        entries.push({name,area:area(value),index:index?Number(index.text):entries.length+1});
+        const rawIndex=index?.text||String(entries.length+1),parts=rawIndex.split(/[.:-]/);
+        entries.push({name,area:area(value),index:Number(parts.at(-1)),rawIndex});
         lastY=cell.cy;bottom=cell.y1;
       }
       if(!entries.length)continue;
       const sum=Math.round(entries.reduce((s,r)=>s+number(r.area),0)*100)/100;
       const labels=[...(page.phrases||[]),...page.items].filter(w=>/экспликац/iu.test(w.text)&&w.cy<header.cy&&header.cy-w.cy<page.height*.12&&w.cx>left-header.h*4&&w.cx<right+header.h*4).sort((x,y)=>y.cy-x.cy);
       const label=labels[0]?.text||'';
-      const sequential=entries.every((r,i)=>r.index===i+1);
-      result.push({rows:entries.map(({name,area})=>({name,area})),total:total??sum,sum,verified:sequential&&(total===null||Math.abs(total-sum)<.16),hasTotal:total!==null,left,right,top:header.y0,bottom,cx:(left+right)/2,label,floor:floorIn(label),page:page.page});
+      const sequential=entries.every((r,i)=>r.index===entries[0].index+i),prefixes=entries.map(r=>r.rawIndex.match(/^([1-3])[.:-]/)?.[1]||(/^([1-3])\d{2}$/.exec(r.rawIndex)?.[1]));
+      const floorHint=prefixes.every(x=>x&&x===prefixes[0])?'floor'+prefixes[0]:null;
+      result.push({rows:entries.map(({name,area})=>({name,area})),total:total??sum,sum,verified:sequential&&(total===null?entries[0].index===1||!!floorHint:Math.abs(total-sum)<.16),hasTotal:total!==null,left,right,top:header.y0,bottom,cx:(left+right)/2,label,floor:floorIn(label),floorHint,page:page.page});
     }
     return result;
   }
   const planPattern=/планировочн.{0,12}решен|план.{0,25}(?:этаж|мебел|помещ)|привязк[аи]\s+мебел|марк[еи]р[оа]вочн.{0,8}план|кладочн.{0,15}план/iu;
-  function planInfo(page,declared){
+  function planInfos(page,declared){
     const headings=[...(page.phrases||[]),...page.items].filter(w=>planPattern.test(w.text));
-    // A list of sheets is not a drawing. Cross-section level marks are not floors.
-    if(/содержание|ведомость\s+рабочих\s+чертеж/iu.test(page.text)&&headings.length>3)return null;
-    const bottom=headings.filter(w=>w.cy>page.height*.72);
-    const h=(bottom.length?bottom:headings).sort((a,b)=>b.h-a.h)[0];
-    if(!h)return null;
-    const floor=floorIn(h.text)||(declared===1?'floor1':null);
-    let score=/планировочн/iu.test(h.text)?100:/мебел/iu.test(h.text)?90:/марк[еи]р/iu.test(h.text)?75:40;
-    return {floor,score,heading:h.text,page:page.page};
+    if(/содержание|ведомость\s+рабочих\s+чертеж/iu.test(page.text)&&headings.length>3)return [];
+    const result=[];
+    for(const h of headings){
+      const floor=floorIn(h.text)||(declared===1?'floor1':null);
+      if(!floor)continue;
+      const score=/планировочн/iu.test(h.text)?100:/мебел/iu.test(h.text)?90:/марк[еи]р/iu.test(h.text)?75:40;
+      const existing=result.find(x=>x.floor===floor);
+      const entry={floor,score,heading:h.text,page:page.page,cx:h.cx,cy:h.cy,h:h.h};
+      if(!existing)result.push(entry);
+      else if(score>existing.score||score===existing.score&&h.h>existing.h)Object.assign(existing,entry);
+    }
+    return result;
+  }
+  function associateTables(pages,plans,declared){
+    const all=pages.flatMap(p=>p.tables),distance=(table,plan,page)=>Math.abs(table.cx-plan.cx)/page.width+Math.abs(table.top-plan.cy)/page.height*.25;
+    for(const page of pages){
+      const local=plans.filter(p=>p.page===page.page),floors=[...new Set(local.map(p=>p.floor))],unknown=page.tables.filter(t=>!t.floor);
+      for(const table of unknown){
+        if(floors.length===1&&unknown.length===1){table.floor=floors[0];table.association='same_plan';continue;}
+        if(floors.length>1){
+          const ranked=local.map(plan=>({plan,score:distance(table,plan,page)})).sort((a,b)=>a.score-b.score);
+          if(ranked[1].score-ranked[0].score>.12){table.floor=ranked[0].plan.floor;table.association='spatial_plan';continue;}
+        }
+        if(table.floorHint&&Number(table.floorHint.slice(5))<=declared){table.floor=table.floorHint;table.association='room_numbers';continue;}
+        if(declared===1&&!floors.length){table.floor='floor1';table.association='single_floor';}
+      }
+    }
+    // A standalone table may follow its drawing. Equal-distance contradictory
+    // neighbours remain ambiguous rather than borrowing an arbitrary floor.
+    for(const table of all.filter(t=>!t.floor)){
+      const nearby=plans.filter(p=>Math.abs(p.page-table.page)===1),floors=[...new Set(nearby.map(p=>p.floor))];
+      if(floors.length===1&&pages.find(p=>p.page===table.page)?.tables.filter(t=>!t.floor).length===1){table.floor=floors[0];table.association='adjacent_plan';}
+    }
+    // Exact copies inherit a level only when neighbouring plans do not conflict.
+    for(const table of all.filter(t=>!t.floor)){
+      const nearby=[...new Set(plans.filter(p=>Math.abs(p.page-table.page)<=1).map(p=>p.floor))];
+      const matches=[...new Set(all.filter(t=>t!==table&&t.floor&&signature(t)===signature(table)).map(t=>t.floor))];
+      if(matches.length===1&&nearby.length<=1&&(!nearby.length||nearby[0]===matches[0])){table.floor=matches[0];table.association='matching_table';}
+    }
   }
   const signature=t=>t.rows.map(r=>clean(r.name).toLowerCase()+':'+r.area).join('|');
   function analyze(pages){
@@ -105,17 +139,19 @@
     }
     data.project_number=vote(strong.length?strong:weak,'project_number');
     let declared=vote(counts,'floors');
-    for(const p of pages){const info=planInfo(p,declared);if(info)plans.push({...info,source:p});}
+    for(const p of pages)for(const info of planInfos(p,declared))plans.push({...info,source:p});
     const explicit=plans.map(p=>p.floor).filter(Boolean);
     if(!declared){const nums=explicit.filter(f=>/^floor/.test(f)).map(f=>Number(f.slice(5)));if(nums.length)declared=Math.max(...nums);}
+    associateTables(pages,plans,declared);
     data.floors=declared;
     if(declared>3)blocking.push('В альбоме больше трёх надземных этажей');
     if(explicit.some(f=>/^floor/.test(f)&&Number(f.slice(5))>declared))blocking.push('Этажность в описании не совпадает с планами');
     for(const key of ['floor1','floor2','floor3','basement']){
       const candidates=plans.filter(p=>p.floor===key).sort((a,b)=>b.score-a.score);
-      let chosen=candidates.find(p=>p.source.tables.some(t=>!t.floor||t.floor===key))||candidates[0];
-      let table=chosen?.source.tables.find(t=>t.floor===key)||(chosen?.source.tables.length===1?chosen.source.tables[0]:null);
-      if(!table)table=pages.flatMap(p=>p.tables).find(t=>t.floor===key);
+      const assigned=pages.flatMap(p=>p.tables).filter(t=>t.floor===key);
+      const rankTable=t=>(t.verified?100:0)+(t.hasTotal?20:0)+(/экспликац/iu.test(t.label)?10:0)+t.rows.length*.01;
+      let chosen=candidates.find(p=>p.source.tables.some(t=>t.floor===key))||candidates[0];
+      let table=chosen?.source.tables.filter(t=>t.floor===key).sort((a,b)=>rankTable(b)-rankTable(a))[0]||assigned.slice().sort((a,b)=>rankTable(b)-rankTable(a))[0];
       if(chosen||table)levels[key]={plan:chosen?{page:chosen.page,table,heading:chosen.heading}:null,table};
     }
     if(levels.basement)data.tags.push('Цокольный этаж');
@@ -125,9 +161,10 @@
       const l=levels[key];
       const label=key==='basement'?'цоколь':key.slice(5)+'-й этаж';
       if(!l?.table){complete=false;blocking.push('Не найдена экспликация: '+label);continue;}
+      if(l.table.association==='adjacent_plan')warnings.push('Экспликация '+label+' сопоставлена с соседним планом');
       if(!l.table.verified)blocking.push('Не сходится экспликация: '+label);
       if(!l.plan)blocking.push('Не найден план: '+label);
-      total+=l.table.total;sources[key]={page:l.table.page,planPage:l.plan?.page,area:'table'};
+      total+=l.table.total;sources[key]={page:l.table.page,planPage:l.plan?.page,area:'table',association:l.table.association||'explicit'};
     }
     // Prefer an explicitly named whole-building area; otherwise sum distinct floors once.
     let explicitArea=null;const areaCandidates=[];
