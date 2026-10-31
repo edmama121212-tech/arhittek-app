@@ -67,6 +67,10 @@ try{
  await denied(()=>db.query('delete from public.projects where id=$1',[U(10)]));
  const refundCash=j.workspace.cash;await request('create',create(12,100,'client_refund'),39);j=await invariant();eq([j.workspace.cash,(await project(12)).advance],[refundCash-100,'1900'],'Client refund reduces cash and received amount once');
  await denied(()=>request('create',create(12,999999,'client_refund'),40));eq((await project(12)).advance,'1900','Rejected refund cannot alter a project');
+ const beforeAtomicFailure=await read(),projectBeforeFailure=await project(12);
+ await db.exec('reset role');await db.exec("create function public.test_project_projection_failure() returns trigger language plpgsql as $$begin if new.id='30000000-0000-4000-8000-000000000012' then raise exception 'Simulated projection failure';end if;return new;end$$;create trigger test_projection_failure before update on public.projects for each row execute function public.test_project_projection_failure()");await role();
+ await denied(()=>request('create',create(12,100),43));eq((await db.query('select count(*)::int n from public.ledger_entries where id=$1',[U(43)])).rows[0].n,0,'A failed project projection rolls back the source insert');eq(await project(12),projectBeforeFailure,'A failed projection leaves all project totals intact');eq((await read()).workspace.cash,beforeAtomicFailure.workspace.cash,'A failed projection rolls back journal and wallet movements');
+ await db.exec('reset role;drop trigger test_projection_failure on public.projects;drop function public.test_project_projection_failure()');await role();
  await role(false);await denied(()=>request('create',create(12,1000),32));await denied(read);await role();
  await denied(()=>db.query('select * from arhittek_finance.project_source_openings'));
  const liveBefore=(await project(10)).advance;await db.exec('reset role');await db.exec(sql('supabase/migrations/20261031175258_project_money_integrity.sql'));await role();eq((await project(10)).advance,liveBefore,'Migration reapplication cannot duplicate historical openings');
