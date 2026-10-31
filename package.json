@@ -12,7 +12,7 @@
     "test:construction": "node tests/construction-finance.cjs && node tests/construction-stage-template.cjs && node tests/construction-access.cjs && node tests/construction-cash-ui.cjs && node tests/client-portal.cjs && node tests/construction-operational-audit.cjs && node tests/construction-reserve-invariants.cjs && node tests/client-portal-gateway.cjs && node tests/client-portal-sql.cjs && node tests/invoice-payment-rpc-ui.cjs",
     "test:security": "node tests/owner-access.cjs && node tests/owner-access-ui.cjs && node tests/session-security.cjs && node tests/invoice-payment-atomic.cjs && node tests/employees-server-access.cjs",
     "test:catalog:pdf": "node tests/catalog-pdf-context.cjs && node tests/catalog-pdf.cjs",
-    "test:finance:workspace": "node tests/finance-workspace.cjs && node tests/finance-workspace-ui.cjs"
+    "test:finance:workspace": "node tests/finance-workspace.cjs && node tests/finance-zero-start.cjs && node tests/finance-workspace-ui.cjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.10",

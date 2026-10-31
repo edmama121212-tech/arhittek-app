@@ -3,22 +3,23 @@ const fs=require('fs'),path=require('path'),assert=require('node:assert/strict')
 const {PGlite}=require('@electric-sql/pglite'),{chromium,webkit}=require(process.env.CATALOG_PLAYWRIGHT_MODULE||'playwright'),{jsPDF}=require('jspdf');
 const core=require('../catalog-pdf-core'),root=path.resolve(__dirname,'..');
 let passed=0;const eq=(a,b,label)=>{assert.deepEqual(a,b,label);passed++};
-function fixture({number='00157-A',floors=3,basement=true,padding=0}={}){
+function fixture({number='00157-A',floors=3,basement=true,padding=0,embeddedFacade=false,coverOnly=false,duplicateIds=false}={}){
  const pdf=new jsPDF({unit:'pt',format:[900,640],orientation:'landscape'});
  if(padding)pdf.internal.write('%'+'x'.repeat(padding));
  const legacy=s=>s.replace(/[А-Яа-яЁё№]/g,c=>c==='№'?'¹':c==='Ё'?'¨':c==='ё'?'¸':String.fromCharCode(c.charCodeAt(0)-0x410+0xc0));
  const text=(s,x,y,size=12)=>{pdf.setTextColor(0);pdf.setFontSize(size);pdf.text(legacy(s),x,y)};
  text('Проект №'+number,60,70,24);text(floors+'-х этажный жилой дом',60,110,18);
+ if(coverOnly){text('Визуализация фасада',60,185);pdf.setFillColor(50,110,170);pdf.rect(60,210,780,350,'F');}
  text('Архитектурные решения. Газоблок. Ленточный фундамент. Общие сведения и состав проекта.',60,150);
  for(const label of [...Array.from({length:floors},(_,i)=>(i+1)+'-й этаж'),...(basement?['цокольный этаж']:[])]){
   pdf.addPage();text('План '+label,60,50,18);pdf.setDrawColor(30);pdf.setLineWidth(3);pdf.rect(70,100,420,420);pdf.line(280,100,280,520);pdf.line(70,310,490,310);
   text('Экспликация '+label,570,75);text('№',550,100);text('Наименование',580,100);text('Площадь',760,100);
-  [['Спальня','20,00'],['С/У','5,00'],['Кухня гостиная','75,00']].forEach(([n,a],i)=>{const y=125+i*22;text(String(i+1),550,y);text(n,580,y);text(a,765,y)});
+  [['Спальня','20,00'],['С/У','5,00'],['Кухня гостиная','75,00']].forEach(([n,a],i)=>{const y=125+i*22;text(String(duplicateIds&&i===1?1:i+1),550,y);text(n,580,y);text(a,765,y)});
   text('Итого',580,191);text('100,00',765,191);text('Стены подвала — условное обозначение',550,250);
   text('Проект №'+number,590,590);text('План '+label,590,610);
  }
  // Bright facade illustrations exercise rendering and image selection.
- for(const color of [[60,120,170],[90,150,100]]){pdf.addPage();pdf.setFillColor(...color);pdf.rect(60,40,780,560,'F');pdf.setFillColor(230,220,200);pdf.rect(220,210,460,300,'F');}
+ for(const color of (coverOnly?[]:[[60,120,170],[90,150,100]])){pdf.addPage();pdf.setFillColor(...color);pdf.rect(60,40,780,560,'F');pdf.setFillColor(230,220,200);pdf.rect(220,210,460,300,'F');if(embeddedFacade){pdf.setFillColor(255);pdf.rect(0,0,900,640,'F');pdf.addImage('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAALUlEQVR4nO3NsQ0AIAzAsCAx9HiO5gnYHGX3qjP17930NQAAAAAAAAAAAPCqCxaJAvodmQr4AAAAAElFTkSuQmCC','PNG',240,150,400,300);text('Дополнительные сведения и пояснения к проекту. Архитектурные материалы, отделка и комплектация здания.',60,80);}}
  return Buffer.from(pdf.output('arraybuffer'));
 }
 async function sqlTests(){
@@ -182,6 +183,17 @@ function coreTests(){
  eq(r.blocking,[],'Complete album has no blockers');eq(r.images.every(Boolean),true,'Facade and all four floor image slots populated');
  eq(r.data.tags.includes('Цокольный этаж'),true,'Basement comes from its actual plan');
  eq(await page.evaluate(()=>{openCardEditor();CatalogPdfImport.apply(__parsed);return [ceFloorsSelected,ceFeatureSelected,document.getElementById('ce-area3').value,document.getElementById('ce-areab').value,document.getElementById('ce-price').value]}),[3,['basement'],'100,00','100,00','60000'],'Card apply uses level data and current catalogue rate');
+ const scan=await page.evaluate(async()=>{
+  const saved=window.Tesseract,calls=[];let attempts=0,terminated=false;
+  const word=(text,x,y,confidence=90)=>({text,confidence,bbox:{x0:x,x1:x+text.length*10,y0:y,y1:y+18}});
+  const full=[word('№',10,30),word('Наименование',60,30),word('Площадь',400,30),word('1',10,70),word('Спальня',60,70),word('20,00',400,70,4),word('7',10,110),word('С/У',60,110),word('5,00',400,110,4),word('Итого',60,150),word('25,00',400,150,4)];
+  window.Tesseract={OEM:{LSTM_ONLY:1},createWorker:async()=>({setParameters:async p=>calls.push(p.tessedit_pageseg_mode),recognize:async()=>({data:{confidence:90,words:++attempts===1?full.slice(1,2):full}}),terminate:async()=>{terminated=true}})};
+  try{const c=document.createElement('canvas');c.width=600;c.height=300;const blob=await new Promise(resolve=>c.toBlob(resolve));setVal('ce-expl2','');
+   await scanExplication({files:[new File([blob],'table.png',{type:'image/png'})],value:''},'ce-expl2');
+   const count=ceScanPending['ce-expl2']?.length;applyScannedExplication('ce-expl2');return {calls,count,area:document.getElementById('ce-area2').value,terminated};
+  }finally{window.Tesseract=saved;}
+ });
+ eq(scan,{calls:[3,11],count:2,area:'25,00',terminated:true},'Scanner retries sparse layout, preserves weak numeric OCR and fills floor area after confirmation');
  await page.locator('#catalog-pdf-file').setInputFiles({name:'album.pdf',mimeType:'application/pdf',buffer:album});
  await page.waitForFunction(()=>document.getElementById('cards-pdf-result').textContent.includes('Создан проект'),null,{timeout:60000});
  eq(await page.evaluate(()=>[__imports.length,__db.project_cards.length,__syncs,__db.project_cards[0].project_number]),[1,1,1,'00157-A'],'Upload alone creates and syncs one card');
@@ -190,6 +202,18 @@ function coreTests(){
  await page.waitForFunction(()=>document.getElementById('cards-pdf-result').textContent.includes('уже есть'),null,{timeout:60000});
  eq(await page.evaluate(()=>[__db.project_cards.length,__syncs]),[1,1],'Repeated upload does not create or sync duplicate');
  const ranged=await read(fixture({number:'00003',floors:1,basement:false,padding:2*1024*1024}));eq([ranged.data.project_number,ranged.data.total_area,ranged.blocking],['00003','100,00',[]],'Multi-chunk PDF.js range is delivered in one complete callback');
+ const labelled=await read(fixture({number:'00004',floors:1,basement:false,embeddedFacade:true}));eq([labelled.images[0]!==null,labelled.images[1]!==null,labelled.blocking], [true,true,[]],'Raster facades on textual pages are detected and cropped');
+ const covered=await read(fixture({number:'00005',floors:1,basement:false,coverOnly:true}));eq([covered.sources.facades,covered.images[0]!==null,covered.blocking],[[1],true,[]],'Facade on the cover is not excluded by page number');
+ await page.evaluate(()=>{window.__ocrSaved={ocr:CatalogOcr,tess:window.Tesseract};window.__recoveries=0;
+  window.Tesseract={OEM:{LSTM_ONLY:1},createWorker:async()=>({terminate:async()=>{}})};
+  window.CatalogOcr={...CatalogOcr,recognize:async(worker,canvas)=>{__recoveries++;const w=(text,x,y)=>({text,x0:x,x1:x+text.length*10,y0:y,y1:y+18});return {confidence:99,words:[w('№',100,50),w('Наименование',200,50),w('Площадь',canvas.width-180,50),...[['Спальня','20,00'],['С/У','5,00'],['Кухня гостиная','75,00']].flatMap(([n,a],i)=>[w(String(i+1),100,90+i*40),w(n,200,90+i*40),w(a,canvas.width-180,90+i*40)]),w('Итого',200,230),w('100,00',canvas.width-180,230)]}}};
+ });
+ const recovered=await read(fixture({number:'00006',floors:1,basement:false,duplicateIds:true}));
+ eq([recovered.blocking,recovered.data.total_area,await page.evaluate(()=>__recoveries)],[[],'100,00',1],'Incomplete native table is recovered by targeted OCR instead of silently accepted');
+ await page.evaluate(()=>{window.CatalogOcr=__ocrSaved.ocr;window.Tesseract={OEM:{LSTM_ONLY:1},createWorker:async()=>{throw Error('Isolated unavailable OCR')}};});
+ const unavailable=await read(fixture({number:'00007',floors:1,basement:false,duplicateIds:true}));
+ eq([unavailable.blocking.some(s=>s.includes('Не сходится')),unavailable.warnings.some(s=>s.includes('Не удалось повторно')),unavailable.images[2]!==null],[true,true,true],'Unavailable retry OCR preserves extracted draft and its real blockers');
+ await page.evaluate(()=>{window.Tesseract=__ocrSaved.tess;});
  const one=await read(fixture({number:'00002',floors:1,basement:false}));eq([one.data.floors,one.data.tags.includes('Цокольный этаж')],[1,false],'Legend alone cannot enable basement');
  await page.evaluate(()=>{openCardEditor();CatalogPdfImport.apply(__parsed);window.__importFailure=true;});
  const failed=await page.evaluate(()=>saveCard());eq(failed.ok,false,'Failed import reports failure');

@@ -41,6 +41,12 @@ try{
  await page.evaluate(async()=>{const old=sb.rpc.bind(sb);sb.rpc=async(n,a)=>{if(['get_financial_journal','confirm_finance_workspace','get_financial_journal_history','get_finance_request'].includes(n)){const r=await __financeRPC({name:n,args:a});if(window.__loseOnce&&n==='confirm_finance_workspace'&&!r.error){window.__loseOnce=false;return {data:null,error:{message:'Simulated lost response'}};}return r;}return old(n,a)};await loadAll();});
  await page.locator('.nav-btn[data-view="view-finance"]').click();await page.waitForSelector('#financeWorkspace');
  eq(await page.locator('#financeWorkspace').getByText('Нужна начальная сверка',{exact:true}).isVisible(),true);
+ await page.evaluate(()=>{window.__beforeZero=state.financialJournal;const j=state.financialJournal;state.financialJournal={...j,opening_mode:'zero',start_date:'2026-11-01',workspace:{...j.workspace,opening_mode:'zero',start_date:'2026-11-01'}};ARHITTEKFinanceWorkspace.render();});
+ eq(await page.locator('#financeWorkspace').getByText('Запланирован старт с нуля',{exact:true}).isVisible(),true);
+ eq(await page.locator('#financeWorkspace [data-journal="activate"]').count(),0);
+ await page.locator('#financeWorkspace [data-fw-tab="archive"]').click();eq(await page.locator('#financeWorkspace').getByText(await page.evaluate(()=> 'Операции до '+fmtDate('2026-11-01')),{exact:true}).isVisible(),true);
+ await page.evaluate(()=>{state.financialJournal=__beforeZero;ARHITTEKFinanceWorkspace.render();});
+ await page.locator('#financeWorkspace [data-fw-tab="overview"]').click();
  await cmd('activate',activatePayload,201,0);await page.evaluate(()=>loadAll());
  eq(await page.locator('#financeWorkspace h1').textContent(),'Финансы');eq(await page.evaluate(()=>ARHITTEKFinanceWorkspace.enabled()),true);
  await page.locator('#financeWorkspace [data-fw="record-income"]').click();

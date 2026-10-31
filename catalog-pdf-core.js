@@ -28,46 +28,56 @@
     return {page,width,height,items:words,lines,phrases,text:words.map(w=>w.text).join('\n'),ocr};
   }
   function floorIn(text){
-    if(/(?:цокол\w*|подвал\w*)\s*(?:этаж)?/iu.test(text))return 'basement';
     const m=text.match(/(?:этаж[а-я]*\s*([1-9])|([1-9])\s*(?:[-–]?\s*(?:й|ый|ой|го))?\s*этаж)/iu);
     if(m)return 'floor'+(m[1]||m[2]);
     const verbal=text.match(/(перв|втор|трет)[а-яё]*\s+этаж/iu);
     if(verbal)return 'floor'+({перв:1,втор:2,трет:3}[verbal[1].toLowerCase()]);
-    const roman=text.match(/(?:^|[\s(])(IV|III|II|I)\s*[-–]?\s*(?:этаж[а-яё]*|эт\.?)(?:\s|$)/iu);return roman?'floor'+({I:1,II:2,III:3,IV:4}[roman[1].toUpperCase()]):null;
+    const roman=text.match(/(?:^|[\s(])(IV|III|II|I)\s*[-–]?\s*(?:этаж[а-яё]*|эт\.?)(?:\s|$)/iu);if(roman)return 'floor'+({I:1,II:2,III:3,IV:4}[roman[1].toUpperCase()]);
+    if(/цокольн[а-яё]*\s+этаж|подвальн[а-яё]*\s+этаж|(?:план|экспликация)(?:\s+помещений)?\s+(?:цоколя|подвала)|^(?:цоколь|подвал)$/iu.test(clean(text)))return 'basement';
+    return null;
   }
   function tables(page){
-    const result=[];
-    for(const header of page.items.filter(w=>/^наименование(?:\s|$)|^название\s+помещ/iu.test(w.text))){
-      const a=page.items.filter(w=>/^площадь(?:\s|,|$)/iu.test(w.text)&&w.x0>header.x0&&Math.abs(w.cy-header.cy)<Math.max(header.h,w.h)*1.5).sort((x,y)=>x.x0-y.x0)[0];
+    const result=[],compact=s=>clean(s).replace(/\s/g,''),words=page.items;
+    const headers=[...words,...(page.phrases||[])].filter(w=>/^наименование|^названиепомещ/iu.test(compact(w.text)));
+    for(const header of headers){
+      if(result.some(t=>Math.abs(t.top-header.y0)<header.h&&Math.abs(t.nameX-header.x0)<header.h))continue;
+      const a=[...words,...(page.phrases||[])].filter(w=>/^площадь/iu.test(compact(w.text))&&w.x0>header.x0&&Math.abs(w.cy-header.cy)<Math.max(header.h,w.h)*2).sort((x,y)=>x.x0-y.x0)[0];
       if(!a)continue;
-      const id=page.items.filter(w=>/^(?:№|N|N°|поз\.?)$/iu.test(w.text)&&w.x0<header.x0&&Math.abs(w.cy-header.cy)<header.h*1.5).sort((x,y)=>y.x0-x.x0)[0];
-      const left=id?id.x0-header.h*.5:header.x0-header.h*2;
-      const right=a.x1+a.h*2, boundary=(header.cx+a.cx)/2;
-      const candidates=page.items.filter(w=>!w.vertical&&w.cy>header.cy+header.h*.4&&w.x0>boundary&&w.x0<right&&/^\d+(?:[.,]\d{1,2})?(?:\s*м\s*[²2])?$/iu.test(w.text));
-      const entries=[];let total=null,lastY=header.cy,bottom=header.y1;
-      for(const cell of candidates.sort((x,y)=>x.cy-y.cy)){
-        if(cell.cy-lastY>Math.max(40,header.h*4)&&entries.length)break;
-        const value=number(cell.text.replace(/\s*м\s*[²2]/iu,''));
-        if(!(value>0&&value<100000))continue;
-        const same=page.items.filter(w=>!w.vertical&&Math.abs(w.cy-cell.cy)<Math.max(w.h,cell.h)*.65&&w.x0>=left&&w.x1<cell.x0);
-        const index=id?same.find(w=>Math.abs(w.cx-id.cx)<header.h&&/^\d{1,3}(?:[.:-]\d{1,3})?$/.test(w.text)):null;
-        const name=clean(same.filter(w=>w!==index&&w.x0>(id?id.x1: left)&&!/^\d+$/.test(w.text)).sort((x,y)=>x.x0-y.x0).map(w=>w.text).join(' '));
-        if(!name||/^(итого|всего|общая\s+площадь|сумма)/iu.test(name)){
-          if(entries.length){total=value;bottom=cell.y1;break;}continue;
+      const id=words.filter(w=>/^(?:№|N|N°|поз\.?)$/iu.test(w.text)&&w.x0<header.x0&&Math.abs(w.cy-header.cy)<header.h*2).sort((x,y)=>y.x0-x.x0)[0];
+      const left=id?id.x0-header.h*.5:header.x0-header.h*2,right=a.x1+a.h*2;
+      const areaLeft=Math.max((header.x0+a.x0)/2,a.x0-a.h*2);
+      const numeric=words.filter(w=>!w.vertical&&w.cy>Math.max(header.cy,a.cy)+header.h*.5&&w.x0>=areaLeft&&w.x0<right&&/^[\d\s.,м²]+$/iu.test(w.text));
+      const cells=rows(numeric).map(line=>{
+        const text=line.items.map(w=>w.text).join('').replace(/\s|м[²2]?/giu,'');
+        return /^\d+(?:[.,]\d{1,2})?$/.test(text)?{...line,value:number(text),y1:Math.max(...line.items.map(w=>w.y1))}:null;
+      }).filter(c=>c&&c.value>0&&c.value<100000);
+      const entries=[];let total=null,lastY=header.cy,bottom=header.y1,unread=0;
+      for(let i=0;i<cells.length;i++){
+        const cell=cells[i];if(cell.cy-lastY>Math.max(45,header.h*5)&&entries.length)break;
+        const above=i?(cells[i-1].cy+cell.cy)/2:Math.max(header.y1,a.y1),below=cells[i+1]?(cell.cy+cells[i+1].cy)/2:cell.cy+header.h*1.1;
+        const same=words.filter(w=>!w.vertical&&w.cy>above&&w.cy<below&&w.x0>=left&&w.x0<areaLeft);
+        const index=id?same.filter(w=>Math.abs(w.cx-id.cx)<header.h*1.5&&/^\d{1,3}(?:[.:-]\d{1,3})?$/.test(w.text)).sort((x,y)=>Math.abs(x.cy-cell.cy)-Math.abs(y.cy-cell.cy))[0]:null;
+        const name=clean(same.filter(w=>w!==index&&w.x0>(id?id.x1:left)&&!/^\d+$/.test(w.text)).sort((x,y)=>Math.abs(x.cy-y.cy)<header.h*.5?x.x0-y.x0:x.cy-y.cy).map(w=>w.text).join(' '));
+        if(/^(итого|всего|общая\s+площадь|сумма)/iu.test(name)){if(entries.length){total=cell.value;bottom=cell.y1;break;}continue;}
+        if(!name||!/[а-яёa-z]/iu.test(name)){
+          const currentSum=entries.reduce((sum,r)=>sum+number(r.area),0);
+          if(entries.length&&Math.abs(cell.value-currentSum)<.021&&cell.cy-lastY<Math.max(40,header.h*4)){total=cell.value;bottom=cell.y1;break;}
+          unread++;continue;
         }
-        if(!/[а-яёa-z]/iu.test(name)||/наименование|условные|стадия|экспликац/iu.test(name))break;
-        if(id&&!index)break;
-        const rawIndex=index?.text||String(entries.length+1),parts=rawIndex.split(/[.:-]/);
-        entries.push({name,area:area(value),index:Number(parts.at(-1)),rawIndex});
-        lastY=cell.cy;bottom=cell.y1;
+        if(/наименование|условные|стадия|экспликац/iu.test(name))break;
+        const rawIndex=index?.text||null,parts=rawIndex?.split(/[.:-]/);
+        entries.push({name,area:area(cell.value),index:parts?Number(parts.at(-1)):null,rawIndex});lastY=cell.cy;bottom=cell.y1;
       }
       if(!entries.length)continue;
       const sum=Math.round(entries.reduce((s,r)=>s+number(r.area),0)*100)/100;
-      const labels=[...(page.phrases||[]),...page.items].filter(w=>/экспликац/iu.test(w.text)&&w.cy<header.cy&&header.cy-w.cy<page.height*.12&&w.cx>left-header.h*4&&w.cx<right+header.h*4).sort((x,y)=>y.cy-x.cy);
-      const label=labels[0]?.text||'';
-      const sequential=entries.every((r,i)=>r.index===entries[0].index+i),prefixes=entries.map(r=>r.rawIndex.match(/^([1-3])[.:-]/)?.[1]||(/^([1-3])\d{2}$/.exec(r.rawIndex)?.[1]));
+      const labels=[...(page.phrases||[]),...words].filter(w=>/экспликац/iu.test(w.text)&&w.cy<header.cy&&header.cy-w.cy<page.height*.12&&w.cx>left-header.h*4&&w.cx<right+header.h*4).sort((x,y)=>y.cy-x.cy);
+      const label=labels[0]?.text||'',sequential=entries.every((r,i)=>r.index!==null&&r.index===entries[0].index+i),prefixes=entries.map(r=>r.rawIndex?.match(/^([1-3])[.:-]/)?.[1]||(/^([1-3])\d{2}$/.exec(r.rawIndex||'')?.[1]));
       const floorHint=prefixes.every(x=>x&&x===prefixes[0])?'floor'+prefixes[0]:null;
-      result.push({rows:entries.map(({name,area})=>({name,area})),total:total??sum,sum,verified:sequential&&(total===null?entries[0].index===1||!!floorHint:Math.abs(total-sum)<.16),hasTotal:total!==null,left,right,top:header.y0,bottom,cx:(left+right)/2,label,floor:floorIn(label),floorHint,page:page.page});
+      const ids=entries.map(r=>r.rawIndex).filter(Boolean),uniqueIds=new Set(ids).size===ids.length;
+      // Room numbers are identifiers, not an arithmetic sequence. Printed totals
+      // validate non-contiguous numbering; a genuine mismatch still blocks saving.
+      const verified=!unread&&uniqueIds&&(total!==null?Math.abs(total-sum)<.021:(!id||sequential&&(entries[0].index===1||!!floorHint)));
+      result.push({rows:entries.map(({name,area})=>({name,area})),total:total??sum,sum,verified,hasTotal:total!==null,left,right,top:header.y0,bottom,cx:(left+right)/2,nameX:header.x0,label,floor:floorIn(label),floorHint,page:page.page,unread});
     }
     return result;
   }
@@ -149,9 +159,9 @@
     for(const key of ['floor1','floor2','floor3','basement']){
       const candidates=plans.filter(p=>p.floor===key).sort((a,b)=>b.score-a.score);
       const assigned=pages.flatMap(p=>p.tables).filter(t=>t.floor===key);
-      const rankTable=t=>(t.verified?100:0)+(t.hasTotal?20:0)+(/экспликац/iu.test(t.label)?10:0)+t.rows.length*.01;
+      const rankTable=t=>(t.verified?1000:0)+(t.hasTotal?20:0)+(/экспликац/iu.test(t.label)?10:0)+t.rows.length*.01;
       let chosen=candidates.find(p=>p.source.tables.some(t=>t.floor===key))||candidates[0];
-      let table=chosen?.source.tables.filter(t=>t.floor===key).sort((a,b)=>rankTable(b)-rankTable(a))[0]||assigned.slice().sort((a,b)=>rankTable(b)-rankTable(a))[0];
+      let table=assigned.slice().sort((a,b)=>rankTable(b)-rankTable(a)+(b.page===chosen?.page?30:0)-(a.page===chosen?.page?30:0))[0];
       if(chosen||table)levels[key]={plan:chosen?{page:chosen.page,table,heading:chosen.heading}:null,table};
     }
     if(levels.basement)data.tags.push('Цокольный этаж');
@@ -162,7 +172,7 @@
       const label=key==='basement'?'цоколь':key.slice(5)+'-й этаж';
       if(!l?.table){complete=false;blocking.push('Не найдена экспликация: '+label);continue;}
       if(l.table.association==='adjacent_plan')warnings.push('Экспликация '+label+' сопоставлена с соседним планом');
-      if(!l.table.verified)blocking.push('Не сходится экспликация: '+label);
+      if(!l.table.verified){complete=false;blocking.push('Не сходится экспликация: '+label+' (комнаты '+area(l.table.sum)+' м²'+(l.table.hasTotal?', итог '+area(l.table.total)+' м²':'')+')');}
       if(!l.plan)blocking.push('Не найден план: '+label);
       total+=l.table.total;sources[key]={page:l.table.page,planPage:l.plan?.page,area:'table',association:l.table.association||'explicit'};
     }
@@ -212,6 +222,6 @@
     if(pages.some(p=>p.ocr))warnings.push('Часть данных распознана со скана');
     return {data,levels,sources,warnings,blocking:[...new Set(blocking)],pages:pages.length};
   }
-  root.CatalogPdfCore=Object.freeze({repairText,pageFromItems,tables,analyze,floorIn,area,number});
+  root.CatalogPdfCore=Object.freeze({repairText,pageFromItems,tables,analyze,floorIn,area,number,planInfos});
   if(typeof module!=='undefined')module.exports=root.CatalogPdfCore;
 })(typeof window!=='undefined'?window:globalThis);
