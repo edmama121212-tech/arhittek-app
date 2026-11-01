@@ -11512,9 +11512,9 @@ async function uploadCardImages(images,targetId=ceCurrentId){
     if(typeof img === 'string' && (img.startsWith('http://') || img.startsWith('https://'))){ out.push(img); continue; }
     if(typeof img === 'string' && img.startsWith('data:')){
       try{
-        const blob = dataURLtoBlob(img);
-        const fileName = `cards/${targetId||'new'}_${Date.now()}_${i}_${Math.random().toString(36).slice(2,7)}.jpg`;
-        const {error: upErr} = await sb.storage.from('expense-photos').upload(fileName, blob, {contentType:'image/jpeg', upsert:true});
+        const blob = dataURLtoBlob(img),contentType=blob.type==='image/png'?'image/png':'image/jpeg',extension=contentType==='image/png'?'png':'jpg';
+        const fileName = `cards/${targetId||'new'}_${Date.now()}_${i}_${Math.random().toString(36).slice(2,7)}.${extension}`;
+        const {error: upErr} = await sb.storage.from('expense-photos').upload(fileName, blob, {contentType, upsert:true});
         if(upErr) throw upErr;
         const {data: urlData} = sb.storage.from('expense-photos').getPublicUrl(fileName);
         out.push(urlData.publicUrl || img);
@@ -11534,6 +11534,7 @@ async function saveCard(){
   if(CatalogPdfImport.busyReading()){showToast('Дождитесь завершения чтения PDF');return;}
   const cardId=ceCurrentId,generation=cardEditorGeneration,saveKey=cardId || 'new:'+generation;
   const importMeta=cePdfImportMeta?JSON.parse(JSON.stringify(cePdfImportMeta)):null;
+  const saveActor=session?.token;
   if(cardSavesInFlight.has(saveKey))return;
   const images=ceImages.slice(),thumbs=ceThumbs.slice();
   const btn = document.getElementById('ce-save-btn');
@@ -11579,7 +11580,7 @@ async function saveCard(){
       if(thumbs.length===ceThumbs.length&&thumbs.every((image,index)=>image===ceThumbs[index]))ceThumbs=payload.thumbnails.slice();
     }
 
-    let result,duplicate=false;
+    let result,duplicate=false,planRefresh=null;
     let savedId = cardId;
     if(cardId){
       result = await sb.from('project_cards').update(payload).eq('id', cardId).select('id').maybeSingle();
@@ -11596,12 +11597,13 @@ async function saveCard(){
     if(result.error) throw result.error;
     if(!result.data?.id)throw new Error('Не получено подтверждение сохранения карточки');
     persisted=true;
+    if(duplicate&&window.CatalogPlan)planRefresh=await CatalogPlan.refreshExisting({id:savedId,incoming:payload,client:sb,allowed:canEditCards,actor:saveActor});
     if(cardEditorGeneration===generation)ceCurrentId=savedId;
 
     // Синхронизация с WordPress
     let siteSyncFailed=false;
     try {
-      if(!duplicate)await syncCardToWordPress(payload, savedId);
+      if(!duplicate||planRefresh?.updated)await syncCardToWordPress(planRefresh?.card||payload, savedId);
     } catch(wpErr) {
       siteSyncFailed=true;
       console.warn('WordPress sync error:', wpErr.message);
@@ -11612,8 +11614,8 @@ async function saveCard(){
       closeCardEditor();
     }
     await loadCards();
-    showToast(duplicate?'Проект уже есть в каталоге. Повторная карточка не создана':siteSyncFailed?'Карточка сохранена. Не удалось обновить сайт':cardId?'Проект обновлён':'Проект создан');
-    return {ok:true,id:savedId,duplicate};
+    showToast(planRefresh?.updated?'Планы обновлены по шаблону. Повторная карточка не создана':duplicate?'Проект уже есть в каталоге. Повторная карточка не создана':siteSyncFailed?'Карточка сохранена. Не удалось обновить сайт':cardId?'Проект обновлён':'Проект создан');
+    return {ok:true,id:savedId,duplicate,updatedPlans:!!planRefresh?.updated};
   } catch(e){
     console.error('saveCard error', e);
     showToast(persisted?'Карточка сохранена. Не удалось обновить список — повторите обновление':'Ошибка сохранения: '+(e.message||e));

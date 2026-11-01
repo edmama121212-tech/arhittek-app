@@ -3,7 +3,7 @@ const fs=require('fs'),path=require('path'),assert=require('node:assert/strict')
 const {PGlite}=require('@electric-sql/pglite'),{chromium,webkit}=require(process.env.CATALOG_PLAYWRIGHT_MODULE||'playwright'),{jsPDF}=require('jspdf');
 const core=require('../catalog-pdf-core'),root=path.resolve(__dirname,'..');
 let passed=0;const eq=(a,b,label)=>{assert.deepEqual(a,b,label);passed++};
-function fixture({number='00157-A',floors=3,basement=true,padding=0,embeddedFacade=false,coverOnly=false,duplicateIds=false}={}){
+function fixture({number='00157-A',floors=3,basement=true,padding=0,embeddedFacade=false,coverOnly=false,duplicateIds=false,compound=false,noRoomNames=false,noDimensions=false}={}){
  const pdf=new jsPDF({unit:'pt',format:[900,640],orientation:'landscape'});
  if(padding)pdf.internal.write('%'+'x'.repeat(padding));
  const legacy=s=>s.replace(/[А-Яа-яЁё№]/g,c=>c==='№'?'¹':c==='Ё'?'¨':c==='ё'?'¸':String.fromCharCode(c.charCodeAt(0)-0x410+0xc0));
@@ -13,6 +13,8 @@ function fixture({number='00157-A',floors=3,basement=true,padding=0,embeddedFaca
  text('Архитектурные решения. Газоблок. Ленточный фундамент. Общие сведения и состав проекта.',60,150);
  for(const label of [...Array.from({length:floors},(_,i)=>(i+1)+'-й этаж'),...(basement?['цокольный этаж']:[])]){
   pdf.addPage();text('План '+label,60,50,18);pdf.setDrawColor(30);pdf.setLineWidth(3);pdf.rect(70,100,420,420);pdf.line(280,100,280,520);pdf.line(70,310,490,310);
+  if(compound){pdf.setFillColor(191);pdf.moveTo(70,100).lineTo(490,100).lineTo(490,520).lineTo(70,520).close().moveTo(85,115).lineTo(475,115).lineTo(475,505).lineTo(85,505).close().fillEvenOdd();pdf.rect(274,115,12,390,'F');pdf.rect(85,304,390,12,'F');}
+  if(!noRoomNames){text('Спальня',135,200,12);text('С/У',350,200,12);text('Кухня гостиная',130,420,12);}if(!noDimensions)text('12 000',240,83,10);
   text('Экспликация '+label,570,75);text('№',550,100);text('Наименование',580,100);text('Площадь',760,100);
   [['Спальня','20,00'],['С/У','5,00'],['Кухня гостиная','75,00']].forEach(([n,a],i)=>{const y=125+i*22;text(String(duplicateIds&&i===1?1:i+1),550,y);text(n,580,y);text(a,765,y)});
   text('Итого',580,191);text('100,00',765,191);text('Стены подвала — условное обозначение',550,250);
@@ -124,6 +126,7 @@ function coreTests(){
  eq(streamChecks,{text:['First','Second'],fonts:['first','second'],lang:'ru',successUnlocked:true,error:'Text stream failed',errorUnlocked:true,cancelledName:'AbortError',cancelUnlocked:true},'Chunked text, failed streams and cancellation release their readers');
  await page.evaluate(()=>{
   window.__imports=[];window.__syncs=0;
+  window.__imageUploads=[];const storage=sb.storage.from.bind(sb.storage);sb.storage.from=name=>{const bucket=storage(name),upload=bucket.upload.bind(bucket);bucket.upload=(file,blob,options)=>{__imageUploads.push({file,mime:blob.type,contentType:options.contentType});return upload(file,blob,options)};return bucket;};
   const original=sb.rpc.bind(sb);sb.rpc=async(n,a)=>{
    if(n!=='import_catalog_pdf')return original(n,a);
    __imports.push(JSON.parse(JSON.stringify(a.p_card)));
@@ -210,9 +213,17 @@ function coreTests(){
  await page.waitForFunction(()=>document.getElementById('cards-pdf-result').textContent.includes('Создан проект'),null,{timeout:60000});
  eq(await page.evaluate(()=>[__imports.length,__db.project_cards.length,__syncs,__db.project_cards[0].project_number]),[1,1,1,'00157-A'],'Dropping a PDF from the file manager creates and syncs one card');
  eq(await page.evaluate(()=>JSON.stringify(__imports).includes('data:image')),false,'Only hosted card images, not PDF bytes, reach the database');
+ eq(await page.evaluate(()=>__imageUploads.some(x=>x.mime==='image/png')&&__imageUploads.every(x=>x.mime===x.contentType&&(x.mime!=='image/png'||x.file.endsWith('.png')))),true,'Lossless plan PNGs keep their actual MIME type and extension in storage');
  await page.evaluate(()=>openCardEditor(null));await dropAlbum('#ce-pdf-import','renamed.pdf');
  await page.waitForFunction(()=>document.getElementById('cards-pdf-result').textContent.includes('уже есть'),null,{timeout:60000});
  eq(await page.evaluate(()=>[__db.project_cards.length,__syncs]),[1,1],'Dropping the same PDF in the new-project form does not create or sync a duplicate');
+ await page.evaluate(()=>{const card=__db.project_cards[0];card.pdf_import_meta.sources.plans={};card.images[2]='https://example.invalid/legacy-plan.jpg';card.images[0]='https://example.invalid/owner-facade.jpg';card.title='Ручное название';card.price='99999';});
+ await dropAlbum('#view-cards','same-album-clean-plans.pdf');
+ await page.waitForFunction(()=>document.getElementById('cards-pdf-result').textContent.includes('обновлены по шаблону'),null,{timeout:60000});
+ eq(await page.evaluate(()=>{const c=__db.project_cards[0];return [__db.project_cards.length,c.title,c.price,c.images[0],c.images[2]!=='https://example.invalid/legacy-plan.jpg',c.pdf_import_meta.sources.plans.floor1.style,__syncs]}),[1,'Ручное название','99999','https://example.invalid/owner-facade.jpg',true,'arhittek-plan-1',2],'Reuploading the identical original PDF replaces only legacy plans, preserving manual price, title and facades');
+ const foreign=fixture({number:'00157-A',floors:1,basement:false});await page.locator('#catalog-pdf-file').setInputFiles({name:'different-revision.pdf',mimeType:'application/pdf',buffer:foreign});
+ await page.waitForFunction(()=>!CatalogPdfImport.busyReading()&&document.getElementById('cards-pdf-result').textContent.includes('уже есть'),null,{timeout:60000});
+ eq(await page.evaluate(()=>[__db.project_cards[0].title,Object.keys(__db.project_cards[0].pdf_import_meta.sources.plans).length,__syncs]),['Ручное название',4,2],'A different PDF with the same project number cannot overwrite existing plans');
  const ranged=await read(fixture({number:'00003',floors:1,basement:false,padding:2*1024*1024}));eq([ranged.data.project_number,ranged.data.total_area,ranged.blocking],['00003','100,00',[]],'Multi-chunk PDF.js range is delivered in one complete callback');
  const labelled=await read(fixture({number:'00004',floors:1,basement:false,embeddedFacade:true}));eq([labelled.images[0]!==null,labelled.images[1]!==null,labelled.blocking], [true,true,[]],'Raster facades on textual pages are detected and cropped');
  const covered=await read(fixture({number:'00005',floors:1,basement:false,coverOnly:true}));eq([covered.sources.facades,covered.images[0]!==null,covered.blocking],[[1],true,[]],'Facade on the cover is not excluded by page number');
@@ -226,6 +237,13 @@ function coreTests(){
  const unavailable=await read(fixture({number:'00007',floors:1,basement:false,duplicateIds:true}));
  eq([unavailable.blocking.some(s=>s.includes('Не сходится')),unavailable.warnings.some(s=>s.includes('Не удалось повторно')),unavailable.images[2]!==null],[true,true,true],'Unavailable retry OCR preserves extracted draft and its real blockers');
  await page.evaluate(()=>{window.Tesseract=__ocrSaved.tess;});
+ const compound=await read(fixture({number:'00008',floors:1,basement:false,compound:true}));
+ eq([compound.sources.plans.floor1.style,compound.sources.plans.floor1.widthMm,compound.sources.plans.floor1.heightMm,compound.sources.plans.floor1.rooms],['arhittek-plan-1',12000,12000,3],'Styled plans retain source dimensions and all room labels');
+ const geometry=await page.evaluate(async()=>{const image=new Image();image.src=__parsed.images[2];await image.decode();const c=document.createElement('canvas');c.width=image.width;c.height=image.height;const ctx=c.getContext('2d');ctx.drawImage(image,0,0);const p=__parsed.sources.plans.floor1,b=p.bounds,scale=Math.min(1400/(b.x1-b.x0),1040/(b.y1-b.y0)),left=(1800-(b.x1-b.x0)*scale)/2+30,top=270+(1040-(b.y1-b.y0)*scale)/2;const pixel=(x,y)=>Array.from(ctx.getImageData(Math.round(left+(x-b.x0)*scale),Math.round(top+(y-b.y0)*scale),1,1).data).slice(0,3);return {wall:pixel(75,200),room:pixel(150,150)}});
+ eq(geometry.wall.every(n=>n<90)&&geometry.room.every(n=>n>220),true,'A filled PDF wall contour retains its interior hole instead of blacking out rooms');
+ const unnamed=await read(fixture({number:'00009',floors:1,basement:false,noRoomNames:true}));eq([unnamed.images[2],unnamed.blocking.some(s=>s.includes('названия комнат'))],[null,true],'Unlocated rooms block the plan instead of uploading the original technical sheet');
+ const undimensioned=await read(fixture({number:'00010',floors:1,basement:false,noDimensions:true}));eq([undimensioned.images[2],undimensioned.blocking.some(s=>s.includes('габариты'))],[null,true],'Unknown overall dimensions are not invented');
+ const noVector=await page.evaluate(()=>CatalogPlan.prepare({pdfjs:{OPS:{}},page:{getOperatorList:async()=>({fnArray:[],argsArray:[]}),getViewport:()=>({transform:[1,0,0,1,0,0]})},info:{width:900,height:640,items:[],phrases:[],text:'',tables:[]},table:{rows:[]},key:'floor1'}));eq([noVector.ok,noVector.image],[false,undefined],'An unsupported scan cannot silently bypass clean-plan preparation');
  const one=await read(fixture({number:'00002',floors:1,basement:false}));eq([one.data.floors,one.data.tags.includes('Цокольный этаж')],[1,false],'Legend alone cannot enable basement');
  await page.evaluate(()=>{openCardEditor();CatalogPdfImport.apply(__parsed);window.__importFailure=true;});
  const failed=await page.evaluate(()=>saveCard());eq(failed.ok,false,'Failed import reports failure');
