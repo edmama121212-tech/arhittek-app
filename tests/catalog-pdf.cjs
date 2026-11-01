@@ -194,13 +194,25 @@ function coreTests(){
   }finally{window.Tesseract=saved;}
  });
  eq(scan,{calls:[3,11],count:2,area:'25,00',terminated:true},'Scanner retries sparse layout, preserves weak numeric OCR and fills floor area after confirmation');
- await page.locator('#catalog-pdf-file').setInputFiles({name:'album.pdf',mimeType:'application/pdf',buffer:album});
+ await page.evaluate(()=>closeCardEditor());await page.locator('#nav-cards').click();
+ const invalidDrop=await page.evaluate(()=>{
+  const zone=document.getElementById('view-cards'),generation=cardEditorGeneration,dataTransfer=new DataTransfer();dataTransfer.items.add(new File(['not a PDF'],'project.pln'));
+  const over=new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer});zone.dispatchEvent(over);
+  const highlighted=zone.classList.contains('catalog-pdf-drop-active'),drop=new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer});zone.dispatchEvent(drop);
+  return [over.defaultPrevented,highlighted,drop.defaultPrevented,cardEditorGeneration===generation,document.getElementById('toast').textContent.includes('PDF'),zone.classList.contains('catalog-pdf-drop-active')];
+ });
+ eq(invalidDrop,[true,true,true,true,true,false],'File drop highlights the catalogue, prevents browser navigation and rejects a non-PDF without clearing a draft');
+ async function dropAlbum(selector,name){return page.evaluate(({selector,name,bytes})=>{
+  const dataTransfer=new DataTransfer();dataTransfer.items.add(new File([Uint8Array.from(atob(bytes),c=>c.charCodeAt(0))],name));
+  document.querySelector(selector).dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer}));
+ },{selector,name,bytes:album.toString('base64')});}
+ await dropAlbum('#view-cards','album.pdf');
  await page.waitForFunction(()=>document.getElementById('cards-pdf-result').textContent.includes('Создан проект'),null,{timeout:60000});
- eq(await page.evaluate(()=>[__imports.length,__db.project_cards.length,__syncs,__db.project_cards[0].project_number]),[1,1,1,'00157-A'],'Upload alone creates and syncs one card');
+ eq(await page.evaluate(()=>[__imports.length,__db.project_cards.length,__syncs,__db.project_cards[0].project_number]),[1,1,1,'00157-A'],'Dropping a PDF from the file manager creates and syncs one card');
  eq(await page.evaluate(()=>JSON.stringify(__imports).includes('data:image')),false,'Only hosted card images, not PDF bytes, reach the database');
- await page.locator('#catalog-pdf-file').setInputFiles({name:'renamed.pdf',mimeType:'application/pdf',buffer:album});
+ await page.evaluate(()=>openCardEditor(null));await dropAlbum('#ce-pdf-import','renamed.pdf');
  await page.waitForFunction(()=>document.getElementById('cards-pdf-result').textContent.includes('уже есть'),null,{timeout:60000});
- eq(await page.evaluate(()=>[__db.project_cards.length,__syncs]),[1,1],'Repeated upload does not create or sync duplicate');
+ eq(await page.evaluate(()=>[__db.project_cards.length,__syncs]),[1,1],'Dropping the same PDF in the new-project form does not create or sync a duplicate');
  const ranged=await read(fixture({number:'00003',floors:1,basement:false,padding:2*1024*1024}));eq([ranged.data.project_number,ranged.data.total_area,ranged.blocking],['00003','100,00',[]],'Multi-chunk PDF.js range is delivered in one complete callback');
  const labelled=await read(fixture({number:'00004',floors:1,basement:false,embeddedFacade:true}));eq([labelled.images[0]!==null,labelled.images[1]!==null,labelled.blocking], [true,true,[]],'Raster facades on textual pages are detected and cropped');
  const covered=await read(fixture({number:'00005',floors:1,basement:false,coverOnly:true}));eq([covered.sources.facades,covered.images[0]!==null,covered.blocking],[[1],true,[]],'Facade on the cover is not excluded by page number');

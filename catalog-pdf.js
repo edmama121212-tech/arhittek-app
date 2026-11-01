@@ -217,7 +217,11 @@
     ceAutoPrice();markCardEditorDirty();cePreview();
   }
   async function start(input){
-    const file=input?.files?.[0];if(input)input.value='';if(!file)return;
+    const file=input?.files?.[0];if(input)input.value='';return startFile(file);
+  }
+  async function startFile(file){
+    if(!file)return;
+    if(file.type!=='application/pdf'&&!/\.pdf$/i.test(file.name||'')){showToast('Перетащите PDF-файл архитектурного альбома');return;}
     if(!canEditCards()){showToast('Нет доступа к импорту каталога');return;}
     if(active){showToast('Дождитесь завершения текущего импорта');return;}
     openCardEditor(null);const generation=cardEditorGeneration,actor=session?.token;
@@ -236,6 +240,40 @@
     }catch(e){if(generation===cardEditorGeneration)status(e.name==='AbortError'?'Импорт отменён':e.message||'Не удалось прочитать PDF. Попробуйте другой файл',null);}
     finally{if(generation===cardEditorGeneration)unlock(job);if(active===job)active=null;}
   }
+  function installDrop(){
+    const catalog=document.getElementById('view-cards'),block=document.getElementById('ce-pdf-import'),button=document.getElementById('cards-pdf-button');
+    if(!catalog||!block||!button)return;
+    for(const [target,id] of [[button,'cards-pdf-drop-hint'],[block.querySelector('button'),'ce-pdf-drop-hint']]){
+      const hint=document.createElement('p');hint.id=id;hint.className='catalog-pdf-drop-hint';hint.textContent='Или перетащите сюда PDF-файл альбома';target.after(hint);target.setAttribute('aria-describedby',id);
+    }
+    const isFile=e=>Array.from(e.dataTransfer?.types||[]).includes('Files')||!!e.dataTransfer?.files?.length;
+    let highlighted=null;
+    function clear(){highlighted?.classList.remove('catalog-pdf-drop-active');highlighted=null;}
+    function zone(event){
+      if(!canEditCards())return null;
+      const editor=document.getElementById('cardEditorOverlay');
+      if(editor&&getComputedStyle(editor).display!=='none')return !ceCurrentId&&!block.hidden&&block.contains(event.target)?block:null;
+      return catalog.classList.contains('active')&&catalog.contains(event.target)?catalog:null;
+    }
+    document.addEventListener('dragover',event=>{
+      if(!isFile(event))return;event.preventDefault();const target=zone(event);
+      if(target!==highlighted){clear();highlighted=target;highlighted?.classList.add('catalog-pdf-drop-active');}
+      event.dataTransfer.dropEffect=target&&!active?'copy':'none';
+    });
+    document.addEventListener('dragleave',event=>{if(!event.relatedTarget)clear();});
+    document.addEventListener('dragend',clear);window.addEventListener('blur',clear);
+    document.addEventListener('drop',event=>{
+      if(!isFile(event))return;event.preventDefault();const target=zone(event);clear();
+      if(!target)return;
+      if(active){showToast('Дождитесь завершения текущего импорта');return;}
+      const files=Array.from(event.dataTransfer.files||[]),items=Array.from(event.dataTransfer.items||[]);
+      if(items.some(item=>item.webkitGetAsEntry?.()?.isDirectory)){showToast('Перетащите PDF-файл, а не папку');return;}
+      if(files.length!==1){showToast('Загружайте по одному PDF-альбому');return;}
+      if(target===block&&document.getElementById('cardEditorOverlay').dataset.dirty==='1'){showToast('Сначала сохраните карточку или закройте её перед загрузкой другого альбома');return;}
+      void startFile(files[0]);
+    });
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',installDrop,{once:true});else installDrop();
   function reset(){cancel();status('Загрузите альбом — приложение заполнит и создаст карточку',null);const block=document.getElementById('ce-pdf-import');if(block)block.hidden=!!ceCurrentId;}
-  root.CatalogPdfImport=Object.freeze({read,start,cancel,reset,busyReading:()=>!!active&&!active.saving,apply,pdfItems,exportImage,readTextContent,imageRegions,photo});
+  root.CatalogPdfImport=Object.freeze({read,start,startFile,cancel,reset,busyReading:()=>!!active&&!active.saving,apply,pdfItems,exportImage,readTextContent,imageRegions,photo});
 })(window);
