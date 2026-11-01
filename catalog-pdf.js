@@ -1,7 +1,7 @@
 (function(root){
   'use strict';
   const PDF_BASE='https://cdn.jsdelivr.net/npm/pdfjs-dist@6.4.299/';
-  let pdfPromise=null,active=null;
+  let pdfPromise=null,planPromise=null,active=null;
   const abort=()=>new DOMException('Импорт отменён','AbortError');
   function check(job){if(job.cancelled||job.shouldStop?.())throw abort();}
   function progress(job,text,value){check(job);job.onProgress?.(text,value);}
@@ -172,12 +172,26 @@
       const selected=facadeCandidates.sort((a,b)=>b.score-a.score||a.page-b.page).slice(0,2),facades=selected.map(f=>f.page);
       const usedPages=new Set(Object.values(result.levels).map(l=>l.table?.page));
       if(pages.some(p=>usedPages.has(p.page)&&p.ocr&&(!Number.isFinite(p.confidence)||p.confidence<70)))result.blocking.push('Качество скана требует проверки распознанных данных');
+      const optionalContent=await doc.getOptionalContentConfig({intent:'display'});check(job);
       const images=CatalogFloors.slots(),thumbnails=CatalogFloors.slots();
       if(!facades.length)result.blocking.push('Не найдена визуализация фасада');
-      const assets=[...selected.map((f,index)=>({...f,index,plan:false})),...CatalogFloors.definitions.filter(f=>result.levels[f.key]?.plan).map(f=>({page:result.levels[f.key].plan.page,index:f.image,plan:true}))];
+      const assets=[...selected.map((f,index)=>({...f,index,plan:false})),...CatalogFloors.definitions.filter(f=>result.levels[f.key]?.plan).map(f=>({page:result.levels[f.key].plan.page,index:f.image,key:f.key,plan:true}))];
       for(let i=0;i<assets.length;i++){
         const asset=assets[i];progress(job,asset.plan?'Извлекаю план, страница '+asset.page+'…':'Извлекаю визуализацию, страница '+asset.page+'…',65+i/assets.length*25);
-        const canvas=await render(doc,asset.page,asset.plan?2400:1920,job);
+        if(asset.plan){
+          progress(job,'Оформляю чистый план: '+(asset.key==='basement'?'цоколь':asset.key.slice(5)+'-й этаж')+'…',65+i/assets.length*25);
+          planPromise??=import('./catalog-plan.js').catch(e=>{planPromise=null;throw e;});await planPromise;check(job);
+          const page=await doc.getPage(asset.page);
+          try{
+            const prepared=await CatalogPlan.prepare({pdfjs,page,info:pages[asset.page-1],table:result.levels[asset.key].table,key:asset.key,optionalContent,knownFootprint:result.sources.footprint?.from==='dimension_lines'?{value:result.data.footprint,page:result.sources.footprint.page}:null,check:()=>check(job)});check(job);
+            if(prepared.ok){images[asset.index]=prepared.image;thumbnails[asset.index]=prepared.thumbnail;(result.sources.plans??={})[asset.key]=prepared.report;
+              if(prepared.report.basis==='source-room-area-consensus')result.warnings.push('Габариты '+(asset.key==='basement'?'цоколя':asset.key.slice(5)+'-го этажа')+' рассчитаны по геометрии и площадям '+prepared.report.calibratedRooms+' помещений');
+              if(asset.key==='floor1'&&!result.data.footprint)result.data.footprint=(prepared.report.widthMm/1000).toLocaleString('ru-RU')+' × '+(prepared.report.heightMm/1000).toLocaleString('ru-RU');
+            }else result.blocking.push('План '+(asset.key==='basement'?'цоколя':asset.key.slice(5)+'-го этажа')+': '+prepared.reason+'. Нужна проверка исходного листа');
+          }finally{page.cleanup();}
+          continue;
+        }
+        const canvas=await render(doc,asset.page,1920,job);
         try{const item=exportImage(canvas,pages[asset.page-1],asset.plan,asset.bounds);images[asset.index]=item.image;thumbnails[asset.index]=item.thumbnail;}
         finally{canvas.width=canvas.height=0;}
       }
@@ -235,7 +249,7 @@
       const saved=await saveCard();
       if(saved?.ok){
         const report=document.getElementById('cards-pdf-result');report.hidden=false;
-        report.textContent=(saved.duplicate?'Проект №'+result.data.project_number+' уже есть в каталоге. Повторная карточка не создана.':'Создан проект №'+result.data.project_number+' из PDF. ')+(result.warnings.length?'Проверьте: '+result.warnings.join('. ')+'.':'');
+        report.textContent=(saved.updatedPlans?'Планы проекта №'+result.data.project_number+' обновлены по шаблону. Повторная карточка не создана.':saved.duplicate?'Проект №'+result.data.project_number+' уже есть в каталоге. Повторная карточка не создана.':'Создан проект №'+result.data.project_number+' из PDF. ')+(result.warnings.length?'Проверьте: '+result.warnings.join('. ')+'.':'');
       }else if(generation===cardEditorGeneration)status('Данные извлечены. Сохранение не подтверждено — нажмите «Сохранить проект» для повтора',null);
     }catch(e){if(generation===cardEditorGeneration)status(e.name==='AbortError'?'Импорт отменён':e.message||'Не удалось прочитать PDF. Попробуйте другой файл',null);}
     finally{if(generation===cardEditorGeneration)unlock(job);if(active===job)active=null;}

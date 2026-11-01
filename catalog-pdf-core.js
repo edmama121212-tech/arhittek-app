@@ -77,13 +77,13 @@
       // Room numbers are identifiers, not an arithmetic sequence. Printed totals
       // validate non-contiguous numbering; a genuine mismatch still blocks saving.
       const verified=!unread&&uniqueIds&&(total!==null?Math.abs(total-sum)<.021:(!id||sequential&&(entries[0].index===1||!!floorHint)));
-      result.push({rows:entries.map(({name,area})=>({name,area})),total:total??sum,sum,verified,hasTotal:total!==null,left,right,top:header.y0,bottom,cx:(left+right)/2,nameX:header.x0,label,floor:floorIn(label),floorHint,page:page.page,unread});
+      result.push({rows:entries.map(({name,area})=>({name,area})),roomIds:entries.map(r=>r.rawIndex),total:total??sum,sum,verified,hasTotal:total!==null,left,right,top:header.y0,bottom,cx:(left+right)/2,nameX:header.x0,label,floor:floorIn(label),floorHint,page:page.page,unread});
     }
     return result;
   }
   const planPattern=/планировочн.{0,12}решен|план.{0,25}(?:этаж|мебел|помещ)|привязк[аи]\s+мебел|марк[еи]р[оа]вочн.{0,8}план|кладочн.{0,15}план/iu;
   function planInfos(page,declared){
-    const headings=[...(page.phrases||[]),...page.items].filter(w=>planPattern.test(w.text));
+    const headings=[...(page.phrases||[]),...page.items].filter(w=>planPattern.test(w.text)||/^(?:[1-3]\s*[-–]?\s*(?:й|ый|ой)?\s*этаж|(?:перв|втор|трет)[а-яё]*\s+этаж|цокольный\s+этаж)(?:\s*\(\d+\))?$/iu.test(w.text.trim()));
     if(/содержание|ведомость\s+рабочих\s+чертеж/iu.test(page.text)&&headings.length>3)return [];
     const result=[];
     for(const h of headings){
