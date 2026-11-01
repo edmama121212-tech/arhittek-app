@@ -10,6 +10,14 @@ function projectRows(s){
  const archived=(s.financialProjects||s.trash?.projects||[]).filter(p=>p.deleted_at&&!ids.has(p.id));
  return [...live,...archived];
 }
+// One completion date for payroll, reserves and archived project fees.
+function completionDate(s,p){
+ const day=value=>value&&Number.isFinite(Date.parse(value))?new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Moscow',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(value)):null;
+ if(p.completed_at)return day(p.completed_at);
+ const done=new Set((s.statuses||[]).filter(x=>x.name==='Завершён').map(x=>x.id));
+ const first=(s.financialStatusHistory||s.history||[]).filter(a=>a.entity_id===p.id&&done.has(a.changes?.status_id?.new)&&a.changes.status_id.old!==a.changes.status_id.new&&day(a.created_at)).sort((a,b)=>Date.parse(a.created_at)-Date.parse(b.created_at))[0];
+ return first?day(first.created_at):p.end_date||(p.created_at?String(p.created_at).slice(0,10):null);
+}
 function calculate(s,until,hooks={}){
  const cash=window.ARHITTEKCash;
  until=until||cash.day();
@@ -35,7 +43,7 @@ function calculate(s,until,hooks={}){
   const completion=statusChanges.find(a=>a.changes.status_id.new===statusId&&cash.day(new Date(a.created_at))<=until);
   // updated_at changes for names, notes, contracts and stages too; it is not
   // evidence that a project was completed or that money was released.
-  const completionDay=completion?cash.day(new Date(completion.created_at)):p.end_date;
+  const accrualDay=completionDate(s,p),completionDay=completion?cash.day(new Date(completion.created_at)):accrualDay;
   const completed=/заверш/i.test((s.statuses||[]).find(x=>x.id===statusId)?.name||'')&&(until===cash.day()||!completionDay||completionDay<=until);
   const movements=post.filter(e=>e.row.project_id===p.id);
   const receipts=round(movements.filter(e=>e.amount>0).reduce((a,e)=>a+e.amount,0));
@@ -43,7 +51,7 @@ function calculate(s,until,hooks={}){
   const directPayments=round(movements.filter(e=>e.amount<0&&cash.flowGroup(e)!=='team').reduce((a,e)=>a-e.amount,0));
   const closingAfterSnapshot=completed&&(completion
    ?Date.parse(completion.created_at)>Date.parse(cash.cutoff)
-   :!!p.end_date&&p.end_date>=cash.cutoff.slice(0,10)&&p.end_date<=until);
+   :!!accrualDay&&accrualDay>=cash.cutoff.slice(0,10)&&accrualDay<=until);
   const invoiceRows=(s.invoices||[]).filter(i=>!i.deleted_at&&i.project_id===p.id&&!i.paid_by_client&&Date.parse(i.created_at)>Date.parse(cash.cutoff)&&String(i.invoice_date||i.created_at).slice(0,10)<=until);
   const eligible=movements.length>0||closingAfterSnapshot||invoiceRows.length>0;
   const projectInvoices=(s.invoices||[]).filter(i=>!i.deleted_at&&i.project_id===p.id&&String(i.invoice_date||i.created_at||'').slice(0,10)<=until);
@@ -58,11 +66,11 @@ function calculate(s,until,hooks={}){
   const add=(id,amount,month,legacy=0)=>{
    if(!id||amount<=0||!month)return;
    let item=items.find(x=>x.projectId===p.id&&x.employeeId===id&&x.month===month);
-   if(!item){item={projectId:p.id,employeeId:id,month,ref:p.end_date||p.created_at||'',due:0,legacy:0,paid:0,paidPost:0,salaryPaid:0,salaryPaidBefore:0,salaryPaidPost:0};items.push(item);}
+   if(!item){item={projectId:p.id,employeeId:id,month,ref:accrualDay||'',due:0,legacy:0,paid:0,paidPost:0,salaryPaid:0,salaryPaidBefore:0,salaryPaidPost:0};items.push(item);}
    item.due=round(item.due+amount);item.legacy=round(item.legacy+legacy);
   };
   if(p.fee_base==='m2'||isConstruction){
-   if(completed)roleRows.forEach(r=>add(r.payee_employee_id,num(r.amount),String(p.end_date||p.created_at||'').slice(0,7)));
+   if(completed)roleRows.forEach(r=>add(r.payee_employee_id,num(r.amount),String(accrualDay||'').slice(0,7)));
   }else{
    [[p.employee_id,num(f.mainFeeAmount),num(f.mainPaid),num(f.feePercent)],
     [p.co_employee_id,num(f.coFeeAmount),num(f.coPaid),num(f.coFeePercent)]].forEach(([id,amount,legacy,rate])=>{
@@ -75,9 +83,9 @@ function calculate(s,until,hooks={}){
      for(const [m,a] of [...byMonth].sort())add(id,a,m);
      const own=items.filter(x=>x.projectId===p.id&&x.employeeId===id);
      for(const x of own){const paid=Math.min(legacy,x.due);x.legacy+=paid;legacy-=paid;}
-    }else if(completed)add(id,amount,String(p.end_date||p.created_at||'').slice(0,7),legacy);
+    }else if(completed)add(id,amount,String(accrualDay||'').slice(0,7),legacy);
    });
-   if(completed&&construction(p))roleRows.forEach(r=>add(r.payee_employee_id,num(r.amount),String(p.end_date||p.created_at||'').slice(0,7)));
+   if(completed&&construction(p))roleRows.forEach(r=>add(r.payee_employee_id,num(r.amount),String(accrualDay||'').slice(0,7)));
   }
  }
  // A fee payment and the project's fee_paid counter describe the same payment.
@@ -125,6 +133,6 @@ function calculate(s,until,hooks={}){
  const companyReserve=round(cashBalance-amortization-projectsHeld-teamHeld-costsHeld);
  return {cashBalance,amortization,projectsHeld,constructionHeld,teamHeld,costsHeld,releasedOpeningFunds,openingFundsUsed,countedCash:counted,companyReserve,available:companyReserve,beforeTeam:round(companyReserve+teamHeld),projects:details.filter(d=>d.eligible),warnings};
 }
-window.ARHITTEKBudget={calculate,projectRows};
+window.ARHITTEKBudget={calculate,projectRows,completionDate};
 })();
 

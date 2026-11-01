@@ -12,6 +12,16 @@ await test('quarter salary',()=>computeFinancePeriod('2026-07-01','2026-09-30').
 await test('year salary',()=>computeFinancePeriod('2026-01-01','2026-12-31').payrollPaidOut,1200000);
 await test('partial month salary',()=>salaryForRange({fixed_salary:30000},'2026-09-16','2026-09-30'),15000);
 await test('leap month',()=>timesheetMonthRange('2024-02'),{from:'2024-02-01',to:'2024-02-29'});
+await test('Actual completion moves the architect fee into November payroll and its visible card',()=>{
+ const previous={projects:state.projects,employees:state.employees,ledger:state.ledger,financialStatusHistory:state.financialStatusHistory},month=document.getElementById('ts-month').value;
+ try{
+  state.employees=[...state.employees.map(e=>e.id==='architect'?{...e,name:'Ризван'}:e),{id:'manager',name:'Менеджер',role:'Менеджер',active:true}];
+  state.projects=[{id:'completion-case',name:'Иса Дагестан',category_id:'arch',status_id:'done',employee_id:'architect',co_employee_id:'manager',price:65000,fee_percent:50,co_fee_percent:25,fee_base:'profit',end_date:'2026-10-23',completed_at:'2026-11-01T14:00:24Z'}];state.ledger=[];state.financialStatusHistory=[];
+  const november=completedProjectEarningsForRange('2026-11-01','2026-11-30').employees.architect?.earned||0,october=completedProjectEarningsForRange('2026-10-01','2026-10-31').employees.architect?.earned||0;
+  document.getElementById('ts-month').value='2026-11';renderTimesheet();
+  return [november,october,document.getElementById('timesheetCard').textContent.includes('Ризван')];
+ }finally{Object.assign(state,previous);document.getElementById('ts-month').value=month;renderTimesheet();}
+},[24375,0,true]);
 await test('m2 only after completion',()=>{state.projects=[{id:'d',name:'Design',category_id:'design',price:200000,status_id:'active',fee_base:'m2',end_date:'2026-09-18'}];state.ledger=[{project_id:'d',type:'role_payout',payee_employee_id:'visual',amount:40000}];return completedProjectEarningsForRange('2026-09-01','2026-09-30').employees.visual?.earned||0},0);
 await test('m2 completed',()=>{state.projects[0].status_id='done';return completedProjectEarningsForRange('2026-09-01','2026-09-30').employees.visual.earned},40000);
 await test('bonus enters payroll month',()=>{state.ledger.push({id:'bonus1',type:'bonus',payee_employee_id:'visual',amount:5000,entry_date:'2026-09-20'});return completedProjectEarningsForRange('2026-09-01','2026-09-30').employees.visual.earned},45000);
