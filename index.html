@@ -4946,14 +4946,7 @@ async function saveProject(){
     return;
   }
 
-  // Если проект переводят в «Завершён» без даты сдачи, фиксируем фактический день.
-  // Иначе начисления могли попасть в табель за месяц создания проекта.
-  const selectedStatusForSave = findStatus(payload.status_id);
-  if(selectedStatusForSave && selectedStatusForSave.name === 'Завершён' && !payload.end_date){
-    payload.end_date = financeToday();
-    const endField = document.getElementById('pf-end');
-    if(endField) endField.value = payload.end_date;
-  }
+  // Actual completion is stamped by the server. end_date is the planned deadline.
 
   if([payload.fee_percent,payload.co_fee_percent].some(v=>v!==null&&(!Number.isFinite(v)||v<0||v>100))||(Number(payload.fee_percent)||0)+(Number(payload.co_fee_percent)||0)>100){showToast('Сумма долей должна быть от 0 до 100%');return;}
   if(payload.area!==null&&(!Number.isFinite(payload.area)||payload.area<0)){showToast('Площадь не может быть отрицательной');return;}
@@ -5226,13 +5219,13 @@ function renderEmployeeFeeSummary(){
 // ЗАРАБОТОК ПО ЗАКОНЧЕННЫМ ПРОЕКТАМ — общий расчёт, используется и в
 // табеле по сотрудникам, и в финансовой сводке компании (Обзор).
 // Считаем только проекты со статусом «Завершён», привязывая их к периоду
-// по дате сдачи (end_date), а если её нет — по дате создания проекта.
+// по фактической дате завершения; старые записи сохраняют исторический период.
 // Гонорар сотрудника считается как обычно (через getProjectFee), но для
 // сотрудников с фиксированной ЗП (is_salaried) реальная выплата — это
 // min(фикс. ЗП, заработано), а разница остаётся в прибыли компании.
 // ============================================================
 function timesheetProjectRefDate(p){
-  return p.end_date || (p.created_at ? p.created_at.slice(0,10) : null);
+  return ARHITTEKBudget.completionDate(state,p);
 }
 
 function financeDeptOf(p){
@@ -6257,7 +6250,7 @@ function renderM2CompensationSummary(p){
   const area=Number(document.getElementById('pf-area')?.value || p?.area || 0);
   const items=projectRolePayoutEntries(p?.id).filter(x=>!x.deleted_at);
   const total=items.reduce((s,x)=>s+Number(x.amount||0),0);
-  el.innerHTML=`<div class="fee-row total"><div class="fl">Начислено по м²</div><div class="fv">${fmtMoney(total)}</div></div><div class="payroll-note">Начисления появятся в табеле только после статуса «Завершён» и попадут в месяц даты сдачи проекта.</div>`;
+  el.innerHTML=`<div class="fee-row total"><div class="fl">Начислено по м²</div><div class="fv">${fmtMoney(total)}</div></div><div class="payroll-note">Начисления появятся в табеле только после статуса «Завершён» и попадут в месяц фактического завершения проекта.</div>`;
 }
 
 function getProjectCompensationMethod(p){
@@ -6345,7 +6338,7 @@ function renderProjectRolePayouts(projectId){
         <div class="li-name" style="font-weight:700;color:var(--gold);">−${fmtMoney(total)}</div>
       </div></div>`;
   }
-  if(status && status.name !== 'Завершён'){ el.insertAdjacentHTML('afterbegin','<div class="payroll-note" style="padding:8px 0;color:var(--gold);">Начисления сохранены, но в табеле появятся только после завершения проекта — в месяц даты сдачи.</div>'); }
+  if(status && status.name !== 'Завершён'){ el.insertAdjacentHTML('afterbegin','<div class="payroll-note" style="padding:8px 0;color:var(--gold);">Начисления сохранены, но в табеле появятся только после завершения проекта — в месяц фактического завершения.</div>'); }
   updateCompanyRemainderField(projectId);
 }
 
