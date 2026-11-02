@@ -40,3 +40,23 @@ let split=table({caption:'Экспликация 1-го этажа'});split=spli
 result=core.analyze([page(1,[w('Проект №11525',20,20),w('Одноэтажный дом',20,50)]),page(2,[...plan(1),...split])]);
 eq([result.data.total_area,result.blocking],['25,00',[]],'Split decimal PDF cells join before arithmetic validation');
 console.log(JSON.stringify({passed,failed:[]}));
+// Regression cases from heterogeneous Archicad albums (no private files).
+eq(core.floorIn('План -1-й этаж'),'basement','Negative first level is basement');
+eq(core.floorIn('План 2-этаж'),'floor2','Abbreviated hyphenated floor');
+for(const prefix of ['2/','2\\']){
+ const r=core.analyze([title(),p1(),page(3,plan(2)),page(5,table({prefix}))]);
+ eq(r.sources.floor2.association,'room_numbers','Slash/backslash floor prefix');
+}
+let duplicate=table();duplicate.find(v=>v.text==='2').text='1';
+let r=core.analyze([page(1,[w('Одноэтажный дом',20,20)]),page(2,[...plan(1),...duplicate])]);
+eq([r.data.total_area,r.data.project_number,r.warnings.some(v=>v.includes('повторяются'))],['25,00',null,true],'Arithmetic total independent of duplicated identifiers; absent number stays manual');
+let aggregate=table({values:[20,5,100,500]});aggregate=aggregate.filter(v=>v.y0!==180);aggregate.push(w('Итого',530,235),w('625.00',720,235));
+aggregate.filter(v=>v.text==='С/У').forEach((v,i)=>{if(i===1)v.text='Дом';if(i===2)v.text='Участок';});
+r=core.analyze([page(1,[w('Одноэтажный дом',20,20)]),page(2,[...plan(1),...aggregate])]);
+eq([r.data.total_area,r.levels.floor1.table.verified,r.levels.floor1.table.rows.length],['25,00',true,2],'Site and building aggregate rows excluded after raw arithmetic validation');
+let bedrooms=table();bedrooms.find(v=>v.text==='Спальня').text='СП-1';
+r=core.analyze([page(1,[w('Одноэтажный дом',20,20)]),page(2,[...plan(1),...bedrooms])]);eq(r.data.beds,1,'Numbered bedroom abbreviation');
+const identity=Array.from({length:4},(_,i)=>page(i+1,[w('Проект №17/ 2022-АР',20,20)]));identity.push(page(5,[w('Проект №99/2022',20,20)]));
+eq(core.analyze(identity).data.project_number,'17/2022','Split identifier, discipline suffix and minority typo');
+const note=page(2,[w('Пояснительная записка',20,20),...table({caption:'Экспликация 1-го этажа'})]);eq(core.planInfos(note,1),[],'Description table is not a plan');
+console.log(JSON.stringify({contextTotal:passed,failed:[]}));

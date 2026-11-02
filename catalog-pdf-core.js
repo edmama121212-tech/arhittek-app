@@ -28,12 +28,13 @@
     return {page,width,height,items:words,lines,phrases,text:words.map(w=>w.text).join('\n'),ocr};
   }
   function floorIn(text){
-    const m=text.match(/(?:этаж[а-я]*\s*([1-9])|([1-9])\s*(?:[-–]?\s*(?:й|ый|ой|го))?\s*этаж)/iu);
+    if(/(?:^|[\s(])[−-]\s*1\s*[-–]?\s*(?:й|го)?\s*этаж/iu.test(text))return 'basement';
+    const m=text.match(/(?:этаж[а-я]*\s*([1-9])|([1-9])\s*[-–]?\s*(?:(?:й|ый|ой|го)\s*)?этаж)/iu);
     if(m)return 'floor'+(m[1]||m[2]);
     const verbal=text.match(/(перв|втор|трет)[а-яё]*\s+этаж/iu);
     if(verbal)return 'floor'+({перв:1,втор:2,трет:3}[verbal[1].toLowerCase()]);
     const roman=text.match(/(?:^|[\s(])(IV|III|II|I)\s*[-–]?\s*(?:этаж[а-яё]*|эт\.?)(?:\s|$)/iu);if(roman)return 'floor'+({I:1,II:2,III:3,IV:4}[roman[1].toUpperCase()]);
-    if(/цокольн[а-яё]*\s+этаж|подвальн[а-яё]*\s+этаж|(?:план|экспликация)(?:\s+помещений)?\s+(?:цоколя|подвала)|^(?:цоколь|подвал)$/iu.test(clean(text)))return 'basement';
+    if(/цокольн[а-яё]*\s+этаж|подвальн[а-яё]*\s+этаж|(?:план|экспликация)(?:\s+помещений)?\s+(?:цоколь|цоколя|подвал|подвала)|^(?:цоколь|подвал)$/iu.test(clean(text)))return 'basement';
     return null;
   }
   function tables(page){
@@ -54,9 +55,9 @@
       const entries=[];let total=null,lastY=header.cy,bottom=header.y1,unread=0;
       for(let i=0;i<cells.length;i++){
         const cell=cells[i];if(cell.cy-lastY>Math.max(45,header.h*5)&&entries.length)break;
-        const above=i?(cells[i-1].cy+cell.cy)/2:Math.max(header.y1,a.y1),below=cells[i+1]?(cell.cy+cells[i+1].cy)/2:cell.cy+header.h*1.1;
+        const above=i?(cells[i-1].cy+cell.cy)/2:Math.max(header.y1,a.y1),below=Math.min(cells[i+1]?(cell.cy+cells[i+1].cy)/2:Infinity,cell.cy+header.h*2);
         const same=words.filter(w=>!w.vertical&&w.cy>above&&w.cy<below&&w.x0>=left&&w.x0<areaLeft);
-        const index=id?same.filter(w=>Math.abs(w.cx-id.cx)<header.h*1.5&&/^\d{1,3}(?:[.:-]\d{1,3})?$/.test(w.text)).sort((x,y)=>Math.abs(x.cy-cell.cy)-Math.abs(y.cy-cell.cy))[0]:null;
+        const index=id?same.filter(w=>Math.abs(w.cx-id.cx)<header.h*1.5&&/^\d{1,3}(?:[./:\\-]\d{1,3})?$/.test(w.text)).sort((x,y)=>Math.abs(x.cy-cell.cy)-Math.abs(y.cy-cell.cy))[0]:null;
         const name=clean(same.filter(w=>w!==index&&w.x0>(id?id.x1:left)&&!/^\d+$/.test(w.text)).sort((x,y)=>Math.abs(x.cy-y.cy)<header.h*.5?x.x0-y.x0:x.cy-y.cy).map(w=>w.text).join(' '));
         if(/^(итого|всего|общая\s+площадь|сумма)/iu.test(name)){if(entries.length){total=cell.value;bottom=cell.y1;break;}continue;}
         if(!name||!/[а-яёa-z]/iu.test(name)){
@@ -65,29 +66,34 @@
           unread++;continue;
         }
         if(/наименование|условные|стадия|экспликац/iu.test(name))break;
-        const rawIndex=index?.text||null,parts=rawIndex?.split(/[.:-]/);
+        const rawIndex=index?.text||null,parts=rawIndex?.split(/[./:\\-]/);
         entries.push({name,area:area(cell.value),index:parts?Number(parts.at(-1)):null,rawIndex});lastY=cell.cy;bottom=cell.y1;
       }
       if(!entries.length)continue;
-      const sum=Math.round(entries.reduce((s,r)=>s+number(r.area),0)*100)/100;
+      const rawSum=Math.round(entries.reduce((s,r)=>s+number(r.area),0)*100)/100;
       const labels=[...(page.phrases||[]),...words].filter(w=>/экспликац/iu.test(w.text)&&w.cy<header.cy&&header.cy-w.cy<page.height*.12&&w.cx>left-header.h*4&&w.cx<right+header.h*4).sort((x,y)=>y.cy-x.cy);
-      const label=labels[0]?.text||'',sequential=entries.every((r,i)=>r.index!==null&&r.index===entries[0].index+i),prefixes=entries.map(r=>r.rawIndex?.match(/^([1-3])[.:-]/)?.[1]||(/^([1-3])\d{2}$/.exec(r.rawIndex||'')?.[1]));
+      const label=labels[0]?.text||'',sequential=entries.every((r,i)=>r.index!==null&&r.index===entries[0].index+i),prefixes=entries.map(r=>r.rawIndex?.match(/^([1-3])[./:\\-]/)?.[1]||(/^([1-3])\d{2}$/.exec(r.rawIndex||'')?.[1]));
       const floorHint=prefixes.every(x=>x&&x===prefixes[0])?'floor'+prefixes[0]:null;
       const ids=entries.map(r=>r.rawIndex).filter(Boolean),uniqueIds=new Set(ids).size===ids.length;
       // Room numbers are identifiers, not an arithmetic sequence. Printed totals
       // validate non-contiguous numbering; a genuine mismatch still blocks saving.
-      const verified=!unread&&uniqueIds&&(total!==null?Math.abs(total-sum)<.021:(!id||sequential&&(entries[0].index===1||!!floorHint)));
-      result.push({rows:entries.map(({name,area})=>({name,area})),roomIds:entries.map(r=>r.rawIndex),total:total??sum,sum,verified,hasTotal:total!==null,left,right,top:header.y0,bottom,cx:(left+right)/2,nameX:header.x0,label,floor:floorIn(label),floorHint,page:page.page,unread});
+      const verified=!unread&&(total!==null?Math.abs(total-rawSum)<.021:(!id||sequential&&(entries[0].index===1||!!floorHint)));
+      const excludedRows=entries.filter(r=>/^(?:дом|жилой\s+дом|здание|участок|территория|площадь\s+(?:участка|застройки))$/iu.test(r.name));
+      const rooms=entries.filter(r=>!excludedRows.includes(r)),sum=Math.round(rooms.reduce((v,r)=>v+number(r.area),0)*100)/100;
+      result.push({excludedRows,ambiguousRoomIds:!uniqueIds,rawTotal:total,rows:rooms.map(({name,area})=>({name,area})),roomIds:rooms.map(r=>r.rawIndex),total:excludedRows.length?sum:total??sum,sum,verified,hasTotal:total!==null&&!excludedRows.length,left,right,top:header.y0,bottom,cx:(left+right)/2,nameX:header.x0,label,floor:floorIn(label),floorHint,page:page.page,unread});
     }
     return result;
   }
-  const planPattern=/планировочн.{0,12}решен|план.{0,25}(?:этаж|мебел|помещ)|привязк[аи]\s+мебел|марк[еи]р[оа]вочн.{0,8}план|кладочн.{0,15}план/iu;
+  const summaryTable=t=>/общая|общий|генерал|генплан|строений|участк/iu.test(t.label);
+  const planPattern=/^(?:обмерный\s+[1-3]\s*[-–]?\s*этаж|план\s+обмерный|планировочн.{0,12}решен|план.{0,25}(?:этаж|мебел|помещ)|привязк[аи]\s+мебел|марк[еи]р[оа]вочн.{0,8}план|кладочн.{0,15}план)/iu;
   function planInfos(page,declared){
     const headings=[...(page.phrases||[]),...page.items].filter(w=>planPattern.test(w.text)||/^(?:[1-3]\s*[-–]?\s*(?:й|ый|ой)?\s*этаж|(?:перв|втор|трет)[а-яё]*\s+этаж|цокольный\s+этаж)(?:\s*\(\d+\))?$/iu.test(w.text.trim()));
     if(/содержание|ведомость\s+рабочих\s+чертеж/iu.test(page.text)&&headings.length>3)return [];
-    const result=[];
+    const result=[],floorTables=(page.tables||tables(page)).filter(t=>t.floor&&!summaryTable(t));
+    if(/пояснительная\s+записка|общие\s+данные/iu.test(page.text)&&!headings.some(h=>planPattern.test(h.text)&&floorIn(h.text)))return [];
     for(const h of headings){
-      const floor=floorIn(h.text)||(declared===1?'floor1':null);
+      const floor=floorIn(h.text)||(new Set(floorTables.map(t=>t.floor)).size===1?floorTables[0].floor:null)||(declared===1?'floor1':null);
+      if(!planPattern.test(h.text)&&/план\s+кровли|разрез|стропильн|перекрыти/iu.test(page.text)&&!floorTables.some(t=>t.floor===floor))continue;
       if(!floor)continue;
       const score=/планировочн/iu.test(h.text)?100:/мебел/iu.test(h.text)?90:/марк[еи]р/iu.test(h.text)?75:40;
       const existing=result.find(x=>x.floor===floor);
@@ -95,12 +101,13 @@
       if(!existing)result.push(entry);
       else if(score>existing.score||score===existing.score&&h.h>existing.h)Object.assign(existing,entry);
     }
+    for(const t of floorTables.filter(t=>t.verified&&!result.some(p=>p.floor===t.floor)))result.push({floor:t.floor,score:15,heading:t.label,page:page.page,cx:t.cx,cy:t.top,h:10});
     return result;
   }
   function associateTables(pages,plans,declared){
     const all=pages.flatMap(p=>p.tables),distance=(table,plan,page)=>Math.abs(table.cx-plan.cx)/page.width+Math.abs(table.top-plan.cy)/page.height*.25;
     for(const page of pages){
-      const local=plans.filter(p=>p.page===page.page),floors=[...new Set(local.map(p=>p.floor))],unknown=page.tables.filter(t=>!t.floor);
+      const local=plans.filter(p=>p.page===page.page),floors=[...new Set(local.map(p=>p.floor))],unknown=page.tables.filter(t=>!t.floor&&!summaryTable(t));
       for(const table of unknown){
         if(floors.length===1&&unknown.length===1){table.floor=floors[0];table.association='same_plan';continue;}
         if(floors.length>1){
@@ -113,12 +120,12 @@
     }
     // A standalone table may follow its drawing. Equal-distance contradictory
     // neighbours remain ambiguous rather than borrowing an arbitrary floor.
-    for(const table of all.filter(t=>!t.floor)){
+    for(const table of all.filter(t=>!t.floor&&!summaryTable(t))){
       const nearby=plans.filter(p=>Math.abs(p.page-table.page)===1),floors=[...new Set(nearby.map(p=>p.floor))];
       if(floors.length===1&&pages.find(p=>p.page===table.page)?.tables.filter(t=>!t.floor).length===1){table.floor=floors[0];table.association='adjacent_plan';}
     }
     // Exact copies inherit a level only when neighbouring plans do not conflict.
-    for(const table of all.filter(t=>!t.floor)){
+    for(const table of all.filter(t=>!t.floor&&!summaryTable(t))){
       const nearby=[...new Set(plans.filter(p=>Math.abs(p.page-table.page)<=1).map(p=>p.floor))];
       const matches=[...new Set(all.filter(t=>t!==table&&t.floor&&signature(t)===signature(table)).map(t=>t.floor))];
       if(matches.length===1&&nearby.length<=1&&(!nearby.length||nearby[0]===matches[0])){table.floor=matches[0];table.association='matching_table';}
@@ -130,8 +137,8 @@
     const strong=[],weak=[],counts=[];
     for(const p of pages){
       for(const line of p.lines){
-        for(const m of line.text.matchAll(/№\s*([\p{L}\d][\p{L}\d._\/-]{0,39})/gu)){
-          const val=m[1].replace(/[.,;]+$/,'');if(!/\d/.test(val)||/док/iu.test(val))continue;
+        for(const m of line.text.replace(/(\d)\s*([/._-])\s*(?=\d)/gu,'$1$2').matchAll(/№\s*([\p{L}\d][\p{L}\d._\/-]{0,39})/gu)){
+          const val=m[1].replace(/-(?:АР|ЭП|РП|КР|ВК|ОВ|ЭОМ)$/iu,'').replace(/[.,;]+$/,'');if(/[/_-]$/.test(val))continue;if(!/\d/.test(val)||/док/iu.test(val))continue;
           if(/проект\s*(?:АР|ЭП|РП|КР)?\s*№/iu.test(line.text))strong.push({value:val,page:p.page});
           else if(val.replace(/\D/g,'').length>=3)weak.push({value:val,page:p.page});
         }
@@ -141,11 +148,11 @@
       p.tables=tables(p);
     }
     function vote(candidates,field){
-      const grouped=new Map();for(const c of candidates){const v=grouped.get(c.value)||{...c,count:0};v.count++;grouped.set(c.value,v);}
+      const grouped=new Map();for(const c of candidates){const v=grouped.get(c.value)||{...c,count:0};v.pages??=new Set();v.pages.add(c.page);v.count=v.pages.size;grouped.set(c.value,v);}
       const ranked=[...grouped.values()].sort((a,b)=>b.count-a.count);
       if(!ranked.length)return null;
-      if(ranked.length>1){blocking.push((field==='floors'?'Этажность':'Номер проекта')+': в альбоме разные значения');return null;}
-      sources[field]={page:ranked[0].page};return ranked[0].value;
+      if(ranked.length>1&&!(field==='project_number'&&ranked[0].count>=3&&ranked[0].count-ranked[1].count>=2&&ranked[0].count/ranked.reduce((sum,v)=>sum+v.count,0)>=.75)){blocking.push((field==='floors'?'Этажность':'Номер проекта')+': в альбоме разные значения');return null;}
+      if(ranked.length>1)warnings.push('Номер проекта выбран по большинству листов; отдельные подписи отличаются');sources[field]={page:ranked[0].page};return ranked[0].value;
     }
     data.project_number=vote(strong.length?strong:weak,'project_number');
     let declared=vote(counts,'floors');
@@ -153,16 +160,19 @@
     const explicit=plans.map(p=>p.floor).filter(Boolean);
     if(!declared){const nums=explicit.filter(f=>/^floor/.test(f)).map(f=>Number(f.slice(5)));if(nums.length)declared=Math.max(...nums);}
     associateTables(pages,plans,declared);
+    const mansard=pages.some(p=>/мансард/iu.test(p.text)),occupied=pages.flatMap(p=>p.tables).filter(t=>t.verified&&/^floor/.test(t.floor||'')&&!summaryTable(t)).map(t=>Number(t.floor.slice(5)));
+    if(mansard&&occupied.length&&Math.max(...occupied)>declared){declared=Math.max(...occupied);warnings.push('Этажность уточнена по планам и экспликациям мансарды');}
+    if(mansard)data.tags.push('Мансарда');
     data.floors=declared;
     if(declared>3)blocking.push('В альбоме больше трёх надземных этажей');
     if(explicit.some(f=>/^floor/.test(f)&&Number(f.slice(5))>declared))blocking.push('Этажность в описании не совпадает с планами');
     for(const key of ['floor1','floor2','floor3','basement']){
       const candidates=plans.filter(p=>p.floor===key).sort((a,b)=>b.score-a.score);
-      const assigned=pages.flatMap(p=>p.tables).filter(t=>t.floor===key);
+      const assigned=pages.flatMap(p=>p.tables).filter(t=>t.floor===key&&!summaryTable(t));
       const rankTable=t=>(t.verified?1000:0)+(t.hasTotal?20:0)+(/экспликац/iu.test(t.label)?10:0)+t.rows.length*.01;
       let chosen=candidates.find(p=>p.source.tables.some(t=>t.floor===key))||candidates[0];
       let table=assigned.slice().sort((a,b)=>rankTable(b)-rankTable(a)+(b.page===chosen?.page?30:0)-(a.page===chosen?.page?30:0))[0];
-      if(chosen||table)levels[key]={plan:chosen?{page:chosen.page,table,heading:chosen.heading}:null,table};
+      if(chosen||table)levels[key]={planCandidates:candidates.map(p=>({page:p.page,heading:p.heading,score:p.score})),plan:chosen?{page:chosen.page,table,heading:chosen.heading}:null,table};
     }
     if(levels.basement)data.tags.push('Цокольный этаж');
     const activeKeys=[...(levels.basement?['basement']:[]),...Array.from({length:Math.min(declared||0,3)},(_,i)=>'floor'+(i+1))];
@@ -171,6 +181,8 @@
       const l=levels[key];
       const label=key==='basement'?'цоколь':key.slice(5)+'-й этаж';
       if(!l?.table){complete=false;blocking.push('Не найдена экспликация: '+label);continue;}
+      if(l.table.excludedRows?.length)warnings.push('Из площади '+label+' исключены отдельные строки: '+l.table.excludedRows.map(r=>r.name).join(', '));
+      if(l.table.ambiguousRoomIds)warnings.push('В экспликации '+label+' повторяются номера помещений');
       if(l.table.association==='adjacent_plan')warnings.push('Экспликация '+label+' сопоставлена с соседним планом');
       if(!l.table.verified){complete=false;blocking.push('Не сходится экспликация: '+label+' (комнаты '+area(l.table.sum)+' м²'+(l.table.hasTotal?', итог '+area(l.table.total)+' м²':'')+')');}
       if(!l.plan)blocking.push('Не найден план: '+label);
@@ -188,8 +200,8 @@
     const rooms=activeKeys.flatMap(k=>levels[k]?.table?.rows||[]);
     if(!explicitArea&&complete&&rooms.some(r=>/террас|навес|балкон|лоджи/iu.test(r.name)))warnings.push('Общая площадь взята из экспликаций, включая открытые помещения');
     if(complete){
-      data.beds=rooms.filter(r=>/спальн|^сп$|детск/iu.test(r.name)).length;
-      data.baths=rooms.filter(r=>/^(?:с\s*[\/.]?\s*у)(?:\s|$)|сануз|ванн|душев|туалет/iu.test(r.name)).length;
+      data.beds=rooms.filter(r=>/спальн|^сп(?:\s|[-–—.]|\d|$)|детск/iu.test(r.name)).length;
+      data.baths=rooms.filter(r=>/^(?:с\s*[\/.]?\s*у)(?:\s|[-–.]|\d|$)|сануз|ванн|душев|туалет/iu.test(r.name)).length;
     }
     const text=pages.map(p=>p.text).join('\n');
     if(/газ[оа]б{1,2}л{1,2}ок/iu.test(text))data.tags.push('Газоблок');
@@ -200,22 +212,10 @@
     else if(/современн[а-яё]*\s+стил/iu.test(text))data.tags.push('Современный');
     if(rooms.some(r=>/террас/iu.test(r.name)))data.tags.push('Терраса');
     data.title=declared?({1:'Одноэтажный дом',2:'Двухэтажный дом',3:'Трёхэтажный дом'}[declared]||'Жилой дом'):'Жилой дом';
-    // Overall dimension lines: use explicit dimensions, or matching floor-one drawings.
-    const dimensionPages=[];
-    for(const p of pages){
-      const m=p.text.match(/(?:габариты|размеры\s+(?:дома|здания))\s*[:—-]?\s*(\d+(?:[.,]\d+)?)\s*[xх×]\s*(\d+(?:[.,]\d+)?)/iu);
-      if(m){data.footprint=m[1]+' × '+m[2];sources.footprint={page:p.page};break;}
-      const match=p.tables.find(t=>levels.floor1?.table&&signature(t)===signature(levels.floor1.table));
-      const plan=plans.find(x=>x.page===p.page&&x.floor==='floor1');
-      if(!match||/оси|кладочн|разбивочн|фундамент/iu.test(plan?.heading||''))continue;
-      const dims=p.items.filter(w=>/^(?:\d{1,2}[ \u00a0])?\d{3,5}$/.test(w.text)&&number(w.text)>=3000&&number(w.text)<=100000&&!(w.cy>p.height*.75&&w.cx>p.width*.52)&&!p.tables.some(t=>w.cx>t.left&&w.cx<t.right&&w.cy>t.top&&w.cy<t.bottom));
-      if(dims.length>8)continue;
-      const own=dims.filter(w=>!match||p.tables.length<2||p.tables.slice().sort((a,b)=>Math.abs(a.cx-w.cx)-Math.abs(b.cx-w.cx))[0]===match);
-      const h=own.filter(w=>!w.vertical).map(w=>number(w.text)),v=own.filter(w=>w.vertical).map(w=>number(w.text));
-      if(h.length&&v.length)dimensionPages.push({page:p.page,h:Math.max(...h),v:Math.max(...v),priority:p.tables.length>1?2:1});
-    }
-    if(!data.footprint&&dimensionPages.length){const d=dimensionPages.sort((a,b)=>b.priority-a.priority||b.h*b.v-a.h*a.v)[0];data.footprint=[d.h/1000,d.v/1000].map(n=>String(Number(n.toFixed(3))).replace('.',',')).join(' × ');sources.footprint={page:d.page,from:'dimension_lines'};}
-    if(!data.project_number)blocking.push('Не найден однозначный номер проекта в PDF');
+    // Explicit building dimensions are safe textual evidence. Numeric chains
+    // require a geometric witness, checked later by the plan renderer.
+    for(const p of pages){const m=p.text.match(/(?:габариты|размеры\s+(?:дома|здания))\s*[:—-]?\s*(\d+(?:[.,]\d+)?)\s*[xх×]\s*(\d+(?:[.,]\d+)?)/iu);if(m){data.footprint=m[1]+' × '+m[2];sources.footprint={page:p.page};break;}}
+    if(!data.project_number&&!blocking.some(s=>s.startsWith('Номер проекта')))blocking.push('Не указан номер проекта в PDF — впишите его вручную');
     if(!declared)blocking.push('Не определена этажность');
     if(!data.total_area)blocking.push('Не найдена общая площадь');
     if(!data.footprint)warnings.push('Габариты не найдены');
