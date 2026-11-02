@@ -141,7 +141,7 @@
    for(const seed of numberWords.slice().sort((a,b)=>b.h-a.h)){
     const similar=numberWords.filter(w=>Math.abs(w.h/seed.h-1)<.15),matches=ids.map(id=>similar.filter(w=>idKey(w.text)===id));
     if(!matches.every(a=>a.length===1))continue;const found=matches.map(a=>a[0]),xs=found.map(w=>w.cx),ys=found.map(w=>w.cy);
-    if(Math.max(...xs)-Math.min(...xs)<width(b)*.4||Math.max(...ys)-Math.min(...ys)<height(b)*.4)continue;
+    const spreadX=(Math.max(...xs)-Math.min(...xs))/width(b),spreadY=(Math.max(...ys)-Math.min(...ys))/height(b);if(spreadX<.2||spreadY<.2||spreadX*spreadY<.1)continue;
     consensus=found;break;
    }
   }
@@ -151,7 +151,7 @@
   for(const p of structure.local){if(!p.stroked||p.dash)continue;let prev;for(const c of p.commands){if(c[0]===0){prev=[c[1],c[2]];continue;}if(c[0]!==1||!prev)continue;const q=[c[1],c[2]],dx=q[0]-prev[0],dy=q[1]-prev[1],len=Math.hypot(dx,dy);if(len>0)edges.push({x:(prev[0]+q[0])/2,y:(prev[1]+q[1])/2,dx:dx/len,dy:dy/len,len});prev=q;}}
   const ringCache=new Map(),ring=w=>{
    if(ringCache.has(w))return ringCache.get(w);let found=false;
-   const curved=structure.local.some(p=>p.curved&&p.closed&&contains(p.bounds,w,w.h*.25)&&width(p.bounds)<w.h*5&&height(p.bounds)<w.h*5&&width(p.bounds)>w.h&&height(p.bounds)>w.h);
+   const curved=structure.local.some(p=>p.curved&&(p.closed||Math.hypot(p.commands[0][1]-p.commands.at(-1).at(-2),p.commands[0][2]-p.commands.at(-1).at(-1))<.5)&&contains(p.bounds,w,w.h*.25)&&width(p.bounds)<w.h*5&&height(p.bounds)<w.h*5&&width(p.bounds)>w.h&&height(p.bounds)>w.h);
    if(curved)found=true;
    const local=edges.filter(e=>e.len<w.h*.8&&Math.abs(e.x-w.cx)<w.h*3&&Math.abs(e.y-w.cy)<w.h*3);
    for(const cy of [w.cy,w.cy+w.h*.2])for(let radius=w.h*.7;!found&&radius<w.h*2.3;radius+=w.h*.2){const sectors=new Set();let count=0;for(const e of local){const x=e.x-w.cx,y=e.y-cy,d=Math.hypot(x,y);if(Math.abs(d-radius)>w.h*.23||Math.abs((x*e.dx+y*e.dy)/d)>.23)continue;count++;sectors.add(Math.floor((Math.atan2(y,x)+Math.PI)/(Math.PI*2)*12)%12);}if(count>=12&&sectors.size>=10)found=true;}
@@ -177,14 +177,14 @@
   const annotations=names.map(w=>({x0:w.x0-w.h*3,y0:w.y0-w.h*3,x1:w.x1+w.h*3,y1:w.y1+w.h*3}));
   for(const r of roomLabels?.items||[]){const h=median(info.items.filter(w=>Math.hypot(w.cx-r.x,w.cy-r.y)<w.h*2).map(w=>w.h));annotations.push({x0:r.x-h*3,y0:r.y-h*3,x1:r.x+h*3,y1:r.y+h*3});}
   const clean=p=>!annotations.some(a=>contains(a,p.bounds))&&!s.walls.some(w=>contains(w.bounds,p.bounds,.01))&&(!s.floors.length||[...s.floors,...s.walls].some(w=>intersects(w.bounds,p.bounds,t*1.2)));
-  const arcs=s.local.filter(p=>p.stroked&&!p.dash&&clean(p)&&p.curved&&width(p.bounds)>t*.8&&height(p.bounds)>t*.8&&Math.max(width(p.bounds),height(p.bounds))<Math.max(width(b),height(b))*.18);
+  const arcs=s.local.filter(p=>p.stroked&&!p.dash&&clean(p)&&p.curved&&s.walls.some(w=>intersects(w.bounds,p.bounds,t*.6))&&width(p.bounds)>t*.8&&height(p.bounds)>t*.8&&Math.max(width(p.bounds),height(p.bounds))<Math.max(width(b),height(b))*.18);
   const nearArc=p=>p.points.some(v=>arcs.some(a=>a.points.some(q=>Math.hypot(v[0]-q[0],v[1]-q[1])<t*.3)));
   const inBand=p=>{
    const r=p.bounds,horizontal=height(r)<t*.7,vertical=width(r)<t*.7;
    if(!horizontal&&!vertical)return false;
    return s.walls.some(w=>{const q=w.bounds;if(!inside((r.x0+r.x1)/2,(r.y0+r.y1)/2,q,t*.45))return false;return horizontal&&height(q)<t*2.2&&(Math.abs(r.y0-q.y0)<t*.7||Math.abs(r.y1-q.y1)<t*.7)&&width(r)<t*20||vertical&&width(q)<t*2.2&&(Math.abs(r.x0-q.x0)<t*.7||Math.abs(r.x1-q.x1)<t*.7)&&height(r)<t*20;});
   };
-  return s.local.filter(p=>{if(!p.stroked||p.dash||!p.stroke||p.stroke.gray>=.85||!clean(p))return false;const door=arcs.includes(p)||nearArc(p),stair=stairs.some(z=>contains(z,p.bounds)&&Math.max(width(p.bounds),height(p.bounds))<Math.max(width(z),height(z))*.95);p.detailRole=door||stair?'detail':'window';return door||stair||inBand(p);});
+  return s.local.filter(p=>{if(!p.stroked||p.dash||!p.stroke||p.stroke.gray>=.85||!clean(p)||Math.max(width(p.bounds),height(p.bounds))<t*.8)return false;const door=arcs.includes(p)||nearArc(p),stair=stairs.some(z=>contains(z,p.bounds)&&Math.max(width(p.bounds),height(p.bounds))<Math.max(width(z),height(z))*.95);p.detailRole=door||stair?'detail':'window';return door||stair||!s.focused&&inBand(p);});
  }
  function contours(p){
   const out=[];let points=[];for(const c of p.commands){if(c[0]===0&&points.length){out.push(points);points=[];}if(c[0]===0||c[0]===1)points.push([c[1],c[2]]);}if(points.length)out.push(points);return out;
@@ -306,15 +306,17 @@
   const walls=[...replacements.values()],bounds=union([room.bounds,...walls.map(p=>p.bounds)]),local=s.local.filter(p=>replacements.has(p)||!s.walls.includes(p)&&contains(bounds,p.bounds,.7)).map(p=>replacements.get(p)||p);
   return {...s,bounds,walls,local,floors:[room],focused:true,context:[]};
  }
- async function prepare({pdfjs,page,info,table,key,knownFootprint,optionalContent,check=()=>{}}){
+ async function prepare({pdfjs,page,info,table,key,knownFootprint,reference,optionalContent,check=()=>{}}){
   check();const operators=await page.getOperatorList();check();const paths=vectors(pdfjs,operators,page.getViewport({scale:1}),check,optionalContent),selected=chooseStructure(paths,info,key),structure=selected&&key==='basement'?focusBasement(selected,info,table):selected;
   if(!structure)return {ok:false,reason:'не удалось однозначно выделить векторные стены и отдельный план этажа'};
   const roomLabels=labels(info,structure,table);let dims=structure.focused?null:dimensions(info,structure,roomLabels);
   if(key==='floor1'&&knownFootprint&&(!dims||dims.basis==='source-room-area-consensus')){const values=String(knownFootprint.value).split(/[×xх]/i).map(v=>CatalogPdfCore.number(v)*1000);if(values.length===2&&values.every(n=>n>0)&&Math.abs((values[0]/values[1])/(width(structure.bounds)/height(structure.bounds))-1)<.015)dims={widthMm:values[0],heightMm:values[1],derived:[],basis:'album-dimension-lines',dimensionPage:knownFootprint.page};}
+  const scales=info.items.filter(w=>/^1\s*:\s*(20|25|50|75|100|150|200)$/.test(w.text)&&w.cx>=structure.bounds.x0&&w.cx<=structure.bounds.x1).sort((a,b)=>Math.abs(a.cy-structure.bounds.y0)-Math.abs(b.cy-structure.bounds.y0)),drawingScale=scales.length?Number(scales[0].text.split(':')[1]):null;
+  if(!dims&&reference?.widthMm>0&&reference.heightMm>0&&drawingScale&&reference.drawingScale===drawingScale&&Math.abs(width(structure.bounds)/width(reference.bounds)-1)<.005&&Math.abs(height(structure.bounds)/height(reference.bounds)-1)<.005)dims={widthMm:reference.widthMm,heightMm:reference.heightMm,derived:['width','height'],basis:'matching-scale-and-footprint',referenceFloor:'floor1'};
   if(!roomLabels.complete)return {ok:false,foundRooms:roomLabels.items.length,reason:'не все названия комнат удалось связать с местами на плане'};
   if(!dims)dims={widthMm:null,heightMm:null,derived:[],basis:'unavailable'};
   check();const rendered=draw(structure,roomLabels,dims,key,info);
-  return {ok:true,...rendered,report:{style:VERSION,bounds:structure.bounds,...dims,rooms:roomLabels.items.length,wallPaths:structure.walls.length,sourceGeometry:true}};
+  return {ok:true,...rendered,report:{style:VERSION,drawingScale,bounds:structure.bounds,...dims,rooms:roomLabels.items.length,wallPaths:structure.walls.length,sourceGeometry:true}};
  }
  async function refreshExisting({id,incoming,client,allowed,actor}){
   const reports=incoming.pdf_import_meta?.sources?.plans;if(!reports||!id)return {updated:false};

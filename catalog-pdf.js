@@ -186,9 +186,10 @@
           for(const candidate of candidates){
           const page=await doc.getPage(candidate);
           try{
-            const prepared=await CatalogPlan.prepare({pdfjs,page,info:pages[candidate-1],table:result.levels[asset.key].table,key:asset.key,optionalContent,knownFootprint:result.sources.footprint?.from==='dimension_lines'?{value:result.data.footprint,page:result.sources.footprint.page}:null,check:()=>check(job)});check(job);
+            const prepared=await CatalogPlan.prepare({pdfjs,page,info:pages[candidate-1],table:result.levels[asset.key].table,key:asset.key,optionalContent,reference:asset.key!=='floor1'?result.sources.plans?.floor1:null,knownFootprint:result.sources.footprint?.from==='dimension_lines'?{value:result.data.footprint,page:result.sources.footprint.page}:null,check:()=>check(job)});check(job);
             if(prepared.ok){result.levels[asset.key].plan.page=candidate;result.sources[asset.key].planPage=candidate;images[asset.index]=prepared.image;thumbnails[asset.index]=prepared.thumbnail;(result.sources.plans??={})[asset.key]=prepared.report;
               if(prepared.report.basis==='source-room-area-consensus')result.warnings.push('Габариты '+(asset.key==='basement'?'цоколя':asset.key.slice(5)+'-го этажа')+' рассчитаны по геометрии и площадям '+prepared.report.calibratedRooms+' помещений');
+              if(prepared.report.basis==='matching-scale-and-footprint')result.warnings.push('Габариты '+asset.key.slice(5)+'-го этажа перенесены с 1-го по совпадающим контуру и масштабу');
               if(prepared.report.basis==='unavailable')result.warnings.push('Габариты '+(asset.key==='basement'?'цоколя':asset.key.slice(5)+'-го этажа')+' не подтверждены — план подготовлен без размеров');
               if(asset.key==='floor1'&&!result.data.footprint&&prepared.report.widthMm>0&&prepared.report.heightMm>0)result.data.footprint=(prepared.report.widthMm/1000).toLocaleString('ru-RU')+' × '+(prepared.report.heightMm/1000).toLocaleString('ru-RU');
               failure=null;break;
@@ -202,6 +203,7 @@
         try{const item=exportImage(canvas,pages[asset.page-1],asset.plan,asset.bounds);images[asset.index]=item.image;thumbnails[asset.index]=item.thumbnail;}
         finally{canvas.width=canvas.height=0;}
       }
+      if(result.data.footprint)result.warnings=result.warnings.filter(w=>w!=='Габариты не найдены');
       result.sources.facades=facades;result.sources.file={originalBytes:file.size,workingBytes:prepared.file.size,optimized:prepared.optimized,lossless:true};result.images=images;result.thumbnails=thumbnails;result.sha256=sha256;
       progress(job,'Карточка заполнена',95);return result;
     }catch(e){
