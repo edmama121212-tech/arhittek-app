@@ -40,3 +40,38 @@ let split=table({caption:'Экспликация 1-го этажа'});split=spli
 result=core.analyze([page(1,[w('Проект №11525',20,20),w('Одноэтажный дом',20,50)]),page(2,[...plan(1),...split])]);
 eq([result.data.total_area,result.blocking],['25,00',[]],'Split decimal PDF cells join before arithmetic validation');
 console.log(JSON.stringify({passed,failed:[]}));
+// Regression cases from heterogeneous Archicad albums (no private files).
+eq(core.floorIn('План -1-й этаж'),'basement','Negative first level is basement');
+eq(core.floorIn('План 2-этаж'),'floor2','Abbreviated hyphenated floor');
+for(const prefix of ['2/','2\\']){
+ const r=core.analyze([title(),p1(),page(3,plan(2)),page(5,table({prefix}))]);
+ eq(r.sources.floor2.association,'room_numbers','Slash/backslash floor prefix');
+}
+let duplicate=table();duplicate.find(v=>v.text==='2').text='1';
+let r=core.analyze([page(1,[w('Одноэтажный дом',20,20)]),page(2,[...plan(1),...duplicate])]);
+eq([r.data.total_area,r.data.project_number,r.warnings.some(v=>v.includes('повторяются'))],['25,00',null,true],'Arithmetic total independent of duplicated identifiers; absent number stays manual');
+let aggregate=table({values:[20,5,100,500]});aggregate=aggregate.filter(v=>v.y0!==180);aggregate.push(w('Итого',530,235),w('625.00',720,235));
+aggregate.filter(v=>v.text==='С/У').forEach((v,i)=>{if(i===1)v.text='Дом';if(i===2)v.text='Участок';});
+r=core.analyze([page(1,[w('Одноэтажный дом',20,20)]),page(2,[...plan(1),...aggregate])]);
+eq([r.data.total_area,r.levels.floor1.table.verified,r.levels.floor1.table.rows.length],['25,00',true,2],'Site and building aggregate rows excluded after raw arithmetic validation');
+let bedrooms=table();bedrooms.find(v=>v.text==='Спальня').text='СП-1';
+r=core.analyze([page(1,[w('Одноэтажный дом',20,20)]),page(2,[...plan(1),...bedrooms])]);eq(r.data.beds,1,'Numbered bedroom abbreviation');
+const identity=Array.from({length:4},(_,i)=>page(i+1,[w('Проект №17/ 2022-АР',20,20)]));identity.push(page(5,[w('Проект №99/2022',20,20)]));
+eq(core.analyze(identity).data.project_number,'17/2022','Split identifier, discipline suffix and minority typo');
+const note=page(2,[w('Пояснительная записка',20,20),...table({caption:'Экспликация 1-го этажа'})]);eq(core.planInfos(note,1),[],'Description table is not a plan');
+console.log(JSON.stringify({contextTotal:passed,failed:[]}));
+const vm=require('node:vm'),fs=require('node:fs'),ctx={window:{},CatalogPdfCore:core};
+vm.runInNewContext(fs.readFileSync(require.resolve('../catalog-plan.js'),'utf8'),ctx);const renderer=ctx.window.CatalogPlan;
+const structure={bounds:{x0:0,y0:0,x1:100,y1:200},local:[],walls:[],floors:[],thickness:2};
+const numbered=[w('1',50,90),w('2',50,10),w('3',15,90),w('4',50,180),...Array.from({length:12},(_,i)=>({...w(String(i+1),65+i*1.2,110),y1:113}))];
+const info=page(1,numbered),roomTable={rows:['Холл','СП 1','СП 2','Балкон'].map((name,i)=>({name,area:String(i+5)})),roomIds:['1','2','3','4']};
+let labels=renderer.labels(info,structure,roomTable);
+eq([labels.complete,labels.items.length,labels.items.find(r=>r.raw==='СП 1').y],[true,4,15],'Number-only room layout overrides a compact staircase sequence');
+labels=renderer.labels(page(1,numbered.filter(v=>v.text!=='4')),structure,roomTable);eq(labels.complete,false,'Incomplete numbering cannot fabricate a missing room position');
+eq(renderer.dimensions(page(1,[w('5000',20,205)]),structure,{items:[]}),null,'Nearby dimension text without a spanning line is insufficient');
+const line={stroked:true,dash:false,curved:false,lineWidth:.5,commands:[[0,0,220],[1,100,220]]};
+const supported=renderer.dimensions(page(1,[w('10000',20,224)]),{...structure,context:[line]},{items:[]});
+eq([supported.widthMm,supported.heightMm],[10000,20000],'Spanning source dimension supports proportionate overall dimensions');
+eq(renderer.dimensions(page(1,[w('2000',20,224)]),{...structure,context:[line]},{items:[{area:250}]}),null,'Physically impossible bounding area rejects an unrelated small dimension');
+const dup=renderer.labels(page(1,[w('1',50,50)]),structure,{rows:[{name:'Спальня',area:'10'},{name:'СУ',area:'5'}],roomIds:['1','1']});eq(dup.complete,false,'Duplicate room IDs never establish automatic label placement');
+console.log(JSON.stringify({recognitionTotal:passed,failed:[]}));

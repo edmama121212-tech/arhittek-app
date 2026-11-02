@@ -24,4 +24,6 @@ On a duplicate import, only an exactly matching original PDF hash and project nu
 
 ## Validation
 
-`npm run test:catalog:pdf` includes real PDF.js vector rendering, floor/basement extraction, compound wall holes checked at pixel level, rejection of missing room positions/dimensions/scans, drag-and-drop, duplicate/legacy refresh and correct PNG uploads. CI runs this on Chromium and WebKit, with missing stream async iteration reproduced. Local real-album checks also cover project 16626 (two floors on one sheet) and project 13225 (36-page album, hatched walls, two floors).
+`npm run test:catalog:pdf` includes real PDF.js vector rendering, floor/basement extraction, compound wall holes checked at pixel level, rejection of missing room positions/scans; plans with unconfirmed dimensions omit dimension chains, drag-and-drop, duplicate/legacy refresh and correct PNG uploads. CI runs this on Chromium and WebKit, with missing stream async iteration reproduced. Local real-album checks also cover project 16626 (two floors on one sheet) and project 13225 (36-page album, hatched walls, two floors).
+
+Recognition v2: numbered bedroom abbreviations, negative basement levels, page-level project-number consensus, aggregate site rows excluded from floor totals, alternate plan candidates, and dimension-free clean plans when source dimensions are unavailable. Unknown project numbers remain manual.

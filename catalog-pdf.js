@@ -152,14 +152,14 @@
         }catch(e){if(e.name==='AbortError')throw e;recoveryWarnings.push('Не удалось повторно распознать таблицу на листе '+n+'. Проверьте её вручную');}
       }
       result.warnings.push(...recoveryWarnings);
-      const facadeCandidates=[];
-      for(const p of pages.slice().sort((a,b)=>Number(meaningful(a))-Number(meaningful(b))||a.page-b.page)){
+      const facadeCandidates=[],isVisual=p=>/визуализац|перспектив|экстерьер|общий\s+вид|3[dд]\s*вид/iu.test(p.text);
+      for(const p of pages.slice().sort((a,b)=>Number(isVisual(b))-Number(isVisual(a))||Number(meaningful(a))-Number(meaningful(b))||a.page-b.page)){
         check(job);if(CatalogPdfCore.planInfos(p,result.data.floors).length||p.tables.length)continue;
-        const technical=/фасад|разрез/iu.test(p.text)&&p.items.filter(w=>/^[+−-]?\d{1,2}[.,]\d{3}$/.test(w.text)).length>=4&&!/визуализац|перспектив|3[dд]/iu.test(p.text);if(technical)continue;
+        const technical=!isVisual(p)&&(/разрез|генплан|генеральный\s+план|стропильн|план\s+(?:фундамента|кровли)|монолитное\s+перекрытие/iu.test(p.text)||/фасад/iu.test(p.text)&&p.items.filter(w=>/^[+−-]?\d{1,2}[.,]\d{3}$/.test(w.text)).length>=2);if(technical)continue;
         if(p.photoHint){facadeCandidates.push({page:p.page,bounds:null,score:p.page>2?30:10});if(facadeCandidates.filter(f=>f.page>2).length>=2)break;continue;}
         const page=await doc.getPage(p.page),viewport=page.getViewport({scale:1});let regions;
         try{regions=imageRegions(pdfjs,await page.getOperatorList(),viewport);}catch(e){page.cleanup();throw e;}
-        const named=/визуализац|перспектив|3[dд]/iu.test(p.text);
+        const named=isVisual(p);
         if(!regions.length&&meaningful(p)&&!named){page.cleanup();continue;}
         progress(job,'Ищу фасады: лист '+p.page+' из '+pages.length,56);
         const thumbnail=await render(doc,p.page,640,job);
@@ -181,20 +181,29 @@
         if(asset.plan){
           progress(job,'Оформляю чистый план: '+(asset.key==='basement'?'цоколь':asset.key.slice(5)+'-й этаж')+'…',65+i/assets.length*25);
           planPromise??=import('./catalog-plan.js').catch(e=>{planPromise=null;throw e;});await planPromise;check(job);
-          const page=await doc.getPage(asset.page);
+          const candidates=[...new Set([asset.page,...(result.levels[asset.key].planCandidates||[]).map(p=>p.page)])].slice(0,4);
+          let failure=null;
+          for(const candidate of candidates){
+          const page=await doc.getPage(candidate);
           try{
-            const prepared=await CatalogPlan.prepare({pdfjs,page,info:pages[asset.page-1],table:result.levels[asset.key].table,key:asset.key,optionalContent,knownFootprint:result.sources.footprint?.from==='dimension_lines'?{value:result.data.footprint,page:result.sources.footprint.page}:null,check:()=>check(job)});check(job);
-            if(prepared.ok){images[asset.index]=prepared.image;thumbnails[asset.index]=prepared.thumbnail;(result.sources.plans??={})[asset.key]=prepared.report;
+            const prepared=await CatalogPlan.prepare({pdfjs,page,info:pages[candidate-1],table:result.levels[asset.key].table,key:asset.key,optionalContent,reference:asset.key!=='floor1'?result.sources.plans?.floor1:null,knownFootprint:result.sources.footprint?.from==='dimension_lines'?{value:result.data.footprint,page:result.sources.footprint.page}:null,check:()=>check(job)});check(job);
+            if(prepared.ok){result.levels[asset.key].plan.page=candidate;result.sources[asset.key].planPage=candidate;images[asset.index]=prepared.image;thumbnails[asset.index]=prepared.thumbnail;(result.sources.plans??={})[asset.key]=prepared.report;
               if(prepared.report.basis==='source-room-area-consensus')result.warnings.push('Габариты '+(asset.key==='basement'?'цоколя':asset.key.slice(5)+'-го этажа')+' рассчитаны по геометрии и площадям '+prepared.report.calibratedRooms+' помещений');
-              if(asset.key==='floor1'&&!result.data.footprint)result.data.footprint=(prepared.report.widthMm/1000).toLocaleString('ru-RU')+' × '+(prepared.report.heightMm/1000).toLocaleString('ru-RU');
-            }else result.blocking.push('План '+(asset.key==='basement'?'цоколя':asset.key.slice(5)+'-го этажа')+': '+prepared.reason+'. Нужна проверка исходного листа');
+              if(prepared.report.basis==='matching-scale-and-footprint')result.warnings.push('Габариты '+asset.key.slice(5)+'-го этажа перенесены с 1-го по совпадающим контуру и масштабу');
+              if(prepared.report.basis==='unavailable')result.warnings.push('Габариты '+(asset.key==='basement'?'цоколя':asset.key.slice(5)+'-го этажа')+' не подтверждены — план подготовлен без размеров');
+              if(asset.key==='floor1'&&!result.data.footprint&&prepared.report.widthMm>0&&prepared.report.heightMm>0)result.data.footprint=(prepared.report.widthMm/1000).toLocaleString('ru-RU')+' × '+(prepared.report.heightMm/1000).toLocaleString('ru-RU');
+              failure=null;break;
+            }else if(!failure||(prepared.foundRooms||0)>(failure.foundRooms||0))failure=prepared;
           }finally{page.cleanup();}
+          }
+          if(failure)result.blocking.push('План '+(asset.key==='basement'?'цоколя':asset.key.slice(5)+'-го этажа')+': '+failure.reason+'. Нужна проверка исходного листа');
           continue;
         }
         const canvas=await render(doc,asset.page,1920,job);
         try{const item=exportImage(canvas,pages[asset.page-1],asset.plan,asset.bounds);images[asset.index]=item.image;thumbnails[asset.index]=item.thumbnail;}
         finally{canvas.width=canvas.height=0;}
       }
+      if(result.data.footprint)result.warnings=result.warnings.filter(w=>w!=='Габариты не найдены');
       result.sources.facades=facades;result.sources.file={originalBytes:file.size,workingBytes:prepared.file.size,optimized:prepared.optimized,lossless:true};result.images=images;result.thumbnails=thumbnails;result.sha256=sha256;
       progress(job,'Карточка заполнена',95);return result;
     }catch(e){
@@ -221,6 +230,7 @@
     for(const [key,id]of Object.entries(fields))setVal(id,d[key]??'');
     selectFloors(d.floors||1);ceFeatureSelected=[];
     if(d.tags.includes('Цокольный этаж'))toggleFeature('basement');
+    if(d.tags.includes('Мансарда'))toggleFeature('mansard');
     if(d.tags.includes('Плоская кровля'))toggleFeature('flat');
     selectStyle(d.tags.includes('Классический')?'classic':d.tags.includes('Современный')?'modern':'');setVal('ce-tags',d.tags.join(', '));
     for(const f of CatalogFloors.definitions){const level=result.levels[f.key];setVal('ce-area'+f.suffix,level?.table?CatalogPdfCore.area(level.table.total):'');setVal('ce-expl'+f.suffix,level?.table?.rows.map(r=>r.name+': '+r.area).join('\n')||'');}
