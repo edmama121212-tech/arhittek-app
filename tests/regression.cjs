@@ -10,7 +10,7 @@ await test('no fee without an assigned executor',()=>getProjectFee({id:'a',categ
 await test('monthly salary',()=>computeFinancePeriod('2026-09-01','2026-09-30').payrollPaidOut,100000);
 await test('quarter salary',()=>computeFinancePeriod('2026-07-01','2026-09-30').payrollPaidOut,300000);
 await test('year salary',()=>computeFinancePeriod('2026-01-01','2026-12-31').payrollPaidOut,1200000);
-await test('partial month salary',()=>salaryForRange({fixed_salary:30000},'2026-09-16','2026-09-30'),15000);
+await test('partial month salary',()=>salaryForRange({id:'admin'},'2026-09-16','2026-09-30'),25000);
 await test('leap month',()=>timesheetMonthRange('2024-02'),{from:'2024-02-01',to:'2024-02-29'});
 await test('Actual completion moves the architect fee into November payroll and its visible card',()=>{
  const previous={projects:state.projects,employees:state.employees,ledger:state.ledger,financialStatusHistory:state.financialStatusHistory},month=document.getElementById('ts-month').value;
@@ -26,7 +26,7 @@ await test('m2 only after completion',()=>{state.projects=[{id:'d',name:'Design'
 await test('m2 completed',()=>{state.projects[0].status_id='done';return completedProjectEarningsForRange('2026-09-01','2026-09-30').employees.visual.earned},40000);
 await test('bonus enters payroll month',()=>{state.ledger.push({id:'bonus1',type:'bonus',payee_employee_id:'visual',amount:5000,entry_date:'2026-09-20'});return completedProjectEarningsForRange('2026-09-01','2026-09-30').employees.visual.earned},45000);
 await test('direct costs exclude payroll',()=>{state.ledger.push({project_id:'d',type:'project_expense',amount:10000});return getProjectExpenses(state.projects[0])},10000);
-await test('construction advances are client money while an explicit employee accrual remains payable',()=>{state.projects=[{id:'b',name:'Build',category_id:'build',status_id:'done',fee_base:'m2',end_date:'2026-09-18'}];state.employees=state.employees.filter(e=>!e.is_salaried);state.invoices=[{project_id:'b',item_type:'Работа',amount:30000}];state.ledger=[{project_id:'b',type:'advance',amount:100000},{project_id:'b',type:'role_payout',payee_employee_id:'visual',amount:20000}];return computeFinancePeriod('2026-09-01','2026-09-30').netProfit},-20000);
+await test('construction advances are client money while an explicit employee accrual remains payable',()=>{state.projects=[{id:'b',name:'Build',category_id:'build',status_id:'done',fee_base:'m2',end_date:'2026-09-18'}];state.employees=state.employees.filter(e=>!e.is_salaried);state.salaryHistory={...state.salaryHistory,employees:state.salaryHistory.employees.filter(e=>!e.is_salaried)};state.invoices=[{project_id:'b',item_type:'Работа',amount:30000}];state.ledger=[{project_id:'b',type:'advance',amount:100000},{project_id:'b',type:'role_payout',payee_employee_id:'visual',amount:20000}];return computeFinancePeriod('2026-09-01','2026-09-30').netProfit},-20000);
 await test('direct client construction costs and advances create no company profit',()=>{state.ledger=state.ledger.filter(e=>e.type!=='role_payout');state.invoices=[{project_id:'b',item_type:'Материал',amount:30000,paid_by_client:true}];return computeFinancePeriod('2026-09-01','2026-09-30').netProfit},0);
 await test('completed construction hidden',()=>{renderConstrSummary();return !document.getElementById('constrSummaryBlock').textContent.includes('Build')},true);
 await test('render all',()=>{renderAll();return true},true);

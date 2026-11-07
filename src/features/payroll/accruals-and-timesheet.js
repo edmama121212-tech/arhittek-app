@@ -22,21 +22,48 @@ function financeDeptOf(p){
 
 // Возвращает: { employees: {empId: {earned, items:[{projectId,name,amount}]}},
 //               revenue, projectCosts, byDeptProfit: {dept: profit} }
-// Current salary rates; partial months use calendar days from employee creation.
-function salaryForRange(emp, from, to){
-  const rate=Math.max(0,Number(emp.fixed_salary)||0);
-  if(!rate || !from || !to || from>to) return 0;
-  const hired=(emp.created_at||'').slice(0,10), start=hired&&hired>from?hired:from;
-  if(start>to) return 0;
-  const [sy,sm]=start.split('-').map(Number),[ey,em]=to.split('-').map(Number);
-  let total=0;
-  for(let i=sy*12+sm-1;i<=ey*12+em-1;i++){
-    const y=Math.floor(i/12),m=i%12+1,month=`${y}-${String(m).padStart(2,'0')}`,days=new Date(y,m,0).getDate();
-    const first=month===start.slice(0,7)?Number(start.slice(8,10)):1;
-    const last=month===to.slice(0,7)?Number(to.slice(8,10)):days;
-    total+=rate*Math.max(0,last-first+1)/days;
+function payrollEmployees(){
+  if(!state.salaryHistory||state.salaryHistory.version!==1){
+    throw new Error('История окладов не загружена. Обновите данные.');
   }
-  return Math.round(total*100)/100;
+  return state.salaryHistory.employees.map(employee=>{
+    const current=state.employees.find(row=>row.id===employee.id);
+    return current?{...employee,name:current.name,role:current.role||employee.role}:employee;
+  });
+}
+function payrollEmployee(employeeId){
+  return payrollEmployees().find(e=>e.id===employeeId);
+}
+// Versions use the server's Moscow calendar date. The last change on a day is
+// effective for that day; a later card edit cannot rewrite an earlier day.
+function salaryDetailsForRange(emp,from,to){
+  const employee=payrollEmployee(emp.id);
+  if(!employee){
+    throw new Error('История оклада сотрудника не загружена');
+  }
+  if(!from||!to||from>to)return {amount:0,uncertain:false};
+  const versions=employee.versions;
+  const last=Date.parse(to+'T00:00:00Z');
+  let index=-1,total=0,uncertain=false;
+  for(let stamp=Date.parse(from+'T00:00:00Z');stamp<=last;stamp+=86400000){
+    const date=new Date(stamp),day=date.toISOString().slice(0,10);
+    while(index+1<versions.length&&versions[index+1].effective_from<=day){
+      index++;
+    }
+    const version=versions[index];
+    if(version?.uncertain)uncertain=true;
+    if(!version||!version.active||version.deleted||!version.is_salaried)continue;
+    const days=new Date(Date.UTC(date.getUTCFullYear(),date.getUTCMonth()+1,0)).getUTCDate();
+    total+=version.fixed_salary/days;
+  }
+  return {amount:Math.round(total*100)/100,uncertain};
+}
+function salaryForRange(emp,from,to){
+  return salaryDetailsForRange(emp,from,to).amount;
+}
+function payrollHistoryNotice(from,to){
+  return payrollEmployees().some(e=>salaryDetailsForRange(e,from,to).uncertain)?
+    '<div class="note" data-salary-history-note>Для части периода оклад восстановлен по начальной записи и доступному журналу. Изменения до начала надёжной истории могли не сохраниться; проверьте старые начисления.</div>':'';
 }
 
 function completedProjectEarningsForRange(from, to){
@@ -126,9 +153,11 @@ function completedProjectEarningsForRange(from, to){
 
   // Гарантированный оклад всегда присутствует в табеле текущего месяца,
   // даже если сотрудник не участвовал ни в одном завершённом проекте.
-  state.employees.filter(e=>e.active!==false && e.is_salaried).forEach(emp=>{
+  payrollEmployees().forEach(emp=>{
+    const salary=salaryForRange(emp,from,to);
+    if(!salary)return;
     if(!employees[emp.id]) employees[emp.id] = {earned:0, items:[]};
-    employees[emp.id].salary = salaryForRange(emp, from, to);
+    employees[emp.id].salary = salary;
   });
 
   return {employees, revenue, projectCosts, byDeptProfit};
@@ -141,11 +170,11 @@ function splitPayrollByEmployee(employeesEarned){
   let payrollPaidOut = 0, companyRetained = 0;
   // Гарантированный оклад выплачивается независимо от количества завершённых проектов.
   // Проектные начисления добавляются сверху, если они есть.
-  state.employees.filter(e=>e.active!==false || employeesEarned[e.id]?.earned).forEach(emp=>{
+  payrollEmployees().filter(e=>e.active!==false&&!e.deleted_at || employeesEarned[e.id]?.earned || employeesEarned[e.id]?.salary).forEach(emp=>{
     const earned = employeesEarned[emp.id]?.earned || 0;
-    const salary = emp.is_salaried && emp.active!==false ? (employeesEarned[emp.id]?.salary ?? (Number(emp.fixed_salary)||0)) : 0;
+    const salary = employeesEarned[emp.id]?.salary || 0;
     const payout = salary + earned;
-    result[emp.id] = {earned, payout, retained:0, isSalaried:!!emp.is_salaried, salary};
+    result[emp.id] = {earned, payout, retained:0, isSalaried:salary>0, salary};
     payrollPaidOut += payout;
   });
   return {result, payrollPaidOut, companyRetained};
@@ -203,6 +232,11 @@ function renderTimesheet(){
     monthInput.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   }
   const monthStr = monthInput.value;
+  if(!state.salaryHistory){
+    const card=document.getElementById('timesheetCard');
+    if(card)card.innerHTML='<div class="empty-state">История окладов недоступна. Обновите данные.</div>';
+    return;
+  }
   const {from, to} = timesheetMonthRange(monthStr);
   const {employees: earnedMap} = completedProjectEarningsForRange(from, to);
   const {result: payrollByEmp} = splitPayrollByEmployee(earnedMap);
@@ -210,9 +244,9 @@ function renderTimesheet(){
   const card = document.getElementById('timesheetCard');
   if(!card) return;
 
-  const rows = state.employees.filter(e=>e.active!==false || earnedMap[e.id]?.earned).filter(e=>session?.isAdmin || e.id===session?.employeeId).map(emp=>{
+  const rows = payrollEmployees().filter(e=>e.active!==false&&!e.deleted_at || earnedMap[e.id]?.earned || earnedMap[e.id]?.salary).filter(e=>session?.isAdmin || e.id===session?.employeeId).map(emp=>{
     const e = earnedMap[emp.id];
-    const p = payrollByEmp[emp.id] || {earned:0, payout:0, retained:0, isSalaried: !!emp.is_salaried, salary: Number(emp.fixed_salary)||0};
+    const p = payrollByEmp[emp.id] || {earned:0, payout:0, retained:0, isSalaried:false, salary:0};
     return {
       id: emp.id,
       name: emp.name,
@@ -231,7 +265,7 @@ function renderTimesheet(){
   const totalPaid=rows.filter(r=>r.paid).reduce((s,r)=>s+r.payout,0);
   const totalOutstanding=totalPayout-totalPaid;
 
-  card.innerHTML = rows.map(r=>{
+  card.innerHTML = payrollHistoryNotice(from,to)+rows.map(r=>{
     const expanded = !!timesheetExpanded[r.id];
     const projectItems = r.items.filter(it=>it.role!=='премия');
     const bonusItems = r.items.filter(it=>it.role==='премия');

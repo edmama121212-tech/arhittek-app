@@ -6,6 +6,7 @@ let state = {
   projects: [],
   financialProjects: [],
   financialStatusHistory: [],
+  salaryHistory: null,
   employees: [],
   categories: [],
   statuses: [],

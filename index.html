@@ -2235,6 +2235,7 @@ let state = {
   projects: [],
   financialProjects: [],
   financialStatusHistory: [],
+  salaryHistory: null,
   employees: [],
   categories: [],
   statuses: [],
@@ -2434,7 +2435,7 @@ function isFrozen(p){
   const st = findStatus(p.status_id);
   return !!(st && st.name === 'Заморожен');
 }
-function findEmployee(id){ return state.employees.find(e=>e.id===id); }
+function findEmployee(id){ return state.employees.find(e=>e.id===id) || state.salaryHistory?.employees.find(e=>e.id===id); }
 function findDepartment(id){ return state.departments.find(d=>d.id===id); }
 function financeToday(){
   return new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Moscow',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
@@ -2485,9 +2486,9 @@ function clearPrivateState(){
   if(typeof resetContractCustomer==='function')resetContractCustomer();
   document.getElementById('ct-project-dialog')?.close?.();
   document.getElementById('ct-project-results')?.replaceChildren();
-  window.ARHITTEKJournal?.clear();state.companyInfo=null;state.financialJournal=null;state.financialDataReady=false;state.financialLoadedAt=null;
+  window.ARHITTEKJournal?.clear();state.companyInfo=null;state.financialJournal=null;state.salaryHistory=null;state.financialDataReady=false;state.financialLoadedAt=null;
   state.trash={projects:[],employees:[],categories:[],ledger:[],companyExpenses:[],companyIncome:[],tariffs:[]};
-  for(const id of ['analyticsContent','timesheetContent','employeesCard','historyCard','trashCard','financeContent']){
+  for(const id of ['analyticsContent','timesheetContent','timesheetCard','finSalariesCard','employeesCard','historyCard','trashCard','financeContent']){
     const el=document.getElementById(id);if(el)el.replaceChildren();
   }
   document.querySelectorAll('.sheet-overlay.active').forEach(el=>el.classList.remove('active'));
@@ -2521,6 +2522,7 @@ async function verifyCurrentEmployeeAccess(){
   session.isAdmin=verifiedAccess.owner;session.name=access.name;
   window.session=session;
   if(!verifiedAccess.owner){
+    state.salaryHistory=null;
     for(const key of ['ledger','cashCounts','timesheetPayments','companyExpenses','companyIncome','financialProjects','history'])state[key]=[];
     state.trash={projects:[],employees:[],categories:[],ledger:[],companyExpenses:[],companyIncome:[],tariffs:[]};
   }
@@ -3366,6 +3368,51 @@ async function loadEmployeeLoginOptions(){
   return {...result,data:result.data.filter(employee=>employee.active!==false).sort((a,b)=>a.name.localeCompare(b.name,'ru')||a.id.localeCompare(b.id))};
 }
 
+// Migration-first: salary read failures must never silently recalculate history
+// from today's card. This response contains only the owner's safe payroll roster.
+async function loadSalaryHistorySafe(){
+  try{
+    const result=await sb.rpc('get_employee_salary_history',{});
+    if(result.error)return result;
+    const data=result.data;
+    const employeeIds=new Set(),versionIds=new Set();
+    const sources=['legacy_baseline','audit','server'];
+    if(data?.version!==1||data.history_policy!=='effective-salary-v1'||!Array.isArray(data.employees)){
+      throw new Error('История окладов не подтверждена сервером');
+    }
+    const employees=data.employees.map(e=>{
+      if(!e||typeof e.id!=='string'||employeeIds.has(e.id)||typeof e.name!=='string'||!Array.isArray(e.versions)||!e.versions.length){
+        throw new Error('Неполная история окладов');
+      }
+      employeeIds.add(e.id);
+      const versions=e.versions.map(v=>{
+        const effectiveStamp=Date.parse(v?.effective_from+'T00:00:00Z');
+        const validDate=Number.isFinite(effectiveStamp)&&new Date(effectiveStamp).toISOString().slice(0,10)===v.effective_from;
+        if(!v||typeof v.id!=='string'||!/^\d+$/.test(v.id)||versionIds.has(v.id)||!validDate||!Number.isFinite(Date.parse(v.changed_at))||
+          !['is_salaried','active','deleted','uncertain'].every(k=>typeof v[k]==='boolean')||!sources.includes(v.source)||
+          typeof v.fixed_salary!=='number'||!Number.isFinite(v.fixed_salary)||v.fixed_salary<0||v.source==='legacy_baseline'&&!v.uncertain){
+          throw new Error('Неполная история окладов');
+        }
+        versionIds.add(v.id);
+        return {
+          id:v.id,effective_from:v.effective_from,changed_at:v.changed_at,
+          is_salaried:v.is_salaried,fixed_salary:v.fixed_salary,active:v.active,
+          deleted:v.deleted,source:v.source,uncertain:v.uncertain,
+        };
+      }).sort((a,b)=>a.effective_from.localeCompare(b.effective_from)||
+        Date.parse(a.changed_at)-Date.parse(b.changed_at)||a.id.length-b.id.length||a.id.localeCompare(b.id));
+      return {
+        id:e.id,name:e.name,role:typeof e.role==='string'?e.role:'',created_at:e.created_at,
+        active:e.active===true,is_salaried:e.is_salaried===true,fixed_salary:Number(e.fixed_salary)||0,
+        deleted_at:e.deleted_at||null,versions,
+      };
+    });
+    return {data:{version:1,history_policy:data.history_policy,employees},error:null};
+  }catch(error){
+    return {data:null,error};
+  }
+}
+
 function loadAll(){
   if(loadAllPromise){loadAllQueued=true;return loadAllPromise;}
   loadAllPromise=(async()=>{
@@ -3401,7 +3448,7 @@ async function loadAllData(){
     const ownerRead=read=>isOwner()?read():Promise.resolve({data:[],error:null,count:0});
     const documentRead=read=>canUseDocuments()?read():Promise.resolve({data:[],error:null,count:0});
     const stageRead=beginStageRead();
-    const [proj, emp, cat, st, dept, led, photos, invs, tzForms, tzRefs, company, kpForms, stages, members, kpCat, tsPay, compExp, compInc, counts, statusHistory, journal] = await Promise.all([
+    const [proj, emp, cat, st, dept, led, photos, invs, tzForms, tzRefs, company, kpForms, stages, members, kpCat, tsPay, compExp, compInc, counts, statusHistory, journal, salaryHistory] = await Promise.all([
       fetchAllRows(()=>sb.from('projects').select('*',{count:'exact'}).order('created_at', {ascending:true})),
       loadEmployeesSafe(),
       fetchAllRows(()=>sb.from('categories').select('*',{count:'exact'}).is('deleted_at', null).order('sort_order')),
@@ -3423,14 +3470,17 @@ async function loadAllData(){
       ownerRead(()=>fetchAllRows(()=>sb.from('audit_log').select('id,entity_type,entity_id,entity_name,action,changes,created_at',{count:'exact'}).eq('entity_type','reserve').eq('action','cash_count').order('created_at',{ascending:false}))),
       ownerRead(()=>fetchAllRows(()=>sb.from('audit_log').select('id,entity_id,changes,created_at',{count:'exact'}).eq('entity_type','project').order('created_at',{ascending:false}))),
       isOwner()?sb.rpc('get_financial_journal'):Promise.resolve({data:null,error:null}),
+      isOwner()?loadSalaryHistorySafe():Promise.resolve({data:null,error:null}),
     ]);
 
     if(accessActor.employeeId!==session?.employeeId||accessActor.token!==session?.token||!hasVerifiedAccess())return;
     // kpForms and stages are optional — may not exist until migrations run
-    const errs = [proj,emp,cat,st,dept,led,photos,invs,tzForms,tzRefs,company,tsPay,compExp,compInc,counts,statusHistory,journal].map(r=>r.error).filter(Boolean);
+    const errs = [proj,emp,cat,st,dept,led,photos,invs,tzForms,tzRefs,company,tsPay,compExp,compInc,counts,statusHistory,journal,salaryHistory].map(r=>r.error).filter(Boolean);
     if(errs.length) throw errs[0];
     if(isOwner()&&!ARHITTEKJournal.valid(journal.data))throw new Error("Сервер не подтвердил финансовый журнал");
     state.financialJournal=isOwner()?journal.data:null;
+    if(isOwner()&&(emp.data||[]).some(e=>!salaryHistory.data.employees.some(h=>h.id===e.id)))throw new Error('История окладов не охватывает список сотрудников');
+    state.salaryHistory=isOwner()?salaryHistory.data:null;
     const freshEmployee=(emp.data||[]).find(e=>e.id===session.employeeId);
     if(!freshEmployee||freshEmployee.active===false)throw new Error('Учётная запись недоступна');
     if(!isOwner()&&!['ведущий архитектор','ведущий дизайнер'].includes(String(freshEmployee.role||'').trim().toLowerCase()))verifiedAccess.documents=false;
@@ -5239,21 +5289,48 @@ function financeDeptOf(p){
 
 // Возвращает: { employees: {empId: {earned, items:[{projectId,name,amount}]}},
 //               revenue, projectCosts, byDeptProfit: {dept: profit} }
-// Current salary rates; partial months use calendar days from employee creation.
-function salaryForRange(emp, from, to){
-  const rate=Math.max(0,Number(emp.fixed_salary)||0);
-  if(!rate || !from || !to || from>to) return 0;
-  const hired=(emp.created_at||'').slice(0,10), start=hired&&hired>from?hired:from;
-  if(start>to) return 0;
-  const [sy,sm]=start.split('-').map(Number),[ey,em]=to.split('-').map(Number);
-  let total=0;
-  for(let i=sy*12+sm-1;i<=ey*12+em-1;i++){
-    const y=Math.floor(i/12),m=i%12+1,month=`${y}-${String(m).padStart(2,'0')}`,days=new Date(y,m,0).getDate();
-    const first=month===start.slice(0,7)?Number(start.slice(8,10)):1;
-    const last=month===to.slice(0,7)?Number(to.slice(8,10)):days;
-    total+=rate*Math.max(0,last-first+1)/days;
+function payrollEmployees(){
+  if(!state.salaryHistory||state.salaryHistory.version!==1){
+    throw new Error('История окладов не загружена. Обновите данные.');
   }
-  return Math.round(total*100)/100;
+  return state.salaryHistory.employees.map(employee=>{
+    const current=state.employees.find(row=>row.id===employee.id);
+    return current?{...employee,name:current.name,role:current.role||employee.role}:employee;
+  });
+}
+function payrollEmployee(employeeId){
+  return payrollEmployees().find(e=>e.id===employeeId);
+}
+// Versions use the server's Moscow calendar date. The last change on a day is
+// effective for that day; a later card edit cannot rewrite an earlier day.
+function salaryDetailsForRange(emp,from,to){
+  const employee=payrollEmployee(emp.id);
+  if(!employee){
+    throw new Error('История оклада сотрудника не загружена');
+  }
+  if(!from||!to||from>to)return {amount:0,uncertain:false};
+  const versions=employee.versions;
+  const last=Date.parse(to+'T00:00:00Z');
+  let index=-1,total=0,uncertain=false;
+  for(let stamp=Date.parse(from+'T00:00:00Z');stamp<=last;stamp+=86400000){
+    const date=new Date(stamp),day=date.toISOString().slice(0,10);
+    while(index+1<versions.length&&versions[index+1].effective_from<=day){
+      index++;
+    }
+    const version=versions[index];
+    if(version?.uncertain)uncertain=true;
+    if(!version||!version.active||version.deleted||!version.is_salaried)continue;
+    const days=new Date(Date.UTC(date.getUTCFullYear(),date.getUTCMonth()+1,0)).getUTCDate();
+    total+=version.fixed_salary/days;
+  }
+  return {amount:Math.round(total*100)/100,uncertain};
+}
+function salaryForRange(emp,from,to){
+  return salaryDetailsForRange(emp,from,to).amount;
+}
+function payrollHistoryNotice(from,to){
+  return payrollEmployees().some(e=>salaryDetailsForRange(e,from,to).uncertain)?
+    '<div class="note" data-salary-history-note>Для части периода оклад восстановлен по начальной записи и доступному журналу. Изменения до начала надёжной истории могли не сохраниться; проверьте старые начисления.</div>':'';
 }
 
 function completedProjectEarningsForRange(from, to){
@@ -5343,9 +5420,11 @@ function completedProjectEarningsForRange(from, to){
 
   // Гарантированный оклад всегда присутствует в табеле текущего месяца,
   // даже если сотрудник не участвовал ни в одном завершённом проекте.
-  state.employees.filter(e=>e.active!==false && e.is_salaried).forEach(emp=>{
+  payrollEmployees().forEach(emp=>{
+    const salary=salaryForRange(emp,from,to);
+    if(!salary)return;
     if(!employees[emp.id]) employees[emp.id] = {earned:0, items:[]};
-    employees[emp.id].salary = salaryForRange(emp, from, to);
+    employees[emp.id].salary = salary;
   });
 
   return {employees, revenue, projectCosts, byDeptProfit};
@@ -5358,11 +5437,11 @@ function splitPayrollByEmployee(employeesEarned){
   let payrollPaidOut = 0, companyRetained = 0;
   // Гарантированный оклад выплачивается независимо от количества завершённых проектов.
   // Проектные начисления добавляются сверху, если они есть.
-  state.employees.filter(e=>e.active!==false || employeesEarned[e.id]?.earned).forEach(emp=>{
+  payrollEmployees().filter(e=>e.active!==false&&!e.deleted_at || employeesEarned[e.id]?.earned || employeesEarned[e.id]?.salary).forEach(emp=>{
     const earned = employeesEarned[emp.id]?.earned || 0;
-    const salary = emp.is_salaried && emp.active!==false ? (employeesEarned[emp.id]?.salary ?? (Number(emp.fixed_salary)||0)) : 0;
+    const salary = employeesEarned[emp.id]?.salary || 0;
     const payout = salary + earned;
-    result[emp.id] = {earned, payout, retained:0, isSalaried:!!emp.is_salaried, salary};
+    result[emp.id] = {earned, payout, retained:0, isSalaried:salary>0, salary};
     payrollPaidOut += payout;
   });
   return {result, payrollPaidOut, companyRetained};
@@ -5420,6 +5499,11 @@ function renderTimesheet(){
     monthInput.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   }
   const monthStr = monthInput.value;
+  if(!state.salaryHistory){
+    const card=document.getElementById('timesheetCard');
+    if(card)card.innerHTML='<div class="empty-state">История окладов недоступна. Обновите данные.</div>';
+    return;
+  }
   const {from, to} = timesheetMonthRange(monthStr);
   const {employees: earnedMap} = completedProjectEarningsForRange(from, to);
   const {result: payrollByEmp} = splitPayrollByEmployee(earnedMap);
@@ -5427,9 +5511,9 @@ function renderTimesheet(){
   const card = document.getElementById('timesheetCard');
   if(!card) return;
 
-  const rows = state.employees.filter(e=>e.active!==false || earnedMap[e.id]?.earned).filter(e=>session?.isAdmin || e.id===session?.employeeId).map(emp=>{
+  const rows = payrollEmployees().filter(e=>e.active!==false&&!e.deleted_at || earnedMap[e.id]?.earned || earnedMap[e.id]?.salary).filter(e=>session?.isAdmin || e.id===session?.employeeId).map(emp=>{
     const e = earnedMap[emp.id];
-    const p = payrollByEmp[emp.id] || {earned:0, payout:0, retained:0, isSalaried: !!emp.is_salaried, salary: Number(emp.fixed_salary)||0};
+    const p = payrollByEmp[emp.id] || {earned:0, payout:0, retained:0, isSalaried:false, salary:0};
     return {
       id: emp.id,
       name: emp.name,
@@ -5448,7 +5532,7 @@ function renderTimesheet(){
   const totalPaid=rows.filter(r=>r.paid).reduce((s,r)=>s+r.payout,0);
   const totalOutstanding=totalPayout-totalPaid;
 
-  card.innerHTML = rows.map(r=>{
+  card.innerHTML = payrollHistoryNotice(from,to)+rows.map(r=>{
     const expanded = !!timesheetExpanded[r.id];
     const projectItems = r.items.filter(it=>it.role!=='премия');
     const bonusItems = r.items.filter(it=>it.role==='премия');
@@ -5490,13 +5574,14 @@ function renderTimesheet(){
 // ============================================================
 function exportTimesheetToPdf(employeeId, monthStr){
   if(!session||(!session.isAdmin&&session.employeeId!==employeeId)){showToast('Нет доступа к табелю сотрудника');return;}
-  const emp = findEmployee(employeeId);
+  if(!state.salaryHistory){showToast('История окладов недоступна. Обновите данные.');return;}
+  const emp = payrollEmployee(employeeId);
   if(!emp){ showToast('Сотрудник не найден'); return; }
   const {from, to} = timesheetMonthRange(monthStr);
   const {employees: earnedMap} = completedProjectEarningsForRange(from, to);
   const {result: payrollByEmp} = splitPayrollByEmployee(earnedMap);
   const e = earnedMap[employeeId];
-  const p = payrollByEmp[employeeId] || {earned:0, payout:0, retained:0, isSalaried: !!emp.is_salaried, salary: Number(emp.fixed_salary)||0};
+  const p = payrollByEmp[employeeId] || {earned:0, payout:0, retained:0, isSalaried:false, salary:0};
   const items = e ? e.items : [];
   const paid = isTimesheetPaid(employeeId, monthStr);
   const payState = (typeof salaryPaymentState==='function') ? salaryPaymentState(employeeId, monthStr, p.payout) : {paid:paid?p.payout:0,remaining:paid?0:p.payout,overdue:false};
@@ -5541,6 +5626,10 @@ function exportTimesheetToPdf(employeeId, monthStr){
   doc.setFont('Roboto','normal'); doc.setFontSize(10);
   if(emp.role){ doc.text('Должность: ' + emp.role, margin, y); y += 6; }
   if(p.isSalaried){ doc.text('Фиксированный оклад: ' + fmtMoney(p.salary), margin, y); y += 6; }
+  if(salaryDetailsForRange(emp,from,to).uncertain){
+    const note=doc.splitTextToSize('История до установки восстановлена по начальной записи и доступному журналу. Проверьте старые начисления.',contentWidth);
+    doc.setFontSize(8);doc.text(note,margin,y);y+=4*note.length;doc.setFontSize(10);
+  }
   y += 4;
 
   // ---- Таблица начислений ----
@@ -6619,7 +6708,11 @@ document.querySelectorAll('#payment-type .yn-btn').forEach(btn=>{
 let paymentSaveInFlight=false;
 function projectFeePaidField(project,entry){
   if(!project||project.fee_base==='m2')return null;
-  return entry.payee_employee_id&&entry.payee_employee_id===project.co_employee_id?'co_fee_paid':'fee_paid';
+  const payee=entry?.payee_employee_id;
+  // Older payments without a recipient used the primary executor's counter.
+  if(!payee||payee===project.employee_id)return 'fee_paid';
+  if(payee===project.co_employee_id)return 'co_fee_paid';
+  return null;
 }
 async function savePayment(){
   if(paymentSaveInFlight) return;

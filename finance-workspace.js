@@ -123,8 +123,21 @@ async function act(action,id){
   form('Регулярный платёж',input('Название','label',employee?'Оклад · '+employee.name:old?.label||'')+select('Направление','direction',[['expense','Расход'],['income','Поступление']],old?.direction||'expense')+input('Сумма в месяц','amount',employee?.fixed_salary||old?.amount||'','number')+input('Первый месяц оплаты','start_month',month,'month')+input('До какого числа (1–28)','due_day',old?.due_day||10,'number')+'<p>Укажите месяц срока выплаты. Например, оклад за октябрь со сроком в ноябре начинается с ноября. Уже оплаченные суммы первого месяца не вносите повторно: проверьте исходный остаток обязательств.</p>',f=>({command:'rule',payload:{...f,amount:number(f.amount),due_day:number(f.due_day),start_month:f.start_month+'-01',certainty:'confirmed',...(action==='replace-rule'?{replace_id:id}:{}),employee_id:employee?.id||old?.employee_id||null,terms:{salary:employee?{employee_id:employee.id,amount:employee.fixed_salary,role:employee.role}:old?.terms||null,as_of:s.as_of}}}));
  }else if(action==='stop-rule')form('Остановить регулярный платёж','<p>Этот месяц остаётся в календаре. Новые месяцы создаваться не будут.</p>',f=>({command:'stop_rule',payload:{...f,id}}));
  else if(action==='link'){
-  const source=s.unmatched.find(x=>x.id===id),items=s.items.filter(x=>x.origin!=='funded'&&x.direction!=='release'&&(source.cash_delta>0)===(x.direction==='income'));
-  if(!items.length)throw new Error('Сначала внесите соответствующий план');
+  const source=s.unmatched.find(x=>x.id===id);
+  if(!source)throw new Error('Оплата изменилась. Обновите журнал.');
+  let projectId=null,employeeId=null;
+  if(source.source_table==='ledger_entries'){
+   const payment=(state.ledger||[]).find(x=>x.id===source.source_id&&!x.deleted_at);
+   if(!payment)throw new Error('Исходная оплата не загружена. Обновите журнал.');
+   projectId=payment.project_id||null;
+   employeeId=payment.payee_employee_id||null;
+  }else if(!['company_income','company_expenses'].includes(source.source_table)){
+   throw new Error('Обновите журнал для проверки исходной оплаты.');
+  }
+  const items=s.items.filter(x=>x.origin!=='funded'&&x.direction!=='release'&&
+   (source.cash_delta>0)===(x.direction==='income')&&
+   (x.project_id||null)===projectId&&(x.employee_id||null)===employeeId);
+  if(!items.length)throw new Error('Нет неоплаченного плана для этого сотрудника и проекта. Создайте соответствующий план.');
   form('Связать ранее внесённую оплату',select('Какой план погашает оплата','key',items.map(x=>[x.key,x.label+' · '+money(x.remaining)]))+input('Связываемая часть оплаты','amount',Math.min(source.remaining,items[0].remaining),'number')+'<p>Денежный остаток не изменится. При отмене исходной оплаты остаток плана восстановится автоматически.</p>',f=>({command:'link',payload:{...f,source:id,amount:number(f.amount)}}));
  }else if(action==='unlink')form('Отменить связь оплаты с планом','<p>Сама денежная операция сохранится. Неоплаченная часть плана восстановится.</p>',f=>({command:'unlink',payload:{...f,id}}));
  else if(action==='history'){

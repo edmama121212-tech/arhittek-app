@@ -356,7 +356,7 @@ window.openOfficePayment=openOfficePayment;
 
 function salaryAggregate(month){
   let due=0,paid=0,remaining=0,overdue=0;
-  (state.employees||[]).filter(e=>e.active!==false||payrollDueForEmployee(e.id,month)>0).forEach(e=>{
+  payrollEmployees().filter(e=>e.active!==false&&!e.deleted_at||payrollDueForEmployee(e.id,month)>0).forEach(e=>{
     const st=salaryPaymentState(e.id,month);
     due+=st.due;paid+=st.paid;remaining+=st.remaining;if(st.overdue)overdue+=st.remaining;
   });
@@ -377,6 +377,7 @@ function statusBadge(st){
   return '<span style="color:var(--text-dim);font-weight:700">К ОПЛАТЕ</span>';
 }
 function renderFinancialObligations(){
+  if(!state.salaryHistory){$('financeObligationsWrap')?.replaceChildren();return;}
   const wrap=ensureObligationsBlock();if(!wrap)return;
   const month=currentObligationMonth(),salary=salaryAggregate(month),rent=officeObligation('rent',month),internet=officeObligation('internet',month);
   const totalDue=salary.due+rent.expected+internet.expected,totalPaid=salary.paid+rent.paid+internet.paid,totalRemaining=salary.remaining+rent.remaining+internet.remaining,totalOverdue=salary.overdue+(rent.overdue?rent.remaining:0)+(internet.overdue?internet.remaining:0);
@@ -450,8 +451,8 @@ if(oldRenderCompanyBudgetOb){
 function enhanceFinanceSalaryCard(){
   const el=$('finSalariesCard');if(!el)return;
   const month=currentObligationMonth();
-  const rows=(state.employees||[]).filter(e=>e.active!==false&&e.is_salaried);
-  if(!rows.length)return;
+  const range=monthRange(month),rows=payrollEmployees().filter(e=>salaryForRange(e,range.from,range.to)>0);
+  if(!rows.length){el.innerHTML='<div class="empty-state">Нет начисленных окладов за выбранный месяц</div>';return;}
   let totalDue=0,totalPaid=0,totalRemaining=0,totalOverdue=0;
   const body=rows.map(e=>{
     const st=salaryPaymentState(e.id,month);
@@ -463,7 +464,7 @@ function enhanceFinanceSalaryCard(){
       (session?.isAdmin?'<button class="btn btn-secondary" type="button" data-fin-salary-pay="'+escapeHtml(e.id)+'" style="width:auto;padding:7px 10px">'+(st.remaining?'Выплатить':'История')+'</button>':'')+'</div>'+
     '</div>';
   }).join('');
-  el.innerHTML='<div class="project-note" style="padding:10px 0">Фиксированный оклад — это начисление. Реальная выплата учитывается отдельно и может быть частичной.</div>'+body+
+  el.innerHTML='<div class="project-note" style="padding:10px 0">Фиксированный оклад — это начисление. Реальная выплата учитывается отдельно и может быть частичной.</div>'+payrollHistoryNotice(range.from,range.to)+body+
     '<div class="list-item" style="border-top:1px solid var(--line-strong)"><div class="li-name" style="font-weight:700">Итого · '+escapeHtml(monthLabel(month))+'</div><div class="proj-sum" style="font-weight:700">'+fmtMoney(totalDue)+'</div></div>'+
     '<div class="list-item"><div class="li-name">Фактически выплачено</div><div class="proj-sum" style="color:var(--green)">'+fmtMoney(totalPaid)+'</div></div>'+
     '<div class="list-item"><div class="li-name">Осталось'+(totalOverdue?' · просрочено '+fmtMoney(totalOverdue):'')+'</div><div class="proj-sum" style="color:'+(totalOverdue?'var(--red)':'var(--gold)')+'">'+fmtMoney(totalRemaining)+'</div></div>';

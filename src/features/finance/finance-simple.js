@@ -5,7 +5,7 @@ const $=id=>document.getElementById(id),n=v=>Number.isFinite(Number(v))?Number(v
 let tab='overview',month=new Date().toLocaleDateString('sv-SE').slice(0,7);
 function rows(){
  const range=timesheetMonthRange(month),earned=completedProjectEarningsForRange(range.from,range.to).employees,split=splitPayrollByEmployee(earned).result;
- return (state.employees||[]).filter(e=>!e.deleted_at&&(e.active!==false||n(split[e.id]?.payout)>0)).map(e=>({employee:e,...salaryPaymentState(e.id,month,n(split[e.id]?.payout))})).filter(r=>r.due||r.paid);
+ return payrollEmployees().map(e=>({employee:e,...salaryPaymentState(e.id,month,n(split[e.id]?.payout))})).filter(r=>r.due||r.paid);
 }
 function office(kind){
  const expected=Math.max(0,n(localStorage.getItem('forecast_'+kind)??(kind==='rent'?110000:2500))),category=kind==='rent'?'Аренда':'Связь и интернет';
