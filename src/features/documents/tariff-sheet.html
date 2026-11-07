@@ -1,0 +1,41 @@
+<!-- ===================== СЛАЙДЕР ТАРИФА (КП) ===================== -->
+<div class="sheet-overlay" id="tariffSheetOverlay">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">
+      <span id="tariffSheetTitle">Тариф</span>
+      <button class="sheet-close" id="tariffSheetClose">✕</button>
+    </div>
+    <div class="field">
+      <label>Направление</label>
+      <input type="text" id="tf-group" placeholder="например: Архитектурное проектирование">
+    </div>
+    <div class="field">
+      <label>Название услуги</label>
+      <input type="text" id="tf-name" placeholder="например: Архитектурное решение">
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Единица</label>
+        <select id="tf-unit">
+          <option value="м²">м²</option>
+          <option value="шт">шт</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Ставка, ₽</label>
+        <input type="number" id="tf-rate" placeholder="0">
+      </div>
+    </div>
+    <div class="field">
+      <label>Что входит (описание для КП)</label>
+      <textarea id="tf-desc" placeholder="что входит в услугу, сроки..."></textarea>
+    </div>
+    <button class="btn btn-primary" id="tf-save">Сохранить</button>
+    <div class="btn-row">
+      <button class="btn btn-danger" id="tf-delete">Удалить</button>
+      <button class="btn btn-secondary" id="tf-cancel">Отмена</button>
+    </div>
+  </div>
+</div>
+

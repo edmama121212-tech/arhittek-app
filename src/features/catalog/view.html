@@ -1,0 +1,58 @@
+  <div class="view" id="view-cards" style="padding-top:0;">
+
+    <!-- Закреплённые кнопки сверху (только canEditCards) -->
+    <div id="cards-admin-bar" style="display:none;position:sticky;top:0;z-index:10;background:var(--bg);padding:10px 0 8px;border-bottom:1px solid var(--line);margin-bottom:4px;">
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary" style="flex:1;" onclick="openCardEditor(null)">+ Добавить проект</button>
+        <button class="btn btn-secondary" style="flex:1;" onclick="createShareLink()">+ Ссылка клиенту</button>
+      </div>
+      <button class="btn btn-primary" id="cards-pdf-button" style="width:100%;margin-top:8px;min-height:44px" onclick="document.getElementById('catalog-pdf-file').click()">📄 Создать карточку из PDF</button>
+      <input id="catalog-pdf-file" type="file" accept="application/pdf,.pdf" hidden onchange="CatalogPdfImport.start(this)">
+      <div id="cards-pdf-result" role="status" hidden></div>
+    </div>
+
+    <div class="section-label" style="margin-top:8px;">
+      <span class="lbl-text">КАТАЛОГ ПРОЕКТОВ</span>
+      <span class="section-label-line"></span>
+    </div>
+
+    <!-- Фильтр по этажности -->
+    <div class="filters" id="cards-filters" style="flex-wrap:wrap;gap:6px;">
+      <div class="filter-chip active" data-floors="all" onclick="filterCards('all',this)">Все</div>
+      <div class="filter-chip" data-floors="1" onclick="filterCards('1',this)">1 этаж</div>
+      <div class="filter-chip" data-floors="2" onclick="filterCards('2',this)">2 этажа</div>
+      <div class="filter-chip" data-floors="3" onclick="filterCards('3',this)">3+ этажей</div>
+    </div>
+    <div class="filters" id="feature-filters" style="flex-wrap:wrap;gap:6px;margin-top:6px;">
+      <div class="filter-chip active" data-feature="all" onclick="filterFeature('all',this)">Без доп.</div>
+      <div class="filter-chip" data-feature="basement" onclick="filterFeature('basement',this)">Цокольный этаж</div>
+      <div class="filter-chip" data-feature="mansard" onclick="filterFeature('mansard',this)">Мансарда</div>
+      <div class="filter-chip" data-feature="flat" onclick="filterFeature('flat',this)">Плоская кровля</div>
+    </div>
+    <div class="filters" id="style-filters" style="flex-wrap:wrap;gap:6px;margin-top:6px;">
+      <div class="filter-chip active" data-style="all" onclick="filterStyle('all',this)">Все стили</div>
+      <div class="filter-chip" data-style="classic" onclick="filterStyle('classic',this)">Классический</div>
+      <div class="filter-chip" data-style="modern" onclick="filterStyle('modern',this)">Современный</div>
+    </div>
+
+    <!-- Счётчик: всего проектов + разбивка по этажам/стилю -->
+    <div id="cards-stats"></div>
+
+    <!-- Список карточек -->
+    <div id="cards-list">
+      <div class="note" style="text-align:center;padding:40px 0;opacity:0.5;">Загрузка проектов…</div>
+    </div>
+
+    <!-- Ссылки для клиентов (только canEditCards) -->
+    <div id="cards-links-section" style="display:none;">
+      <div class="section-label" style="margin-top:24px;">
+        <span class="lbl-text">Ссылки для клиентов</span>
+        <span class="section-label-line"></span>
+      </div>
+      <div class="card" id="cards-links-list">
+        <div class="note" style="opacity:0.5;">Нет активных ссылок</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== ЕЩЁ (команда, категории, история, корзина, экспорт) ===================== -->

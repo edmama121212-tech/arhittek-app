@@ -23,6 +23,9 @@ jobs:
         with:
           node-version: 22
 
+      - name: Verify published files match their sources
+        run: npm run build:check
+
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 

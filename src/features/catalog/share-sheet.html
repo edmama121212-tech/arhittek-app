@@ -1,0 +1,45 @@
+<!-- ===== SHARE LINK SHEET ===== -->
+<div class="sheet-overlay" id="shareLinkOverlay">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">
+      <span>Ссылка для клиента</span>
+      <button class="sheet-close" onclick="document.getElementById('shareLinkOverlay').classList.remove('active')">×</button>
+    </div>
+    <div style="margin-bottom:14px;">
+      <label class="form-label">Название ссылки (для себя)</label>
+      <input class="form-input" id="sl-name" placeholder="Клиент Ахмад, июль 2026"/>
+    </div>
+    <div style="margin-bottom:14px;" id="sl-filter-row">
+      <label class="form-label">Фильтр карточек</label>
+      <select class="form-input" id="sl-filter">
+        <option value="all">Все карточки</option>
+        <option value="1">Только 1-этажные</option>
+        <option value="2">Только 2-этажные</option>
+        <option value="3">3+ этажа</option>
+      </select>
+    </div>
+    <div id="sl-single-note" style="display:none;margin-bottom:14px;font-size:12px;color:var(--text-dim);background:var(--blue-soft);border-radius:8px;padding:8px 10px;">Ссылка ведёт только на этот конкретный проект.</div>
+    <div style="margin-bottom:16px;">
+      <label class="form-label">Срок действия ссылки</label>
+      <select class="form-input" id="sl-expires">
+        <option value="7">7 дней</option>
+        <option value="14" selected>14 дней</option>
+        <option value="30">30 дней</option>
+        <option value="90">3 месяца</option>
+        <option value="0">Бессрочно</option>
+      </select>
+    </div>
+    <button class="btn btn-primary" style="width:100%;" onclick="generateShareLink()">Создать ссылку</button>
+    <div id="sl-result" style="display:none;margin-top:14px;">
+      <label class="form-label">Ссылка готова — скопируй и отправь клиенту</label>
+      <div style="display:flex;gap:8px;margin-top:6px;">
+        <input class="form-input" id="sl-url" readonly style="font-size:11px;"/>
+        <button class="btn btn-primary" style="flex-shrink:0;padding:0 14px;" onclick="copyShareUrl()">Копировать</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+

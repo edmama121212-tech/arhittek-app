@@ -1,0 +1,260 @@
+<!-- ===================== СЛАЙДЕР ПРОЕКТА (создание/редактирование) ===================== -->
+<div class="sheet-overlay" id="projectSheetOverlay">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">
+      <span id="projectSheetTitle">Проект</span>
+      <button class="sheet-close" id="projectSheetClose">✕</button>
+    </div>
+
+    <div class="field">
+      <label>Название</label>
+      <input type="text" id="pf-name" placeholder="например: Дом Алхазурова — пристройка">
+    </div>
+
+    <div class="field">
+      <label>ФИО клиента</label>
+      <input type="text" id="pf-client-name" placeholder="Иванов Иван Иванович">
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Категория</label>
+        <select id="pf-category"></select>
+      </div>
+      <div class="field">
+        <label>Статус (этап работы)</label>
+        <select id="pf-status"></select>
+      </div>
+    </div>
+
+    <div class="field" id="pf-department-field">
+      <label>Статус оплаты</label>
+      <select id="pf-payment">
+        <option value="Ждём оплату">Ждём оплату</option>
+        <option value="Частично оплачен">Частично оплачен</option>
+        <option value="Оплачен">Оплачен</option>
+      </select>
+      <input type="hidden" id="pf-department">
+    </div>
+
+    <div class="field-row" id="pf-employee-field">
+      <div class="field">
+        <label>Исполнитель</label>
+        <select id="pf-employee"><option value="">—</option></select>
+      </div>
+      <div class="field">
+        <label>Соисполнитель</label>
+        <select id="pf-co-employee"><option value="">—</option></select>
+      </div>
+    </div>
+    <div class="field" id="pf-members-field" style="margin-top:0;">
+      <label>Дополнительные участники</label>
+      <div id="pf-members-list" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px;"></div>
+      <select id="pf-members-add" style="width:auto; min-width:160px;">
+        <option value="">+ Добавить участника</option>
+      </select>
+    </div>
+
+    <div class="field-row" id="pf-phone-field">
+      <div class="field">
+        <label>Телефон</label>
+        <input type="text" id="pf-phone" placeholder="7 900 000-00-00">
+      </div>
+      <div class="field">
+        <label>Адрес / объект</label>
+        <input type="text" id="pf-address" placeholder="Грозный, ...">
+      </div>
+    </div>
+
+    <div id="pf-financial-section">
+    <div class="accent-block ab-blue">
+    <div class="accent-title">Экономика проекта</div>
+    <div class="hint">Сначала фиксируем выручку и оплату клиента. Затем отдельно учитываем прямые расходы и вознаграждение исполнителей. Прибыль компании считается последней строкой.</div>
+    </div>
+
+    <div class="accent-block ab-blue">
+    <div class="accent-title">Цена и оплата</div>
+    <div class="field-row3">
+      <div class="field">
+        <label>Цена, ₽</label>
+        <input type="number" id="pf-price" placeholder="0">
+      </div>
+      <div class="field">
+        <label>Получено, ₽</label>
+        <input type="number" id="pf-advance" placeholder="0" readonly title="Изменяется только через «Принять платёж»">
+      </div>
+      <div class="field">
+        <label>Остаток, ₽</label>
+        <input type="number" id="pf-balance" placeholder="0" readonly title="Рассчитывается автоматически: Цена − Получено">
+      </div>
+    </div>
+    <div class="hint" style="margin:-6px 0 0;">«Получено» и «Остаток» обновляются автоматически после платежей (кнопка «Принять платёж» ниже).</div>
+    </div>
+
+    <div class="accent-block ab-gold" id="pf-compensation-block">
+      <div class="accent-title">Начисление исполнителям</div>
+      <div class="field">
+        <label>Метод начисления</label>
+        <select id="pf-compensation-method">
+          <option value="percent_price">Процент от выручки проекта</option>
+          <option value="percent_profit">Процент от прибыли проекта</option>
+          <option value="m2">Фиксированная ставка за м²</option>
+        </select>
+      </div>
+      <div class="hint" style="margin:-4px 0 10px;">Сначала выбираете метод. После этого ниже появляется только нужный способ начисления.</div>
+
+      <div id="pf-percent-method-fields">
+        <div class="field-row">
+          <div class="field">
+            <label>% исполнителя</label>
+            <input type="number" id="pf-feepercent" placeholder="например: 30" min="0" max="100" step="0.01">
+          </div>
+          <div class="field" id="pf-co-percent-field">
+            <label>% соисполнителя</label>
+            <input type="number" id="pf-co-feepercent" placeholder="например: 20" min="0" max="100" step="0.01">
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Исполнитель</label>
+            <select id="pf-employee-fee"><option value="">—</option></select>
+          </div>
+          <div class="field">
+            <label>Соисполнитель</label>
+            <select id="pf-co-employee-fee"><option value="">—</option></select>
+          </div>
+        </div>
+      </div>
+
+      <div id="pf-m2-method-fields" style="display:none;">
+        <div class="field">
+          <label>Площадь проекта, м²</label>
+          <input type="number" id="pf-area" placeholder="например: 100" min="0" step="0.01">
+        </div>
+        <div id="pf-m2-payouts-list"></div>
+        <div id="pf-m2-add-row" style="display:flex; gap:6px; align-items:end; flex-wrap:wrap; margin-top:6px;">
+          <div class="field" style="margin-bottom:0; flex:1; min-width:125px;">
+            <label>Роль</label>
+            <select id="pf-rp-role">
+              <option value="Визуализатор">Визуализатор</option>
+              <option value="Чертёжник">Чертёжник</option>
+              <option value="Ведущий дизайнер">Ведущий дизайнер</option>
+              <option value="Другое">Другое</option>
+            </select>
+          </div>
+          <div class="field" style="margin-bottom:0; flex:1; min-width:125px;">
+            <label>Исполнитель</label>
+            <select id="pf-rp-employee"></select>
+          </div>
+          <div class="field" style="margin-bottom:0; flex:1; min-width:90px;">
+            <label>Ставка, ₽/м²</label>
+            <input type="number" id="pf-rp-rate" placeholder="400" min="0" step="1">
+          </div>
+          <button class="btn btn-secondary" type="button" id="pf-rp-add-btn" style="width:auto; white-space:nowrap; margin-bottom:0; padding:11px 16px;">+ Начислить</button>
+        </div>
+      </div>
+
+      <input type="hidden" id="pf-feebase" value="price">
+      <input type="hidden" id="pf-feepaid" value="0">
+      <input type="hidden" id="pf-co-feepaid" value="0">
+      <div id="pf-fee-summary" style="display:none;"></div>
+      <div id="pf-compensation-summary" class="fee-card" style="margin-top:10px;margin-bottom:0;"></div>
+    </div>
+
+    <div class="accent-block ab-red">
+    <div class="accent-title">Расходы по проекту</div>
+    <div class="field">
+      <label>Прямые расходы проекта, ₽</label>
+      <input type="number" id="pf-expenses" placeholder="0" readonly title="Автоматически из расходов проекта">
+    </div>
+
+    <!-- Список расходов проекта -->
+    <div id="pf-expenses-block" style="margin:-2px 0 0;">
+      <div id="pf-expenses-list"></div>
+      <div id="pf-expense-add-row" style="display:flex; gap:6px; align-items:end; flex-wrap:wrap; margin-top:6px;">
+        <div class="field" style="margin-bottom:0; flex:2; min-width:120px;">
+          <label>На что расход</label>
+          <input type="text" id="pf-expense-desc" placeholder="например: печать альбома">
+        </div>
+        <div class="field" style="margin-bottom:0; flex:1; min-width:80px;">
+          <label>Сумма, ₽</label>
+          <input type="number" id="pf-expense-amount" placeholder="0">
+        </div>
+        <div class="field" style="margin-bottom:0; flex:1; min-width:120px;">
+          <label>Дата</label>
+          <input type="date" id="pf-expense-date">
+        </div>
+        <button class="btn btn-secondary" type="button" id="pf-expense-add-btn" style="width:auto; white-space:nowrap; margin-bottom:0; padding:11px 16px;">+ Расход</button>
+            <button class="btn btn-secondary" type="button" id="pf-expense-cancel-edit" style="display:none;width:auto;white-space:nowrap;margin-bottom:0;padding:11px 12px;">Отмена</button>
+      </div>
+    </div>
+    </div>
+
+    <div style="display:flex;gap:8px;flex-wrap:nowrap;">
+      <button class="btn btn-secondary" id="pf-add-payment" type="button" style="flex:1;min-width:0;">💰 Принять платёж</button>
+      <button class="btn btn-secondary" type="button" style="flex:1;min-width:0;" onclick="(function(){var el=document.getElementById('pf-payment-history');if(el){el.scrollIntoView({behavior:'smooth',block:'start'});}})()">📋 История</button>
+    </div>
+    <div id="pf-payment-history" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="field-row" style="align-items:start;">
+      <div class="field" style="margin-bottom:4px;">
+        <label>Дата начала</label>
+        <input type="date" id="pf-start">
+      </div>
+      <div class="field" style="margin-bottom:4px;">
+        <label>Срок (дней)</label>
+        <input type="number" id="pf-duration-days" min="0" step="1" placeholder="напр. 30">
+        <input type="date" id="pf-end" style="display:none">
+      </div>
+    </div>
+    <div id="pf-end-preview" style="font-size:12px;color:#9fb3c8;margin:-2px 0 10px;">Дата окончания: —</div>
+
+    <div class="field">
+      <label>Заметки</label>
+      <textarea id="pf-notes" placeholder="дополнительная информация..."></textarea>
+    </div>
+
+    <div class="section-label" style="margin:18px 0 10px;"><span class="lbl-text">Этапы проекта</span><span class="section-label-line"></span></div>
+    <div id="pf-stages-list" class="card" style="margin-bottom:8px;"></div>
+    <div id="pf-stage-add-row" style="display:none; gap:8px; align-items:end;">
+      <div class="field" style="margin-bottom:0; flex:1; min-width:0;">
+        <label>Название этапа</label>
+        <input type="text" id="pf-stage-name" placeholder="например: Эскизный проект">
+      </div>
+      <button class="btn btn-secondary" id="pf-stage-add" type="button" style="display:none; width:auto; white-space:nowrap; margin-bottom:0; padding:11px 16px;">+ Добавить</button>
+      <input type="date" id="pf-stage-date" style="display:none">
+    </div>
+
+    <!-- Задачи (раздел скрыт) -->
+    <div style="display:none">
+      <div id="pf-tasks-list"></div>
+      <div id="pf-task-add-row">
+        <input id="pf-task-name">
+        <select id="pf-task-priority"></select>
+        <button id="pf-task-add-btn"></button>
+      </div>
+    </div>
+
+    <div class="section-label" style="margin:18px 0 10px;"><span class="lbl-text">Техническое задание (ТЗ)</span><span class="section-label-line"></span></div>
+    <div id="pf-tz-list" class="card" style="margin-bottom:8px;"></div>
+    <button class="btn btn-secondary" id="pf-tz-create" style="display:none;">Создать ссылку на ТЗ для клиента</button>
+
+    <div class="section-label" style="margin:18px 0 10px;"><span class="lbl-text">Коммерческие предложения</span><span class="section-label-line"></span></div>
+    <div id="pf-kp-list" class="card" style="margin-bottom:8px;"></div>
+    <button class="btn btn-secondary" id="pf-create-kp" style="display:none;">Создать КП для этого проекта</button>
+
+    <div class="section-label" style="margin:18px 0 10px;"><span class="lbl-text">История изменений</span><span class="section-label-line"></span></div>
+    <button class="btn btn-secondary" id="pf-history-toggle" type="button" style="margin-bottom:8px;">📋 Показать историю изменений</button>
+    <div id="pf-history-list" class="card" style="margin-bottom:8px; display:none;"></div>
+
+    <button class="btn btn-primary" id="pf-save">Сохранить</button>
+    <button class="btn btn-secondary" id="pf-open-as-object" style="display:none; margin-top:8px;">📦 Накладные, материалы, фото</button>
+    <div class="btn-row">
+      <button class="btn btn-danger" id="pf-delete">Удалить проект</button>
+      <button class="btn btn-secondary" id="pf-cancel">Отмена</button>
+    </div>
+  </div>
+</div>
+

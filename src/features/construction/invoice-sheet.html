@@ -1,0 +1,76 @@
+<!-- ===================== НАКЛАДНАЯ (просмотр / редактирование / удаление) ===================== -->
+<div id="invoiceSheetOverlay" style="display:none;position:fixed;inset:0;z-index:5500;background:rgba(6,12,22,0.75);align-items:flex-end;justify-content:center;">
+  <div class="sheet" id="invoiceSheet" style="max-height:92vh;overflow-y:auto;width:100%;max-width:600px;padding-bottom:calc(20px + env(safe-area-inset-bottom));">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <h3 style="font-size:16px;font-weight:700;">Накладная</h3>
+      <button onclick="closeInvoiceSheet()" style="background:none;border:none;color:var(--text-dim);font-size:22px;cursor:pointer;">✕</button>
+    </div>
+
+    <!-- Фото накладной -->
+    <div id="invSheet-photo-wrap" style="margin-bottom:14px;display:none;">
+      <img id="invSheet-photo-img" src="" alt="фото накладной"
+           style="width:100%;max-height:260px;object-fit:contain;border-radius:10px;border:1px solid var(--line-strong);cursor:pointer;"
+           onclick="window.open(this.src,'_blank')">
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Номер накладной</label>
+        <input type="text" id="invSheet-number" placeholder="напр. БИ 14.04.26">
+      </div>
+      <div class="field">
+        <label>Дата накладной</label>
+        <input type="date" id="invSheet-date">
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Тип</label>
+        <select id="invSheet-type">
+          <option value="Материал">Материал</option>
+          <option value="Работа">Работа</option>
+          <option value="Инструмент">Инструмент</option>
+          <option value="Расходник">Расходник</option>
+          <option value="Доставка">Доставка</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Сумма, ₽</label>
+        <input type="number" id="invSheet-amount" placeholder="0">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Категория</label>
+      <input type="text" id="invSheet-category" placeholder="например: Кирпич">
+    </div>
+
+    <div class="field">
+      <label>Описание</label>
+      <input type="text" id="invSheet-desc" placeholder="что куплено / какая работа">
+    </div>
+
+    <div class="field" style="display:flex;align-items:center;gap:8px;flex-direction:row;">
+      <input type="checkbox" id="invSheet-paid-client" style="width:auto;">
+      <label style="margin:0;" for="invSheet-paid-client">🤝 Оплачено заказчиком напрямую (минуя компанию)</label>
+    </div>
+
+    <div class="field">
+      <label>Заменить фото</label>
+      <div style="display:flex;gap:8px;margin-bottom:6px;">
+        <label class="photo-upload-label" style="flex:1;margin:0;" for="invSheet-photo-input">🖼 Из галереи</label>
+        <label class="photo-upload-label" style="flex:1;margin:0;" for="invSheet-camera-input">📷 Сделать фото</label>
+      </div>
+      <input type="file" id="invSheet-photo-input" accept="image/*" style="display:none;" onchange="onInvSheetPhotoChange(this)">
+      <input type="file" id="invSheet-camera-input" accept="image/*" capture="environment" style="display:none;" onchange="onInvSheetPhotoChange(this)">
+      <span id="invSheet-photo-name" style="font-size:11px;color:var(--text-dim);"></span>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:6px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="saveInvoiceSheet()">💾 Сохранить</button>
+      <button class="btn" style="flex:0 0 auto;background:rgba(224,82,82,0.15);color:var(--red);border:1px solid rgba(224,82,82,0.35);" onclick="deleteInvoiceSheet()">🗑 Удалить</button>
+    </div>
+  </div>
+</div>
+

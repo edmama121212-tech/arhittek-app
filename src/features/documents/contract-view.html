@@ -1,0 +1,167 @@
+  <div class="view" id="view-contracts">
+
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+      <button class="icon-btn" id="contractsBack" style="font-size:20px;">←</button>
+      <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:16px;">Сформировать договор</div>
+    </div>
+
+    <div class="section-label"><span class="lbl-text">Тип договора</span><span class="section-label-line"></span></div>
+    <div class="card">
+      <div class="yn-group" id="contract-type" style="flex-wrap:wrap;">
+        <div class="yn-btn selected" data-value="ar" style="flex-basis:31%;">АР</div>
+        <div class="yn-btn" data-value="di" style="flex-basis:31%;">ДИ</div>
+        <div class="yn-btn" data-value="st" style="flex-basis:31%;">Строительство</div>
+      </div>
+    </div>
+
+    <div class="section-label"><span class="lbl-text">Проект (необязательно)</span><span class="section-label-line"></span></div>
+    <div class="card">
+      <div class="field" style="margin-bottom:0;">
+        <label>Подставить данные из проекта</label>
+        <select id="ct-project" hidden aria-hidden="true" tabindex="-1"><option value="">— не выбран —</option></select>
+        <button type="button" id="ct-project-picker" class="btn btn-secondary" aria-haspopup="dialog" style="width:100%;text-align:left;white-space:normal">— не выбран —</button>
+        <dialog id="ct-project-dialog" aria-labelledby="ct-project-title">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px">
+            <h2 id="ct-project-title" style="margin:0;font-size:18px">Выбрать проект</h2>
+            <button type="button" class="icon-btn" id="ct-project-close" aria-label="Закрыть поиск проектов">✕</button>
+          </div>
+          <label for="ct-project-search">Поиск по проекту, заказчику или адресу</label>
+          <input type="search" id="ct-project-search" placeholder="Начните вводить название…" autocomplete="off">
+          <div id="ct-project-results" aria-label="Найденные проекты"></div>
+          <div id="ct-project-count" class="hint" role="status" aria-live="polite"></div>
+        </dialog>
+        <div class="hint" style="margin-top:6px;">Подставит тип договора, заказчика, телефон, объект, цену и даты из карточки проекта.</div>
+      </div>
+    </div>
+
+    <div class="section-label"><span class="lbl-text">Заказчик</span><span class="section-label-line"></span></div>
+    <div class="card">
+      <div class="field">
+        <label for="ct-customer-type">Договор с</label>
+        <select id="ct-customer-type"><option value="individual">Физлицом</option><option value="legal">Юрлицом</option></select>
+      </div>
+      <div id="ct-individual-fields">
+      <div class="field">
+        <label>ФИО заказчика</label>
+        <input type="text" id="ct-client-name" placeholder="Иванов Иван Иванович">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Серия и номер паспорта</label>
+          <input type="text" id="ct-passport" placeholder="0000 000000">
+        </div>
+        <div class="field">
+          <label>Дата рождения</label>
+          <input type="date" id="ct-birthdate">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Кем выдан</label>
+          <input type="text" id="ct-passport-issuer" placeholder="ГУ МВД России по ...">
+        </div>
+        <div class="field">
+          <label>Дата выдачи</label>
+          <input type="date" id="ct-passport-date">
+        </div>
+      </div>
+      <div class="field">
+        <label>Адрес регистрации (прописка)</label>
+        <input type="text" id="ct-address" placeholder="г. ..., ул. ..., д. ...">
+      </div>
+      </div>
+      <div id="ct-legal-fields" hidden>
+        <div class="field"><label for="ct-legal-company-name">Полное название организации</label><input type="text" id="ct-legal-company-name" placeholder="ООО «Компания»"></div>
+        <div class="field"><label for="ct-legal-inn">ИНН</label><input type="text" id="ct-legal-inn" placeholder="10 цифр"></div>
+        <div class="field"><label for="ct-legal-kpp">КПП</label><input type="text" id="ct-legal-kpp" placeholder="9 цифр"></div>
+        <div class="field"><label for="ct-legal-ogrn">ОГРН</label><input type="text" id="ct-legal-ogrn" placeholder="13 цифр"></div>
+        <div class="field"><label for="ct-legal-legal-address">Юридический адрес</label><input type="text" id="ct-legal-legal-address" placeholder="Адрес организации"></div>
+        <div class="field"><label for="ct-legal-representative">ФИО представителя</label><input type="text" id="ct-legal-representative" placeholder="Иванов Иван Иванович"></div>
+        <div class="field"><label for="ct-legal-representative-role">Должность представителя</label><input type="text" id="ct-legal-representative-role" placeholder="Генеральный директор"></div>
+        <div class="field"><label for="ct-legal-authority">Основание полномочий</label><input type="text" id="ct-legal-authority" placeholder="Устав / доверенность № и дата"></div>
+        <div class="field"><label for="ct-legal-bank-name">Банк</label><input type="text" id="ct-legal-bank-name" placeholder="Название банка"></div>
+        <div class="field"><label for="ct-legal-bank-account">Расчётный счёт</label><input type="text" id="ct-legal-bank-account" placeholder="20 цифр"></div>
+        <div class="field"><label for="ct-legal-bik">БИК</label><input type="text" id="ct-legal-bik" placeholder="9 цифр"></div>
+        <div class="field"><label for="ct-legal-corr-account">Корреспондентский счёт</label><input type="text" id="ct-legal-corr-account" placeholder="20 цифр"></div>
+      </div>
+      <div class="field">
+        <label>Телефон</label>
+        <input type="text" id="ct-phone" placeholder="+7 900 000-00-00">
+      </div>
+      <div class="field"><label for="ct-email">Электронная почта</label><input type="email" id="ct-email" placeholder="mail@example.ru"></div>
+    </div>
+
+    <div class="section-label"><span class="lbl-text">Условия договора</span><span class="section-label-line"></span></div>
+    <div class="card">
+      <div class="field-row">
+        <div class="field">
+          <label>Номер договора</label>
+          <input type="text" id="ct-number" placeholder="например: 0001">
+        </div>
+        <div class="field">
+          <label>Дата договора</label>
+          <input type="date" id="ct-date">
+        </div>
+      </div>
+      <div class="field">
+        <label>Объект</label>
+        <input type="text" id="ct-object" placeholder="адрес / описание объекта">
+      </div>
+      <div class="field">
+        <label>Состав работ (каждый пункт с новой строки)</label>
+        <textarea id="ct-scope" style="min-height:120px;"></textarea>
+      </div>
+      <div class="field">
+        <label for="ct-tariff">Способ расчёта / тариф</label>
+        <select id="ct-tariff"><option value="manual">Договорная сумма — за весь объём работ</option></select>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="ct-area">Площадь, м²</label>
+          <input type="number" id="ct-area" min="0.01" step="0.01" inputmode="decimal" placeholder="Например: 100">
+        </div>
+        <div class="field" id="ct-rate-field" hidden>
+          <label for="ct-rate">Тариф без скидки, ₽/м²</label>
+          <input type="number" id="ct-rate" min="0" step="0.01" inputmode="decimal" placeholder="0">
+        </div>
+      </div>
+      <div id="ct-discount-fields" hidden>
+        <div class="field-row">
+          <div class="field">
+            <label for="ct-discount-mode">Цена по тарифу</label>
+            <select id="ct-discount-mode"><option value="none">Без скидки</option><option value="discount">Со скидкой</option></select>
+          </div>
+          <div class="field" id="ct-discount-value-field" hidden>
+            <label for="ct-discount-pct">Скидка, %</label>
+            <input type="number" id="ct-discount-pct" min="0" max="100" step="0.01" inputmode="decimal" placeholder="Например: 10">
+          </div>
+        </div>
+        <div class="note" id="ct-price-preview" aria-live="polite" style="margin-bottom:12px"></div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label id="ct-price-label" for="ct-price">Договорная сумма, ₽</label>
+          <input type="number" id="ct-price" min="0" step="0.01" inputmode="decimal" placeholder="0">
+          <div class="hint" id="ct-fixed-price-hint">Укажите согласованную общую сумму. Площадь отображается в договоре отдельно и не меняет стоимость.</div>
+        </div>
+        <div class="field">
+          <label>Аванс, %</label>
+          <input type="number" id="ct-advance-pct" value="50">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Начало работ (до)</label>
+          <input type="date" id="ct-start">
+        </div>
+        <div class="field">
+          <label>Завершение работ (до)</label>
+          <input type="date" id="ct-end">
+        </div>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" id="ct-export-pdf">Скачать договор в PDF</button>
+
+  </div>
+

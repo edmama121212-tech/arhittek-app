@@ -1,0 +1,46 @@
+<!-- ===================== ПРИЁМ ПЛАТЕЖА ===================== -->
+<div class="sheet-overlay" id="paymentSheetOverlay">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">
+      <span>Принять платёж</span>
+      <button class="sheet-close" id="paymentSheetClose">✕</button>
+    </div>
+
+    <div class="field">
+      <label>Тип платежа</label>
+      <div class="yn-group" id="payment-type" style="flex-wrap:wrap;">
+        <div class="yn-btn selected" data-value="advance" style="flex-basis:48%;">Аванс</div>
+        <div class="yn-btn" data-value="final_payment" style="flex-basis:48%;">Оплата остатка</div>
+        <div class="yn-btn" data-value="materials_budget" style="flex-basis:48%;">Бюджет на материалы</div>
+        <div class="yn-btn" data-value="fee_payment" style="flex-basis:48%;">Выплата команде</div>
+        <div class="yn-btn" data-value="withdrawal" style="flex-basis:100%;">Вывод средств из бюджета объекта</div>
+      </div>
+    </div>
+
+    <div class="field" id="payment-payee-field" hidden>
+      <label>Кому выдали деньги</label><select id="payment-payee"></select>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Сумма, ₽</label>
+        <input type="number" id="payment-amount" placeholder="0">
+      </div>
+      <div class="field">
+        <label>Дата платежа</label>
+        <input type="date" id="payment-date">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Комментарий</label>
+      <input type="text" id="payment-note" placeholder="например: наличными / переводом на карту / причина вывода средств...">
+    </div>
+
+    <div class="note" id="payment-hint" style="margin-bottom:10px;"></div>
+
+    <button class="btn btn-primary" id="payment-save">Сохранить платёж</button>
+  </div>
+</div>
+

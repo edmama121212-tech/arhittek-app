@@ -1,0 +1,24 @@
+  <div class="view" id="view-projects">
+
+    <div class="search-box">
+      <input type="text" id="projectSearch" placeholder="Поиск по названию, адресу, телефону...">
+      <button class="search-clear" id="projectSearchClear" type="button">✕</button>
+    </div>
+
+    <div class="filters filters-scroll" id="categoryFilters">
+      <div class="filter-chip active" data-cat="all">Все</div>
+    </div>
+    <div class="filters filters-scroll" id="statusFilters">
+      <div class="filter-chip active" data-st="all">Любой статус</div>
+    </div>
+    <div class="filters filters-scroll" id="paymentFilters" style="display:none;"></div>
+    <div class="filters filters-scroll" id="employeeFilters"></div>
+    <div id="filter-active-badge" style="display:none;margin:4px 16px 0;background:var(--blue-soft);color:var(--blue);border:1px solid rgba(0,113,235,0.3);border-radius:20px;padding:3px 12px;font-size:12px;font-weight:600;cursor:pointer;" onclick="resetAllFilters()">✕ Сбросить фильтры: <span id="filter-badge-text"></span></div>
+
+    <div class="card" id="projectsCard">
+      <div class="loading-state">Загрузка…</div>
+    </div>
+
+  </div>
+
+  <!-- ===================== СТРОИТЕЛЬНЫЙ ОТДЕЛ ===================== -->
