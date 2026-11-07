@@ -1,29 +1,42 @@
-# Clean catalogue plans — ARHITTEK template 1
+# Catalogue plans — ARHITTEK template 3
 
-New PDF imports render plans before uploading card images. `catalog-plan.js` reads PDF.js vector operations, separates floor drawings and renders one consistent 1800 × 1600 PNG per floor. Facade extraction remains separate. No generation service changes or invents architectural geometry.
+`src/features/catalog/catalog-plan.js` isolates a floor from its source PDF and
+paints it with PDF.js inside the ARHITTEK template, producing a 3600 × 3200 PNG.
+PDF.js retains the source walls, windows, doors, straight and winding stairs,
+thin/unnumbered treads, entrance steps, dashed flights, furniture, room labels,
+clipping, optional layers, opacity, patterns and paint order. The original
+labels keep their own positions and sizes. No architectural lines are removed
+or invented by a selective detail classifier.
 
-## Drawing
+Floor detection includes patterned balconies and landings beyond the structural
+walls. The crop has a margin for door swings and exterior steps. Nearby floor
+tables are masked only when their region does not intersect detected walls or
+floor fills. Surrounding sheet borders and adjacent drawings fall outside the
+crop. Internal source annotations remain intact to preserve drawing fidelity.
 
-The style uses white/light room backgrounds, dark structural walls, blue glazing/overall dimensions, restrained door and stair lines, and room names. Technical text, internal dimension chains, dashed axes, sheet borders, legends, tables and adjacent drawings are excluded. The original PDF remains unchanged.
+The template adds the heading, a light diagonal logo/phone watermark, and
+confirmed overall dimensions. Derived dimensions retain the ≈ marker and their
+recorded calibration basis. Source rendering and the crop are recorded as
+`renderer: pdfjs-native`, `detailPolicy: preserve-all`, and `sourceCrop`.
+PNG images retain the correct MIME type and extension.
 
-The watermark uses the ARHITTEK house silhouette, 44px wide, and `+79226593872`, rotated together −45° with opacity 0.075. Room labels are drawn above it. Plans are uploaded as PNG with `image/png`, not mislabeled JPEG.
-
-Geometry comes from filled structural contours (including compound holes), or white structural contours with repeated diagonal wall hatching. Stroke-only plans require an explicit closed main outline. PDF graphic-state clipping, optional-layer visibility, opacity, paint order and pattern occlusion are respected. A technical line covered by a later floor fill is not resurrected in the catalogue image.
-
-Room names are linked to native labels and the correct floor explication; number-only labels additionally require a nearby matching room area. Two floors on one page are split by structural groups and floor headings, including headings without the word “План”.
-
-## Dimensions and uncertain input
-
-Explicit local dimensions have priority. A declared drawing scale can determine dimensions. For the first floor, dimension-line values already found elsewhere in the album may be used only if the aspect ratio agrees. Otherwise at least three independent source room areas and their vector floor polygons must yield the same uniform scale within 0.5%, with at least 70% agreement. Area-calibrated/derived dimensions are marked approximately (≈), their basis is stored, and the import reports how many rooms supported the calculation.
-
-A scan without reliably extractable vectors, ambiguous floor separation, unlocated room labels or unconfirmed dimensions returns a specific review blocker. The importer does not silently insert the original technical sheet as a supposedly cleaned plan, and does not auto-save an incomplete result. Extracted card data remains available for review.
+Plans in catalogue cards link to their full resolution image for phone zoom.
+The same markup is used in internal, public and standalone cards.
 
 ## Existing cards
 
-On a duplicate import, only an exactly matching original PDF hash and project number can refresh legacy plan image slots and thumbnails. Existing title, price, facade images, room tables and other card fields remain unchanged. A card update is conditional on its read `updated_at`; concurrent edits cause a retry message. Current/newer style versions and unknown custom styles are preserved. A different PDF sharing the number does not overwrite the card. Successful image refresh is synced to the existing website card, not a duplicate.
+Reimporting an exactly matching original PDF and project number can refresh
+older ARHITTEK plan image slots and thumbnails. Manual fields, facade images,
+current/newer styles and unknown custom styles are preserved. Updates check
+the previously read `updated_at` to avoid overwriting concurrent edits. The
+existing website card is synced after a successful refresh.
 
 ## Validation
 
-`npm run test:catalog:pdf` includes real PDF.js vector rendering, floor/basement extraction, compound wall holes checked at pixel level, rejection of missing room positions/scans; plans with unconfirmed dimensions omit dimension chains, drag-and-drop, duplicate/legacy refresh and correct PNG uploads. CI runs this on Chromium and WebKit, with missing stream async iteration reproduced. Local real-album checks also cover project 16626 (two floors on one sheet) and project 13225 (36-page album, hatched walls, two floors).
-
-Recognition v2: numbered bedroom abbreviations, negative basement levels, page-level project-number consensus, aggregate site rows excluded from floor totals, alternate plan candidates, and dimension-free clean plans when source dimensions are unavailable. Unknown project numbers remain manual.
+`npm run test:catalog:pdf` covers actual PDF.js rendering and pixel comparisons
+for thin straight/winding stairs, dashed flights, exterior steps, compound wall
+holes, paint-order occlusion, patterned balcony bounds, safe full-image links,
+floor/basement extraction, duplicate refresh, and correct PNG uploads.
+The browser suite runs on Chromium and WebKit, including missing stream async
+iteration. Unsupported scans and ambiguous floor/room extraction still require
+review instead of silently saving an incomplete card.

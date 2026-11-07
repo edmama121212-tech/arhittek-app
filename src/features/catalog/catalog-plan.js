@@ -1,7 +1,7 @@
 /* Deterministic catalogue drawings: source geometry, never invented walls. */
 (function(root){
  'use strict';
- const VERSION='arhittek-plan-2',INK='#243447',BLUE='#2877c9',LIGHT='#8495a5';
+ const VERSION='arhittek-plan-3',INK='#243447',BLUE='#2877c9';
  const norm=s=>String(s||'').toLowerCase().replace(/ё/g,'е').replace(/[^а-яa-z0-9]/g,'');
  const roomNorm=s=>norm(s).replace(/^сп(?=\d|$)/,'спальня').replace(/^су(?=\d|$)/,'санузел').replace(/^каридор$/,'коридор').replace(/^кательная$/,'котельная');
  const roomName=s=>({сп:'Спальня',мсп:'Мастер-спальня',су:'Санузел',котельная:'Котельная',кательная:'Котельная'}[norm(s)]||String(s).replace(/^СП[-–\s]*(\d+)$/iu,'Спальня $1'));
@@ -99,7 +99,7 @@
   let clusters=groups(walls,info.width*.035).filter(g=>width(g.bounds)>info.width*.1&&height(g.bounds)>info.height*.1);
   // A continuous source floor polygon can join wall groups separated by
   // wide openings. Separate drawings have separate floor footprints.
-  const bridges=paths.filter(p=>p.filled&&p.fill&&(p.fill.saturation>.08||p.fill.gray>=.85&&p.fill.gray<.985)&&width(p.bounds)<info.width*.9&&height(p.bounds)<info.height*.85);
+  const bridges=paths.filter(p=>p.filled&&(p.pattern||p.fill&&(p.fill.saturation>.08||p.fill.gray>=.85&&p.fill.gray<.985))&&width(p.bounds)<info.width*.9&&height(p.bounds)<info.height*.85);
   for(const p of bridges){const joined=clusters.filter(g=>intersects(g.bounds,p.bounds));if(joined.length<2)continue;const merged={paths:joined.flatMap(g=>g.paths),bounds:union(joined.map(g=>g.bounds))};clusters=clusters.filter(g=>!joined.includes(g));clusters.push(merged);}
   clusters.sort((a,b)=>a.bounds.x0-b.bounds.x0);
   if(!clusters.length)return null;
@@ -111,7 +111,7 @@
   else if(heading){const ranked=clusters.map(g=>({g,d:Math.abs((g.bounds.x0+g.bounds.x1)/2-heading.cx)/info.width+Math.abs(g.bounds.y0-heading.cy)/info.height*.2})).sort((a,b)=>a.d-b.d);if(ranked[1]&&ranked[1].d-ranked[0].d<.06)return null;selected=ranked[0].g;}
   if(!selected)return null;
   let bounds=selected.bounds;
-  const floors=paths.filter(p=>p.filled&&p.fill&&(p.fill.saturation>.08||p.fill.gray>=.85&&p.fill.gray<.985)&&p.closed&&width(p.bounds)*height(p.bounds)>20&&width(p.bounds)<info.width*.8&&height(p.bounds)<info.height*.8);
+  const floors=paths.filter(p=>p.filled&&(p.pattern||p.fill&&(p.fill.saturation>.08||p.fill.gray>=.85&&p.fill.gray<.985))&&p.closed&&width(p.bounds)*height(p.bounds)>20&&width(p.bounds)<info.width*.8&&height(p.bounds)<info.height*.8);
   let attached=[];
   for(let round=0;round<3;round++){
    attached=floors.filter(p=>intersects(p.bounds,bounds,1)&&width(p.bounds)<width(selected.bounds)*1.3&&height(p.bounds)<height(selected.bounds)*1.3&&!clusters.some(g=>g!==selected&&intersects(p.bounds,g.bounds)));
@@ -165,26 +165,6 @@
    if(found.length!==1)continue;const w=found[0];used.add(w);results.push({name:roomName(rows[i].name),raw:rows[i].name,area:CatalogPdfCore.number(rows[i].area),x:w.cx,y:w.cy});
   }
   return {items:results,complete:!!rows.length&&rows.every(r=>results.filter(x=>x.raw===r.name).length===rows.filter(x=>x.name===r.name).length)};
- }
- function stairZones(info,b){
-  const numbers=info.items.filter(w=>inside(w.cx,w.cy,b)&&/^\d{1,2}$/.test(w.text)&&Number(w.text)<=40);
-  const zones=[];for(const w of numbers){const column=numbers.filter(v=>Math.abs(v.cx-w.cx)<w.h*5&&Math.abs(v.cy-w.cy)<w.h*35);if(new Set(column.map(v=>v.text)).size<7)continue;const r=union(column.map(v=>({x0:v.x0,y0:v.y0,x1:v.x1,y1:v.y1})));const pad=w.h*7;const z={x0:r.x0-pad,y0:r.y0-pad*.3,x1:r.x1+pad,y1:r.y1+pad*.3};if(!zones.some(v=>intersects(v,z)))zones.push(z);}return zones;
- }
- function details(info,s,roomLabels){
-  if(s.fallback)return s.local.filter(p=>p.stroked&&!p.dash&&p.stroke&&p.stroke.gray<.85&&p.lineWidth>=.8);
-  const t=s.thickness,b=s.bounds,stairs=stairZones(info,b);
-  const names=info.items.filter(w=>inside(w.cx,w.cy,b)&&/[а-яё]/iu.test(w.text)&&!/^\d|м[²2]/iu.test(w.text));
-  const annotations=names.map(w=>({x0:w.x0-w.h*3,y0:w.y0-w.h*3,x1:w.x1+w.h*3,y1:w.y1+w.h*3}));
-  for(const r of roomLabels?.items||[]){const h=median(info.items.filter(w=>Math.hypot(w.cx-r.x,w.cy-r.y)<w.h*2).map(w=>w.h));annotations.push({x0:r.x-h*3,y0:r.y-h*3,x1:r.x+h*3,y1:r.y+h*3});}
-  const clean=p=>!annotations.some(a=>contains(a,p.bounds))&&!s.walls.some(w=>contains(w.bounds,p.bounds,.01))&&(!s.floors.length||[...s.floors,...s.walls].some(w=>intersects(w.bounds,p.bounds,t*1.2)));
-  const arcs=s.local.filter(p=>p.stroked&&!p.dash&&clean(p)&&p.curved&&s.walls.some(w=>intersects(w.bounds,p.bounds,t*.6))&&width(p.bounds)>t*.8&&height(p.bounds)>t*.8&&Math.max(width(p.bounds),height(p.bounds))<Math.max(width(b),height(b))*.18);
-  const nearArc=p=>p.points.some(v=>arcs.some(a=>a.points.some(q=>Math.hypot(v[0]-q[0],v[1]-q[1])<t*.3)));
-  const inBand=p=>{
-   const r=p.bounds,horizontal=height(r)<t*.7,vertical=width(r)<t*.7;
-   if(!horizontal&&!vertical)return false;
-   return s.walls.some(w=>{const q=w.bounds;if(!inside((r.x0+r.x1)/2,(r.y0+r.y1)/2,q,t*.45))return false;return horizontal&&height(q)<t*2.2&&(Math.abs(r.y0-q.y0)<t*.7||Math.abs(r.y1-q.y1)<t*.7)&&width(r)<t*20||vertical&&width(q)<t*2.2&&(Math.abs(r.x0-q.x0)<t*.7||Math.abs(r.x1-q.x1)<t*.7)&&height(r)<t*20;});
-  };
-  return s.local.filter(p=>{if(!p.stroked||p.dash||!p.stroke||p.stroke.gray>=.85||!clean(p)||Math.max(width(p.bounds),height(p.bounds))<t*.8)return false;const door=arcs.includes(p)||nearArc(p),stair=stairs.some(z=>contains(z,p.bounds)&&Math.max(width(p.bounds),height(p.bounds))<Math.max(width(z),height(z))*.95);p.detailRole=door||stair?'detail':'window';return door||stair||!s.focused&&inBand(p);});
  }
  function contours(p){
   const out=[];let points=[];for(const c of p.commands){if(c[0]===0&&points.length){out.push(points);points=[];}if(c[0]===0||c[0]===1)points.push([c[1],c[2]]);}if(points.length)out.push(points);return out;
@@ -252,36 +232,42 @@
   ctx.save();ctx.translate(-22,-42);ctx.scale(44/318,44/318);ctx.beginPath();for(const [i,p]of [[0,[0,157]],[1,[157,0]],[1,[318,157]],[1,[318,268]],[1,[84,268]],[1,[84,237]],[1,[278,237]],[1,[278,174]],[1,[158,56]],[1,[40,174]],[1,[40,268]],[1,[0,268]]])i?ctx.lineTo(...p):ctx.moveTo(...p);ctx.closePath();ctx.fill();ctx.restore();
   ctx.font='18px Arial, sans-serif';ctx.textAlign='center';ctx.fillText('+79226593872',0,20);ctx.restore();
  }
- function draw(s,roomLabels,dims,key,info){
-  const canvas=document.createElement('canvas');canvas.width=1800;canvas.height=1600;const c=canvas.getContext('2d'),b=s.bounds,scale=Math.min(1400/width(b),1040/height(b));
-  const left=(1800-width(b)*scale)/2+30,top=270+(1040-height(b)*scale)/2,map=(x,y)=>[left+(x-b.x0)*scale,top+(y-b.y0)*scale];
+ // PDF.js paints the source itself. Classifying individual strokes loses
+ // unnumbered/winding stairs, thin wall outlines and clipped compound paths.
+ function cropBounds(s,info){
+  const b=s.bounds,pad=s.focused?0:Math.max(s.thickness*3,Math.min(width(b),height(b))*.025);
+  return {x0:Math.max(0,b.x0-pad),y0:Math.max(0,b.y0-pad),x1:Math.min(info.width,b.x1+pad),y1:Math.min(info.height,b.y1+pad)};
+ }
+ async function draw(s,roomLabels,dims,key,info,page,optionalContent,check){
+  const canvas=document.createElement('canvas');canvas.width=3600;canvas.height=3200;const c=canvas.getContext('2d'),b=s.bounds,crop=cropBounds(s,info),scale=Math.min(1400/width(crop),1040/height(crop));
+  c.scale(2,2);
+  const cropLeft=(1800-width(crop)*scale)/2+30,cropTop=270+(1040-height(crop)*scale)/2;
+  const left=cropLeft+(b.x0-crop.x0)*scale,top=cropTop+(b.y0-crop.y0)*scale,map=(x,y)=>[cropLeft+(x-crop.x0)*scale,cropTop+(y-crop.y0)*scale];
   c.fillStyle='#fff';c.fillRect(0,0,1800,1600);c.fillStyle=BLUE;c.font='bold 27px Arial, sans-serif';c.fillText('ARHITTEK',170,84);
   c.fillStyle=INK;c.font='bold 43px Arial, sans-serif';c.fillText(key==='basement'?'План цокольного этажа':'План '+key.slice(5)+'-го этажа',170,190);
   c.strokeStyle='#e8edf3';c.lineWidth=2;c.beginPath();c.moveTo(170,115);c.lineTo(1630,115);c.stroke();
-  const selectedDetails=new Set(details(info,s,roomLabels)),wallSet=new Set(s.walls);
-  // Respect source paint order: a later opaque floor hides construction marks
-  // and lower-storey geometry exactly as in the PDF. It must not be resurrected.
-  for(const p of s.local){
-   c.save();for(const clip of p.clips||[]){c.beginPath();for(const shape of clip.paths)path(c,shape,map,false);c.clip(clip.rule);}
-   if(p.filled&&(p.pattern||p.fill&&p.fill.saturation<.08&&(wallSet.has(p)||p.fill.gray>=.85))){
-    path(c,p,map);c.fillStyle=wallSet.has(p)?INK:'#fbfcfd';c.fill(p.evenOdd?'evenodd':'nonzero');if(wallSet.has(p)){c.strokeStyle=INK;c.lineWidth=.45;c.stroke();}
+  const source=document.createElement('canvas');source.width=Math.ceil(width(crop)*scale*2);source.height=Math.ceil(height(crop)*scale*2);
+  try{
+   check();const render=page.render({canvasContext:source.getContext('2d'),viewport:page.getViewport({scale:scale*2}),transform:[1,0,0,1,-crop.x0*scale*2,-crop.y0*scale*2],background:'#ffffff',optionalContentConfigPromise:Promise.resolve(optionalContent)});
+   await render.promise;check();
+   // A sheet may put an explication in the empty corner below an L-shaped
+   // house. Remove it only when its whole region is clear of source geometry.
+   const sc=source.getContext('2d');sc.fillStyle='#fff';
+   for(const table of info.tables||[]){
+    const heading=info.items.filter(w=>/экспликац/iu.test(w.text)&&w.y1<=table.top&&table.top-w.y1<info.height*.1&&w.cx>=table.left-info.width*.03&&w.cx<=table.right+info.width*.03).sort((a,b)=>b.y1-a.y1)[0];
+    const r={x0:Math.min(table.left,heading?.x0??table.left)-4,y0:(heading?.y0??table.top)-4,x1:table.right+4,y1:table.bottom+8};
+    if(!intersects(crop,r)||[...s.walls,...s.floors].some(p=>intersects(p.bounds,r)))continue;
+    sc.fillRect((r.x0-crop.x0)*scale*2,(r.y0-crop.y0)*scale*2,width(r)*scale*2,height(r)*scale*2);
    }
-   if(selectedDetails.has(p)){path(c,p,map);c.strokeStyle=p.detailRole==='detail'?LIGHT:BLUE;c.lineWidth=p.detailRole==='detail'?2.1:1.35;c.stroke();}
-   c.restore();
-  }
+   c.drawImage(source,cropLeft,cropTop,source.width/2,source.height/2);
+  }finally{source.width=source.height=0;}
+  // Keep the original room labels and their positions. Redrawing longer names
+  // at a uniform size over narrow halls caused the labels to collide.
   c.save();c.beginPath();
   if(s.floors.length)for(const p of s.floors)path(c,p,map,false);else c.rect(left,top,width(b)*scale,height(b)*scale);
   c.clip();c.globalCompositeOperation='multiply';
   for(let y=top+120;y<top+height(b)*scale;y+=320)for(let x=left+130;x<left+width(b)*scale;x+=360)watermark(c,x,y);
   c.restore();
-  for(const r of roomLabels.items){
-   let [x,y]=map(r.x,r.y);let l=b.x0,rt=b.x1;
-   for(const p of s.walls){const q=p.bounds;if(r.y<q.y0||r.y>q.y1)continue;if(q.x1<=r.x)l=Math.max(l,q.x1);if(q.x0>=r.x)rt=Math.min(rt,q.x0);}
-   const max=Math.max(55,(rt-l)*scale*.84);let size=24;while(size>11){c.font='600 '+size+'px Arial, sans-serif';if(c.measureText(r.name).width<=max)break;size--;}
-   const lines=c.measureText(r.name).width>max&&r.name.includes('-')?r.name.split('-'):r.name.includes(' ')&&c.measureText(r.name).width>max?r.name.split(' '):[r.name];
-   const textWidth=Math.min(max,Math.max(...lines.map(line=>c.measureText(line).width))),lx=map(l,r.y)[0]+textWidth/2+4,rx=map(rt,r.y)[0]-textWidth/2-4;if(lx<=rx)x=Math.max(lx,Math.min(rx,x));
-   c.fillStyle=INK;c.textAlign='center';c.textBaseline='middle';lines.forEach((line,i)=>c.fillText(line,x,y+(i-(lines.length-1)/2)*(size+3),max));
-  }
   if(dims?.widthMm&&dims?.heightMm){
   c.textBaseline='alphabetic';c.font='26px Arial, sans-serif';c.fillStyle=BLUE;c.strokeStyle=BLUE;c.lineWidth=2;
   const right=left+width(b)*scale,bottom=top+height(b)*scale,dy=bottom+80,dx=left-70,fmt=n=>Math.round(n).toLocaleString('ru-RU');
@@ -293,7 +279,7 @@
   c.fillStyle='#8796a6';c.font='16px Arial, sans-serif';c.textAlign='right';c.fillText('Габариты в мм',1630,1538);
   }
   const image=canvas.toDataURL('image/png'),thumb=document.createElement('canvas');thumb.width=270;thumb.height=240;thumb.getContext('2d').drawImage(canvas,0,0,270,240);const thumbnail=thumb.toDataURL('image/jpeg',.85);canvas.width=canvas.height=thumb.width=thumb.height=0;
-  return {image,thumbnail};
+  return {image,thumbnail,sourceCrop:crop};
  }
  function focusBasement(s,info,table){
   if(!table?.verified||table.rows.length!==1||!/подвал|цоколь/iu.test(table.rows[0].name))return s;
@@ -315,8 +301,8 @@
   if(!dims&&reference?.widthMm>0&&reference.heightMm>0&&drawingScale&&reference.drawingScale===drawingScale&&Math.abs(width(structure.bounds)/width(reference.bounds)-1)<.005&&Math.abs(height(structure.bounds)/height(reference.bounds)-1)<.005)dims={widthMm:reference.widthMm,heightMm:reference.heightMm,derived:['width','height'],basis:'matching-scale-and-footprint',referenceFloor:'floor1'};
   if(!roomLabels.complete)return {ok:false,foundRooms:roomLabels.items.length,reason:'не все названия комнат удалось связать с местами на плане'};
   if(!dims)dims={widthMm:null,heightMm:null,derived:[],basis:'unavailable'};
-  check();const rendered=draw(structure,roomLabels,dims,key,info);
-  return {ok:true,...rendered,report:{style:VERSION,drawingScale,bounds:structure.bounds,...dims,rooms:roomLabels.items.length,wallPaths:structure.walls.length,sourceGeometry:true}};
+  check();const rendered=await draw(structure,roomLabels,dims,key,info,page,optionalContent,check);
+  return {ok:true,...rendered,report:{style:VERSION,renderer:'pdfjs-native',detailPolicy:'preserve-all',sourceCrop:rendered.sourceCrop,drawingScale,bounds:structure.bounds,...dims,rooms:roomLabels.items.length,wallPaths:structure.walls.length,sourceGeometry:true}};
  }
  async function refreshExisting({id,incoming,client,allowed,actor}){
   const reports=incoming.pdf_import_meta?.sources?.plans;if(!reports||!id)return {updated:false};

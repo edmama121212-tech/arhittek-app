@@ -29,3 +29,5 @@
   #cardEditorOverlay>div>div:first-child>div:last-child{position:sticky;bottom:0;z-index:2}
   #cardEditorOverlay>div>div:nth-child(2){overflow:visible!important;padding:20px 12px!important}
 }
+
+.catalog-plan-open{display:block;color:#2877c9;text-decoration:none;cursor:zoom-in}.catalog-plan-open>span{display:block;padding:10px 4px 0;text-align:center;font-size:12px;font-weight:600}.catalog-plan-open:focus-visible{outline:3px solid #2877c9;outline-offset:4px}
