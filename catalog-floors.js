@@ -17,8 +17,12 @@
   function tabs(card,suffix='',handler='showTab'){
     return active(card).map(f=>`<div class="tab" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" onclick="${handler}('${f.key}${suffix}',this)">${f.label}</div>`).join('');
   }
+  function planImage(src,title){
+    const img=`<img class="plan-img" src="${esc(src)}" alt="${esc(title)}: план" loading="lazy"/>`;
+    return /^https?:\/\//i.test(src)?`<a class="catalog-plan-open" href="${esc(src)}" target="_blank" rel="noopener" aria-label="Увеличить план: ${esc(title)}">${img}<span>Увеличить план ↗</span></a>`:img;
+  }
   function panels(card,suffix=''){
-    return active(card).map(f=>`<div class="panel" id="${f.key}${suffix}"><div class="plan-wrap"><div class="plan-label">${f.title} <span>${esc(card[f.area]||'—')} м²</span></div><div class="plan-img-container">${card.images?.[f.image]?`<img class="plan-img" src="${esc(card.images[f.image])}" alt="${f.title}: план" loading="lazy"/>`:'<div class="catalog-plan-empty">План не добавлен</div>'}</div></div><div class="explication"><div class="expl-header"><span class="expl-header-title">Экспликация</span><span class="expl-header-total">${esc(card[f.area]||'—')} м²</span></div>${rows(card[f.rooms])}</div><div style="height:12px"></div></div>`).join('');
+    return active(card).map(f=>`<div class="panel" id="${f.key}${suffix}"><div class="plan-wrap"><div class="plan-label">${f.title} <span>${esc(card[f.area]||'—')} м²</span></div><div class="plan-img-container">${card.images?.[f.image]?planImage(card.images[f.image],f.title):'<div class="catalog-plan-empty">План не добавлен</div>'}</div></div><div class="explication"><div class="expl-header"><span class="expl-header-title">Экспликация</span><span class="expl-header-total">${esc(card[f.area]||'—')} м²</span></div>${rows(card[f.rooms])}</div><div style="height:12px"></div></div>`).join('');
   }
   function editor(){
     return definitions.map(f=>`<section class="ce-floor-section" id="ce-section-${f.key}">

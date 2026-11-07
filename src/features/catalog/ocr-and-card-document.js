@@ -600,6 +600,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .plan-label{font-size:10px;font-weight:700;color:var(--text-label);letter-spacing:.12em;text-transform:uppercase;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;}
 .plan-label span{background:var(--blue-light);color:var(--blue);font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;}
 .plan-img-container{background:#E8EDF4;border:1px solid var(--border);border-radius:12px;padding:12px;}
+.catalog-plan-open{display:block;color:#2877c9;text-decoration:none;cursor:zoom-in}.catalog-plan-open>span{display:block;padding:10px 4px 0;text-align:center;font-size:12px;font-weight:600}.catalog-plan-open:focus-visible{outline:3px solid #2877c9;outline-offset:4px}
 .catalog-plan-empty{padding:22px 8px;text-align:center;color:#888;font-size:12px}.plan-img{width:100%;height:auto;display:block;border-radius:4px;}
 .explication{margin:10px 14px 0;border:1px solid var(--border);border-radius:12px;overflow:hidden;}
 .expl-header{background:var(--blue);padding:9px 14px;display:flex;justify-content:space-between;align-items:center;}

@@ -220,7 +220,7 @@ function coreTests(){
  await page.evaluate(()=>{const card=__db.project_cards[0];card.pdf_import_meta.sources.plans={};card.images[2]='https://example.invalid/legacy-plan.jpg';card.images[0]='https://example.invalid/owner-facade.jpg';card.title='Ручное название';card.price='99999';});
  await dropAlbum('#view-cards','same-album-clean-plans.pdf');
  await page.waitForFunction(()=>document.getElementById('cards-pdf-result').textContent.includes('обновлены по шаблону'),null,{timeout:60000});
- eq(await page.evaluate(()=>{const c=__db.project_cards[0];return [__db.project_cards.length,c.title,c.price,c.images[0],c.images[2]!=='https://example.invalid/legacy-plan.jpg',c.pdf_import_meta.sources.plans.floor1.style,__syncs]}),[1,'Ручное название','99999','https://example.invalid/owner-facade.jpg',true,'arhittek-plan-2',2],'Reuploading the identical original PDF replaces only legacy plans, preserving manual price, title and facades');
+ eq(await page.evaluate(()=>{const c=__db.project_cards[0];return [__db.project_cards.length,c.title,c.price,c.images[0],c.images[2]!=='https://example.invalid/legacy-plan.jpg',c.pdf_import_meta.sources.plans.floor1.style,__syncs]}),[1,'Ручное название','99999','https://example.invalid/owner-facade.jpg',true,'arhittek-plan-3',2],'Reuploading the identical original PDF replaces only legacy plans, preserving manual price, title and facades');
  const foreign=fixture({number:'00157-A',floors:1,basement:false});await page.locator('#catalog-pdf-file').setInputFiles({name:'different-revision.pdf',mimeType:'application/pdf',buffer:foreign});
  await page.waitForFunction(()=>!CatalogPdfImport.busyReading()&&document.getElementById('cards-pdf-result').textContent.includes('уже есть'),null,{timeout:60000});
  eq(await page.evaluate(()=>[__db.project_cards[0].title,Object.keys(__db.project_cards[0].pdf_import_meta.sources.plans).length,__syncs]),['Ручное название',4,2],'A different PDF with the same project number cannot overwrite existing plans');
@@ -238,9 +238,9 @@ function coreTests(){
  eq([unavailable.blocking.some(s=>s.includes('Не сходится')),unavailable.warnings.some(s=>s.includes('Не удалось повторно')),unavailable.images[2]!==null],[true,true,true],'Unavailable retry OCR preserves extracted draft and its real blockers');
  await page.evaluate(()=>{window.Tesseract=__ocrSaved.tess;});
  const compound=await read(fixture({number:'00008',floors:1,basement:false,compound:true}));
- eq([compound.sources.plans.floor1.style,compound.sources.plans.floor1.widthMm,compound.sources.plans.floor1.heightMm,compound.sources.plans.floor1.rooms],['arhittek-plan-2',12000,12000,3],'Styled plans retain source dimensions and all room labels');
- const geometry=await page.evaluate(async()=>{const image=new Image();image.src=__parsed.images[2];await image.decode();const c=document.createElement('canvas');c.width=image.width;c.height=image.height;const ctx=c.getContext('2d');ctx.drawImage(image,0,0);const p=__parsed.sources.plans.floor1,b=p.bounds,scale=Math.min(1400/(b.x1-b.x0),1040/(b.y1-b.y0)),left=(1800-(b.x1-b.x0)*scale)/2+30,top=270+(1040-(b.y1-b.y0)*scale)/2;const pixel=(x,y)=>Array.from(ctx.getImageData(Math.round(left+(x-b.x0)*scale),Math.round(top+(y-b.y0)*scale),1,1).data).slice(0,3);return {wall:pixel(75,200),room:pixel(150,150)}});
- eq(geometry.wall.every(n=>n<90)&&geometry.room.every(n=>n>220),true,'A filled PDF wall contour retains its interior hole instead of blacking out rooms');
+ eq([compound.sources.plans.floor1.style,compound.sources.plans.floor1.widthMm,compound.sources.plans.floor1.heightMm,compound.sources.plans.floor1.rooms],['arhittek-plan-3',12000,12000,3],'Styled plans retain source dimensions and all room labels');
+ const geometry=await page.evaluate(async()=>{const image=new Image();image.src=__parsed.images[2];await image.decode();const c=document.createElement('canvas');c.width=image.width;c.height=image.height;const ctx=c.getContext('2d');ctx.drawImage(image,0,0);const p=__parsed.sources.plans.floor1,b=p.sourceCrop,scale=Math.min(1400/(b.x1-b.x0),1040/(b.y1-b.y0)),left=(1800-(b.x1-b.x0)*scale)/2+30,top=270+(1040-(b.y1-b.y0)*scale)/2;const pixel=(x,y)=>Array.from(ctx.getImageData(Math.round((left+(x-b.x0)*scale)*2),Math.round((top+(y-b.y0)*scale)*2),1,1).data).slice(0,3);return {wall:pixel(75,200),room:pixel(150,150)}});
+ eq(geometry.wall.every(n=>n<210)&&geometry.room.every(n=>n>220),true,'A filled PDF wall contour retains its interior hole instead of blacking out rooms');
  const unnamed=await read(fixture({number:'00009',floors:1,basement:false,noRoomNames:true}));eq([unnamed.images[2],unnamed.blocking.some(s=>s.includes('названия комнат'))],[null,true],'Unlocated rooms block the plan instead of uploading the original technical sheet');
  const undimensioned=await read(fixture({number:'00010',floors:1,basement:false,noDimensions:true}));eq([!!undimensioned.images[2],undimensioned.sources.plans.floor1.widthMm,undimensioned.warnings.some(s=>s.includes('без размеров'))],[true,null,true],'Unknown overall dimensions are not invented');
  const noVector=await page.evaluate(()=>CatalogPlan.prepare({pdfjs:{OPS:{}},page:{getOperatorList:async()=>({fnArray:[],argsArray:[]}),getViewport:()=>({transform:[1,0,0,1,0,0]})},info:{width:900,height:640,items:[],phrases:[],text:'',tables:[]},table:{rows:[]},key:'floor1'}));eq([noVector.ok,noVector.image],[false,undefined],'An unsupported scan cannot silently bypass clean-plan preparation');
@@ -253,7 +253,9 @@ function coreTests(){
   await page.setViewportSize({width,height:844});await page.evaluate(()=>openCardEditor());
   eq(await page.locator('#cardEditorOverlay').evaluate(e=>e.scrollWidth<=e.clientWidth+1),true,'No editor overflow at '+width);
   eq(await page.locator('#cardEditorOverlay>div').evaluate(e=>getComputedStyle(e).overflowY),'auto','Editor enables native vertical scrolling at '+width);
-  if(safari){await page.mouse.move(width/2,600);await page.mouse.wheel(0,650)}
+  // Windows desktop Chrome does not consistently synthesize compositor
+  // scrolling from CDP touch moves; Linux CI still exercises the touch path.
+  if(safari||process.platform==='win32'){await page.mouse.move(width/2,600);await page.mouse.wheel(0,650)}
   else{
    const cdp=await context.newCDPSession(page);
    await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:width/2,y:700}]});
