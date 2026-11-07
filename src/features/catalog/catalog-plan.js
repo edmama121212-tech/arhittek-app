@@ -1,7 +1,7 @@
 /* Deterministic catalogue drawings: source geometry, never invented walls. */
 (function(root){
  'use strict';
- const VERSION='arhittek-plan-2',INK='#243447',BLUE='#2877c9',LIGHT='#8495a5';
+ const VERSION='arhittek-plan-4',INK='#283a46',BLUE='#2877c9',FURNITURE='#e2eff9';
  const norm=s=>String(s||'').toLowerCase().replace(/ё/g,'е').replace(/[^а-яa-z0-9]/g,'');
  const roomNorm=s=>norm(s).replace(/^сп(?=\d|$)/,'спальня').replace(/^су(?=\d|$)/,'санузел').replace(/^каридор$/,'коридор').replace(/^кательная$/,'котельная');
  const roomName=s=>({сп:'Спальня',мсп:'Мастер-спальня',су:'Санузел',котельная:'Котельная',кательная:'Котельная'}[norm(s)]||String(s).replace(/^СП[-–\s]*(\d+)$/iu,'Спальня $1'));
@@ -19,7 +19,7 @@
   if(Array.isArray(value)||ArrayBuffer.isView(value)){const a=Array.from(value);return a.slice(0,3).map(n=>n>1?n/255:n);}
   return null;
  }
- function shade(color){const a=rgb(color);return a?{gray:a.reduce((s,n)=>s+n,0)/3,saturation:Math.max(...a)-Math.min(...a)}:null;}
+ function shade(color){const a=rgb(color);return a?{rgb:a,gray:a.reduce((s,n)=>s+n,0)/3,saturation:Math.max(...a)-Math.min(...a)}:null;}
  function unpack(raw,matrix){
   if(!Array.isArray(raw)&&!ArrayBuffer.isView(raw))return [];
   const paths=[];let commands=[],points=[],curved=false,closed=false;
@@ -33,7 +33,7 @@
   }flush();return paths;
  }
  function vectors(pdfjs,operators,viewport,check=()=>{},optionalContent){
-  const O=pdfjs.OPS,stack=[],marked=[],paths=[];let visible=true;let state={matrix:[1,0,0,1,0,0],fill:'#000000',pattern:false,stroke:'#000000',dash:false,lineWidth:1,fillAlpha:1,strokeAlpha:1,clips:[],pendingClip:null};
+  const O=pdfjs.OPS,stack=[],marked=[],paths=[];let visible=true;let state={matrix:[1,0,0,1,0,0],fill:'#000000',pattern:false,stroke:'#000000',dash:false,dashPattern:[],lineWidth:1,fillAlpha:1,strokeAlpha:1,clips:[],pendingClip:null};
   for(let i=0;i<operators.fnArray.length;i++){
    if(i%300===0)check();const op=operators.fnArray[i],a=operators.argsArray[i]||[];
    if(op===O.beginMarkedContent||op===O.beginMarkedContentProps){marked.push(visible);if(op===O.beginMarkedContentProps&&a[0]==='OC'&&optionalContent)visible=visible&&optionalContent.isVisible(a[1]);}
@@ -43,9 +43,9 @@
    else if(op===O.transform)state.matrix=multiply(state.matrix,a);
    else if(op===O.clip)state.pendingClip='nonzero';
    else if(op===O.eoClip)state.pendingClip='evenodd';
-   else if(op===O.setGState){for(const [key,value]of a[0]||[]){if(key==='LW')state.lineWidth=value;else if(key==='D')state.dash=!!value[0]?.length;else if(key==='ca')state.fillAlpha=value;else if(key==='CA')state.strokeAlpha=value;}}
+   else if(op===O.setGState){for(const [key,value]of a[0]||[]){if(key==='LW')state.lineWidth=value;else if(key==='D'){state.dash=!!value[0]?.length;state.dashPattern=Array.from(value[0]||[]);}else if(key==='ca')state.fillAlpha=value;else if(key==='CA')state.strokeAlpha=value;}}
    else if(op===O.setLineWidth)state.lineWidth=a[0];
-   else if(op===O.setDash)state.dash=!!a[0]?.length;
+   else if(op===O.setDash){state.dash=!!a[0]?.length;state.dashPattern=Array.from(a[0]||[]);}
    else if(op===O.setFillRGBColor){state.fill=a[0];state.pattern=false;}
    else if(op===O.setStrokeRGBColor)state.stroke=a[0];
    else if(op===O.setFillGray){state.fill=[a[0],a[0],a[0]];state.pattern=false;}
@@ -65,7 +65,7 @@
     if(filled||stroked)for(const p of combined){
      let bounds={...p.bounds};for(const clip of state.clips){if(!clip.paths.length)continue;const b=union(clip.paths.map(q=>q.bounds));bounds={x0:Math.max(bounds.x0,b.x0),y0:Math.max(bounds.y0,b.y0),x1:Math.min(bounds.x1,b.x1),y1:Math.min(bounds.y1,b.y1)};}
      if(bounds.x1<bounds.x0||bounds.y1<bounds.y0)continue;
-     paths.push({...p,bounds,uniform:Math.abs(Math.hypot(m[0],m[1])/Math.hypot(m[2],m[3])-1)<.005,evenOdd,clips:state.clips,sequence:i,pattern:state.pattern,closed:p.closed||filled||[O.closeStroke,O.closeFillStroke,O.closeEOFillStroke].includes(paint),filled,stroked,fill:shade(state.fill),stroke:shade(state.stroke),dash:state.dash,lineWidth:Math.abs(state.lineWidth)*(Math.hypot(m[0],m[1])+Math.hypot(m[2],m[3]))/2});
+     paths.push({...p,bounds,uniform:Math.abs(Math.hypot(m[0],m[1])/Math.hypot(m[2],m[3])-1)<.005,evenOdd,clips:state.clips,sequence:i,pattern:state.pattern,closed:p.closed||filled||[O.closeStroke,O.closeFillStroke,O.closeEOFillStroke].includes(paint),filled,stroked,fill:shade(state.fill),stroke:shade(state.stroke),dash:state.dash,dashPattern:state.dashPattern.map(n=>n*(Math.hypot(m[0],m[1])+Math.hypot(m[2],m[3]))/2),lineWidth:Math.abs(state.lineWidth)*(Math.hypot(m[0],m[1])+Math.hypot(m[2],m[3]))/2});
     }
     if(state.pendingClip){state.clips=state.clips.concat([{paths:decoded,rule:state.pendingClip}]);state.pendingClip=null;}
    }
@@ -78,7 +78,7 @@
  }
  function chooseStructure(paths,info,key){
   const headings=CatalogPdfCore.planInfos(info,3),heading=headings.find(h=>h.floor===key);
-  let walls=paths.filter(p=>p.filled&&p.fill&&p.fill.saturation<.08&&p.fill.gray<.85&&!info.items.some(w=>p.commands.length<=12&&contains(p.bounds,w,w.h*.25)&&height(p.bounds)<w.h*2.8&&width(p.bounds)<w.x1-w.x0+w.h*4)&&!(width(p.bounds)>info.width*.6&&(p.bounds.y1<info.height*.07||p.bounds.y0>info.height*.9))&&!(p.commands.length<=4&&Math.max(width(p.bounds),height(p.bounds))<Math.min(info.width,info.height)*.02)&&width(p.bounds)*height(p.bounds)>1&&!p.curved&&width(p.bounds)<info.width*.95&&height(p.bounds)<info.height*.9);
+  let extraWalls=[];let walls=paths.filter(p=>p.filled&&p.fill&&p.fill.saturation<.08&&p.fill.gray<.85&&!info.items.some(w=>p.commands.length<=12&&contains(p.bounds,w,w.h*.25)&&height(p.bounds)<w.h*2.8&&width(p.bounds)<w.x1-w.x0+w.h*4)&&!(width(p.bounds)>info.width*.6&&(p.bounds.y1<info.height*.07||p.bounds.y0>info.height*.9))&&!(p.commands.length<=4&&Math.max(width(p.bounds),height(p.bounds))<Math.min(info.width,info.height)*.02)&&width(p.bounds)*height(p.bounds)>1&&!p.curved&&width(p.bounds)<info.width*.95&&height(p.bounds)<info.height*.9);
   {
    // Uncoloured Archicad walls are white polygons with repeated diagonal hatching.
    // A white window infill has no such hatching and must remain an opening.
@@ -87,7 +87,7 @@
     let previous;for(const c of p.commands){if(c[0]===0){previous=[c[1],c[2]];continue;}if(c[0]!==1||!previous)continue;const next=[c[1],c[2]],b=box([previous,next]),ratio=width(b)/height(b);if(width(b)>.3&&height(b)>.3&&ratio>.65&&ratio<1.5)hatches.push({bounds:b,sequence:p.sequence});previous=next;}
    }
    const hatched=paths.filter(p=>p.filled&&p.fill?.gray>.985&&!p.curved&&width(p.bounds)*height(p.bounds)>2&&(Math.min(width(p.bounds),height(p.bounds))<Math.max(info.width,info.height)*.045||p.commands.filter(c=>c[0]===0).length>1)&&hatches.filter(h=>h.sequence>p.sequence&&contains(p.bounds,h.bounds,.15)).length>=2);
-   const extent=ps=>ps.reduce((v,p)=>v+Math.max(width(p.bounds),height(p.bounds)),0);if(hatched.length>=3&&extent(hatched)>extent(walls)*1.3)walls=hatched;
+   const extent=ps=>ps.reduce((v,p)=>v+Math.max(width(p.bounds),height(p.bounds)),0);if(hatched.length>=3&&extent(hatched)>extent(walls)*1.3)walls=hatched;else extraWalls=hatched;
   }
   let fallback=false;
   if(walls.length<3&&!walls.some(p=>p.commands.filter(c=>c[0]===0).length>1&&width(p.bounds)>info.width*.12&&height(p.bounds)>info.height*.12)){
@@ -99,7 +99,7 @@
   let clusters=groups(walls,info.width*.035).filter(g=>width(g.bounds)>info.width*.1&&height(g.bounds)>info.height*.1);
   // A continuous source floor polygon can join wall groups separated by
   // wide openings. Separate drawings have separate floor footprints.
-  const bridges=paths.filter(p=>p.filled&&p.fill&&(p.fill.saturation>.08||p.fill.gray>=.85&&p.fill.gray<.985)&&width(p.bounds)<info.width*.9&&height(p.bounds)<info.height*.85);
+  const bridges=paths.filter(p=>p.filled&&(p.pattern||p.fill&&(p.fill.saturation>.08||p.fill.gray>=.85&&p.fill.gray<.985))&&width(p.bounds)<info.width*.9&&height(p.bounds)<info.height*.85);
   for(const p of bridges){const joined=clusters.filter(g=>intersects(g.bounds,p.bounds));if(joined.length<2)continue;const merged={paths:joined.flatMap(g=>g.paths),bounds:union(joined.map(g=>g.bounds))};clusters=clusters.filter(g=>!joined.includes(g));clusters.push(merged);}
   clusters.sort((a,b)=>a.bounds.x0-b.bounds.x0);
   if(!clusters.length)return null;
@@ -111,7 +111,7 @@
   else if(heading){const ranked=clusters.map(g=>({g,d:Math.abs((g.bounds.x0+g.bounds.x1)/2-heading.cx)/info.width+Math.abs(g.bounds.y0-heading.cy)/info.height*.2})).sort((a,b)=>a.d-b.d);if(ranked[1]&&ranked[1].d-ranked[0].d<.06)return null;selected=ranked[0].g;}
   if(!selected)return null;
   let bounds=selected.bounds;
-  const floors=paths.filter(p=>p.filled&&p.fill&&(p.fill.saturation>.08||p.fill.gray>=.85&&p.fill.gray<.985)&&p.closed&&width(p.bounds)*height(p.bounds)>20&&width(p.bounds)<info.width*.8&&height(p.bounds)<info.height*.8);
+  const floors=paths.filter(p=>p.filled&&(p.pattern||p.fill&&(p.fill.saturation>.08||p.fill.gray>=.85&&p.fill.gray<.985))&&p.closed&&width(p.bounds)*height(p.bounds)>20&&width(p.bounds)<info.width*.8&&height(p.bounds)<info.height*.8);
   let attached=[];
   for(let round=0;round<3;round++){
    attached=floors.filter(p=>intersects(p.bounds,bounds,1)&&width(p.bounds)<width(selected.bounds)*1.3&&height(p.bounds)<height(selected.bounds)*1.3&&!clusters.some(g=>g!==selected&&intersects(p.bounds,g.bounds)));
@@ -119,7 +119,7 @@
   }
   const local=paths.filter(p=>contains(bounds,p.bounds,.7));
   const thickness=median(selected.paths.map(p=>Math.min(width(p.bounds),height(p.bounds))).filter(n=>n>.2&&n<Math.max(width(bounds),height(bounds))*.06));
-  return {context:paths,bounds,walls:selected.paths,floors:attached,local,thickness:Math.max(.6,thickness),fallback};
+  return {context:paths,bounds,walls:selected.paths,extraWalls:extraWalls.filter(p=>contains(bounds,p.bounds,2)),floors:attached,local,thickness:Math.max(.6,thickness),fallback};
  }
  function labels(info,structure,table){
   const b=structure.bounds,rows=table?.rows||[];
@@ -165,26 +165,6 @@
    if(found.length!==1)continue;const w=found[0];used.add(w);results.push({name:roomName(rows[i].name),raw:rows[i].name,area:CatalogPdfCore.number(rows[i].area),x:w.cx,y:w.cy});
   }
   return {items:results,complete:!!rows.length&&rows.every(r=>results.filter(x=>x.raw===r.name).length===rows.filter(x=>x.name===r.name).length)};
- }
- function stairZones(info,b){
-  const numbers=info.items.filter(w=>inside(w.cx,w.cy,b)&&/^\d{1,2}$/.test(w.text)&&Number(w.text)<=40);
-  const zones=[];for(const w of numbers){const column=numbers.filter(v=>Math.abs(v.cx-w.cx)<w.h*5&&Math.abs(v.cy-w.cy)<w.h*35);if(new Set(column.map(v=>v.text)).size<7)continue;const r=union(column.map(v=>({x0:v.x0,y0:v.y0,x1:v.x1,y1:v.y1})));const pad=w.h*7;const z={x0:r.x0-pad,y0:r.y0-pad*.3,x1:r.x1+pad,y1:r.y1+pad*.3};if(!zones.some(v=>intersects(v,z)))zones.push(z);}return zones;
- }
- function details(info,s,roomLabels){
-  if(s.fallback)return s.local.filter(p=>p.stroked&&!p.dash&&p.stroke&&p.stroke.gray<.85&&p.lineWidth>=.8);
-  const t=s.thickness,b=s.bounds,stairs=stairZones(info,b);
-  const names=info.items.filter(w=>inside(w.cx,w.cy,b)&&/[а-яё]/iu.test(w.text)&&!/^\d|м[²2]/iu.test(w.text));
-  const annotations=names.map(w=>({x0:w.x0-w.h*3,y0:w.y0-w.h*3,x1:w.x1+w.h*3,y1:w.y1+w.h*3}));
-  for(const r of roomLabels?.items||[]){const h=median(info.items.filter(w=>Math.hypot(w.cx-r.x,w.cy-r.y)<w.h*2).map(w=>w.h));annotations.push({x0:r.x-h*3,y0:r.y-h*3,x1:r.x+h*3,y1:r.y+h*3});}
-  const clean=p=>!annotations.some(a=>contains(a,p.bounds))&&!s.walls.some(w=>contains(w.bounds,p.bounds,.01))&&(!s.floors.length||[...s.floors,...s.walls].some(w=>intersects(w.bounds,p.bounds,t*1.2)));
-  const arcs=s.local.filter(p=>p.stroked&&!p.dash&&clean(p)&&p.curved&&s.walls.some(w=>intersects(w.bounds,p.bounds,t*.6))&&width(p.bounds)>t*.8&&height(p.bounds)>t*.8&&Math.max(width(p.bounds),height(p.bounds))<Math.max(width(b),height(b))*.18);
-  const nearArc=p=>p.points.some(v=>arcs.some(a=>a.points.some(q=>Math.hypot(v[0]-q[0],v[1]-q[1])<t*.3)));
-  const inBand=p=>{
-   const r=p.bounds,horizontal=height(r)<t*.7,vertical=width(r)<t*.7;
-   if(!horizontal&&!vertical)return false;
-   return s.walls.some(w=>{const q=w.bounds;if(!inside((r.x0+r.x1)/2,(r.y0+r.y1)/2,q,t*.45))return false;return horizontal&&height(q)<t*2.2&&(Math.abs(r.y0-q.y0)<t*.7||Math.abs(r.y1-q.y1)<t*.7)&&width(r)<t*20||vertical&&width(q)<t*2.2&&(Math.abs(r.x0-q.x0)<t*.7||Math.abs(r.x1-q.x1)<t*.7)&&height(r)<t*20;});
-  };
-  return s.local.filter(p=>{if(!p.stroked||p.dash||!p.stroke||p.stroke.gray>=.85||!clean(p)||Math.max(width(p.bounds),height(p.bounds))<t*.8)return false;const door=arcs.includes(p)||nearArc(p),stair=stairs.some(z=>contains(z,p.bounds)&&Math.max(width(p.bounds),height(p.bounds))<Math.max(width(z),height(z))*.95);p.detailRole=door||stair?'detail':'window';return door||stair||!s.focused&&inBand(p);});
  }
  function contours(p){
   const out=[];let points=[];for(const c of p.commands){if(c[0]===0&&points.length){out.push(points);points=[];}if(c[0]===0||c[0]===1)points.push([c[1],c[2]]);}if(points.length)out.push(points);return out;
@@ -252,36 +232,82 @@
   ctx.save();ctx.translate(-22,-42);ctx.scale(44/318,44/318);ctx.beginPath();for(const [i,p]of [[0,[0,157]],[1,[157,0]],[1,[318,157]],[1,[318,268]],[1,[84,268]],[1,[84,237]],[1,[278,237]],[1,[278,174]],[1,[158,56]],[1,[40,174]],[1,[40,268]],[1,[0,268]]])i?ctx.lineTo(...p):ctx.moveTo(...p);ctx.closePath();ctx.fill();ctx.restore();
   ctx.font='18px Arial, sans-serif';ctx.textAlign='center';ctx.fillText('+79226593872',0,20);ctx.restore();
  }
- function draw(s,roomLabels,dims,key,info){
-  const canvas=document.createElement('canvas');canvas.width=1800;canvas.height=1600;const c=canvas.getContext('2d'),b=s.bounds,scale=Math.min(1400/width(b),1040/height(b));
-  const left=(1800-width(b)*scale)/2+30,top=270+(1040-height(b)*scale)/2,map=(x,y)=>[left+(x-b.x0)*scale,top+(y-b.y0)*scale];
-  c.fillStyle='#fff';c.fillRect(0,0,1800,1600);c.fillStyle=BLUE;c.font='bold 27px Arial, sans-serif';c.fillText('ARHITTEK',170,84);
-  c.fillStyle=INK;c.font='bold 43px Arial, sans-serif';c.fillText(key==='basement'?'План цокольного этажа':'План '+key.slice(5)+'-го этажа',170,190);
-  c.strokeStyle='#e8edf3';c.lineWidth=2;c.beginPath();c.moveTo(170,115);c.lineTo(1630,115);c.stroke();
-  const selectedDetails=new Set(details(info,s,roomLabels)),wallSet=new Set(s.walls);
-  // Respect source paint order: a later opaque floor hides construction marks
-  // and lower-storey geometry exactly as in the PDF. It must not be resurrected.
-  for(const p of s.local){
-   c.save();for(const clip of p.clips||[]){c.beginPath();for(const shape of clip.paths)path(c,shape,map,false);c.clip(clip.rule);}
-   if(p.filled&&(p.pattern||p.fill&&p.fill.saturation<.08&&(wallSet.has(p)||p.fill.gray>=.85))){
-    path(c,p,map);c.fillStyle=wallSet.has(p)?INK:'#fbfcfd';c.fill(p.evenOdd?'evenodd':'nonzero');if(wallSet.has(p)){c.strokeStyle=INK;c.lineWidth=.45;c.stroke();}
-   }
-   if(selectedDetails.has(p)){path(c,p,map);c.strokeStyle=p.detailRole==='detail'?LIGHT:BLUE;c.lineWidth=p.detailRole==='detail'?2.1:1.35;c.stroke();}
-   c.restore();
+ // PDF.js paints the source itself. Classifying individual strokes loses
+ // unnumbered/winding stairs, thin wall outlines and clipped compound paths.
+ function cropBounds(s,info){
+  const b=s.bounds,pad=s.focused?0:Math.max(s.thickness*3,Math.min(width(b),height(b))*.025);
+  const visual=union([b,...outsideSteps(s,info)]);
+  return {x0:Math.max(0,visual.x0-pad),y0:Math.max(0,visual.y0-pad),x1:Math.min(info.width,visual.x1+pad),y1:Math.min(info.height,visual.y1+pad)};
+ }
+ function outsideSteps(s,info){
+  if(s.focused)return [];
+  const b=s.bounds,t=s.thickness,span=Math.max(width(b),height(b)),lines=[];
+  for(const p of s.context||s.local){
+   if(!p.stroked||p.curved||p.commands.length!==2||p.commands[1][0]!==1||!contains({x0:b.x0-span*.25,y0:b.y0-span*.25,x1:b.x1+span*.25,y1:b.y1+span*.25},p.bounds))continue;
+   const r=p.bounds,horizontal=height(r)<.15,vertical=width(r)<.15,length=Math.max(width(r),height(r));
+   if((horizontal||vertical)&&length>t*3&&length<span*.35)lines.push({p,horizontal,lo:horizontal?r.x0:r.y0,hi:horizontal?r.x1:r.y1,axis:horizontal?r.y0:r.x0});
   }
-  c.save();c.beginPath();
-  if(s.floors.length)for(const p of s.floors)path(c,p,map,false);else c.rect(left,top,width(b)*scale,height(b)*scale);
-  c.clip();c.globalCompositeOperation='multiply';
-  for(let y=top+120;y<top+height(b)*scale;y+=320)for(let x=left+130;x<left+width(b)*scale;x+=360)watermark(c,x,y);
-  c.restore();
-  for(const r of roomLabels.items){
-   let [x,y]=map(r.x,r.y);let l=b.x0,rt=b.x1;
-   for(const p of s.walls){const q=p.bounds;if(r.y<q.y0||r.y>q.y1)continue;if(q.x1<=r.x)l=Math.max(l,q.x1);if(q.x0>=r.x)rt=Math.min(rt,q.x0);}
-   const max=Math.max(55,(rt-l)*scale*.84);let size=24;while(size>11){c.font='600 '+size+'px Arial, sans-serif';if(c.measureText(r.name).width<=max)break;size--;}
-   const lines=c.measureText(r.name).width>max&&r.name.includes('-')?r.name.split('-'):r.name.includes(' ')&&c.measureText(r.name).width>max?r.name.split(' '):[r.name];
-   const textWidth=Math.min(max,Math.max(...lines.map(line=>c.measureText(line).width))),lx=map(l,r.y)[0]+textWidth/2+4,rx=map(rt,r.y)[0]-textWidth/2-4;if(lx<=rx)x=Math.max(lx,Math.min(rx,x));
-   c.fillStyle=INK;c.textAlign='center';c.textBaseline='middle';lines.forEach((line,i)=>c.fillText(line,x,y+(i-(lines.length-1)/2)*(size+3),max));
+  const zones=[];
+  for(const seed of lines){
+   const run=lines.filter(l=>l.horizontal===seed.horizontal&&Math.abs(l.lo-seed.lo)<t*.2&&Math.abs(l.hi-seed.hi)<t*.2&&Math.abs(l.axis-seed.axis)<t*8).sort((a,b)=>a.axis-b.axis);
+   const unique=run.filter((l,i)=>!i||l.axis-run[i-1].axis>.2);if(unique.length<3)continue;
+   const r=union(unique.map(l=>l.p.bounds));
+   if(contains(b,r)||!intersects(b,r,t*4)||info.items.some(w=>inside(w.cx,w.cy,r)&&(/[а-яё]/iu.test(w.text)||/[.,]/.test(w.text))))continue;
+   if(!zones.some(z=>contains(z,r)))zones.push(r);
+  }return zones;
+ }
+ // Template 3.1 is drawn from source paths, never a generated replacement layout.
+ async function draw(s,roomLabels,dims,key,info,page,optionalContent,check){
+  const canvas=document.createElement('canvas');canvas.width=3600;canvas.height=3200;
+  const c=canvas.getContext('2d'),b=s.bounds,crop=cropBounds(s,info),scale=Math.min(1420/width(crop),1290/height(crop));
+  const cropLeft=(1800-width(crop)*scale)/2+25,cropTop=65+(1290-height(crop)*scale)/2;
+  const left=cropLeft+(b.x0-crop.x0)*scale,top=cropTop+(b.y0-crop.y0)*scale,map=(x,y)=>[cropLeft+(x-crop.x0)*scale,cropTop+(y-crop.y0)*scale];
+  c.scale(2,2);c.fillStyle='#fff';c.fillRect(0,0,1800,1600);
+  const mask=document.createElement('canvas');mask.width=1800;mask.height=1600;
+  const m=mask.getContext('2d');
+  const wallSet=new Set([...s.walls,...(s.extraWalls||[])]),area=width(b)*height(b),t=s.thickness;
+  const tables=(info.tables||[]).map(v=>({x0:v.left-4,y0:v.top-10,x1:v.right+4,y1:v.bottom+8})).filter(r=>!s.walls.some(p=>intersects(p.bounds,r)));
+  const supports=[...s.walls,...s.floors,...outsideSteps(s,info).map(bounds=>({bounds}))];
+  const local=(s.context||s.local).filter(p=>contains(crop,p.bounds,.7)&&!tables.some(r=>contains(r,p.bounds))&&supports.some(q=>intersects(q.bounds,p.bounds,t*.5)));
+  const notes=info.items.filter(w=>inside(w.cx,w.cy,crop)&&(/[а-яё]/iu.test(w.text)||/^(?:UP|DOWN)$/i.test(w.text))).map(w=>({x0:w.x0-w.h*2,y0:w.y0-w.h*2,x1:w.x1+w.h*2,y1:w.y1+w.h*3}));
+  const words=info.items.filter(w=>inside(w.cx,w.cy,crop));
+  const annotation=p=>!wallSet.has(p)&&(!p.curved&&notes.some(a=>contains(a,p.bounds))||p.curved&&(p.closed||p.points.length>2&&Math.hypot(p.points[0][0]-p.points.at(-1)[0],p.points[0][1]-p.points.at(-1)[1])<.2)&&Math.max(width(p.bounds),height(p.bounds))<t*5&&words.some(w=>/^\d{1,3}$/.test(w.text)&&contains(p.bounds,w,.3)));
+  const wallHatch=p=>!p.filled&&!p.curved&&p.lineWidth===0&&p.commands.length===2&&width(p.bounds)>.1&&height(p.bounds)>.1&&Math.max(width(p.bounds),height(p.bounds))<t*2&&width(p.bounds)/height(p.bounds)>.65&&width(p.bounds)/height(p.bounds)<1.5;
+  const furniture=p=>p.filled&&!p.pattern&&p.fill?.saturation>.08&&width(p.bounds)*height(p.bounds)<area*.12;
+  const windowFill=p=>furniture(p)&&Math.min(width(p.bounds),height(p.bounds))<t*.8&&Math.max(width(p.bounds),height(p.bounds))>Math.min(width(p.bounds),height(p.bounds))*3;
+  const clipped=(ctx,p,fn)=>{ctx.save();for(const clip of p.clips||[]){ctx.beginPath();for(const q of clip.paths)path(ctx,q,map,false);ctx.clip(clip.rule);}fn();ctx.restore();};
+  // Build only the visible wall silhouette in source paint order; opaque later
+  // fills erase hidden/lower-storey walls. Compound holes keep their fill rule.
+  for(const p of local){
+   if(!p.filled||annotation(p))continue;
+   clipped(m,p,()=>{path(m,p,map);m.globalCompositeOperation=wallSet.has(p)?'source-over':'destination-out';m.fillStyle=INK;m.fill(p.evenOdd?'evenodd':'nonzero');});
   }
+  const pixels=m.getImageData(0,0,mask.width,mask.height).data;
+  const inWall=(x,y)=>{const q=map(x,y),ix=Math.round(q[0]),iy=Math.round(q[1]);return ix>=0&&iy>=0&&ix<mask.width&&iy<mask.height&&pixels[(iy*mask.width+ix)*4+3]>240;};
+  for(let i=0;i<local.length;i++){
+   if(i%300===0)check();const p=local[i];if(annotation(p)||wallHatch(p))continue;
+   clipped(c,p,()=>{
+    if(p.filled){path(c,p,map);c.fillStyle=wallSet.has(p)?INK:furniture(p)&&!windowFill(p)?FURNITURE:'#ffffff';c.fill(p.evenOdd?'evenodd':'nonzero');}
+    if(p.stroked&&p.stroke&&p.stroke.gray<.96){
+     // Wall hatching is hidden by the solid cut; hairline stairs outside walls survive.
+     const points=p.points;if(!wallSet.has(p)&&points.length&&points.every(q=>inWall(q[0],q[1])))return;
+     path(c,p,map);c.strokeStyle=wallSet.has(p)?INK:'#7b8791';c.lineWidth=Math.max(.65,Math.min(1.65,p.lineWidth*scale));
+     // Dashed upper flights retain their exact source geometry and neutral treatment.
+     if(p.dash)c.setLineDash(p.dashPattern.map(n=>n*scale));c.stroke();
+    }
+   });
+  }
+  const shadow=document.createElement('canvas');shadow.width=1800;shadow.height=1600;
+  const sh=shadow.getContext('2d');sh.shadowColor='rgba(20,35,49,0.24)';sh.shadowBlur=9;sh.shadowOffsetX=shadow.width+5;sh.shadowOffsetY=8;sh.drawImage(mask,-shadow.width,0);sh.globalCompositeOperation='destination-out';sh.drawImage(mask,0,0);sh.globalCompositeOperation='source-over';
+  c.save();c.globalCompositeOperation='multiply';c.drawImage(shadow,0,0,1800,1600);c.restore();
+  // Render shadows only, so furniture fills cannot hide the original outlines.
+  m.clearRect(0,0,1800,1600);
+  for(const p of local.filter(p=>furniture(p)&&!windowFill(p)&&!annotation(p))){
+   clipped(m,p,()=>{path(m,p,map);m.fillStyle=FURNITURE;m.fill(p.evenOdd?'evenodd':'nonzero');});
+  }
+  sh.clearRect(0,0,shadow.width,shadow.height);sh.shadowColor='rgba(20,35,49,0.18)';sh.shadowBlur=5;sh.shadowOffsetX=shadow.width+2;sh.shadowOffsetY=4;sh.drawImage(mask,-shadow.width,0);sh.globalCompositeOperation='destination-out';sh.drawImage(mask,0,0);sh.globalCompositeOperation='source-over';
+  c.save();c.globalCompositeOperation='multiply';c.drawImage(shadow,0,0,1800,1600);c.restore();
+  mask.width=mask.height=shadow.width=shadow.height=0;
   if(dims?.widthMm&&dims?.heightMm){
   c.textBaseline='alphabetic';c.font='26px Arial, sans-serif';c.fillStyle=BLUE;c.strokeStyle=BLUE;c.lineWidth=2;
   const right=left+width(b)*scale,bottom=top+height(b)*scale,dy=bottom+80,dx=left-70,fmt=n=>Math.round(n).toLocaleString('ru-RU');
@@ -293,7 +319,7 @@
   c.fillStyle='#8796a6';c.font='16px Arial, sans-serif';c.textAlign='right';c.fillText('Габариты в мм',1630,1538);
   }
   const image=canvas.toDataURL('image/png'),thumb=document.createElement('canvas');thumb.width=270;thumb.height=240;thumb.getContext('2d').drawImage(canvas,0,0,270,240);const thumbnail=thumb.toDataURL('image/jpeg',.85);canvas.width=canvas.height=thumb.width=thumb.height=0;
-  return {image,thumbnail};
+  return {image,thumbnail,sourceCrop:crop};
  }
  function focusBasement(s,info,table){
   if(!table?.verified||table.rows.length!==1||!/подвал|цоколь/iu.test(table.rows[0].name))return s;
@@ -313,10 +339,10 @@
   if(key==='floor1'&&knownFootprint&&(!dims||dims.basis==='source-room-area-consensus')){const values=String(knownFootprint.value).split(/[×xх]/i).map(v=>CatalogPdfCore.number(v)*1000);if(values.length===2&&values.every(n=>n>0)&&Math.abs((values[0]/values[1])/(width(structure.bounds)/height(structure.bounds))-1)<.015)dims={widthMm:values[0],heightMm:values[1],derived:[],basis:'album-dimension-lines',dimensionPage:knownFootprint.page};}
   const scales=info.items.filter(w=>/^1\s*:\s*(20|25|50|75|100|150|200)$/.test(w.text)&&w.cx>=structure.bounds.x0&&w.cx<=structure.bounds.x1).sort((a,b)=>Math.abs(a.cy-structure.bounds.y0)-Math.abs(b.cy-structure.bounds.y0)),drawingScale=scales.length?Number(scales[0].text.split(':')[1]):null;
   if(!dims&&reference?.widthMm>0&&reference.heightMm>0&&drawingScale&&reference.drawingScale===drawingScale&&Math.abs(width(structure.bounds)/width(reference.bounds)-1)<.005&&Math.abs(height(structure.bounds)/height(reference.bounds)-1)<.005)dims={widthMm:reference.widthMm,heightMm:reference.heightMm,derived:['width','height'],basis:'matching-scale-and-footprint',referenceFloor:'floor1'};
-  if(!roomLabels.complete)return {ok:false,foundRooms:roomLabels.items.length,reason:'не все названия комнат удалось связать с местами на плане'};
+  // Room names are not printed in template 3.1; incomplete label mapping is not a geometry failure.
   if(!dims)dims={widthMm:null,heightMm:null,derived:[],basis:'unavailable'};
-  check();const rendered=draw(structure,roomLabels,dims,key,info);
-  return {ok:true,...rendered,report:{style:VERSION,drawingScale,bounds:structure.bounds,...dims,rooms:roomLabels.items.length,wallPaths:structure.walls.length,sourceGeometry:true}};
+  check();const rendered=await draw(structure,roomLabels,dims,key,info,page,optionalContent,check);
+  return {ok:true,...rendered,report:{style:VERSION,template:'3.1',renderer:'source-vector-relief',detailPolicy:'geometry-without-annotations',windows:'neutral',shadows:'soft',sourceCrop:rendered.sourceCrop,drawingScale,bounds:structure.bounds,...dims,rooms:roomLabels.items.length,wallPaths:structure.walls.length,sourceGeometry:true}};
  }
  async function refreshExisting({id,incoming,client,allowed,actor}){
   const reports=incoming.pdf_import_meta?.sources?.plans;if(!reports||!id)return {updated:false};
