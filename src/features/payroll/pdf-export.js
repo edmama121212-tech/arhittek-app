@@ -3,13 +3,14 @@
 // ============================================================
 function exportTimesheetToPdf(employeeId, monthStr){
   if(!session||(!session.isAdmin&&session.employeeId!==employeeId)){showToast('Нет доступа к табелю сотрудника');return;}
-  const emp = findEmployee(employeeId);
+  if(!state.salaryHistory){showToast('История окладов недоступна. Обновите данные.');return;}
+  const emp = payrollEmployee(employeeId);
   if(!emp){ showToast('Сотрудник не найден'); return; }
   const {from, to} = timesheetMonthRange(monthStr);
   const {employees: earnedMap} = completedProjectEarningsForRange(from, to);
   const {result: payrollByEmp} = splitPayrollByEmployee(earnedMap);
   const e = earnedMap[employeeId];
-  const p = payrollByEmp[employeeId] || {earned:0, payout:0, retained:0, isSalaried: !!emp.is_salaried, salary: Number(emp.fixed_salary)||0};
+  const p = payrollByEmp[employeeId] || {earned:0, payout:0, retained:0, isSalaried:false, salary:0};
   const items = e ? e.items : [];
   const paid = isTimesheetPaid(employeeId, monthStr);
   const payState = (typeof salaryPaymentState==='function') ? salaryPaymentState(employeeId, monthStr, p.payout) : {paid:paid?p.payout:0,remaining:paid?0:p.payout,overdue:false};
@@ -54,6 +55,10 @@ function exportTimesheetToPdf(employeeId, monthStr){
   doc.setFont('Roboto','normal'); doc.setFontSize(10);
   if(emp.role){ doc.text('Должность: ' + emp.role, margin, y); y += 6; }
   if(p.isSalaried){ doc.text('Фиксированный оклад: ' + fmtMoney(p.salary), margin, y); y += 6; }
+  if(salaryDetailsForRange(emp,from,to).uncertain){
+    const note=doc.splitTextToSize('История до установки восстановлена по начальной записи и доступному журналу. Проверьте старые начисления.',contentWidth);
+    doc.setFontSize(8);doc.text(note,margin,y);y+=4*note.length;doc.setFontSize(10);
+  }
   y += 4;
 
   // ---- Таблица начислений ----

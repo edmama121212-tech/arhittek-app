@@ -42,7 +42,11 @@ document.querySelectorAll('#payment-type .yn-btn').forEach(btn=>{
 let paymentSaveInFlight=false;
 function projectFeePaidField(project,entry){
   if(!project||project.fee_base==='m2')return null;
-  return entry.payee_employee_id&&entry.payee_employee_id===project.co_employee_id?'co_fee_paid':'fee_paid';
+  const payee=entry?.payee_employee_id;
+  // Older payments without a recipient used the primary executor's counter.
+  if(!payee||payee===project.employee_id)return 'fee_paid';
+  if(payee===project.co_employee_id)return 'co_fee_paid';
+  return null;
 }
 async function savePayment(){
   if(paymentSaveInFlight) return;

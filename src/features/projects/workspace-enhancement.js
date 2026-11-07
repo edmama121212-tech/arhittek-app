@@ -365,7 +365,7 @@ function paidMarkState(employeeId,monthStr){
 isTimesheetPaid=function(employeeId,monthStr){const s=paidMarkState(employeeId,monthStr);return s.paid&&!s.stale;};
 
 const oldTimesheet=renderTimesheet;renderTimesheet=function(){
- oldTimesheet();const card=$('timesheetCard');if(!card)return;
+ oldTimesheet();const card=$('timesheetCard');if(!card||!state.salaryHistory)return;
  const range=timesheetMonthRange($('ts-month').value),map=completedProjectEarningsForRange(range.from,range.to).employees,{result}=splitPayrollByEmployee(map);
  [...card.querySelectorAll('input[type="checkbox"]')].forEach(box=>{
   const row=box.closest('.list-item'),click=row.getAttribute('onclick')||'',id=click.match(/toggleTimesheetRow\('([^']+)'\)/)?.[1],r=result[id];if(!r)return;

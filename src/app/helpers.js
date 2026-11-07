@@ -123,7 +123,7 @@ function isFrozen(p){
   const st = findStatus(p.status_id);
   return !!(st && st.name === 'Заморожен');
 }
-function findEmployee(id){ return state.employees.find(e=>e.id===id); }
+function findEmployee(id){ return state.employees.find(e=>e.id===id) || state.salaryHistory?.employees.find(e=>e.id===id); }
 function findDepartment(id){ return state.departments.find(d=>d.id===id); }
 function financeToday(){
   return new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Moscow',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());

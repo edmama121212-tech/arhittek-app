@@ -97,6 +97,51 @@ async function loadEmployeeLoginOptions(){
   return {...result,data:result.data.filter(employee=>employee.active!==false).sort((a,b)=>a.name.localeCompare(b.name,'ru')||a.id.localeCompare(b.id))};
 }
 
+// Migration-first: salary read failures must never silently recalculate history
+// from today's card. This response contains only the owner's safe payroll roster.
+async function loadSalaryHistorySafe(){
+  try{
+    const result=await sb.rpc('get_employee_salary_history',{});
+    if(result.error)return result;
+    const data=result.data;
+    const employeeIds=new Set(),versionIds=new Set();
+    const sources=['legacy_baseline','audit','server'];
+    if(data?.version!==1||data.history_policy!=='effective-salary-v1'||!Array.isArray(data.employees)){
+      throw new Error('История окладов не подтверждена сервером');
+    }
+    const employees=data.employees.map(e=>{
+      if(!e||typeof e.id!=='string'||employeeIds.has(e.id)||typeof e.name!=='string'||!Array.isArray(e.versions)||!e.versions.length){
+        throw new Error('Неполная история окладов');
+      }
+      employeeIds.add(e.id);
+      const versions=e.versions.map(v=>{
+        const effectiveStamp=Date.parse(v?.effective_from+'T00:00:00Z');
+        const validDate=Number.isFinite(effectiveStamp)&&new Date(effectiveStamp).toISOString().slice(0,10)===v.effective_from;
+        if(!v||typeof v.id!=='string'||!/^\d+$/.test(v.id)||versionIds.has(v.id)||!validDate||!Number.isFinite(Date.parse(v.changed_at))||
+          !['is_salaried','active','deleted','uncertain'].every(k=>typeof v[k]==='boolean')||!sources.includes(v.source)||
+          typeof v.fixed_salary!=='number'||!Number.isFinite(v.fixed_salary)||v.fixed_salary<0||v.source==='legacy_baseline'&&!v.uncertain){
+          throw new Error('Неполная история окладов');
+        }
+        versionIds.add(v.id);
+        return {
+          id:v.id,effective_from:v.effective_from,changed_at:v.changed_at,
+          is_salaried:v.is_salaried,fixed_salary:v.fixed_salary,active:v.active,
+          deleted:v.deleted,source:v.source,uncertain:v.uncertain,
+        };
+      }).sort((a,b)=>a.effective_from.localeCompare(b.effective_from)||
+        Date.parse(a.changed_at)-Date.parse(b.changed_at)||a.id.length-b.id.length||a.id.localeCompare(b.id));
+      return {
+        id:e.id,name:e.name,role:typeof e.role==='string'?e.role:'',created_at:e.created_at,
+        active:e.active===true,is_salaried:e.is_salaried===true,fixed_salary:Number(e.fixed_salary)||0,
+        deleted_at:e.deleted_at||null,versions,
+      };
+    });
+    return {data:{version:1,history_policy:data.history_policy,employees},error:null};
+  }catch(error){
+    return {data:null,error};
+  }
+}
+
 function loadAll(){
   if(loadAllPromise){loadAllQueued=true;return loadAllPromise;}
   loadAllPromise=(async()=>{
@@ -132,7 +177,7 @@ async function loadAllData(){
     const ownerRead=read=>isOwner()?read():Promise.resolve({data:[],error:null,count:0});
     const documentRead=read=>canUseDocuments()?read():Promise.resolve({data:[],error:null,count:0});
     const stageRead=beginStageRead();
-    const [proj, emp, cat, st, dept, led, photos, invs, tzForms, tzRefs, company, kpForms, stages, members, kpCat, tsPay, compExp, compInc, counts, statusHistory, journal] = await Promise.all([
+    const [proj, emp, cat, st, dept, led, photos, invs, tzForms, tzRefs, company, kpForms, stages, members, kpCat, tsPay, compExp, compInc, counts, statusHistory, journal, salaryHistory] = await Promise.all([
       fetchAllRows(()=>sb.from('projects').select('*',{count:'exact'}).order('created_at', {ascending:true})),
       loadEmployeesSafe(),
       fetchAllRows(()=>sb.from('categories').select('*',{count:'exact'}).is('deleted_at', null).order('sort_order')),
@@ -154,14 +199,17 @@ async function loadAllData(){
       ownerRead(()=>fetchAllRows(()=>sb.from('audit_log').select('id,entity_type,entity_id,entity_name,action,changes,created_at',{count:'exact'}).eq('entity_type','reserve').eq('action','cash_count').order('created_at',{ascending:false}))),
       ownerRead(()=>fetchAllRows(()=>sb.from('audit_log').select('id,entity_id,changes,created_at',{count:'exact'}).eq('entity_type','project').order('created_at',{ascending:false}))),
       isOwner()?sb.rpc('get_financial_journal'):Promise.resolve({data:null,error:null}),
+      isOwner()?loadSalaryHistorySafe():Promise.resolve({data:null,error:null}),
     ]);
 
     if(accessActor.employeeId!==session?.employeeId||accessActor.token!==session?.token||!hasVerifiedAccess())return;
     // kpForms and stages are optional — may not exist until migrations run
-    const errs = [proj,emp,cat,st,dept,led,photos,invs,tzForms,tzRefs,company,tsPay,compExp,compInc,counts,statusHistory,journal].map(r=>r.error).filter(Boolean);
+    const errs = [proj,emp,cat,st,dept,led,photos,invs,tzForms,tzRefs,company,tsPay,compExp,compInc,counts,statusHistory,journal,salaryHistory].map(r=>r.error).filter(Boolean);
     if(errs.length) throw errs[0];
     if(isOwner()&&!ARHITTEKJournal.valid(journal.data))throw new Error("Сервер не подтвердил финансовый журнал");
     state.financialJournal=isOwner()?journal.data:null;
+    if(isOwner()&&(emp.data||[]).some(e=>!salaryHistory.data.employees.some(h=>h.id===e.id)))throw new Error('История окладов не охватывает список сотрудников');
+    state.salaryHistory=isOwner()?salaryHistory.data:null;
     const freshEmployee=(emp.data||[]).find(e=>e.id===session.employeeId);
     if(!freshEmployee||freshEmployee.active===false)throw new Error('Учётная запись недоступна');
     if(!isOwner()&&!['ведущий архитектор','ведущий дизайнер'].includes(String(freshEmployee.role||'').trim().toLowerCase()))verifiedAccess.documents=false;

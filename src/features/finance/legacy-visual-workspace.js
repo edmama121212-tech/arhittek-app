@@ -50,9 +50,9 @@ function payrollRows(from,to){
   try{
     const earned=completedProjectEarningsForRange(from,to).employees;
     const split=splitPayrollByEmployee(earned).result;
-    return (state.employees||[]).filter(e=>!e.deleted_at && (e.active!==false || n(split[e.id]?.payout)>0)).map(e=>{
+    return payrollEmployees().filter(e=>e.active!==false&&!e.deleted_at || n(split[e.id]?.payout)>0).map(e=>{
       const row=split[e.id]||{salary:0,earned:0,payout:0};
-      const method=e.is_salaried?'Оклад'+(n(row.earned)>0?' + проекты':''):(n(row.earned)>0?'По проектам':'Без начислений');
+      const method=n(row.salary)>0?'Оклад'+(n(row.earned)>0?' + проекты':''):(n(row.earned)>0?'По проектам':'Без начислений');
       return {employee:e,salary:n(row.salary),earned:n(row.earned),payout:n(row.payout),method};
     }).sort((a,b)=>b.payout-a.payout);
   }catch(e){return [];}

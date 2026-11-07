@@ -96,5 +96,5 @@ jobs:
         env:
           CATALOG_BROWSER: webkit
           CATALOG_NO_STREAM_ITERATOR: '1'
-        run: timeout 180s npm run test:catalog:pdf && timeout 90s node tests/finance-workspace-ui.cjs
+        run: timeout 180s npm run test:catalog:pdf && timeout 90s node tests/finance-workspace-ui.cjs && TEST_BROWSER=webkit timeout 90s node tests/employee-salary-history-ui.cjs
 

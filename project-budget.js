@@ -28,7 +28,7 @@ function calculate(s,until,hooks={}){
  const cashBalance=cash.balance(s,until),amortization=cash.amortization(s,until,construction);
  if(cashBalance===null)return {cashBalance:null,available:null,companyReserve:null,amortization,projectsHeld:0,constructionHeld:0,teamHeld:0,costsHeld:0,projects:[],warnings:[]};
  const expenses=hooks.expenses||((p)=>typeof getProjectExpenses==='function'?getProjectExpenses(p):num(p.expenses));
- const salary=hooks.salary||((e,month)=>typeof salaryForRange==='function'?salaryForRange(e,month+'-01',new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5)),0)).toISOString().slice(0,10)):num(e.fixed_salary));
+ const salary=hooks.salary||((e,month)=>typeof salaryForRange==='function'?salaryForRange(e,month+'-01',new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5)),0)).toISOString().slice(0,10)):e.is_salaried?num(e.fixed_salary):0);
  const live=(s.ledger||[]).filter(r=>!r.deleted_at&&r.entry_date&&r.entry_date<=until);
  const events=cash.cashEvents(s).filter(e=>e.date<=until);
  const post=events.filter(e=>e.afterSnapshot),postIds=new Set(post.map(e=>e.row.id).filter(Boolean));
@@ -98,9 +98,9 @@ function calculate(s,until,hooks={}){
  items.sort((a,b)=>String(a.ref).localeCompare(String(b.ref))||String(a.projectId).localeCompare(String(b.projectId)));
  items.forEach(x=>{const key=x.employeeId+'|'+x.month;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(x);});
  for(const group of groups.values()){
-  const first=group[0],e=(s.employees||[]).find(e=>e.id===first.employeeId)||{};
+  const first=group[0],e=(s.salaryHistory?.employees||s.employees||[]).find(e=>e.id===first.employeeId)||{id:first.employeeId};
   const rows=live.filter(r=>r.type==='salary_payment'&&!r.project_id&&r.payee_employee_id===first.employeeId&&salaryMonth(r)===first.month);
-  const fixed=e.is_salaried?Math.max(0,salary(e,first.month)):0;
+  const fixed=Math.max(0,salary(e,first.month));
   const bonuses=sum(live.filter(r=>r.type==='bonus'&&r.payee_employee_id===first.employeeId&&r.entry_date.slice(0,7)===first.month));
   let pool=Math.max(0,sum(rows)-fixed-bonuses),oldPool=Math.max(0,sum(rows.filter(r=>!isPost(r)))-fixed-bonuses);
   const legacy=(s.timesheetPayments||[]).some(t=>t.employee_id===first.employeeId&&t.month===first.month&&t.paid&&t.paid_at&&Date.parse(t.paid_at)<=Date.parse(cash.cutoff));

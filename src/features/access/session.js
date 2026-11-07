@@ -25,9 +25,9 @@ function clearPrivateState(){
   if(typeof resetContractCustomer==='function')resetContractCustomer();
   document.getElementById('ct-project-dialog')?.close?.();
   document.getElementById('ct-project-results')?.replaceChildren();
-  window.ARHITTEKJournal?.clear();state.companyInfo=null;state.financialJournal=null;state.financialDataReady=false;state.financialLoadedAt=null;
+  window.ARHITTEKJournal?.clear();state.companyInfo=null;state.financialJournal=null;state.salaryHistory=null;state.financialDataReady=false;state.financialLoadedAt=null;
   state.trash={projects:[],employees:[],categories:[],ledger:[],companyExpenses:[],companyIncome:[],tariffs:[]};
-  for(const id of ['analyticsContent','timesheetContent','employeesCard','historyCard','trashCard','financeContent']){
+  for(const id of ['analyticsContent','timesheetContent','timesheetCard','finSalariesCard','employeesCard','historyCard','trashCard','financeContent']){
     const el=document.getElementById(id);if(el)el.replaceChildren();
   }
   document.querySelectorAll('.sheet-overlay.active').forEach(el=>el.classList.remove('active'));
@@ -61,6 +61,7 @@ async function verifyCurrentEmployeeAccess(){
   session.isAdmin=verifiedAccess.owner;session.name=access.name;
   window.session=session;
   if(!verifiedAccess.owner){
+    state.salaryHistory=null;
     for(const key of ['ledger','cashCounts','timesheetPayments','companyExpenses','companyIncome','financialProjects','history'])state[key]=[];
     state.trash={projects:[],employees:[],categories:[],ledger:[],companyExpenses:[],companyIncome:[],tariffs:[]};
   }
