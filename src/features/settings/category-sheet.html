@@ -1,0 +1,37 @@
+<!-- ===================== СЛАЙДЕР КАТЕГОРИИ ===================== -->
+<div class="sheet-overlay" id="catSheetOverlay">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">
+      <span id="catSheetTitle">Категория</span>
+      <button class="sheet-close" id="catSheetClose">✕</button>
+    </div>
+    <div class="field">
+      <label>Название</label>
+      <input type="text" id="cf-name" placeholder="например: Ландшафтный дизайн">
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>% гонорара по умолчанию</label>
+        <input type="number" id="cf-feepercent" placeholder="40">
+      </div>
+      <div class="field">
+        <label>База расчёта</label>
+        <select id="cf-feebase">
+          <option value="profit">% от прибыли</option>
+          <option value="price">% от цены</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label>Отдел</label>
+      <select id="cf-department"></select>
+    </div>
+    <button class="btn btn-primary" id="cf-save">Сохранить</button>
+    <div class="btn-row">
+      <button class="btn btn-danger" id="cf-delete">Удалить</button>
+      <button class="btn btn-secondary" id="cf-cancel">Отмена</button>
+    </div>
+  </div>
+</div>
+

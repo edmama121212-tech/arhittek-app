@@ -1,0 +1,99 @@
+  <div class="view" id="view-kp">
+
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+      <button class="icon-btn" id="kpBack" style="font-size:20px;">←</button>
+      <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:16px;">Коммерческое предложение</div>
+    </div>
+
+    <div class="section-label"><span class="lbl-text">Сохранённые КП</span><span class="section-label-line"></span></div>
+    <div id="kpSavedList" class="card" style="margin-bottom:8px;"></div>
+    <button class="btn btn-secondary" id="kpNewBtn" style="margin-bottom:10px;">+ Новое КП</button>
+
+    <div class="section-label"><span class="lbl-text">Клиент</span><span class="section-label-line"></span></div>
+    <div class="card">
+      <div class="field">
+        <label>Имя клиента</label>
+        <input type="text" id="kp-client-name" placeholder="например: Иванов Иван Иванович">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Телефон</label>
+          <input type="text" id="kp-client-phone" placeholder="7 900 000-00-00">
+        </div>
+        <div class="field">
+          <label>Дата</label>
+          <input type="date" id="kp-date">
+        </div>
+      </div>
+      <div class="field">
+        <label>Объект / адрес</label>
+        <input type="text" id="kp-object" placeholder="например: Грозный, ул. ...">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Срок выполнения</label>
+          <input type="text" id="kp-deadline" placeholder="например: 30 рабочих дней">
+        </div>
+        <div class="field">
+          <label>Начало работ</label>
+          <input type="text" id="kp-start" placeholder="например: после аванса">
+        </div>
+      </div>
+    </div>
+
+    <div class="section-label"><span class="lbl-text">Реквизиты в PDF</span><span class="section-label-line"></span></div>
+    <div class="card">
+      <div class="field" style="margin-bottom:0;">
+        <label>Какие блоки показать в PDF</label>
+        <div style="display:flex; flex-direction:column; gap:10px; margin-top:6px;">
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; text-transform:none; letter-spacing:0; color:var(--text); font-weight:normal;">
+            <input type="checkbox" id="kp-show-company" checked style="width:16px;height:16px;accent-color:var(--blue);"> Реквизиты компании (ИНН, ОГРН, адрес)
+          </label>
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; text-transform:none; letter-spacing:0; color:var(--text); font-weight:normal;">
+            <input type="checkbox" id="kp-show-account" style="width:16px;height:16px;accent-color:var(--blue);"> Реквизиты расчётного счёта
+          </label>
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; text-transform:none; letter-spacing:0; color:var(--text); font-weight:normal;">
+            <input type="checkbox" id="kp-show-card" style="width:16px;height:16px;accent-color:var(--blue);"> Банковская карта
+          </label>
+        </div>
+        <div class="hint" style="margin-top:8px;">Выберите один или несколько блоков — они появятся в PDF и Excel.</div>
+      </div>
+    </div>
+
+    <div class="section-label"><span class="lbl-text">Услуги</span><span class="section-label-line"></span></div>
+    <div id="kpServicesList"></div>
+    <button class="btn btn-secondary" id="kpAddService">+ Добавить услугу</button>
+
+    <div class="section-label"><span class="lbl-text">Скидка</span><span class="section-label-line"></span></div>
+    <div class="card">
+      <div class="field-row">
+        <div class="field">
+          <label>Тип скидки</label>
+          <select id="kp-discount-type">
+            <option value="percent">% от суммы</option>
+            <option value="fixed">Фиксированная сумма, ₽</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Размер скидки</label>
+          <input type="number" id="kp-discount-value" placeholder="0">
+        </div>
+      </div>
+    </div>
+
+    <div class="section-label"><span class="lbl-text">Итог</span><span class="section-label-line"></span></div>
+    <div class="fee-card">
+      <div class="fee-row"><div class="fl">Сумма услуг</div><div class="fv" id="kp-subtotal">0 ₽</div></div>
+      <div class="fee-row"><div class="fl">Скидка</div><div class="fv" id="kp-discount-amount">0 ₽</div></div>
+      <div class="fee-row total"><div class="fl">Итого к оплате</div><div class="fv" id="kp-total">0 ₽</div></div>
+      <div class="fee-row remaining"><div class="fl">Аванс (50%)</div><div class="fv" id="kp-advance">0 ₽</div></div>
+      <div class="fee-row"><div class="fl">Остаток после аванса</div><div class="fv" id="kp-remainder">0 ₽</div></div>
+    </div>
+
+    <button class="btn btn-primary" id="kpExportPdf">Скачать PDF</button>
+    <button class="btn btn-secondary" id="kpExportXlsx">Скачать Excel</button>
+    <button class="btn btn-secondary" id="kpSaveBtn" style="margin-top:8px;">💾 Сохранить КП</button>
+
+  </div>
+
+  <!-- ===================== КОМПАНИЯ (реквизиты) ===================== -->

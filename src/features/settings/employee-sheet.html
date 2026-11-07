@@ -1,0 +1,70 @@
+<!-- ===================== СЛАЙДЕР СОТРУДНИКА ===================== -->
+<div class="sheet-overlay" id="empSheetOverlay">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">
+      <span id="empSheetTitle">Сотрудник</span>
+      <button class="sheet-close" id="empSheetClose">✕</button>
+    </div>
+    <div class="field">
+      <label>Имя</label>
+      <input type="text" id="ef-name" placeholder="например: Магомед (Гудермес)">
+    </div>
+    <div class="field">
+      <label for="ef-role">Должность</label>
+      <select id="ef-role"><option value="Сотрудник">Сотрудник</option><option value="Архитектор">Архитектор</option><option value="Ведущий архитектор">Ведущий архитектор</option><option value="Дизайнер">Дизайнер</option><option value="Ведущий дизайнер">Ведущий дизайнер</option><option value="Визуализатор">Визуализатор</option><option value="Чертёжник">Чертёжник</option><option value="Прораб">Прораб</option><option value="Менеджер">Менеджер</option><option value="Комплектатор">Комплектатор</option><option value="Генеральный директор">Генеральный директор</option></select>
+      <div class="hint" id="ef-role-access" style="margin-top:8px;" aria-live="polite"></div>
+    </div>
+    <div class="field">
+      <label>Статус</label>
+      <select id="ef-active">
+        <option value="true">Активен</option>
+        <option value="false">Неактивен (архив)</option>
+      </select>
+    </div>
+    <div class="field" id="ef-pin-field" style="display:none;">
+      <label>Новый PIN-код (до 6 цифр). Оставьте пустым, чтобы не менять текущий</label>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <input type="text" id="ef-pin" inputmode="numeric" maxlength="6" placeholder="оставить как есть" style="flex:1 1 auto; width:auto; min-width:0;">
+        <button class="btn btn-secondary" type="button" style="padding:10px 12px; font-size:12px; white-space:nowrap; flex:0 0 auto; width:auto;"
+          onclick="const p=Math.floor(100000+Math.random()*900000).toString(); document.getElementById('ef-pin').value=p; showToast('Новый PIN: '+p+' — запишите!');">
+          🔀 Случайный
+        </button>
+      </div>
+    </div>
+    <div class="field" id="ef-card-edit-field" style="display:none;">
+      <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+        <input type="checkbox" id="ef-can-edit-cards" style="width:18px;height:18px;cursor:pointer;">
+        <span>Может редактировать каталог готовых проектов</span>
+      </label>
+    </div>
+    <div class="field" id="ef-sections-field" style="display:none;">
+      <label>Видимые разделы приложения</label>
+      <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:8px;">
+        <input type="checkbox" id="ef-see-projects" style="width:18px;height:18px;cursor:pointer;">
+        <span>Проектный (только свои проекты)</span>
+      </label>
+      <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+        <input type="checkbox" id="ef-see-construction" style="width:18px;height:18px;cursor:pointer;">
+        <span>Стройка (только свои объекты)</span>
+      </label>
+    </div>
+    <div class="field" id="ef-salary-field" style="display:none;">
+      <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:8px;">
+        <input type="checkbox" id="ef-is-salaried" style="width:18px;height:18px;cursor:pointer;" onchange="document.getElementById('ef-fixed-salary-row').style.display=this.checked?'':'none';">
+        <span>Фиксированная ЗП без проектных доплат (например, Ген. директор)</span>
+      </label>
+      <div id="ef-fixed-salary-row" style="display:none;">
+        <label>Сумма фиксированной ЗП в месяц, ₽</label>
+        <input type="number" id="ef-fixed-salary" placeholder="50000">
+        <div class="hint" style="margin-top:4px;">Гарантированный оклад начисляется каждый месяц независимо от количества завершённых проектов. Проектные доплаты такому сотруднику не назначаются отдельно.</div>
+      </div>
+    </div>
+    <button class="btn btn-primary" id="ef-save">Сохранить</button>
+    <div class="btn-row">
+      <button class="btn btn-danger" id="ef-delete">Удалить</button>
+      <button class="btn btn-secondary" id="ef-cancel">Отмена</button>
+    </div>
+  </div>
+</div>
+

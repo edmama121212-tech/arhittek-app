@@ -1,0 +1,91 @@
+  <div class="view" id="view-more">
+
+    <!-- Сетка кнопок -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+      <button class="btn btn-primary" id="openKpBtn" style="padding:18px 8px;font-size:13px;line-height:1.3;height:auto;">📋<br>КП</button>
+      <button class="btn btn-primary" id="openContractsBtn" style="padding:18px 8px;font-size:13px;line-height:1.3;height:auto;">📄<br>Договор</button>
+      <button class="btn btn-secondary" id="openCompanyBtn" style="padding:18px 8px;font-size:13px;line-height:1.3;height:auto;">🏢<br>Реквизиты</button>
+      <button class="btn btn-primary" id="openPriceListBtn" style="padding:18px 8px;font-size:13px;line-height:1.3;height:auto;">💳<br>Прайс для клиента</button>
+      <button class="btn btn-primary" id="exportXlsxBtn" style="padding:18px 8px;font-size:13px;line-height:1.3;height:auto;">📊<br>Excel</button>
+      <button class="btn btn-secondary" id="openTimesheetBtn" style="padding:18px 8px;font-size:13px;line-height:1.3;height:auto;">🗓<br>Табель заработка сотрудников</button>
+    </div>
+
+    <div id="more-admin-sections">
+
+    <div class="section-label" style="display:none"><span class="lbl-text">Статусы проектов</span><span class="section-label-line"></span></div>
+    <div class="card" id="statusesCard" style="display:none">
+      <div class="loading-state">Загрузка…</div>
+    </div>
+
+    <div class='section-label' id='historyToggle' onclick='toggleHistorySection()' style='cursor:pointer;'>
+            <span class='lbl-text'>История изменений</span><span class='section-label-line'></span>
+            <span id='historyChevron' style='margin-left:6px;display:inline-block;transition:transform .2s;'>▸</span>
+          </div>
+          <div id='historySectionBody' style='display:none;'>
+          <div class='search-box'>
+            <input type='text' id='historySearch' placeholder='Поиск в истории...'>
+            <button class='search-clear' id='historySearchClear' type='button'>✕</button>
+          </div>
+          <div class='card' id='historyCard'>
+            <div class='loading-state'>Загрузка…</div>
+          </div>
+          </div>
+
+    <div class="section-label"><span class="lbl-text">Корзина</span><span class="section-label-line"></span></div>
+    <div class="note" style="margin-bottom:10px;">Удалённые проекты, сотрудники и финансовые записи. Их можно восстановить. Автоматически из корзины ничего не удаляется.</div>
+    <div class="card" id="trashCard">
+      <div class="loading-state">Загрузка…</div>
+    </div>
+
+    </div>
+
+  </div>
+
+    <!-- ===================== НАСТРОЙКИ ===================== -->
+    <div class='view' id='view-settings'>
+
+      <div style='display:flex; align-items:center; gap:10px; margin-bottom:14px;'>
+        <button class='icon-btn' id='settingsBack' style='font-size:20px;'>←</button>
+        <div style='font-family:Space Grotesk,sans-serif; font-weight:700; font-size:16px;'>Настройки</div>
+      </div>
+
+      <div class='section-label'><span class='lbl-text'>Сотрудники</span><span class='section-label-line'></span></div>
+      <div class='search-box'>
+        <input type='text' id='employeeSearch' placeholder='Поиск сотрудника...'>
+        <button class='search-clear' id='employeeSearchClear' type='button'>✕</button>
+      </div>
+      <div class='card' id='employeesCard'>
+        <div class='loading-state'>Загрузка…</div>
+      </div>
+      <button class='btn btn-secondary' id='addEmployeeBtn'>+ Добавить сотрудника</button>
+
+      <div class='section-label'><span class='lbl-text'>Категории проектов</span><span class='section-label-line'></span></div>
+      <div class='card' id='categoriesCard'>
+        <div class='loading-state'>Загрузка…</div>
+      </div>
+      <button class='btn btn-secondary' id='addCategoryBtn'>+ Добавить категорию</button>
+
+      <div class='section-label'><span class='lbl-text'>Тарифы услуг (КП) — по направлениям</span><span class='section-label-line'></span></div>
+      <div class='card' id='tariffsCard'>
+        <div class='loading-state'>Загрузка…</div>
+      </div>
+      <button class='btn btn-secondary' id='addTariffBtn'>+ Добавить тариф</button>
+
+      <div class='section-label'><span class='lbl-text'>Уведомления</span><span class='section-label-line'></span></div>
+      <div class='card' id='notifSettingsCard'>
+        <div class='loading-state'>Загрузка…</div>
+      </div>
+
+      <div class='section-label' id='catalogPriceSection' style='display:none;'><span class='lbl-text'>Цена готовых проектов (каталог)</span><span class='section-label-line'></span></div>
+      <div class='card' id='catalogPriceCard' style='display:none;'>
+        <div class='field'>
+          <label>Ставка за м², ₽</label>
+          <input type='number' id='catalog-price-per-sqm' placeholder='150'>
+        </div>
+        <div class='note' style='margin-bottom:10px;'>Цена в карточках каталога считается автоматически: площадь этажа × эта ставка. При сохранении новой ставки поле цены в карточке можно подправить вручную под конкретный проект.</div>
+        <button class='btn btn-primary' id='catalogPriceSaveBtn'>Сохранить ставку</button>
+      </div>
+
+    </div>
+
+  <!-- ===================== КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ ===================== -->

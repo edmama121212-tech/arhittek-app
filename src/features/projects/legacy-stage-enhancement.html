@@ -1,0 +1,134 @@
+<script>
+/* === ARHITTEK enhancement: сроки в днях, скрытие раздела "Задачи", этапы по умолчанию === */
+(function(){
+  "use strict";
+  var CAT_ARCH   = "f1138228-54da-46a3-86a4-95ba8e1116c2";
+  var CAT_DESIGN = "c16f08eb-72e8-4261-bef6-77a8c29284ef"; /* Дизайн интерьера */
+  var CAT_FURN   = "916ec7c2-98a1-4d93-bdec-c35c99bea22c"; /* Дизайн мебели */
+  var STAGES_ARCH   = ["Составление ТЗ","Разработка планировки","Экстерьер","Чертежи","Печать и отправка Альбома"];
+  var STAGES_DESIGN = ["Составление ТЗ","Разработка планировки","Визуализация","Чертежи","Печать и отправка Альбома"];
+  /* Переименование старых названий этапов в новые (сохраняя отметку "выполнено") */
+  var LEGACY_RENAME = {
+    "Составить ТЗ": "Составление ТЗ",
+    "Планировка": "Разработка планировки",
+    "Распечатка и Отправка": "Печать и отправка Альбома",
+    "Распечатка и отправка": "Печать и отправка Альбома"
+  };
+  /* Определяем список этапов по категории. Строительный объект не трогаем (возвращаем null). */
+  function defaultStagesFor(catId){
+    if(catId === CAT_ARCH) return STAGES_ARCH;
+    if(catId === CAT_DESIGN || catId === CAT_FURN) return STAGES_DESIGN;
+    /* Фоллбэк по имени категории (на случай других id) */
+    try{
+      var st = (window.state && window.state.categories) || [];
+      var cat = st.find(function(c){ return c.id === catId; });
+      if(cat){
+        var nm = (cat.name||"").toLowerCase();
+        var constrDept = (window.state.departments||[]).find(function(d){ return d.name==="Строительный отдел"; });
+        if(constrDept && cat.department_id === constrDept.id) return null; /* объект — не трогаем */
+        if(nm.indexOf("строительств")!==-1 || nm.indexOf("ремонт")!==-1 || nm.indexOf("монтаж")!==-1) return null;
+        if(nm.indexOf("архитект")!==-1) return STAGES_ARCH;
+        if(nm.indexOf("дизайн")!==-1 || nm.indexOf("интерьер")!==-1 || nm.indexOf("мебел")!==-1) return STAGES_DESIGN;
+      }
+    }catch(e){}
+    return null;
+  }
+  function pad(n){ return String(n).padStart(2,"0"); }
+  function addDays(dateStr, days){ var d=new Date(dateStr+"T00:00:00"); d.setDate(d.getDate()+Number(days)); return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+  function diffDays(a,b){ return Math.round((new Date(b+"T00:00:00")-new Date(a+"T00:00:00"))/86400000); }
+  function ruDate(s){ return new Date(s+"T00:00:00").toLocaleDateString("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric"}); }
+  function wireDuration(){
+    var start=document.getElementById("pf-start"), end=document.getElementById("pf-end"), days=document.getElementById("pf-duration-days"), prev=document.getElementById("pf-end-preview");
+    if(!start||!end||!days||!prev) return;
+    function recompute(){
+      if(start.value && days.value!=="" && !isNaN(days.value)){ var ev=addDays(start.value,days.value); end.value=ev; prev.textContent="Дата окончания: "+ruDate(ev); prev.style.color="#4ade80"; }
+      else { end.value=""; prev.textContent=start.value?"Введите количество дней":"Сначала укажите дату начала"; prev.style.color="#9fb3c8"; }
+    }
+    if(!days.__wired){ days.addEventListener("input",recompute); start.addEventListener("input",recompute); start.addEventListener("change",recompute); days.__wired=true; }
+    if(start.value && end.value){ var dd=diffDays(start.value,end.value); days.value=(dd>=0?dd:""); prev.textContent="Дата окончания: "+ruDate(end.value); prev.style.color="#4ade80"; }
+    else { days.value=""; prev.textContent=start.value?"Введите количество дней":"Сначала укажите дату начала"; }
+  }
+  if(window.openProjectSheet && !window.openProjectSheet.__enh){
+    var origOpen=window.openProjectSheet;
+    window.openProjectSheet=function(){ var r=origOpen.apply(this,arguments); setTimeout(wireDuration,60); setTimeout(wireDuration,250); return r; };
+    window.openProjectSheet.__enh=true;
+  }
+  async function addDefaultStages(projectId, stages){
+    if(!window.sb || !projectId || !stages) return;
+    var rows=stages.map(function(name,i){ return { project_id:projectId, name:name, due_date:null, sort_order:i }; });
+    try { await window.sb.from("project_stages").insert(rows); } catch(e){ console.error("default stages error", e); }
+  }
+
+  /* ── Бэкфилл этапов для существующих проектов ──
+     Неразрушающий и идемпотентный: переименовывает старые названия в новые
+     (сохраняя отметку "выполнено"), затем добавляет недостающие канонические этапы.
+     Ничего не удаляет, чужие/кастомные этапы не трогает. */
+  async function backfillStages(){
+    if(!window.sb || !window.state) return;
+    var projects = window.state.projects || [];
+    var allStages = window.state.projectStages || [];
+    var didChange = false;
+    for(var i=0;i<projects.length;i++){
+      var p = projects[i];
+      var canonical = defaultStagesFor(p.category_id);
+      if(!canonical) continue; /* объект/стройка — пропускаем */
+      var mine = allStages.filter(function(s){ return s.project_id === p.id; });
+
+      /* 1) Переименование legacy-названий, если целевого имени ещё нет */
+      for(var j=0;j<mine.length;j++){
+        var s = mine[j];
+        var target = LEGACY_RENAME[s.name];
+        if(target && canonical.indexOf(target) !== -1){
+          var already = mine.some(function(x){ return x.name === target && x.id !== s.id; });
+          if(!already){
+            try{
+              await window.sb.from("project_stages").update({name: target}).eq("id", s.id);
+              s.name = target; didChange = true;
+            }catch(e){ console.warn("stage rename error", e); }
+          }
+        }
+      }
+
+      /* 2) Добавляем недостающие канонические этапы */
+      var presentNames = mine.map(function(x){ return x.name; });
+      var maxSort = mine.reduce(function(m,x){ return Math.max(m, Number(x.sort_order)||0); }, -1);
+      var toAdd = [];
+      for(var k=0;k<canonical.length;k++){
+        if(presentNames.indexOf(canonical[k]) === -1){
+          maxSort += 1;
+          toAdd.push({ project_id:p.id, name:canonical[k], due_date:null, sort_order:maxSort });
+        }
+      }
+      if(toAdd.length){
+        try{ await window.sb.from("project_stages").insert(toAdd); didChange = true; }
+        catch(e){ console.warn("stage backfill insert error", e); }
+      }
+    }
+    return didChange;
+  }
+
+  /* Запускаем бэкфилл один раз после загрузки данных (флаг версии в localStorage) */
+  var BACKFILL_FLAG = "arhittek_stages_backfill_v3";
+  async function runBackfillOnce(){
+    // Отключено: этапы теперь показываются как встроенный чек-лист (шаблон),
+    // строки в БД создаются только при реальной отметке «выполнено».
+    // Старые названия подхватываются через сопоставление, поэтому массовый бэкфилл не нужен.
+    return;
+  }
+
+  if(window.loadAll && !window.loadAll.__enhStages){
+    var origLoad = window.loadAll;
+    window.loadAll = async function(){
+      var r = await origLoad.apply(this, arguments);
+      /* после первой полной загрузки — разово догоняем этапы */
+      setTimeout(runBackfillOnce, 800);
+      return r;
+    };
+    window.loadAll.__enhStages = true;
+  }
+
+  /* Страховка: если первый loadAll выполнился до установки обёртки — запустим разово сами */
+  setTimeout(runBackfillOnce, 3500);
+})();
+</script>
+

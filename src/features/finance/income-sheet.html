@@ -1,0 +1,28 @@
+<!-- ===================== СЛАЙДЕР ДОХОДА КОМПАНИИ (аренда помещений и пр.) ===================== -->
+<div class="sheet-overlay" id="companyIncomeSheetOverlay">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">
+      <span id="companyIncomeSheetTitle">Доход</span>
+      <button class="sheet-close" id="companyIncomeSheetClose">✕</button>
+    </div>
+    <div class="field">
+      <label>Категория</label>
+      <select id="cin-category"></select>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Сумма, ₽</label><input type="number" id="cin-amount" placeholder="0"></div>
+      <div class="field"><label>Дата</label><input type="date" id="cin-date"></div>
+    </div>
+    <div class="field">
+      <label>Комментарий</label>
+      <input type="text" id="cin-desc" placeholder="например: аренда помещения №1 за август">
+    </div>
+    <button class="btn btn-primary" id="cin-save">Сохранить</button>
+    <div class="btn-row">
+      <button class="btn btn-danger" id="cin-delete">Удалить</button>
+      <button class="btn btn-secondary" id="cin-cancel">Отмена</button>
+    </div>
+  </div>
+</div>
+

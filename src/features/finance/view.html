@@ -1,0 +1,30 @@
+  <div class="view" id="view-finance">
+
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+      <button class="icon-btn" id="financeBack" style="font-size:20px;">←</button>
+      <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:16px;">Финансы компании</div>
+    </div>
+
+    <div class="finance-intro">
+      <strong>Главная логика:</strong> сколько заработали → сколько потратили → сколько осталось компании.
+      Всё остальное спрятано в подробности.
+    </div>
+
+    <div class="section-label"><span class="lbl-text">Финансовая сводка</span><span class="section-label-line"></span></div>
+    <div class="card" id="analyticsBlock" style="padding:14px;"></div>
+
+    <div class="section-label"><span class="lbl-text">Фиксированные оклады</span><span class="section-label-line"></span></div>
+    <div class="card" id="finSalariesCard">
+      <div class="loading-state">Загрузка…</div>
+    </div>
+
+    <div class="section-label"><span class="lbl-text">Резерв и амортизация</span><span class="section-label-line"></span></div>
+    <div class="card" id="companyBudgetBlock" style="padding:14px;"></div>
+
+    <div class="section-label"><span class="lbl-text">Прочие доходы компании</span><span class="section-label-line"></span></div>
+    <div class="card" id="companyIncomeList" style="margin-bottom:8px;"></div>
+    <button class="btn btn-secondary" onclick="openCompanyIncomeSheet(null)">+ Добавить доход</button>
+
+  </div>
+
+  <!-- ===================== ДОГОВОРЫ ===================== -->

@@ -1,0 +1,199 @@
+{
+  "version": 1,
+  "description": "Ordered UTF-8 source fragments. Concatenate bytes without transformation. Paths relative to repository root.",
+  "outputs": {
+    "index.html": [
+      "src/app/shell/head.html",
+      "src/app/styles/base.css",
+      "src/app/shell/head-close.html",
+      "src/app/templates/login-and-header.html",
+      "src/app/templates/main-open.html",
+      "src/features/overview/view.html",
+      "src/features/projects/view.html",
+      "src/features/construction/views.html",
+      "src/features/catalog/view.html",
+      "src/features/settings/tools-and-settings.html",
+      "src/features/documents/proposal-view.html",
+      "src/features/settings/company-view.html",
+      "src/features/payroll/view.html",
+      "src/features/finance/view.html",
+      "src/features/documents/contract-view.html",
+      "src/app/templates/main-close.html",
+      "src/features/catalog/editor.html",
+      "src/features/catalog/share-sheet.html",
+      "src/app/templates/navigation.html",
+      "src/features/projects/editor.html",
+      "src/features/catalog/viewer.html",
+      "src/features/construction/invoice-sheet.html",
+      "src/features/finance/payment-sheet.html",
+      "src/features/settings/employee-sheet.html",
+      "src/features/settings/category-sheet.html",
+      "src/features/documents/tariff-sheet.html",
+      "src/features/finance/expense-sheet.html",
+      "src/features/finance/income-sheet.html",
+      "src/features/brief/answers-sheet.html",
+      "src/app/shell/main-script-open.html",
+      "src/app/animations.js",
+      "src/app/connection.js",
+      "src/app/state.js",
+      "src/app/helpers.js",
+      "src/features/access/session.js",
+      "src/features/projects/stages.js",
+      "src/features/projects/tasks.js",
+      "src/app/data-loading.js",
+      "src/features/overview/construction-summary.js",
+      "src/features/overview/departments.js",
+      "src/features/finance/overview-periods.js",
+      "src/features/finance/profit-loss.js",
+      "src/features/projects/list.js",
+      "src/features/projects/editor.js",
+      "src/features/finance/project-balance.js",
+      "src/features/payroll/fee-calculator.js",
+      "src/features/payroll/accruals-and-timesheet.js",
+      "src/features/payroll/pdf-export.js",
+      "src/features/finance/company-expenses.js",
+      "src/features/finance/company-income.js",
+      "src/features/finance/reserve.js",
+      "src/features/finance/ledger.js",
+      "src/features/payroll/project-allocations.js",
+      "src/features/finance/project-payments.js",
+      "src/features/finance/payment-cancellation.js",
+      "src/features/settings/employees.js",
+      "src/features/settings/categories.js",
+      "src/features/documents/tariffs.js",
+      "src/features/settings/statuses.js",
+      "src/features/construction/legacy-finance.js",
+      "src/features/construction/object-view.js",
+      "src/features/construction/invoice-audit.js",
+      "src/features/construction/invoice-editor.js",
+      "src/features/history/audit-log.js",
+      "src/features/history/trash.js",
+      "src/features/export/spreadsheet.js",
+      "src/features/brief/answers.js",
+      "src/features/documents/contracts.js",
+      "src/features/documents/company-and-proposals.js",
+      "src/app/events.js",
+      "src/app/init.js",
+      "src/features/catalog/editor.js",
+      "src/features/media/image-upload.js",
+      "src/features/catalog/ocr-and-card-document.js",
+      "src/app/realtime.js",
+      "src/app/notifications.js",
+      "src/app/shell/main-script-close.html",
+      "src/features/projects/legacy-stage-enhancement.html",
+      "src/app/shell/extensions.html"
+    ],
+    "premium.js": [
+      "src/app/premium/chrome.js",
+      "src/features/projects/workspace-enhancement.js",
+      "src/features/finance/legacy-forecast.js",
+      "src/features/finance/legacy-visual-workspace.js",
+      "src/features/finance/legacy-controls.js",
+      "src/features/finance/legacy-obligations.js",
+      "src/features/documents/workflow.js",
+      "src/features/documents/price-list.js",
+      "src/app/premium/navigation-persistence.js",
+      "src/app/premium/unsaved-changes.js",
+      "src/features/payroll/workspace-enhancement.js"
+    ],
+    "app-refresh.js": [
+      "src/app/app-refresh.js"
+    ],
+    "data-access.js": [
+      "src/app/data-access.js"
+    ],
+    "premium.css": [
+      "src/app/premium.css"
+    ],
+    "sw.js": [
+      "src/app/sw.js"
+    ],
+    "manifest.json": [
+      "src/app/manifest.json"
+    ],
+    "employee-access.js": [
+      "src/features/access/employee-access.js"
+    ],
+    "cash-finance.js": [
+      "src/features/finance/cash-finance.js"
+    ],
+    "finance-simple.js": [
+      "src/features/finance/finance-simple.js"
+    ],
+    "finance-workspace.js": [
+      "src/features/finance/finance-workspace.js"
+    ],
+    "financial-journal.js": [
+      "src/features/finance/financial-journal.js"
+    ],
+    "project-budget.js": [
+      "src/features/finance/project-budget.js"
+    ],
+    "catalog-floors.css": [
+      "src/features/catalog/catalog-floors.css"
+    ],
+    "catalog-floors.js": [
+      "src/features/catalog/catalog-floors.js"
+    ],
+    "catalog-ocr.js": [
+      "src/features/catalog/catalog-ocr.js"
+    ],
+    "catalog-pdf-core.js": [
+      "src/features/catalog/catalog-pdf-core.js"
+    ],
+    "catalog-pdf-io.js": [
+      "src/features/catalog/catalog-pdf-io.js"
+    ],
+    "catalog-pdf-optimize-worker.js": [
+      "src/features/catalog/catalog-pdf-optimize-worker.js"
+    ],
+    "catalog-pdf.css": [
+      "src/features/catalog/catalog-pdf.css"
+    ],
+    "catalog-pdf.js": [
+      "src/features/catalog/catalog-pdf.js"
+    ],
+    "catalog-plan.js": [
+      "src/features/catalog/catalog-plan.js"
+    ],
+    "catalog.html": [
+      "src/features/catalog/catalog.html"
+    ],
+    "construction-finance.js": [
+      "src/features/construction/construction-finance.js"
+    ],
+    "construction-operations.js": [
+      "src/features/construction/construction-operations.js"
+    ],
+    "construction-workflow.js": [
+      "src/features/construction/construction-workflow.js"
+    ],
+    "client-portal-gateway.js": [
+      "src/features/client-portal/client-portal-gateway.js"
+    ],
+    "client-portal.css": [
+      "src/features/client-portal/client-portal.css"
+    ],
+    "client-portal.html": [
+      "src/features/client-portal/client-portal.html"
+    ],
+    "client-portal.js": [
+      "src/features/client-portal/client-portal.js"
+    ],
+    "client.css": [
+      "src/features/client-portal/client.css"
+    ],
+    "contract-customer.js": [
+      "src/features/documents/contract-customer.js"
+    ],
+    "contract-pricing.js": [
+      "src/features/documents/contract-pricing.js"
+    ],
+    "landscape-brief.js": [
+      "src/features/brief/landscape-brief.js"
+    ],
+    "tz.html": [
+      "src/features/brief/tz.html"
+    ]
+  }
+}

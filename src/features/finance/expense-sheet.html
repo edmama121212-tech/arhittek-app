@@ -1,0 +1,28 @@
+<!-- ===================== СЛАЙДЕР РАСХОДА КОМПАНИИ ===================== -->
+<div class="sheet-overlay" id="companyExpenseSheetOverlay">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">
+      <span id="companyExpenseSheetTitle">Расход</span>
+      <button class="sheet-close" id="companyExpenseSheetClose">✕</button>
+    </div>
+    <div class="field">
+      <label>Категория</label>
+      <select id="cex-category"></select>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Сумма, ₽</label><input type="number" id="cex-amount" placeholder="0"></div>
+      <div class="field"><label>Дата</label><input type="date" id="cex-date"></div>
+    </div>
+    <div class="field">
+      <label>Комментарий</label>
+      <input type="text" id="cex-desc" placeholder="например: аренда офиса за август">
+    </div>
+    <button class="btn btn-primary" id="cex-save">Сохранить</button>
+    <div class="btn-row">
+      <button class="btn btn-danger" id="cex-delete">Удалить</button>
+      <button class="btn btn-secondary" id="cex-cancel">Отмена</button>
+    </div>
+  </div>
+</div>
+

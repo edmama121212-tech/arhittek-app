@@ -1,0 +1,14 @@
+<!-- ===================== ПРОСМОТР КАРТОЧКИ КАТАЛОГА ===================== -->
+<div id="cardViewerOverlay" style="display:none;position:fixed;inset:0;z-index:6000;background:rgba(6,12,22,0.96);flex-direction:column;">
+  <div style="flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;gap:10px;">
+    <button onclick="closeCardViewer()" title="Закрыть" style="background:rgba(255,255,255,0.1);color:#fff;border:none;border-radius:10px;width:40px;height:40px;font-size:20px;cursor:pointer;flex-shrink:0;">✕</button>
+    <div id="cardViewerCounter" style="color:rgba(255,255,255,0.6);font-size:13px;font-weight:600;"></div>
+    <button id="cardViewerEditBtn" onclick="editCurrentCard()" title="Редактировать" style="display:none;background:var(--blue);color:#fff;border:none;border-radius:10px;padding:0 16px;height:40px;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">✎ Редактировать</button>
+  </div>
+  <div style="flex:1;position:relative;min-height:0;display:flex;align-items:stretch;">
+    <button id="cardViewerPrev" onclick="cardViewerNav(-1)" title="Предыдущий" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);z-index:2;background:rgba(255,255,255,0.14);color:#fff;border:none;border-radius:50%;width:44px;height:44px;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;">‹</button>
+    <iframe id="cardViewerFrame" style="flex:1;border:none;width:100%;height:100%;background:#C8C8C8;"></iframe>
+    <button id="cardViewerNext" onclick="cardViewerNav(1)" title="Следующий" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);z-index:2;background:rgba(255,255,255,0.14);color:#fff;border:none;border-radius:50%;width:44px;height:44px;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;">›</button>
+  </div>
+</div>
+

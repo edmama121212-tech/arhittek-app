@@ -1,0 +1,122 @@
+  <div class="view" id="view-company">
+
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+      <button class="icon-btn" id="companyBack" style="font-size:20px;">←</button>
+      <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:16px;">Реквизиты компании</div>
+    </div>
+
+    <div class="section-label"><span class="lbl-text">Общие данные</span><span class="section-label-line"></span></div>
+    <div class="card">
+      <div class="field">
+        <label>Полное наименование</label>
+        <input type="text" id="co-full-name" placeholder="ООО «...»">
+      </div>
+      <div class="field">
+        <label>Краткое наименование</label>
+        <input type="text" id="co-short-name" placeholder="ООО «...»">
+      </div>
+      <div class="field">
+        <label>Генеральный директор</label>
+        <input type="text" id="co-director" placeholder="Фамилия Имя Отчество">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>ИНН</label>
+          <input type="text" id="co-inn" placeholder="0000000000">
+        </div>
+        <div class="field">
+          <label>КПП</label>
+          <input type="text" id="co-kpp" placeholder="000000000">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>ОГРН</label>
+          <input type="text" id="co-ogrn" placeholder="0000000000000">
+        </div>
+        <div class="field">
+          <label>Система налогообложения</label>
+          <input type="text" id="co-tax-system" placeholder="УСН">
+        </div>
+      </div>
+      <div class="field">
+        <label>Юридический адрес</label>
+        <textarea id="co-legal-addr" placeholder="индекс, регион, город, улица, дом"></textarea>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Телефон</label>
+          <input type="text" id="co-phone" placeholder="8 (900) 000-00-00">
+        </div>
+        <div class="field">
+          <label>Email</label>
+          <input type="text" id="co-email" placeholder="info@company.ru">
+        </div>
+      </div>
+    </div>
+
+    <div class="section-label"><span class="lbl-text">Оплата на расчётный счёт</span><span class="section-label-line"></span></div>
+    <div class="card">
+      <div class="field">
+        <label>Банк</label>
+        <input type="text" id="co-bank-name" placeholder="Филиал «...» Банка ... ПАО г. ...">
+      </div>
+      <div class="field">
+        <label>Номер счёта (р/с)</label>
+        <input type="text" id="co-bank-account" placeholder="00000000000000000000">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>БИК банка</label>
+          <input type="text" id="co-bik" placeholder="000000000">
+        </div>
+        <div class="field">
+          <label>Корр. счёт</label>
+          <input type="text" id="co-corr-account" placeholder="00000000000000000000">
+        </div>
+      </div>
+    </div>
+
+    <div class="section-label"><span class="lbl-text">Оплата на банковскую карту</span><span class="section-label-line"></span></div>
+    <div class="card">
+      <div class="field">
+        <label>Номер карты</label>
+        <input type="text" id="co-card-number" placeholder="0000 0000 0000 0000">
+      </div>
+      <div class="field">
+        <label>Получатель (ФИО)</label>
+        <input type="text" id="co-card-holder" placeholder="Фамилия Имя Отчество">
+      </div>
+      <div class="field">
+        <label>Банк карты</label>
+        <input type="text" id="co-card-bank" placeholder="например: Сбербанк">
+      </div>
+    </div>
+
+    <button class="btn btn-primary" id="companySaveBtn">Сохранить реквизиты</button>
+
+        <div class='section-label'><span class='lbl-text'>Скачать данные</span><span class='section-label-line'></span></div>
+        <div class='card'>
+          <div class='field'>
+            <label>Что скачать</label>
+            <select id='co-export-scope'>
+              <option value='all'>Всё сразу</option>
+              <option value='general'>Только общие данные компании</option>
+              <option value='account'>Только расчётный счёт</option>
+              <option value='card'>Только банковская карта</option>
+            </select>
+          </div>
+          <div class='field'>
+            <label>Формат файла</label>
+            <select id='co-export-format'>
+              <option value='pdf'>PDF</option>
+              <option value='word'>Word (.doc)</option>
+              <option value='excel'>Excel (.xlsx)</option>
+            </select>
+          </div>
+        </div>
+        <button class='btn btn-secondary' id='companyExportBtn'>⬇ Скачать реквизиты</button>
+
+  </div>
+
+  <!-- ===================== ТАБЕЛЬ ЗАРАБОТКА ===================== -->
