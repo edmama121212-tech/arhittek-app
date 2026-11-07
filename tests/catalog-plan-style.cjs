@@ -19,6 +19,8 @@ vm.runInThisContext(fs.readFileSync(path.join(__dirname,'../catalog-plan.js'),'u
  for(let i=0;i<=6;i++){const a=i*Math.PI/6;pdf.line(425,440,425+35*Math.cos(a),440+35*Math.sin(a));}
  pdf.setFillColor(230);pdf.rect(140,520,85,30,'F');
  for(const y of [525,533,541,549])pdf.line(140,y,225,y);
+ // A nearby three-row sheet table is not an exterior staircase.
+ for(const y of [580,600,620])pdf.line(140,y,225,y);
  // This later opaque floor deliberately hides a construction line.
  pdf.line(100,260,250,260);pdf.setFillColor(255);pdf.rect(100,255,150,10,'F');
  // Same source blue: a wide furniture item must stay blue, a narrow window neutral.
@@ -29,6 +31,7 @@ vm.runInThisContext(fs.readFileSync(path.join(__dirname,'../catalog-plan.js'),'u
  const result=await CatalogPlan.prepare({pdfjs,page,info,table,key:'floor1',optionalContent});assert(result.ok,result.reason);
  assert.equal(result.report.renderer,'source-vector-relief');assert.equal(result.report.template,'3.1');assert.equal(result.report.windows,'neutral');
  assert(result.report.sourceCrop.y1>550,'Exterior landing and all steps fit inside the crop');
+ assert(result.report.sourceCrop.y1<610,'Sheet table rows cannot expand the crop as steps');
  const image=await canvas.loadImage(result.image),out=canvas.createCanvas(image.width,image.height),ctx=out.getContext('2d');ctx.drawImage(image,0,0);
  const b=result.report.sourceCrop,scale=Math.min(1420/(b.x1-b.x0),1290/(b.y1-b.y0)),left=(1800-(b.x1-b.x0)*scale)/2+25,top=65+(1290-(b.y1-b.y0)*scale)/2;
  const reference=canvas.createCanvas(Math.ceil((b.x1-b.x0)*scale*2),Math.ceil((b.y1-b.y0)*scale*2));

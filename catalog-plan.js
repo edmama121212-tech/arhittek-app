@@ -251,8 +251,10 @@
   for(const seed of lines){
    const run=lines.filter(l=>l.horizontal===seed.horizontal&&Math.abs(l.lo-seed.lo)<t*.2&&Math.abs(l.hi-seed.hi)<t*.2&&Math.abs(l.axis-seed.axis)<t*8).sort((a,b)=>a.axis-b.axis);
    const unique=run.filter((l,i)=>!i||l.axis-run[i-1].axis>.2);if(unique.length<3)continue;
+   const gaps=unique.slice(1).map((l,i)=>l.axis-unique[i].axis);
+   if(gaps.some(g=>g<t*.12||g>t*1.2)||Math.max(...gaps)/Math.min(...gaps)>1.35||unique.at(-1).axis-unique[0].axis>t*6)continue;
    const r=union(unique.map(l=>l.p.bounds));
-   if(contains(b,r)||!intersects(b,r,t*4)||info.items.some(w=>inside(w.cx,w.cy,r)&&(/[а-яё]/iu.test(w.text)||/[.,]/.test(w.text))))continue;
+   if(contains(b,r)||!intersects(b,r,t*4)||info.items.some(w=>inside(w.cx,w.cy,r)&&! /^(?:\d{1,2}|UP|DOWN)$/i.test(w.text.trim())))continue;
    if(!zones.some(z=>contains(z,r)))zones.push(r);
   }return zones;
  }
