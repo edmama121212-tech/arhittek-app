@@ -27,3 +27,31 @@ album; a different revision must not replace a stored plan merely because its
 project number matches.
 
 Validation: `npm run test:catalog:pdf`, `npm run test:catalog`, `npm run build:check`.
+
+## Legacy image migration
+
+Existing card images without a matching PDF can be restyled from their exact
+stored raster using `scripts/catalog-raster-style.py`. This is a reviewed
+maintenance path; it must not substitute an archive album with different geometry.
+Original image URLs and prior reports are retained in
+`pdf_import_meta.plan_style_migration` before the new masters are applied.
+
+The utility removes source annotations, recolours windows neutrally and adds soft
+wall shadows. It accepts reviewed dimension corrections, stair protection regions
+and annotation masks in original source pixel coordinates. OCR alone is not
+sufficient approval for dimension values or wall/stair segmentation: inspect every
+output against the stored source before updating a card. Missing floor dimensions
+may be represented by an explicit whole-house caption from a confirmed source;
+source-derived approximate values retain the approximation mark.
+
+Install Python dependencies from `scripts/requirements-catalog-raster.txt` and
+Tesseract with `rus`/`eng` data. Run:
+
+```
+python tests/catalog-raster-style.py
+python scripts/catalog-raster-style.py source.png output.png --tessdata /path/to/tessdata --dimensions '{"width":12000,"height":16000}'
+```
+
+The regression checks wall and window openings, straight and winding stairs,
+annotation removal, neutral glazing, shadows, dimensions and thumbnail sizes.
+The production upload flow continues to use the PDF vector renderer.
