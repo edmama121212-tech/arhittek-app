@@ -145,6 +145,7 @@ document.getElementById('kpExportPdf').addEventListener('click', exportKpToPdf);
 document.getElementById('kpExportXlsx').addEventListener('click', exportKpToXlsx);
 
 document.getElementById('openCompanyBtn').addEventListener('click', openCompanyView);
+document.getElementById('openFamilyTreeBtn').addEventListener('click', openFamilyTree);
 document.getElementById('companyBack').addEventListener('click', ()=>{
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));

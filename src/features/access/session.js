@@ -73,7 +73,7 @@ function applyAccessVisibility(){
   document.documentElement.dataset.access=mode;
   for(const nav of document.querySelectorAll('.nav-btn[data-view]'))nav.style.display=canAccessView(nav.dataset.view)?'':'none';
   for(const id of ['openKpBtn','openContractsBtn']){const el=document.getElementById(id);if(el)el.style.display=canUseDocuments()?'':'none';}
-  for(const id of ['openCompanyBtn','openPriceListBtn','exportXlsxBtn','openTimesheetBtn','settingsBtn','more-admin-sections']){
+  for(const id of ['openCompanyBtn','openPriceListBtn','exportXlsxBtn','openTimesheetBtn','settingsBtn','more-admin-sections','openFamilyTreeBtn']){
     const el=document.getElementById(id);if(el)el.style.display=isOwner()?'':'none';
   }
   const active=document.querySelector('.view.active');
@@ -81,6 +81,39 @@ function applyAccessVisibility(){
     document.querySelectorAll('.view.active,.nav-btn.active').forEach(el=>el.classList.remove('active'));
     const fallback=hasVerifiedAccess()?(isOwner()?'view-overview':canSeeProjects()?'view-projects':canSeeConstruction()?'view-construction':canUseDocuments()?'view-more':null):null;
     if(fallback){document.getElementById(fallback)?.classList.add('active');document.querySelector('.nav-btn[data-view="'+fallback+'"]')?.classList.add('active');}
+  }
+}
+
+
+// The family records stay behind the separate owner-only ChatGPT Site gate.
+// Never put app session credentials, family data or a gate bypass token in this URL.
+const FAMILY_TREE_URL='https://zhoba-family-tree.edmama121212.chatgpt.site/';
+let familyTreeOpening=false;
+async function openFamilyTree(){
+  if(!isOwner()){showToast('Древо доступно только Мансуру');return false;}
+  if(familyTreeOpening)return false;
+  const actor={employeeId:session.employeeId,token:session.token};
+  const button=document.getElementById('openFamilyTreeBtn');
+  familyTreeOpening=true;
+  if(button){button.disabled=true;button.setAttribute('aria-busy','true');}
+  try{
+    // A saved owner flag cannot authorize a launch: confirm the live server session.
+    await verifyCurrentEmployeeAccess();
+    if(!isOwner()||actor.employeeId!==session?.employeeId||actor.token!==session?.token){
+      showToast('Древо доступно только Мансуру');return false;
+    }
+    // Top-level navigation works in Safari/PWA and preserves the Site's sign-in gate.
+    window.location.assign(FAMILY_TREE_URL);
+    return true;
+  }catch(error){
+    if(actor.employeeId===session?.employeeId&&actor.token===session?.token){
+      revokeVerifiedAccess();applyAccessVisibility();
+    }
+    showToast('Не удалось подтвердить доступ. Войдите заново или повторите позже.');
+    return false;
+  }finally{
+    familyTreeOpening=false;
+    if(button){button.disabled=false;button.removeAttribute('aria-busy');}
   }
 }
 

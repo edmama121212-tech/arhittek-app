@@ -18,7 +18,7 @@ window.updateEmployeeAccessSummary=function(){
 document.getElementById('ef-role')?.addEventListener('change',window.updateEmployeeAccessSummary);
 const buttonViews={settingsBtn:'view-settings',exportXlsxBtn:'view-finance',openTimesheetBtn:'view-timesheet',
   premiumOpenPayroll:'view-timesheet',openKpBtn:'view-kp',openContractsBtn:'view-contracts',
-  openCompanyBtn:'view-company',openPriceListBtn:'view-company'};
+  openCompanyBtn:'view-company',openPriceListBtn:'view-company',openFamilyTreeBtn:'view-family-tree'};
 document.addEventListener('click',event=>{
   const target=event.target.closest('.nav-btn[data-view],'+Object.keys(buttonViews).map(id=>'#'+id).join(','));
   if(!target)return;
