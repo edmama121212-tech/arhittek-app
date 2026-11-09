@@ -75,3 +75,9 @@ eq([supported.widthMm,supported.heightMm],[10000,20000],'Spanning source dimensi
 eq(renderer.dimensions(page(1,[w('2000',20,224)]),{...structure,context:[line]},{items:[{area:250}]}),null,'Physically impossible bounding area rejects an unrelated small dimension');
 const dup=renderer.labels(page(1,[w('1',50,50)]),structure,{rows:[{name:'Спальня',area:'10'},{name:'СУ',area:'5'}],roomIds:['1','1']});eq(dup.complete,false,'Duplicate room IDs never establish automatic label placement');
 console.log(JSON.stringify({recognitionTotal:passed,failed:[]}));
+
+for(const heading of ['План подвала','План помещений цоколя','−1-й этаж','Подвальный этаж']){
+ const info=page(1,[w(heading,20,20)]);eq(core.planInfos(info,2).map(p=>p.floor),['basement'],'Basement drawing heading '+heading);
+}
+const inferred=page(1,[]);inferred.tables=[{verified:true,floor:'basement',label:'',cx:500,top:80}];eq(core.planInfos(inferred,2)[0].inferredFromTable,true,'Inferred table candidate keeps its evidence type');
+console.log(JSON.stringify({recognitionTotal:passed,failed:[]}));

@@ -341,7 +341,7 @@
  // A schedule describes a level; it does not prove that the neighbouring
  // drawing depicts that level. Require drawing evidence before accepting it.
  function focusBasement(s,info,table){
-  const explicit=CatalogPdfCore.planInfos(info,3).some(h=>h.floor==='basement'&&!/экспликац/iu.test(h.heading));
+  const explicit=CatalogPdfCore.planInfos(info,3).some(h=>h.floor==='basement'&&!h.inferredFromTable&&!/экспликац/iu.test(h.heading));
   if(!table?.verified||table.rows.length!==1||!/подвал|цоколь/iu.test(table.rows[0].name))return explicit?s:null;
   const labels=info.items.filter(w=>/^(?:подвал|цоколь)(?:\s*[-–]?\s*\d+)?$/iu.test(w.text.trim())&&inside(w.cx,w.cy,s.bounds)&&!(info.tables||[]).some(t=>inside(w.cx,w.cy,{x0:t.left,y0:t.top-4,x1:t.right,y1:t.bottom+4})));
   if(!labels.length)return explicit?s:null;

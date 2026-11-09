@@ -8,7 +8,7 @@ vm.runInThisContext(fs.readFileSync(path.join(__dirname,'../catalog-plan.js'),'u
 const word=(text,x,y)=>({text,x0:x,x1:x+text.length*5,y0:y,y1:y+10,cx:x+text.length*2.5,cy:y+5,h:10});
 (async()=>{
  const pdfjs=await import('pdfjs-dist/legacy/build/pdf.mjs');let checks=0;
- async function prepare({room=false,caption='План 1-го этажа',hatches=false,duplicate=false,ambiguous=false}={}){
+ async function prepare({room=false,caption='План 1-го этажа',hatches=false,duplicate=false,ambiguous=false,untitled=false}={}){
   const pdf=new jsPDF({unit:'pt',format:[900,640],orientation:'landscape'});
   pdf.setFillColor(170);pdf.moveTo(70,100).lineTo(490,100).lineTo(490,520).lineTo(70,520).close().moveTo(85,115).lineTo(475,115).lineTo(475,505).lineTo(85,505).close().fillEvenOdd();
   pdf.rect(274,115,12,390,'F');pdf.rect(85,304,390,12,'F');
@@ -16,10 +16,11 @@ const word=(text,x,y)=>({text,x0:x,x1:x+text.length*5,y0:y,y1:y+10,cx:x+text.len
   if(hatches){pdf.saveGraphicsState();pdf.rect(286,316,189,189,null).clip().discardPath();pdf.setLineWidth(0);pdf.setDrawColor(100);for(let x=294;x<470;x+=6)for(let y=324;y<500;y+=6)pdf.line(x,y,x+3,y);for(let y=330;y<=380;y+=10)pdf.line(400,y,465,y);pdf.restoreGraphicsState();}
   const task=pdfjs.getDocument({data:new Uint8Array(pdf.output('arraybuffer'))}),doc=await task.promise,page=await doc.getPage(1),view=page.getViewport({scale:1});
   const table={verified:true,rows:[{name:'Подвал',area:'26,40'}],roomIds:['1'],floor:'basement',label:'Экспликация подвала',left:550,right:820,top:80,bottom:150,cx:685,page:1};
-  const info=CatalogPdfCore.pageFromItems([word(caption,70,40),word('Экспликация подвала',550,60),word('Подвал',590,110),...(room?[word('Подвал',330,430)]:[])],view.width,view.height,1);info.tables=[table];
+  const info=CatalogPdfCore.pageFromItems([word(caption,70,40),word('Экспликация подвала',550,60),word('Подвал',590,110),...(room?[word('Подвал',330,430)]:[])],view.width,view.height,1);if(untitled)table.label='';info.tables=[table];
   const result=await CatalogPlan.prepare({pdfjs,page,info,table,key:'basement',optionalContent:await doc.getOptionalContentConfig({intent:'display'})});await task.destroy();return result;
  }
  const unrelated=await prepare();assert.equal(unrelated.ok,false,'A basement table cannot turn a ground-floor drawing into a basement');checks++;
+ const untitled=await prepare({untitled:true});assert.equal(untitled.ok,false,'An assigned table without a title is still not drawing evidence');checks++;
  const unlabelled=await prepare({room:true});assert(unlabelled.ok,'The labelled basement can be separated from a foundation without a formal floor heading');checks++;
  assert(unlabelled.report.focused&&unlabelled.report.sourceCrop.x0>250&&unlabelled.report.sourceCrop.y0>280,'Only the basement footprint enters the crop');checks++;
  assert.equal(unlabelled.report.widthMm,null,'Whole-foundation dimensions are not assigned to the cropped basement');checks++;
