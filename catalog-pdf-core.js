@@ -85,9 +85,9 @@
     return result;
   }
   const summaryTable=t=>/общая|общий|генерал|генплан|строений|участк/iu.test(t.label);
-  const planPattern=/^(?:обмерный\s+[1-3]\s*[-–]?\s*этаж|план\s+обмерный|планировочн.{0,12}решен|план.{0,25}(?:этаж|мебел|помещ)|привязк[аи]\s+мебел|марк[еи]р[оа]вочн.{0,8}план|кладочн.{0,15}план)/iu;
+  const planPattern=/^(?:план(?:\s+помещений)?\s+(?:подвал|цокол)|обмерный\s+[1-3]\s*[-–]?\s*этаж|план\s+обмерный|планировочн.{0,12}решен|план.{0,25}(?:этаж|мебел|помещ)|привязк[аи]\s+мебел|марк[еи]р[оа]вочн.{0,8}план|кладочн.{0,15}план)/iu;
   function planInfos(page,declared){
-    const headings=[...(page.phrases||[]),...page.items].filter(w=>planPattern.test(w.text)||/^(?:[1-3]\s*[-–]?\s*(?:й|ый|ой)?\s*этаж|(?:перв|втор|трет)[а-яё]*\s+этаж|цокольный\s+этаж)(?:\s*\(\d+\))?$/iu.test(w.text.trim()));
+    const headings=[...(page.phrases||[]),...page.items].filter(w=>planPattern.test(w.text)||/^(?:[−-]\s*1\s*[-–]?\s*(?:й|ый|го)?\s*этаж|подвальн[а-яё]*\s+этаж|[1-3]\s*[-–]?\s*(?:й|ый|ой)?\s*этаж|(?:перв|втор|трет)[а-яё]*\s+этаж|цокольный\s+этаж)(?:\s*\(\d+\))?$/iu.test(w.text.trim()));
     if(/содержание|ведомость\s+рабочих\s+чертеж/iu.test(page.text)&&headings.length>3)return [];
     const result=[],floorTables=(page.tables||tables(page)).filter(t=>t.floor&&!summaryTable(t));
     if(/пояснительная\s+записка|общие\s+данные/iu.test(page.text)&&!headings.some(h=>planPattern.test(h.text)&&floorIn(h.text)))return [];
@@ -101,7 +101,7 @@
       if(!existing)result.push(entry);
       else if(score>existing.score||score===existing.score&&h.h>existing.h)Object.assign(existing,entry);
     }
-    for(const t of floorTables.filter(t=>t.verified&&!result.some(p=>p.floor===t.floor)))result.push({floor:t.floor,score:15,heading:t.label,page:page.page,cx:t.cx,cy:t.top,h:10});
+    for(const t of floorTables.filter(t=>t.verified&&!result.some(p=>p.floor===t.floor)))result.push({floor:t.floor,score:15,inferredFromTable:true,heading:t.label,page:page.page,cx:t.cx,cy:t.top,h:10});
     return result;
   }
   function associateTables(pages,plans,declared){

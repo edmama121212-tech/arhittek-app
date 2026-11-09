@@ -1,7 +1,7 @@
 # Catalogue plan template 3.1
 
 PDF imports use `CatalogPlan` to redraw the source vector geometry before saving
-any plan. Internal style version is `arhittek-plan-4`.
+any plan. Internal style version is `arhittek-plan-5`.
 
 - White background, graphite walls, pale blue furniture, neutral windows.
 - Soft wall and furniture contact shadows, strictly top-down presentation.
@@ -55,3 +55,16 @@ python scripts/catalog-raster-style.py source.png output.png --tessdata /path/to
 The regression checks wall and window openings, straight and winding stairs,
 annotation removal, neutral glazing, shadows, dimensions and thumbnail sizes.
 The production upload flow continues to use the PDF vector renderer.
+
+## Basement drawing evidence
+
+A nearby basement schedule is not sufficient to select a drawing. A basement
+needs its own level heading or a labelled basement footprint. A partial basement
+is clipped to that footprint with its original walls, openings and stair paths.
+Coincident solid/pattern fills count as one room. Unrelated sheets are rejected
+so the importer can try other candidates.
+
+Dense, short material-hatch strokes spread across a clipped region are removed;
+long stair treads are retained. Wall edges use a consistent dark contour. The
+synthetic basement regression checks wrong-floor rejection, focused cropping,
+duplicate fills, dimensions, hatch removal and preservation of walls/stairs.
