@@ -3,7 +3,7 @@ const fs=require('fs'),path=require('path'),assert=require('node:assert/strict')
 const {PGlite}=require('@electric-sql/pglite'),{chromium,webkit}=require(process.env.CATALOG_PLAYWRIGHT_MODULE||'playwright'),{jsPDF}=require('jspdf');
 const core=require('../catalog-pdf-core'),root=path.resolve(__dirname,'..');
 let passed=0;const eq=(a,b,label)=>{assert.deepEqual(a,b,label);passed++};
-function fixture({number='00157-A',floors=3,basement=true,padding=0,embeddedFacade=false,coverOnly=false,duplicateIds=false,mismatchArea=false,compound=false,noRoomNames=false,noDimensions=false}={}){
+function fixture({retryPlan=false,number='00157-A',floors=3,basement=true,padding=0,embeddedFacade=false,coverOnly=false,duplicateIds=false,mismatchArea=false,compound=false,noRoomNames=false,noDimensions=false}={}){
  const pdf=new jsPDF({unit:'pt',format:[900,640],orientation:'landscape'});
  if(padding)pdf.internal.write('%'+'x'.repeat(padding));
  const legacy=s=>s.replace(/[А-Яа-яЁё№]/g,c=>c==='№'?'¹':c==='Ё'?'¨':c==='ё'?'¸':String.fromCharCode(c.charCodeAt(0)-0x410+0xc0));
@@ -11,6 +11,7 @@ function fixture({number='00157-A',floors=3,basement=true,padding=0,embeddedFaca
  text('Проект №'+number,60,70,24);text(floors+'-х этажный жилой дом',60,110,18);
  if(coverOnly){text('Визуализация фасада',60,185);pdf.setFillColor(50,110,170);pdf.rect(60,210,780,350,'F');}
  text('Архитектурные решения. Газоблок. Ленточный фундамент. Общие сведения и состав проекта.',60,150);
+ if(retryPlan){pdf.addPage();text('План 1-й этаж',60,50,18);text('Экспликация 1-й этаж',570,75);text('№',550,100);text('Наименование',580,100);text('Площадь',760,100);[['Спальня','20,00'],['С/У','5,00'],['Кухня гостиная','75,00']].forEach(([n,a],i)=>{const y=125+i*22;text(String(i+1),550,y);text(n,580,y);text(a,765,y)});text('Итого',580,191);text('100,00',765,191);}
  for(const label of [...Array.from({length:floors},(_,i)=>(i+1)+'-й этаж'),...(basement?['цокольный этаж']:[])]){
   pdf.addPage();text('План '+label,60,50,18);pdf.setDrawColor(30);pdf.setLineWidth(3);pdf.rect(70,100,420,420);pdf.line(280,100,280,520);pdf.line(70,310,490,310);
   if(compound){pdf.setFillColor(191);pdf.moveTo(70,100).lineTo(490,100).lineTo(490,520).lineTo(70,520).close().moveTo(85,115).lineTo(475,115).lineTo(475,505).lineTo(85,505).close().fillEvenOdd();pdf.rect(274,115,12,390,'F');pdf.rect(85,304,390,12,'F');}
@@ -230,21 +231,27 @@ function coreTests(){
   const dataTransfer=new DataTransfer();dataTransfer.items.add(new File([Uint8Array.from(atob(bytes),c=>c.charCodeAt(0))],name));
   document.querySelector(selector).dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer}));
  },{selector,name,bytes:album.toString('base64')});}
- await dropAlbum('#view-cards','album.pdf');
- await page.waitForFunction(()=>document.getElementById('cards-pdf-result').textContent.includes('Создан проект'),null,{timeout:60000});
- eq(await page.evaluate(()=>[__imports.length,__db.project_cards.length,__syncs,__db.project_cards[0].project_number]),[1,1,1,'00157-A'],'Dropping a PDF from the file manager creates and syncs one card');
+ async function draftReady(){await page.waitForFunction(()=>!CatalogPdfImport.busyReading()&&document.getElementById('ce-pdf-status').textContent.includes('Черновик не сохранён'),null,{timeout:60000});}
+ await dropAlbum('#view-cards','album.pdf');await draftReady();
+ eq(await page.evaluate(()=>[__imports.length,__db.project_cards.length,__syncs,__imageUploads.length,document.getElementById('cardEditorOverlay').style.display!=='none']),[0,0,0,0,true],'PDF drop fills only a draft: no database writes, uploads or sync until Save is clicked');
+ const blocked=await page.evaluate(async()=>{const before=[__imports.length,__syncs,__imageUploads.length],value=document.getElementById('ce-area').value;setVal('ce-area','999999');const result=await saveCard();setVal('ce-area',value);return [result.qualityBlocked,JSON.stringify(before)===JSON.stringify([__imports.length,__syncs,__imageUploads.length]),document.getElementById('cardEditorOverlay').style.display!=='none'];});
+ eq(blocked,[true,true,true],'Publication quality gate blocks inconsistent areas before uploads, database writes and site sync');
+ await page.locator('#ce-save-btn').click();await page.waitForFunction(()=>__db.project_cards.length===1&&document.getElementById('cardEditorOverlay').style.display==='none');
+ eq(await page.evaluate(()=>[__imports.length,__db.project_cards.length,__syncs,__db.project_cards[0].project_number]),[1,1,1,'00157-A'],'Explicit Save creates and syncs one imported card');
  eq(await page.evaluate(()=>JSON.stringify(__imports).includes('data:image')),false,'Only hosted card images, not PDF bytes, reach the database');
  eq(await page.evaluate(()=>__imageUploads.some(x=>x.mime==='image/png')&&__imageUploads.every(x=>x.mime===x.contentType&&(x.mime!=='image/png'||x.file.endsWith('.png')))),true,'Lossless plan PNGs keep their actual MIME type and extension in storage');
- await page.evaluate(()=>openCardEditor(null));await dropAlbum('#ce-pdf-import','renamed.pdf');
- await page.waitForFunction(()=>document.getElementById('cards-pdf-result').textContent.includes('уже есть'),null,{timeout:60000});
- eq(await page.evaluate(()=>[__db.project_cards.length,__syncs]),[1,1],'Dropping the same PDF in the new-project form does not create or sync a duplicate');
+ await page.evaluate(()=>openCardEditor(null));await dropAlbum('#ce-pdf-import','renamed.pdf');await draftReady();
+ eq(await page.evaluate(()=>[__imports.length,__db.project_cards.length,__syncs]),[1,1,1],'Repeated PDF still waits for an explicit Save');
+ eq((await page.evaluate(()=>saveCard())).duplicate,true,'Explicit Save checks existing project');
+ eq(await page.evaluate(()=>[__db.project_cards.length,__syncs]),[1,1],'Saving the same PDF does not create or sync a duplicate');
  await page.evaluate(()=>{const card=__db.project_cards[0];card.pdf_import_meta.sources.plans={};card.images[2]='https://example.invalid/legacy-plan.jpg';card.images[0]='https://example.invalid/owner-facade.jpg';card.title='Ручное название';card.price='99999';});
- await dropAlbum('#view-cards','same-album-clean-plans.pdf');
- await page.waitForFunction(()=>document.getElementById('cards-pdf-result').textContent.includes('обновлены по шаблону'),null,{timeout:60000});
- eq(await page.evaluate(()=>{const c=__db.project_cards[0];return [__db.project_cards.length,c.title,c.price,c.images[0],c.images[2]!=='https://example.invalid/legacy-plan.jpg',c.pdf_import_meta.sources.plans.floor1.style,__syncs]}),[1,'Ручное название','99999','https://example.invalid/owner-facade.jpg',true,'arhittek-plan-7',2],'Reuploading the identical original PDF replaces only legacy plans, preserving manual price, title and facades');
- const foreign=fixture({number:'00157-A',floors:1,basement:false});await page.locator('#catalog-pdf-file').setInputFiles({name:'different-revision.pdf',mimeType:'application/pdf',buffer:foreign});
- await page.waitForFunction(()=>!CatalogPdfImport.busyReading()&&document.getElementById('cards-pdf-result').textContent.includes('уже есть'),null,{timeout:60000});
+ await dropAlbum('#view-cards','same-album-clean-plans.pdf');await draftReady();
+ eq(await page.evaluate(()=>__db.project_cards[0].images[2]),'https://example.invalid/legacy-plan.jpg','Reimport cannot update a stored plan before explicit Save');
+ eq((await page.evaluate(()=>saveCard())).updatedPlans,true,'Explicit Save refreshes the matching older plan');
+ eq(await page.evaluate(()=>{const c=__db.project_cards[0];return [__db.project_cards.length,c.title,c.price,c.images[0],c.images[2]!=='https://example.invalid/legacy-plan.jpg',c.pdf_import_meta.sources.plans.floor1.style,__syncs]}),[1,'Ручное название','99999','https://example.invalid/owner-facade.jpg',true,'arhittek-plan-8',2],'Confirmed reimport preserves manual price, title and facades');
+ const foreign=fixture({number:'00157-A',floors:1,basement:false});await page.locator('#catalog-pdf-file').setInputFiles({name:'different-revision.pdf',mimeType:'application/pdf',buffer:foreign});await draftReady();await page.evaluate(()=>saveCard());
  eq(await page.evaluate(()=>[__db.project_cards[0].title,Object.keys(__db.project_cards[0].pdf_import_meta.sources.plans).length,__syncs]),['Ручное название',4,2],'A different PDF with the same project number cannot overwrite existing plans');
+ const repaired=await read(fixture({retryPlan:true,number:'00011',floors:1,basement:false}));eq([!!repaired.images[2],repaired.sources.plan_review.floor1.attempts.map(a=>a.passed),repaired.sources.plans.floor1.quality.passed],[true,[false,true],true],'A failed plan is retried on the next actual source sheet and accepted only after quality review');
  const ranged=await read(fixture({number:'00003',floors:1,basement:false,padding:2*1024*1024}));eq([ranged.data.project_number,ranged.data.total_area,ranged.blocking],['00003','100,00',[]],'Multi-chunk PDF.js range is delivered in one complete callback');
  const labelled=await read(fixture({number:'00004',floors:1,basement:false,embeddedFacade:true}));eq([labelled.images[0]!==null,labelled.images[1]!==null,labelled.blocking], [true,true,[]],'Raster facades on textual pages are detected and cropped');
  const covered=await read(fixture({number:'00005',floors:1,basement:false,coverOnly:true}));eq([covered.sources.facades,covered.images[0]!==null,covered.blocking],[[1],true,[]],'Facade on the cover is not excluded by page number');
@@ -259,7 +266,7 @@ function coreTests(){
  eq([unavailable.blocking.some(s=>s.includes('Не сходится')),unavailable.warnings.some(s=>s.includes('Не удалось повторно')),unavailable.images[2]!==null],[true,true,true],'Unavailable retry OCR preserves extracted draft and its real blockers');
  await page.evaluate(()=>{window.Tesseract=__ocrSaved.tess;});
  const compound=await read(fixture({number:'00008',floors:1,basement:false,compound:true}));
- eq([compound.sources.plans.floor1.style,compound.sources.plans.floor1.widthMm,compound.sources.plans.floor1.heightMm,compound.sources.plans.floor1.rooms],['arhittek-plan-7',12000,12000,3],'Styled plans retain source dimensions and room metadata');
+ eq([compound.sources.plans.floor1.style,compound.sources.plans.floor1.widthMm,compound.sources.plans.floor1.heightMm,compound.sources.plans.floor1.rooms],['arhittek-plan-8',12000,12000,3],'Styled plans retain source dimensions and room metadata');
  const geometry=await page.evaluate(async()=>{const image=new Image();image.src=__parsed.images[2];await image.decode();const c=document.createElement('canvas');c.width=image.width;c.height=image.height;const ctx=c.getContext('2d');ctx.drawImage(image,0,0);const p=__parsed.sources.plans.floor1,b=p.sourceCrop,scale=Math.min(1420/(b.x1-b.x0),1290/(b.y1-b.y0)),left=(1800-(b.x1-b.x0)*scale)/2+25,top=65+(1290-(b.y1-b.y0)*scale)/2;const pixel=(x,y)=>Array.from(ctx.getImageData(Math.round((left+(x-b.x0)*scale)*2),Math.round((top+(y-b.y0)*scale)*2),1,1).data).slice(0,3);return {wall:pixel(75,200),room:pixel(150,150)}});
  eq(geometry.wall.every(n=>n<90)&&geometry.room.every(n=>n>220),true,'A filled PDF wall contour retains its interior hole instead of blacking out rooms');
  const unnamed=await read(fixture({number:'00009',floors:1,basement:false,noRoomNames:true}));eq([!!unnamed.images[2],unnamed.blocking.some(s=>s.includes('подписать'))],[false,true],'A plan with unverified room positions is blocked instead of publishing missing names');

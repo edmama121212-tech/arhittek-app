@@ -291,6 +291,11 @@ async function saveCard(){
       thumbnails: thumbs,
       updated_at: new Date().toISOString(),
     };
+    let qualityMeta=importMeta||JSON.parse(JSON.stringify(cardsData.find(c=>c.id===cardId)?.pdf_import_meta||null));
+    if(Object.keys(screenshotPlans).length)qualityMeta={...qualityMeta,sources:{...qualityMeta?.sources,plans:{...qualityMeta?.sources?.plans,...screenshotPlans}}};
+    const publicationReview=CatalogQuality.reviewCard(payload,qualityMeta);CatalogQuality.show(publicationReview);
+    if(!publicationReview.passed){showToast('Сохранение заблокировано: нужна проверка карточки');return {ok:false,qualityBlocked:true,error:publicationReview.issues.join('. ')};}
+    if(qualityMeta){qualityMeta.publication_quality={...publicationReview,checked_at:new Date().toISOString()};payload.pdf_import_meta=qualityMeta;if(importMeta)Object.assign(importMeta,qualityMeta);}
     payload.images=await uploadCardImages(images,cardId);
     payload.thumbnails=await uploadCardImages(thumbs,cardId);
     if(cardEditorGeneration===generation){

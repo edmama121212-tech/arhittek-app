@@ -16,12 +16,14 @@
         <div style="margin-bottom:14px;">
           <section id="ce-pdf-import" class="catalog-pdf-import">
             <button type="button" class="btn btn-primary" onclick="document.getElementById('catalog-pdf-file').click()">📄 Заполнить из PDF</button>
-            <p id="ce-pdf-status" role="status" aria-live="polite">Загрузите альбом — приложение заполнит и создаст карточку</p>
+            <p id="ce-pdf-status" role="status" aria-live="polite">Загрузите альбом — приложение заполнит черновик. Сохранение только по кнопке «Сохранить проект».</p>
             <progress id="ce-pdf-progress" max="100" value="0" hidden aria-label="Обработка PDF"></progress>
             <button type="button" id="ce-pdf-cancel" hidden onclick="CatalogPdfImport.cancel()">Отменить импорт</button>
           </section>
             <button type="button" class="ce-shot-open" onclick="CatalogScreenshot.open()">📷 Сканировать и вставить</button>
             <div id="ce-shot-panel" class="ce-shot-panel" hidden></div>
+            <button type="button" class="ce-shot-open" onclick="CatalogQuality.checkEditor()">✓ Перепроверить карточку</button>
+            <p id="ce-quality-status" class="catalog-pdf-import" role="status" aria-live="polite" hidden></p>
 
           <div style="font-size:10px;color:#6b7280;letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:8px;">ЭТАЖНОСТЬ</div>
           <div style="display:flex;gap:6px;">

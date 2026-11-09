@@ -1,7 +1,7 @@
 # Catalogue plan template 3.1
 
 PDF imports use `CatalogPlan` to redraw the source vector geometry before saving
-any plan. Internal style version is `arhittek-plan-7`.
+any plan. Internal style version is `arhittek-plan-8`.
 
 - White background, graphite walls, neutral windows.
 - Soft wall contact shadows, strictly top-down presentation.
@@ -78,3 +78,23 @@ duplicate fills, dimensions, hatch removal and preservation of walls/stairs.
 Structural column symbols with source reinforcement hatch are included in the
 solid wall cut. Ordinary window and door cutouts remain openings. Floor finishes
 are neutral, and only verified usable basement rooms receive a highlight.
+
+PDF upload only fills a draft. Storage upload, database writes, duplicate-plan refresh
+and website sync require the explicit Save Project action. Named stair layers take
+precedence over geometric stair inference. Wall/column hatches and room-number
+clusters cannot establish staircase regions; inferred runs use segment bounds,
+not the bounding box of an entire compound drawing path.
+
+## Publication quality gate
+
+Every generated plan receives a separate quality receipt: source wall coverage
+after rendering, complete room labels, bounded stair primitives and supported
+content. A changed data-image invalidates that receipt. Failed candidates are
+recorded and the importer tries up to eight distinct source sheets; exhausted
+recovery leaves a blocked draft rather than publishing an uncertain plan.
+Before any image upload/database write/site sync, imported cards are checked
+again for verified plans with dimensions, complete floor schedules, room counts,
+facade presence and consistent floor/total areas. A manual screenshot has no
+automatic geometry receipt and cannot bypass this imported-card gate.
+These deterministic checks do not claim universal visual perfection for arbitrary
+PDFs; unsupported or unresolved source data needs correction before publication.

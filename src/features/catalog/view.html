@@ -6,7 +6,7 @@
         <button class="btn btn-primary" style="flex:1;" onclick="openCardEditor(null)">+ Добавить проект</button>
         <button class="btn btn-secondary" style="flex:1;" onclick="createShareLink()">+ Ссылка клиенту</button>
       </div>
-      <button class="btn btn-primary" id="cards-pdf-button" style="width:100%;margin-top:8px;min-height:44px" onclick="document.getElementById('catalog-pdf-file').click()">📄 Создать карточку из PDF</button>
+      <button class="btn btn-primary" id="cards-pdf-button" style="width:100%;margin-top:8px;min-height:44px" onclick="document.getElementById('catalog-pdf-file').click()">📄 Заполнить карточку из PDF</button>
       <input id="catalog-pdf-file" type="file" accept="application/pdf,.pdf" hidden onchange="CatalogPdfImport.start(this)">
       <div id="cards-pdf-result" role="status" hidden></div>
     </div>

@@ -25,6 +25,7 @@
 <script src="catalog-floors.js"></script>
 <link rel="stylesheet" href="catalog-floors.css">
 <script src="catalog-pdf-core.js"></script>
+<script src="catalog-quality.js"></script>
 <script src="catalog-pdf-io.js"></script>
 <script src="catalog-ocr.js"></script>
 <script src="catalog-pdf.js"></script>
@@ -729,7 +730,7 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
         <button class="btn btn-primary" style="flex:1;" onclick="openCardEditor(null)">+ Добавить проект</button>
         <button class="btn btn-secondary" style="flex:1;" onclick="createShareLink()">+ Ссылка клиенту</button>
       </div>
-      <button class="btn btn-primary" id="cards-pdf-button" style="width:100%;margin-top:8px;min-height:44px" onclick="document.getElementById('catalog-pdf-file').click()">📄 Создать карточку из PDF</button>
+      <button class="btn btn-primary" id="cards-pdf-button" style="width:100%;margin-top:8px;min-height:44px" onclick="document.getElementById('catalog-pdf-file').click()">📄 Заполнить карточку из PDF</button>
       <input id="catalog-pdf-file" type="file" accept="application/pdf,.pdf" hidden onchange="CatalogPdfImport.start(this)">
       <div id="cards-pdf-result" role="status" hidden></div>
     </div>
@@ -1335,12 +1336,14 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
         <div style="margin-bottom:14px;">
           <section id="ce-pdf-import" class="catalog-pdf-import">
             <button type="button" class="btn btn-primary" onclick="document.getElementById('catalog-pdf-file').click()">📄 Заполнить из PDF</button>
-            <p id="ce-pdf-status" role="status" aria-live="polite">Загрузите альбом — приложение заполнит и создаст карточку</p>
+            <p id="ce-pdf-status" role="status" aria-live="polite">Загрузите альбом — приложение заполнит черновик. Сохранение только по кнопке «Сохранить проект».</p>
             <progress id="ce-pdf-progress" max="100" value="0" hidden aria-label="Обработка PDF"></progress>
             <button type="button" id="ce-pdf-cancel" hidden onclick="CatalogPdfImport.cancel()">Отменить импорт</button>
           </section>
             <button type="button" class="ce-shot-open" onclick="CatalogScreenshot.open()">📷 Сканировать и вставить</button>
             <div id="ce-shot-panel" class="ce-shot-panel" hidden></div>
+            <button type="button" class="ce-shot-open" onclick="CatalogQuality.checkEditor()">✓ Перепроверить карточку</button>
+            <p id="ce-quality-status" class="catalog-pdf-import" role="status" aria-live="polite" hidden></p>
 
           <div style="font-size:10px;color:#6b7280;letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:8px;">ЭТАЖНОСТЬ</div>
           <div style="display:flex;gap:6px;">
@@ -11108,6 +11111,7 @@ function openCardEditor(id){
   ceCurrentId = id || null;
   cePdfImportMeta = null;
   ceScreenshotPlans = {};
+  const qualityStatus=document.getElementById('ce-quality-status');if(qualityStatus){qualityStatus.hidden=true;qualityStatus.textContent='';}
   CatalogPdfImport.reset();
   initCardFloorEditor();
   CatalogScreenshot.init();
@@ -11704,6 +11708,11 @@ async function saveCard(){
       thumbnails: thumbs,
       updated_at: new Date().toISOString(),
     };
+    let qualityMeta=importMeta||JSON.parse(JSON.stringify(cardsData.find(c=>c.id===cardId)?.pdf_import_meta||null));
+    if(Object.keys(screenshotPlans).length)qualityMeta={...qualityMeta,sources:{...qualityMeta?.sources,plans:{...qualityMeta?.sources?.plans,...screenshotPlans}}};
+    const publicationReview=CatalogQuality.reviewCard(payload,qualityMeta);CatalogQuality.show(publicationReview);
+    if(!publicationReview.passed){showToast('Сохранение заблокировано: нужна проверка карточки');return {ok:false,qualityBlocked:true,error:publicationReview.issues.join('. ')};}
+    if(qualityMeta){qualityMeta.publication_quality={...publicationReview,checked_at:new Date().toISOString()};payload.pdf_import_meta=qualityMeta;if(importMeta)Object.assign(importMeta,qualityMeta);}
     payload.images=await uploadCardImages(images,cardId);
     payload.thumbnails=await uploadCardImages(thumbs,cardId);
     if(cardEditorGeneration===generation){
