@@ -78,6 +78,10 @@ vm.runInThisContext(fs.readFileSync(path.join(__dirname,'../catalog-plan.js'),'u
  const balcony={...paths.find(p=>p.filled),bounds:{x0:20,y0:150,x1:70,y1:480},filled:true,pattern:true,fill:null,closed:true};
  const expanded=CatalogPlan.chooseStructure([...paths,balcony],info,'floor1');assert(expanded.bounds.x0<=20,'Pattern-only balcony is included');
 
- await task.destroy();console.log(JSON.stringify({planStyle31:'passed',checks:25}));
+ const outlinePdf=new jsPDF({unit:'pt',format:[900,640],orientation:'landscape'});outlinePdf.setDrawColor(0);outlinePdf.setLineWidth(5);outlinePdf.rect(70,100,420,420,'S');
+ const outlineTask=pdfjs.getDocument({data:new Uint8Array(outlinePdf.output('arraybuffer'))}),outlineDoc=await outlineTask.promise,outlinePage=await outlineDoc.getPage(1);
+ const outline=await CatalogPlan.prepare({pdfjs,page:outlinePage,info:{...info,items:[]},table:{rows:[]},key:'floor1',optionalContent:await outlineDoc.getOptionalContentConfig({intent:'display'})});assert(outline.ok,outline.reason);
+ const outlineImage=await canvas.loadImage(outline.image),outlineCanvas=canvas.createCanvas(outlineImage.width,outlineImage.height),outlineCtx=outlineCanvas.getContext('2d');outlineCtx.drawImage(outlineImage,0,0);const outlinePixels=outlineCtx.getImageData(0,0,outlineImage.width,outlineImage.height).data;let wallInk=0;for(let i=0;i<outlinePixels.length;i+=4)if(outlinePixels[i]<70&&outlinePixels[i+1]<90&&outlinePixels[i+2]<100)wallInk++;assert(wallInk>10000,'Stroke-only source wall outlines remain visible');await outlineTask.destroy();
+ await task.destroy();console.log(JSON.stringify({planStyle31:'passed',checks:26}));
 })().catch(e=>{console.error(e);process.exitCode=1});
 

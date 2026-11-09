@@ -360,8 +360,8 @@
   // Build only the visible wall silhouette in source paint order; opaque later
   // fills erase hidden/lower-storey walls. Compound holes keep their fill rule.
   for(const p of local){
-   if(!p.filled||annotation(p))continue;
-   clipped(m,p,()=>{path(m,p,map);m.globalCompositeOperation=wallSet.has(p)?'source-over':'destination-out';m.fillStyle=INK;m.fill(p.evenOdd?'evenodd':'nonzero');});
+   if(annotation(p)||!p.filled&&!(wallSet.has(p)&&p.stroked))continue;
+   clipped(m,p,()=>{path(m,p,map);m.globalCompositeOperation=wallSet.has(p)?'source-over':'destination-out';m.fillStyle=INK;if(p.filled)m.fill(p.evenOdd?'evenodd':'nonzero');else {m.strokeStyle=INK;m.lineWidth=Math.max(.65,p.lineWidth*scale);m.stroke();}});
   }
   const pixels=m.getImageData(0,0,mask.width,mask.height).data;
   const inWall=(x,y)=>{const q=map(x,y),ix=Math.round(q[0]),iy=Math.round(q[1]);return ix>=0&&iy>=0&&ix<mask.width&&iy<mask.height&&pixels[(iy*mask.width+ix)*4+3]>240;};
@@ -370,10 +370,10 @@
    if(i%300===0)check();const p=local[i];if(annotation(p)||wallHatch(p)||materialMarks.has(p))continue;
    clipped(c,p,()=>{
     if(p.filled){path(c,p,map);c.fillStyle=wallSet.has(p)?INK:'#ffffff';c.fill(p.evenOdd?'evenodd':'nonzero');if(wallSet.has(p)){c.strokeStyle='#20333f';c.lineWidth=.65;c.stroke();}}
-    if(p.stroked&&p.stroke&&p.stroke.gray<.96&&details.selected.has(p)){
+    if(p.stroked&&p.stroke&&p.stroke.gray<.96&&(wallSet.has(p)||details.selected.has(p))){
      // Wall hatching is hidden by the solid cut; hairline stairs outside walls survive.
      const points=p.points;if(!wallSet.has(p)&&points.length&&points.every(q=>inWall(q[0],q[1])))return;
-     path(c,p,map);c.strokeStyle=wallSet.has(p)?'#20333f':'#667680';c.lineWidth=wallSet.has(p)?.65:Math.max(details.roles.get(p)==='windows'?1.05:1,Math.min(1.65,p.lineWidth*scale));
+     path(c,p,map);c.strokeStyle=wallSet.has(p)?'#20333f':'#667680';c.lineWidth=wallSet.has(p)?Math.max(.65,p.lineWidth*scale):Math.max(details.roles.get(p)==='windows'?1.05:1,Math.min(1.65,p.lineWidth*scale));
      // Dashed upper flights retain their exact source geometry and neutral treatment.
      if(p.dash)c.setLineDash(p.dashPattern.map(n=>n*scale));c.stroke();
     }
