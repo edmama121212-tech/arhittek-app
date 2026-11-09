@@ -1,13 +1,13 @@
 # Catalogue plan template 3.1
 
 PDF imports use `CatalogPlan` to redraw the source vector geometry before saving
-any plan. Internal style version is `arhittek-plan-5`.
+any plan. Internal style version is `arhittek-plan-6`.
 
 - White background, graphite walls, pale blue furniture, neutral windows.
 - Soft wall and furniture contact shadows, strictly top-down presentation.
 - Source walls, openings, doors, furniture, stair treads and entrance steps.
 - Only overall dimensions; source-derived values retain their approximation mark.
-- No printed room names, areas, page heading, watermark or material patterns.
+- Room names are restored from matched source positions; room areas, page headings, watermarks and material patterns are omitted.
 - Room schedules remain in the separate catalogue explication.
 - PNG masters are 3600 × 3200; small JPEG thumbnails serve the list.
 
@@ -60,11 +60,16 @@ The production upload flow continues to use the PDF vector renderer.
 
 A nearby basement schedule is not sufficient to select a drawing. A basement
 needs its own level heading or a labelled basement footprint. A partial basement
-is clipped to that footprint with its original walls, openings and stair paths.
+keeps the complete source drawing; its usable room footprints receive a subtle
+highlight. Multiple usable rooms can be highlighted independently.
 Coincident solid/pattern fills count as one room. Unrelated sheets are rejected
 so the importer can try other candidates.
 
 Dense, short material-hatch strokes spread across a clipped region are removed;
 long stair treads are retained. Wall edges use a consistent dark contour. The
-synthetic basement regression checks wrong-floor rejection, focused cropping,
+synthetic basement regression checks wrong-floor rejection, full-level context and usable-room highlights,
 duplicate fills, dimensions, hatch removal and preservation of walls/stairs.
+
+Structural column symbols with source reinforcement hatch are included in the
+solid wall cut. Ordinary window and door cutouts remain openings. Floor finishes
+are neutral, and only verified usable basement rooms receive a highlight.
