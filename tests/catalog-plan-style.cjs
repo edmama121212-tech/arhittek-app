@@ -23,8 +23,16 @@ vm.runInThisContext(fs.readFileSync(path.join(__dirname,'../catalog-plan.js'),'u
  for(const y of [580,600,620])pdf.line(140,y,225,y);
  // This later opaque floor deliberately hides a construction line.
  pdf.line(100,260,250,260);pdf.setFillColor(255);pdf.rect(100,255,150,10,'F');
- // Same source blue: a wide furniture item must stay blue, a narrow window neutral.
+ // Source furniture is omitted; a narrow window opening stays neutral.
  pdf.setFillColor(180,215,245);pdf.rect(160,180,55,30,'F');pdf.rect(300,103,60,5,'F');
+ // A wall miter is exported as two small triangles, not a dimension arrow.
+ pdf.setFillColor(255);pdf.rect(274,200,12,12,'F');pdf.setFillColor(191);
+ pdf.moveTo(274,200).lineTo(286,200).lineTo(286,212).close().fill();
+ pdf.moveTo(274,200).lineTo(286,212).lineTo(274,212).close().fill();
+ // Generic clutter must not leak into the room interior.
+ pdf.setDrawColor(120);pdf.line(100,170,250,170);pdf.setFillColor(180,215,245);pdf.rect(110,150,30,15,'F');
+ // A shallow 20-degree door arc and its leaf must survive, not only 90-degree arcs.
+ pdf.setDrawColor(0);pdf.setLineWidth(.3);pdf.lines([[0,4.66,-.82,9.28,-2.41,13.68]],326,240,[1,1],'S',false);pdf.line(286,240,323.59,253.68);
  // A source column marker is a white square with reinforcement hatch,
  // not a doorway. It must merge into the same solid wall cut.
  pdf.setFillColor(255);pdf.rect(274,304,12,12,'F');pdf.setDrawColor(160,100,0);pdf.setLineWidth(.2);
@@ -42,6 +50,9 @@ vm.runInThisContext(fs.readFileSync(path.join(__dirname,'../catalog-plan.js'),'u
  const reference=canvas.createCanvas(Math.ceil((b.x1-b.x0)*scale*2),Math.ceil((b.y1-b.y0)*scale*2));
  await page.render({canvasContext:reference.getContext('2d'),viewport:page.getViewport({scale:scale*2}),transform:[1,0,0,1,-b.x0*scale*2,-b.y0*scale*2],background:'#fff',optionalContentConfigPromise:Promise.resolve(optionalContent)}).promise;
  const pixel=(x,y)=>Array.from(ctx.getImageData(Math.round((left+(x-b.x0)*scale)*2),Math.round((top+(y-b.y0)*scale)*2),1,1).data).slice(0,3);
+ assert(result.report.details.doors>=2,'Shallow door arc and its leaf are retained');
+ assert(pixel(280,206).every(n=>n<110),'Both triangular halves of a wall junction remain solid');
+ assert(pixel(170,170).every(n=>n>220),'Unrelated room-interior construction line is omitted');
  assert(pixel(280,310).every(n=>n<110),'Reinforcement column is a solid continuation of the wall');
  assert(result.report.columns>=1,'Column evidence is recorded');
  assert.equal(result.report.roomNames.length,3,'Room names are positioned from the source');
@@ -50,7 +61,7 @@ vm.runInThisContext(fs.readFileSync(path.join(__dirname,'../catalog-plan.js'),'u
  assert(pixel(75,200).every(n=>n<210)&&pixel(150,150).every(n=>n>220),'Compound wall keeps its hole');
  assert(pixel(150,260).every(n=>n>220),'Covered construction marks stay covered');
  const furniture=pixel(180,190),window=pixel(330,105);
- assert(furniture[2]>furniture[0]+10,'Furniture keeps a pale blue fill');
+ assert(furniture.every(n=>n>220),'Furniture is omitted from the restricted clean plan');
  assert(window.every(n=>n>210),'A genuine window opening is not filled with wall');
  assert(Math.max(...window)-Math.min(...window)<8,'Windows are neutral despite blue source fills');
  assert(pixel(86,200)[0]<pixel(240,200)[0],'Soft wall contact shadows are visible');
@@ -63,9 +74,14 @@ vm.runInThisContext(fs.readFileSync(path.join(__dirname,'../catalog-plan.js'),'u
  }
  // Pattern-only balcony outside the wall footprint must expand the plan.
  const paths=CatalogPlan.vectors(pdfjs,await page.getOperatorList(),viewport,()=>{},optionalContent);
+ assert.equal(CatalogPlan.chooseStructure(paths.map(p=>({...p,layer:'Конструктив - Крыши'})),info,'floor1'),null,'Roof layers cannot become walls');
  const balcony={...paths.find(p=>p.filled),bounds:{x0:20,y0:150,x1:70,y1:480},filled:true,pattern:true,fill:null,closed:true};
  const expanded=CatalogPlan.chooseStructure([...paths,balcony],info,'floor1');assert(expanded.bounds.x0<=20,'Pattern-only balcony is included');
 
- await task.destroy();console.log(JSON.stringify({planStyle31:'passed',checks:21}));
+ const outlinePdf=new jsPDF({unit:'pt',format:[900,640],orientation:'landscape'});outlinePdf.setDrawColor(0);outlinePdf.setLineWidth(5);outlinePdf.rect(70,100,420,420,'S');
+ const outlineTask=pdfjs.getDocument({data:new Uint8Array(outlinePdf.output('arraybuffer'))}),outlineDoc=await outlineTask.promise,outlinePage=await outlineDoc.getPage(1);
+ const outline=await CatalogPlan.prepare({pdfjs,page:outlinePage,info:{...info,items:[]},table:{rows:[]},key:'floor1',optionalContent:await outlineDoc.getOptionalContentConfig({intent:'display'})});assert(outline.ok,outline.reason);
+ const outlineImage=await canvas.loadImage(outline.image),outlineCanvas=canvas.createCanvas(outlineImage.width,outlineImage.height),outlineCtx=outlineCanvas.getContext('2d');outlineCtx.drawImage(outlineImage,0,0);const outlinePixels=outlineCtx.getImageData(0,0,outlineImage.width,outlineImage.height).data;let wallInk=0;for(let i=0;i<outlinePixels.length;i+=4)if(outlinePixels[i]<70&&outlinePixels[i+1]<90&&outlinePixels[i+2]<100)wallInk++;assert(wallInk>10000,'Stroke-only source wall outlines remain visible');await outlineTask.destroy();
+ await task.destroy();console.log(JSON.stringify({planStyle31:'passed',checks:26}));
 })().catch(e=>{console.error(e);process.exitCode=1});
 
