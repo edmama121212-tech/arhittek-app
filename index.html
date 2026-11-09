@@ -12170,9 +12170,9 @@ loadAll();
  }
  let token=0,source=null,selection=null,anchor=null,worker=null,pending=null;
  const el=id=>document.getElementById('ce-shot-'+id),visible=()=>document.getElementById('cardEditorOverlay')?.style.display!=='none';
- function message(text){el('status').textContent=text;}
+ function message(text){if(el('status'))el('status').textContent=text;}
  function invalidate(){token++;pending=null;if(el('scan'))el('scan').disabled=!source;if(el('result'))el('result').replaceChildren();if(worker){worker.terminate().catch(()=>{});worker=null;}}
- function reset(){invalidate();if(source)source.width=source.height=0;source=null;selection=null;if(el('panel')){el('panel').hidden=true;el('preview').hidden=true;el('scan').disabled=true;message('');}}
+ function reset(){invalidate();if(source)source.width=source.height=0;source=null;selection=null;if(el('panel')){el('panel').hidden=true;if(el('preview'))el('preview').hidden=true;if(el('scan'))el('scan').disabled=true;message('');}}
  function open(){if(!canEditCards())return;if(!el('panel').hidden){reset();return;}el('panel').hidden=false;el('drop').focus();}
  function level(){return CatalogFloors.definitions.find(f=>f.key===el('level').value)||CatalogFloors.definitions[1];}
  function modeChanged(){invalidate();el('level-wrap').hidden=el('mode').value==='properties';message('');}
@@ -12188,7 +12188,7 @@ loadAll();
    selection=null;el('preview').hidden=false;el('scan').disabled=false;draw();message('Выделите нужную область пальцем или мышью. Для таблицы захватите названия и площади.');
   }catch(e){if(own===token)message(e.message||'Не удалось открыть изображение.');}finally{loaded?.source.close?.();}
  }
- function receive(e){const f=[...(e.clipboardData?.files||e.dataTransfer?.files||[])].find(f=>/^image\//.test(f.type));if(f){e.preventDefault();e.stopPropagation();file(f);}}
+ function receive(e){const data=e.clipboardData||e.dataTransfer,files=[...(data?.files||[]),...[...(data?.items||[])].map(i=>i.getAsFile?.()).filter(Boolean)];const f=files.find(f=>/^image\//.test(f.type));if(f){e.preventDefault();e.stopPropagation();file(f);}}
  function renderProperties(values,snapshot){
   el('result').innerHTML='<p>Выберите поля для вставки. Заполненные поля по умолчанию защищены.</p>'+Object.entries(values).map(([key,value])=>{const [id,label]=fields[key],current=snapshot[id];return `<label class="ce-shot-field"><input type="checkbox" data-field="${key}" ${current?'':'checked'}><span>${label}${current?'<small>Сейчас: '+esc(current)+'</small>':''}</span><input class="ce-inp" data-value="${key}" value="${esc(value)}"></label>`;}).join('')+'<button type="button" class="btn btn-primary" data-shot-apply>Вставить выбранные данные</button>';
  }
@@ -12223,9 +12223,10 @@ loadAll();
    for(const input of selected)setVal(fields[input.dataset.field][0],el('result').querySelector('[data-value="'+input.dataset.field+'"]').value.trim());
   }else if(p.mode==='table'){
    const id='ce-expl'+p.floor.suffix,current=document.getElementById(id).value;if(current!==p.before){message('Экспликация изменена после сканирования. Повторите сканирование.');return;}
-   const rows=CatalogOcr.parse(el('rows').value);if(!rows.length){message('Нужны строки «Название: площадь».');return;}
-   const combined=el('replace').checked?rows:mergeRows(parseExpl(current),rows);setVal(id,combined.map(r=>r.name+': '+r.area).join('\n'));setVal('ce-area'+p.floor.suffix,CatalogPdfCore.area(combined.reduce((n,r)=>n+CatalogPdfCore.number(r.area),0)));enableFloor(p.floor);
-   if(el('totals').checked){const active=CatalogFloors.definitions.filter(f=>f.key==='basement'?ceFeatureSelected.includes('basement'):f.number<=ceFloorsSelected),groups=active.map(f=>parseExpl(document.getElementById('ce-expl'+f.suffix).value));if(groups.every(g=>g.length)){const all=groups.flat();setVal('ce-area',CatalogPdfCore.area(all.reduce((n,r)=>n+CatalogPdfCore.number(r.area),0)));setVal('ce-beds',all.filter(r=>/спальн|^сп(?:\s|[-–—.]|\d|$)|детск/iu.test(r.name)).length);setVal('ce-baths',all.filter(r=>/^(?:с\s*[\/.]?\s*у)(?:\s|[-–.]|\d|$)|сануз|ванн|душев|туалет/iu.test(r.name)).length);}}
+   const text=el('rows').value,rows=CatalogOcr.parse(text),existing=parseExpl(current),valid=rs=>rs.every(r=>r.name.trim()&&Number.isFinite(CatalogPdfCore.number(r.area))&&CatalogPdfCore.number(r.area)>0);if(!rows.length||rows.length!==text.split('\n').filter(l=>l.trim()).length){message('Проверьте каждую строку: «Название: площадь», число должно быть больше нуля.');return;}
+   if(!el('replace').checked&&!valid(existing)){message('В существующей экспликации есть неполные строки. Исправьте их или выберите замену таблицы.');return;}
+   const combined=el('replace').checked?rows:mergeRows(existing,rows);setVal(id,combined.map(r=>r.name+': '+r.area).join('\n'));setVal('ce-area'+p.floor.suffix,CatalogPdfCore.area(combined.reduce((n,r)=>n+CatalogPdfCore.number(r.area),0)));enableFloor(p.floor);
+   if(el('totals').checked){const active=CatalogFloors.definitions.filter(f=>f.key==='basement'?ceFeatureSelected.includes('basement'):f.number<=ceFloorsSelected),groups=active.map(f=>parseExpl(document.getElementById('ce-expl'+f.suffix).value));if(groups.every(g=>g.length&&valid(g))){const all=groups.flat();setVal('ce-area',CatalogPdfCore.area(all.reduce((n,r)=>n+CatalogPdfCore.number(r.area),0)));setVal('ce-beds',all.filter(r=>/спальн|^сп(?:\s|[-–—.]|\d|$)|детск/iu.test(r.name)).length);setVal('ce-baths',all.filter(r=>/^(?:с\s*[\/.]?\s*у)(?:\s|[-–.]|\d|$)|сануз|ванн|душев|туалет/iu.test(r.name)).length);}}
   }else {
    if(ceImages[p.floor.image]!==p.previous){message('План изменён после сканирования. Выберите его снова.');return;}ceImages[p.floor.image]=p.image;ceThumbs[p.floor.image]=null;ceScreenshotPlans[p.floor.key]={style:'manual-screenshot',manual:true,source:'screenshot'};const preview=document.getElementById('ce-plan'+p.floor.suffix+'-preview');preview.src=p.image;preview.style.display='block';enableFloor(p.floor);
   }
