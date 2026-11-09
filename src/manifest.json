@@ -195,6 +195,9 @@
     ],
     "tz.html": [
       "src/features/brief/tz.html"
+    ],
+    "catalog-quality.js": [
+      "src/features/catalog/catalog-quality.js"
     ]
   }
 }

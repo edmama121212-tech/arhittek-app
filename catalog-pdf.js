@@ -181,12 +181,13 @@
         if(asset.plan){
           progress(job,'Оформляю чистый план: '+(asset.key==='basement'?'цоколь':asset.key.slice(5)+'-й этаж')+'…',65+i/assets.length*25);
           planPromise??=import('./catalog-plan.js').catch(e=>{planPromise=null;throw e;});await planPromise;check(job);
-          const candidates=[...new Set([asset.page,...(result.levels[asset.key].planCandidates||[]).map(p=>p.page)])].slice(0,4);
-          let failure=null;
+          const candidates=[...new Set([asset.page,...(result.levels[asset.key].planCandidates||[]).map(p=>p.page)])].slice(0,8);
+          let failure=null;const attempts=[];
           for(const candidate of candidates){
+          progress(job,'Перепроверяю план: попытка '+(attempts.length+1)+' из '+candidates.length+'…',65+i/assets.length*25);
           const page=await doc.getPage(candidate);
           try{
-            const prepared=await CatalogPlan.prepare({pdfjs,page,info:pages[candidate-1],table:result.levels[asset.key].table,key:asset.key,optionalContent,reference:asset.key!=='floor1'?result.sources.plans?.floor1:null,knownFootprint:result.sources.footprint?.from==='dimension_lines'?{value:result.data.footprint,page:result.sources.footprint.page}:null,check:()=>check(job)});check(job);
+            const prepared=await CatalogPlan.prepare({pdfjs,page,info:pages[candidate-1],table:result.levels[asset.key].table,key:asset.key,optionalContent,reference:asset.key!=='floor1'?result.sources.plans?.floor1:null,knownFootprint:result.sources.footprint?.from==='dimension_lines'?{value:result.data.footprint,page:result.sources.footprint.page}:null,check:()=>check(job)});check(job);attempts.push({page:candidate,passed:prepared.ok,reason:prepared.reason||null});
             if(prepared.ok){result.levels[asset.key].plan.page=candidate;result.sources[asset.key].planPage=candidate;images[asset.index]=prepared.image;thumbnails[asset.index]=prepared.thumbnail;(result.sources.plans??={})[asset.key]=prepared.report;
               if(prepared.report.basis==='source-room-area-consensus')result.warnings.push('Габариты '+(asset.key==='basement'?'цоколя':asset.key.slice(5)+'-го этажа')+' рассчитаны по геометрии и площадям '+prepared.report.calibratedRooms+' помещений');
               if(prepared.report.basis==='matching-scale-and-footprint')result.warnings.push('Габариты '+asset.key.slice(5)+'-го этажа перенесены с 1-го по совпадающим контуру и масштабу');
@@ -196,6 +197,7 @@
             }else if(!failure||(prepared.foundRooms||0)>(failure.foundRooms||0))failure=prepared;
           }finally{page.cleanup();}
           }
+          (result.sources.plan_review??={})[asset.key]={passed:!failure,attempts};
           if(failure)result.blocking.push('План '+(asset.key==='basement'?'цоколя':asset.key.slice(5)+'-го этажа')+': '+failure.reason+'. Нужна проверка исходного листа');
           continue;
         }
@@ -251,17 +253,13 @@
     if(active){showToast('Дождитесь завершения текущего импорта');return;}
     openCardEditor(null);const generation=cardEditorGeneration,actor=session?.token;
     const job={cancelled:false,saving:false,onProgress:status,shouldStop:()=>generation!==cardEditorGeneration||!canEditCards()||session?.token!==actor};active=job;
-    const panel=document.getElementById('cardEditorOverlay');job.controls=[...panel.querySelectorAll('input,textarea,button')].filter(el=>el.id!=='ce-pdf-cancel'&&!String(el.getAttribute('onclick')).includes('closeCardEditor')).map(el=>[el,el.disabled]);
+    const panel=document.getElementById('cardEditorOverlay');job.controls=[...panel.querySelectorAll('input,textarea,select,button')].filter(el=>el.id!=='ce-pdf-cancel'&&!String(el.getAttribute('onclick')).includes('closeCardEditor')).map(el=>[el,el.disabled]);
     job.controls.forEach(([el])=>el.disabled=true);document.getElementById('ce-pdf-cancel').hidden=false;
     try{
       const result=await read(file,{job});check(job);unlock(job);apply(result);
-      if(result.blocking.length){status('Нужна проверка: '+result.blocking.join('. ')+'. Найденные данные уже в карточке',null);return;}
-      job.saving=true;status('Сохраняю проект №'+result.data.project_number+'…',98);
-      const saved=await saveCard();
-      if(saved?.ok){
-        const report=document.getElementById('cards-pdf-result');report.hidden=false;
-        report.textContent=(saved.updatedPlans?'Планы проекта №'+result.data.project_number+' обновлены по шаблону. Повторная карточка не создана.':saved.duplicate?'Проект №'+result.data.project_number+' уже есть в каталоге. Повторная карточка не создана.':'Создан проект №'+result.data.project_number+' из PDF. ')+(result.warnings.length?'Проверьте: '+result.warnings.join('. ')+'.':'');
-      }else if(generation===cardEditorGeneration)status('Данные извлечены. Сохранение не подтверждено — нажмите «Сохранить проект» для повтора',null);
+      const note=result.blocking.length?'Нужна проверка: '+result.blocking.join('. ')+'. ':'Данные из PDF извлечены. ';
+      status(note+'Черновик не сохранён. Проверьте карточку и нажмите «Сохранить проект».',null);
+      const report=document.getElementById('cards-pdf-result');if(report){report.hidden=false;report.textContent='PDF прочитан. Открыт черновик карточки — сохранение только по кнопке «Сохранить проект».';}
     }catch(e){if(generation===cardEditorGeneration)status(e.name==='AbortError'?'Импорт отменён':e.message||'Не удалось прочитать PDF. Попробуйте другой файл',null);}
     finally{if(generation===cardEditorGeneration)unlock(job);if(active===job)active=null;}
   }
@@ -299,6 +297,6 @@
     });
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',installDrop,{once:true});else installDrop();
-  function reset(){cancel();status('Загрузите альбом — приложение заполнит и создаст карточку',null);const block=document.getElementById('ce-pdf-import');if(block)block.hidden=!!ceCurrentId;}
+  function reset(){cancel();status('Загрузите альбом — приложение заполнит черновик. Сохранение только по кнопке «Сохранить проект».',null);const block=document.getElementById('ce-pdf-import');if(block)block.hidden=!!ceCurrentId;}
   root.CatalogPdfImport=Object.freeze({read,start,startFile,cancel,reset,busyReading:()=>!!active&&!active.saving,apply,pdfItems,exportImage,readTextContent,imageRegions,photo});
 })(window);

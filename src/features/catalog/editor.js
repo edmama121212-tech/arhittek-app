@@ -260,6 +260,7 @@ function openCardEditor(id){
   ceCurrentId = id || null;
   cePdfImportMeta = null;
   ceScreenshotPlans = {};
+  const qualityStatus=document.getElementById('ce-quality-status');if(qualityStatus){qualityStatus.hidden=true;qualityStatus.textContent='';}
   CatalogPdfImport.reset();
   initCardFloorEditor();
   CatalogScreenshot.init();
