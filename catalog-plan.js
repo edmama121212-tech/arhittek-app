@@ -1,7 +1,7 @@
 /* Deterministic catalogue drawings: source geometry, never invented walls. */
 (function(root){
  'use strict';
- const VERSION='arhittek-plan-4',INK='#283a46',BLUE='#2877c9',FURNITURE='#e2eff9';
+ const VERSION='arhittek-plan-5',INK='#283a46',BLUE='#2877c9',FURNITURE='#e2eff9';
  const norm=s=>String(s||'').toLowerCase().replace(/ё/g,'е').replace(/[^а-яa-z0-9]/g,'');
  const roomNorm=s=>norm(s).replace(/^сп(?=\d|$)/,'спальня').replace(/^су(?=\d|$)/,'санузел').replace(/^каридор$/,'коридор').replace(/^кательная$/,'котельная');
  const roomName=s=>({сп:'Спальня',мсп:'Мастер-спальня',су:'Санузел',котельная:'Котельная',кательная:'Котельная'}[norm(s)]||String(s).replace(/^СП[-–\s]*(\d+)$/iu,'Спальня $1'));
@@ -258,6 +258,20 @@
    if(!zones.some(z=>contains(z,r)))zones.push(r);
   }return zones;
  }
+ // Material hatches repeat tiny strokes across a clipped two-dimensional
+ // region. Stair treads form longer runs and must remain source geometry.
+ function materialHatches(paths,structure){
+  const groups=new Map(),hidden=new Set();
+  for(const p of paths){const clip=p.clips?.at(-1);if(!clip||!p.stroked||p.filled||p.curved||p.dash||p.commands.length!==2||p.commands[1][0]!==1)continue;const group=groups.get(clip)||[];group.push(p);groups.set(clip,group);}
+  for(const [clip,group]of groups){
+   if(group.length<80||!clip.paths?.length)continue;const b=union(clip.paths.map(q=>q.bounds)),unit=Math.min(width(b),height(b),width(structure.bounds),height(structure.bounds))*.12;
+   if(width(b)>width(structure.bounds)*1.3||height(b)>height(structure.bounds)*1.3)continue;
+   const small=group.filter(p=>Math.max(width(p.bounds),height(p.bounds))>0&&Math.max(width(p.bounds),height(p.bounds))<unit);
+   if(small.length<80||small.length<group.length*.8)continue;
+   const xs=new Set(small.map(p=>Math.round((p.bounds.x0+p.bounds.x1)/2))),ys=new Set(small.map(p=>Math.round((p.bounds.y0+p.bounds.y1)/2)));
+   if(xs.size<8||ys.size<8)continue;for(const p of small)hidden.add(p);
+  }return hidden;
+ }
  // Template 3.1 is drawn from source paths, never a generated replacement layout.
  async function draw(s,roomLabels,dims,key,info,page,optionalContent,check){
   const canvas=document.createElement('canvas');canvas.width=3600;canvas.height=3200;
@@ -271,6 +285,7 @@
   const tables=(info.tables||[]).map(v=>({x0:v.left-4,y0:v.top-10,x1:v.right+4,y1:v.bottom+8})).filter(r=>!s.walls.some(p=>intersects(p.bounds,r)));
   const supports=[...s.walls,...s.floors,...outsideSteps(s,info).map(bounds=>({bounds}))];
   const local=(s.context||s.local).filter(p=>contains(crop,p.bounds,.7)&&!tables.some(r=>contains(r,p.bounds))&&supports.some(q=>intersects(q.bounds,p.bounds,t*.5)));
+  const materialMarks=materialHatches(local,s);
   const notes=info.items.filter(w=>inside(w.cx,w.cy,crop)&&(/[а-яё]/iu.test(w.text)||/^(?:UP|DOWN)$/i.test(w.text))).map(w=>({x0:w.x0-w.h*2,y0:w.y0-w.h*2,x1:w.x1+w.h*2,y1:w.y1+w.h*3}));
   const words=info.items.filter(w=>inside(w.cx,w.cy,crop));
   const annotation=p=>!wallSet.has(p)&&(!p.curved&&notes.some(a=>contains(a,p.bounds))||p.curved&&(p.closed||p.points.length>2&&Math.hypot(p.points[0][0]-p.points.at(-1)[0],p.points[0][1]-p.points.at(-1)[1])<.2)&&Math.max(width(p.bounds),height(p.bounds))<t*5&&words.some(w=>/^\d{1,3}$/.test(w.text)&&contains(p.bounds,w,.3)));
@@ -287,13 +302,13 @@
   const pixels=m.getImageData(0,0,mask.width,mask.height).data;
   const inWall=(x,y)=>{const q=map(x,y),ix=Math.round(q[0]),iy=Math.round(q[1]);return ix>=0&&iy>=0&&ix<mask.width&&iy<mask.height&&pixels[(iy*mask.width+ix)*4+3]>240;};
   for(let i=0;i<local.length;i++){
-   if(i%300===0)check();const p=local[i];if(annotation(p)||wallHatch(p))continue;
+   if(i%300===0)check();const p=local[i];if(annotation(p)||wallHatch(p)||materialMarks.has(p))continue;
    clipped(c,p,()=>{
-    if(p.filled){path(c,p,map);c.fillStyle=wallSet.has(p)?INK:furniture(p)&&!windowFill(p)?FURNITURE:'#ffffff';c.fill(p.evenOdd?'evenodd':'nonzero');}
+    if(p.filled){path(c,p,map);c.fillStyle=wallSet.has(p)?INK:furniture(p)&&!windowFill(p)?FURNITURE:'#ffffff';c.fill(p.evenOdd?'evenodd':'nonzero');if(wallSet.has(p)){c.strokeStyle='#20333f';c.lineWidth=.65;c.stroke();}}
     if(p.stroked&&p.stroke&&p.stroke.gray<.96){
      // Wall hatching is hidden by the solid cut; hairline stairs outside walls survive.
      const points=p.points;if(!wallSet.has(p)&&points.length&&points.every(q=>inWall(q[0],q[1])))return;
-     path(c,p,map);c.strokeStyle=wallSet.has(p)?INK:'#7b8791';c.lineWidth=Math.max(.65,Math.min(1.65,p.lineWidth*scale));
+     path(c,p,map);c.strokeStyle=wallSet.has(p)?'#20333f':'#667680';c.lineWidth=wallSet.has(p)?.65:Math.max(.8,Math.min(1.65,p.lineWidth*scale));
      // Dashed upper flights retain their exact source geometry and neutral treatment.
      if(p.dash)c.setLineDash(p.dashPattern.map(n=>n*scale));c.stroke();
     }
@@ -323,20 +338,36 @@
   const image=canvas.toDataURL('image/png'),thumb=document.createElement('canvas');thumb.width=270;thumb.height=240;thumb.getContext('2d').drawImage(canvas,0,0,270,240);const thumbnail=thumb.toDataURL('image/jpeg',.85);canvas.width=canvas.height=thumb.width=thumb.height=0;
   return {image,thumbnail,sourceCrop:crop};
  }
+ // A schedule describes a level; it does not prove that the neighbouring
+ // drawing depicts that level. Require drawing evidence before accepting it.
  function focusBasement(s,info,table){
-  if(!table?.verified||table.rows.length!==1||!/подвал|цоколь/iu.test(table.rows[0].name))return s;
-  const labels=info.items.filter(w=>/^(?:подвал|цоколь)$/iu.test(w.text.trim())&&inside(w.cx,w.cy,s.bounds)&&!info.tables.some(t=>inside(w.cx,w.cy,{x0:t.left,y0:t.top-4,x1:t.right,y1:t.bottom+4})));
-  const targets=s.floors.filter(p=>labels.some(w=>inside(w.cx,w.cy,p.bounds))&&width(p.bounds)*height(p.bounds)<width(s.bounds)*height(s.bounds)*.55);
-  if(targets.length!==1)return s;const room=targets[0],t=s.thickness,r={x0:room.bounds.x0-t,y0:room.bounds.y0-t,x1:room.bounds.x1+t,y1:room.bounds.y1+t};
+  const explicit=CatalogPdfCore.planInfos(info,3).some(h=>h.floor==='basement'&&!/экспликац/iu.test(h.heading));
+  if(!table?.verified||table.rows.length!==1||!/подвал|цоколь/iu.test(table.rows[0].name))return explicit?s:null;
+  const labels=info.items.filter(w=>/^(?:подвал|цоколь)(?:\s*[-–]?\s*\d+)?$/iu.test(w.text.trim())&&inside(w.cx,w.cy,s.bounds)&&!(info.tables||[]).some(t=>inside(w.cx,w.cy,{x0:t.left,y0:t.top-4,x1:t.right,y1:t.bottom+4})));
+  if(!labels.length)return explicit?s:null;
+  const candidates=s.floors.filter(p=>labels.some(w=>inside(w.cx,w.cy,p.bounds))&&width(p.bounds)*height(p.bounds)<width(s.bounds)*height(s.bounds)*.55).sort((a,b)=>width(a.bounds)*height(a.bounds)-width(b.bounds)*height(b.bounds));
+  // Pattern/solid fills of the same room are one footprint, not competing rooms.
+  const targets=[];for(const p of candidates)if(!targets.some(q=>['x0','y0','x1','y1'].every(k=>Math.abs(p.bounds[k]-q.bounds[k])<.75)))targets.push(p);
+  if(!targets.length)return explicit?s:null;
+  const room=targets[0];if(targets.some(p=>!contains(p.bounds,room.bounds,.75)))return null;
+  const t=s.thickness,r={x0:room.bounds.x0-t,y0:room.bounds.y0-t,x1:room.bounds.x1+t,y1:room.bounds.y1+t};
   const clip={rule:'nonzero',paths:[{commands:[[0,r.x0,r.y0],[1,r.x1,r.y0],[1,r.x1,r.y1],[1,r.x0,r.y1],[4]]}]},replacements=new Map();
-  for(const p of s.walls.filter(p=>intersects(p.bounds,r))){const b=p.bounds;replacements.set(p,{...p,bounds:{x0:Math.max(b.x0,r.x0),y0:Math.max(b.y0,r.y0),x1:Math.min(b.x1,r.x1),y1:Math.min(b.y1,r.y1)},clips:[...(p.clips||[]),clip]});}
-  if(replacements.size<3)return s;
-  const walls=[...replacements.values()],bounds=union([room.bounds,...walls.map(p=>p.bounds)]),local=s.local.filter(p=>replacements.has(p)||!s.walls.includes(p)&&contains(bounds,p.bounds,.7)).map(p=>replacements.get(p)||p);
-  return {...s,bounds,walls,local,floors:[room],focused:true,context:[]};
+  for(const p of [...s.walls,...(s.extraWalls||[])].filter(p=>intersects(p.bounds,r))){const b=p.bounds;replacements.set(p,{...p,bounds:{x0:Math.max(b.x0,r.x0),y0:Math.max(b.y0,r.y0),x1:Math.min(b.x1,r.x1),y1:Math.min(b.y1,r.y1)},clips:[...(p.clips||[]),clip]});}
+  if(replacements.size<3)return null;
+  const walls=[...replacements.values()],bounds=union([room.bounds,...walls.map(p=>p.bounds)]),local=[];
+  for(const p of s.context||s.local){
+   if(replacements.has(p)){local.push(replacements.get(p));continue;}
+   if(s.walls.includes(p)||(s.extraWalls||[]).includes(p))continue;
+   if(contains(bounds,p.bounds,.7)){local.push(p);continue;}
+   // A later white window/door cut can extend beyond the crop. Preserve
+   // its occlusion with clipping instead of filling the opening with wall.
+   if(p.filled&&intersects(bounds,p.bounds)){const b=p.bounds;local.push({...p,bounds:{x0:Math.max(b.x0,bounds.x0),y0:Math.max(b.y0,bounds.y0),x1:Math.min(b.x1,bounds.x1),y1:Math.min(b.y1,bounds.y1)},clips:[...(p.clips||[]),clip]});}
+  }
+  return {...s,bounds,walls,extraWalls:[],local,floors:[room],focused:true,context:local,recognition:'label-and-room-footprint'};
  }
  async function prepare({pdfjs,page,info,table,key,knownFootprint,reference,optionalContent,check=()=>{}}){
   check();const operators=await page.getOperatorList();check();const paths=vectors(pdfjs,operators,page.getViewport({scale:1}),check,optionalContent),selected=chooseStructure(paths,info,key),structure=selected&&key==='basement'?focusBasement(selected,info,table):selected;
-  if(!structure)return {ok:false,reason:'не удалось однозначно выделить векторные стены и отдельный план этажа'};
+  if(!structure)return {ok:false,reason:key==='basement'?'таблица цоколя не подтверждена отдельным планом или границами подвального помещения':'не удалось однозначно выделить векторные стены и отдельный план этажа'};
   const roomLabels=labels(info,structure,table);let dims=structure.focused?null:dimensions(info,structure,roomLabels);
   if(key==='floor1'&&knownFootprint&&(!dims||dims.basis==='source-room-area-consensus')){const values=String(knownFootprint.value).split(/[×xх]/i).map(v=>CatalogPdfCore.number(v)*1000);if(values.length===2&&values.every(n=>n>0)&&Math.abs((values[0]/values[1])/(width(structure.bounds)/height(structure.bounds))-1)<.015)dims={widthMm:values[0],heightMm:values[1],derived:[],basis:'album-dimension-lines',dimensionPage:knownFootprint.page};}
   const scales=info.items.filter(w=>/^1\s*:\s*(20|25|50|75|100|150|200)$/.test(w.text)&&w.cx>=structure.bounds.x0&&w.cx<=structure.bounds.x1).sort((a,b)=>Math.abs(a.cy-structure.bounds.y0)-Math.abs(b.cy-structure.bounds.y0)),drawingScale=scales.length?Number(scales[0].text.split(':')[1]):null;
@@ -344,7 +375,7 @@
   // Room names are not printed in template 3.1; incomplete label mapping is not a geometry failure.
   if(!dims)dims={widthMm:null,heightMm:null,derived:[],basis:'unavailable'};
   check();const rendered=await draw(structure,roomLabels,dims,key,info,page,optionalContent,check);
-  return {ok:true,...rendered,report:{style:VERSION,template:'3.1',renderer:'source-vector-relief',detailPolicy:'geometry-without-annotations',windows:'neutral',shadows:'soft',sourceCrop:rendered.sourceCrop,drawingScale,bounds:structure.bounds,...dims,rooms:roomLabels.items.length,wallPaths:structure.walls.length,sourceGeometry:true}};
+  return {ok:true,...rendered,report:{style:VERSION,template:'3.1',renderer:'source-vector-relief',detailPolicy:'geometry-without-annotations',windows:'neutral',shadows:'soft',sourceCrop:rendered.sourceCrop,recognition:structure.recognition||'level-drawing',focused:!!structure.focused,drawingScale,bounds:structure.bounds,...dims,rooms:roomLabels.items.length,wallPaths:structure.walls.length,sourceGeometry:true}};
  }
  async function refreshExisting({id,incoming,client,allowed,actor}){
   const reports=incoming.pdf_import_meta?.sources?.plans;if(!reports||!id)return {updated:false};
