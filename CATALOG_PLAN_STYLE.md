@@ -1,11 +1,11 @@
 # Catalogue plan template 3.1
 
 PDF imports use `CatalogPlan` to redraw the source vector geometry before saving
-any plan. Internal style version is `arhittek-plan-6`.
+any plan. Internal style version is `arhittek-plan-7`.
 
-- White background, graphite walls, pale blue furniture, neutral windows.
-- Soft wall and furniture contact shadows, strictly top-down presentation.
-- Source walls, openings, doors, furniture, stair treads and entrance steps.
+- White background, graphite walls, neutral windows.
+- Soft wall contact shadows, strictly top-down presentation.
+- Source walls, openings, doors, stair treads and entrance steps.
 - Only overall dimensions; source-derived values retain their approximation mark.
 - Room names are restored from matched source positions; room areas, page headings, watermarks and material patterns are omitted.
 - Room schedules remain in the separate catalogue explication.
@@ -18,8 +18,12 @@ Exterior stair runs can extend the crop without changing structural dimensions.
 Shadow masks use half the master resolution to limit memory use on phones.
 
 An ambiguous/scan-only drawing remains blocked rather than silently saving the
-original sheet. Missing overall dimensions are reported, never invented. Furniture
-is preserved where supplied by the source; absent furniture is not made up.
+original sheet. Missing overall dimensions are reported, never invented. Furniture, roof projections, floor patterns, axes and construction grids are omitted.
+Native CAD layers are filtered by level and role. Remaining strokes must match
+door arcs/leaves, glazing, or stair primitives. Verified schedules with unmatched
+room positions block publication instead of silently omitting names.
+Small triangular wall mitres remain structural geometry, rather than being
+discarded as dimension arrows; column reinforcement becomes a continuous wall cut.
 
 Matching reimports refresh older style slots and preserve manual fields, facades
 and concurrent edits. Existing catalogue images require their matching original
