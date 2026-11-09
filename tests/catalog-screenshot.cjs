@@ -1,0 +1,12 @@
+const assert=require('node:assert/strict');
+global.CatalogPdfCore=require('../catalog-pdf-core');
+const shot=require('../src/features/catalog/catalog-screenshot');
+assert.deepEqual(shot.properties('Общая площадь дома: 503,64 м²'),{total_area:'503,64'});
+assert.deepEqual(shot.properties('Проект №00157-А\nГабариты: 10,63 × 17,24\nСпальни: 4\nСанузлы: 3\nЦена: 89 000 ₽'),{project_number:'00157-А',footprint:'10,63 × 17,24',beds:'4',baths:'3',price:'89000'});
+assert.deepEqual(shot.properties('Экспликация 1-го этажа\n1 Кухня 20,00\nИтого 200,00'),{},'Room schedules cannot silently become project characteristics or price');
+const room={name:'Спальня',area:'20,00'},second={name:'Кухня',area:'15,00'};
+assert.deepEqual(shot.mergeRows([room],[{name:'спальня',area:'20.00'},second]),[room,second]);
+assert.equal(shot.mergeRows([], [room,room]).length,2,'Identical real rooms remain separate');
+assert.equal(shot.mergeRows([room,room],[room,room]).length,2,'Re-scanning does not duplicate identical rooms');
+assert.equal(shot.mergeRows([room],[room,room]).length,2,'A genuinely additional identical room is retained');
+console.log(JSON.stringify({screenshotCore:'passed',checks:7}));

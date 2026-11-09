@@ -20,6 +20,9 @@
             <progress id="ce-pdf-progress" max="100" value="0" hidden aria-label="Обработка PDF"></progress>
             <button type="button" id="ce-pdf-cancel" hidden onclick="CatalogPdfImport.cancel()">Отменить импорт</button>
           </section>
+            <button type="button" class="ce-shot-open" onclick="CatalogScreenshot.open()">📷 Сканировать и вставить</button>
+            <div id="ce-shot-panel" class="ce-shot-panel" hidden></div>
+
           <div style="font-size:10px;color:#6b7280;letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:8px;">ЭТАЖНОСТЬ</div>
           <div style="display:flex;gap:6px;">
             <button id="floors-btn-1" onclick="selectFloors(1)" style="flex:1;padding:9px;border-radius:9px;border:1px solid #374151;background:transparent;color:#6b7280;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">1 этаж</button>

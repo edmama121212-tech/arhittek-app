@@ -77,6 +77,7 @@
       "src/features/catalog/editor.js",
       "src/features/media/image-upload.js",
       "src/features/catalog/ocr-and-card-document.js",
+      "src/features/catalog/catalog-screenshot.js",
       "src/app/realtime.js",
       "src/app/notifications.js",
       "src/app/shell/main-script-close.html",
