@@ -80,6 +80,11 @@
   const layer=p.layer||'';if(!layer)return true;
   if(/лест|ступен|stair|step|колонн|column/iu.test(layer))return true;
   if(/зон[аы]?|zone|козыр|крыш|roof|размет|размкт|полы|пола|floor finish|мебел|furniture|рельеф|оси|axis|размер|dimension|маркер/iu.test(layer))return false;
+  // Shared CAD wall layers such as «Стены 1–2 этаж» belong to both levels.
+  // floorIn intentionally returns one level for headings, so do not use it
+  // to collapse a layer range to its last number.
+  const range=layer.match(/([1-3])\s*[-–—]\s*([1-3])\s*(?:этаж|floor)/iu);
+  if(range&&/стен|wall|перегор/iu.test(layer)){const n=Number(key.replace('floor',''));return Number.isFinite(n)&&n>=Math.min(+range[1],+range[2])&&n<=Math.max(+range[1],+range[2]);}
   const floor=CatalogPdfCore.floorIn(layer);return !floor||floor===key;
  }
  function chooseStructure(paths,info,key){

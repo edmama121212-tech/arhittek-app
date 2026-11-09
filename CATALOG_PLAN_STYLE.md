@@ -19,7 +19,8 @@ Shadow masks use half the master resolution to limit memory use on phones.
 
 An ambiguous/scan-only drawing remains blocked rather than silently saving the
 original sheet. Missing overall dimensions are reported, never invented. Furniture, roof projections, floor patterns, axes and construction grids are omitted.
-Native CAD layers are filtered by level and role. Remaining strokes must match
+Native CAD layers are filtered by level and role. Shared wall ranges such as
+«Стены 1–2 этаж» apply to both floors, without treating them as third-floor walls. Remaining strokes must match
 door arcs/leaves, glazing, or stair primitives. Verified schedules with unmatched
 room positions block publication instead of silently omitting names.
 Small triangular wall mitres remain structural geometry, rather than being

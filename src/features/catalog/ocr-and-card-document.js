@@ -251,6 +251,7 @@ async function saveCard(){
   if(CatalogPdfImport.busyReading()){showToast('Дождитесь завершения чтения PDF');return;}
   const cardId=ceCurrentId,generation=cardEditorGeneration,saveKey=cardId || 'new:'+generation;
   const importMeta=cePdfImportMeta?JSON.parse(JSON.stringify(cePdfImportMeta)):null;
+  const screenshotPlans=JSON.parse(JSON.stringify(ceScreenshotPlans));
   const saveActor=session?.token;
   if(cardSavesInFlight.has(saveKey))return;
   const images=ceImages.slice(),thumbs=ceThumbs.slice();
@@ -297,6 +298,11 @@ async function saveCard(){
       if(thumbs.length===ceThumbs.length&&thumbs.every((image,index)=>image===ceThumbs[index]))ceThumbs=payload.thumbnails.slice();
     }
 
+    if(Object.keys(screenshotPlans).length){
+      const meta=importMeta||JSON.parse(JSON.stringify(cardsData.find(c=>c.id===cardId)?.pdf_import_meta||{}));
+      meta.sources={...meta.sources,plans:{...meta.sources?.plans,...screenshotPlans}};
+      payload.pdf_import_meta=meta;
+    }
     let result,duplicate=false,planRefresh=null;
     let savedId = cardId;
     if(cardId){

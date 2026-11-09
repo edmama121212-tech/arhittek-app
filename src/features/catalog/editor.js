@@ -14,6 +14,7 @@ let ceStyleSelected = '';
 let ceFeatureSelected = [];
 let ceCurrentId = null;
 let cePdfImportMeta = null;
+let ceScreenshotPlans = {};
 let cardEditorGeneration = 0;
 const cardSavesInFlight = new Set();
 const cardImageSelections = new Map();
@@ -254,11 +255,14 @@ function renderCardsList(){
 function openCardEditor(id){
   if(!canEditCards()){ showToast('Нет доступа'); return; }
   CatalogPdfImport.cancel();
+  CatalogScreenshot.reset();
   cardEditorGeneration++;
   ceCurrentId = id || null;
   cePdfImportMeta = null;
+  ceScreenshotPlans = {};
   CatalogPdfImport.reset();
   initCardFloorEditor();
+  CatalogScreenshot.init();
   ceImages = CatalogFloors.slots();
   ceThumbs = CatalogFloors.slots();
   ceScanPending = {};
@@ -359,6 +363,7 @@ function openCardEditor(id){
 
 function closeCardEditor(){
   CatalogPdfImport.cancel();
+  CatalogScreenshot.reset();
   document.getElementById('cardEditorOverlay').style.display = 'none';
 }
 

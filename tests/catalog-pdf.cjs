@@ -197,6 +197,27 @@ function coreTests(){
   }finally{window.Tesseract=saved;}
  });
  eq(scan,{calls:[3,11],count:2,area:'25,00',terminated:true},'Scanner retries sparse layout, preserves weak numeric OCR and fills floor area after confirmation');
+ const screenshots=await page.evaluate(async()=>{
+  openCardEditor();CatalogScreenshot.open();const saved=window.Tesseract;let terminated=0;
+  window.Tesseract={OEM:{LSTM_ONLY:1},createWorker:async()=>({setParameters:async()=>{},recognize:async()=>({data:{text:'Кухня 20,00\nСпальня 15,00',words:[]}}),terminate:async()=>{terminated++}})};
+  try{
+   const c=document.createElement('canvas');c.width=400;c.height=300;c.getContext('2d').fillRect(0,0,400,300);const blob=await new Promise(resolve=>c.toBlob(resolve)),file=new File([blob],'screenshot.png',{type:'image/png'});
+   await CatalogScreenshot.file(file);setVal('ce-num','MANUAL');setVal('ce-price','99000');setVal('ce-area','300,00');setVal('ce-expl2','Кухня: 20,00');
+   const level=document.getElementById('ce-shot-level');level.value='floor2';level.dispatchEvent(new Event('change'));await CatalogScreenshot.scan();const before=document.getElementById('ce-expl2').value;
+   document.getElementById('ce-shot-totals').checked=false;CatalogScreenshot.apply();const applied=[parseExpl(document.getElementById('ce-expl2').value).length,document.getElementById('ce-area2').value,ceFloorsSelected,document.getElementById('ce-expl1').value,document.getElementById('ce-num').value,document.getElementById('ce-price').value,document.getElementById('ce-area').value];
+   await CatalogScreenshot.scan();CatalogScreenshot.apply();const repeated=parseExpl(document.getElementById('ce-expl2').value).length;
+   await CatalogScreenshot.scan();setVal('ce-expl2','Ручная правка: 10,00');CatalogScreenshot.apply();const protectedEdit=document.getElementById('ce-expl2').value;
+   const mode=document.getElementById('ce-shot-mode');mode.value='plan';mode.dispatchEvent(new Event('change'));level.value='basement';level.dispatchEvent(new Event('change'));await CatalogScreenshot.scan();const beforePlan=ceImages[5];CatalogScreenshot.apply();const plan=[!!ceImages[5],!ceImages[2],ceFeatureSelected.includes('basement'),ceScreenshotPlans.basement.style,beforePlan==null];
+   await CatalogScreenshot.scan();closeCardEditor();openCardEditor();CatalogScreenshot.apply();const staleIgnored=ceImages.every(x=>!x);
+   CatalogScreenshot.open();const paste=new Event('paste',{bubbles:true,cancelable:true});Object.defineProperty(paste,'clipboardData',{value:{files:[file]}});document.getElementById('ce-shot-drop').dispatchEvent(paste);for(let i=0;i<100&&document.getElementById('ce-shot-preview').hidden;i++)await new Promise(resolve=>setTimeout(resolve,10));const pasted=paste.defaultPrevented&&!document.getElementById('ce-shot-preview').hidden;
+   return {before,applied,repeated,protectedEdit,plan,staleIgnored,pasted,terminated};
+  }finally{window.Tesseract=saved;CatalogScreenshot.reset();}
+ });
+ eq(screenshots.before,'Кухня: 20,00','Screenshot OCR waits for insertion and does not overwrite the draft');
+ eq(screenshots.applied,[2,'35,00',2,'','MANUAL','99000','300,00'],'Screenshot inserts into the selected floor, merges rooms and preserves manual project data');
+ eq([screenshots.repeated,screenshots.protectedEdit],[2,'Ручная правка: 10,00'],'Repeated scans do not duplicate rooms or overwrite intervening edits');
+ eq(screenshots.plan,[true,true,true,'manual-screenshot',true],'A manually cropped screenshot plan uses the basement image slot and explicit manual source');
+ eq([screenshots.staleIgnored,screenshots.pasted,screenshots.terminated>=3],[true,true,true],'Editor changes invalidate pending inserts; clipboard images load and OCR workers terminate');
  await page.evaluate(()=>closeCardEditor());await page.locator('#nav-cards').click();
  const invalidDrop=await page.evaluate(()=>{
   const zone=document.getElementById('view-cards'),generation=cardEditorGeneration,dataTransfer=new DataTransfer();dataTransfer.items.add(new File(['not a PDF'],'project.pln'));

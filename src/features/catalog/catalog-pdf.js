@@ -225,6 +225,7 @@
     job.cancelled=true;job.optimizeReject?.(abort());job.fileTransport?.abort();unlock(job);active=null;job.textReader?.cancel().catch(()=>{});job.renderTask?.cancel();job.loadingTask?.destroy().catch(()=>{});job.ocrWorker?.terminate().catch(()=>{});status('Импорт отменён. Можно выбрать другой PDF',null);
   }
   function apply(result){
+    ceScreenshotPlans={};
     const d=result.data;
     const fields={project_number:'ce-num',title:'ce-title',total_area:'ce-area',footprint:'ce-footprint',beds:'ce-beds',baths:'ce-baths'};
     for(const [key,id]of Object.entries(fields))setVal(id,d[key]??'');
