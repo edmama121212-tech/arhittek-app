@@ -3,7 +3,7 @@ const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),asse
 const {jsPDF}=require('jspdf'),canvas=require('@napi-rs/canvas');
 Object.assign(global,{DOMMatrix:canvas.DOMMatrix,Path2D:canvas.Path2D,ImageData:canvas.ImageData});
 global.window=global;global.requestAnimationFrame=f=>setTimeout(f,0);global.cancelAnimationFrame=clearTimeout;
-global.document={createElement:()=>canvas.createCanvas(1,1)};
+const printed=[];global.document={createElement:()=>{const c=canvas.createCanvas(1,1),ctx=c.getContext('2d'),fill=ctx.fillText.bind(ctx);ctx.fillText=(text,...args)=>{printed.push(String(text));return fill(text,...args)};return c;}};
 global.CatalogPdfCore=require('../catalog-pdf-core');
 vm.runInThisContext(fs.readFileSync(path.join(__dirname,'../catalog-plan.js'),'utf8'));
 (async()=>{
@@ -25,6 +25,11 @@ vm.runInThisContext(fs.readFileSync(path.join(__dirname,'../catalog-plan.js'),'u
  pdf.line(100,260,250,260);pdf.setFillColor(255);pdf.rect(100,255,150,10,'F');
  // Same source blue: a wide furniture item must stay blue, a narrow window neutral.
  pdf.setFillColor(180,215,245);pdf.rect(160,180,55,30,'F');pdf.rect(300,103,60,5,'F');
+ // A source column marker is a white square with reinforcement hatch,
+ // not a doorway. It must merge into the same solid wall cut.
+ pdf.setFillColor(255);pdf.rect(274,304,12,12,'F');pdf.setDrawColor(160,100,0);pdf.setLineWidth(.2);
+ pdf.line(274,308,278,304);pdf.line(274,314,284,304);pdf.line(278,316,286,308);
+ pdf.setDrawColor(170,20,0);pdf.line(274,304,286,304);
  const task=pdfjs.getDocument({data:new Uint8Array(pdf.output('arraybuffer'))});const doc=await task.promise,page=await doc.getPage(1),viewport=page.getViewport({scale:1}),optionalContent=await doc.getOptionalContentConfig({intent:'display'});
  const items=[['Спальня',135,200],['С/У',350,200],['Кухня гостиная',130,420]].map(([text,x,y])=>({text,x0:x,y0:y,x1:x+text.length*5,y1:y+10,cx:x+text.length*2.5,cy:y+5,h:10}));
  const info={width:viewport.width,height:viewport.height,items,tables:[],phrases:[],text:''},table={rows:items.map(w=>({name:w.text,area:'20,00'}))};
@@ -37,10 +42,16 @@ vm.runInThisContext(fs.readFileSync(path.join(__dirname,'../catalog-plan.js'),'u
  const reference=canvas.createCanvas(Math.ceil((b.x1-b.x0)*scale*2),Math.ceil((b.y1-b.y0)*scale*2));
  await page.render({canvasContext:reference.getContext('2d'),viewport:page.getViewport({scale:scale*2}),transform:[1,0,0,1,-b.x0*scale*2,-b.y0*scale*2],background:'#fff',optionalContentConfigPromise:Promise.resolve(optionalContent)}).promise;
  const pixel=(x,y)=>Array.from(ctx.getImageData(Math.round((left+(x-b.x0)*scale)*2),Math.round((top+(y-b.y0)*scale)*2),1,1).data).slice(0,3);
+ assert(pixel(280,310).every(n=>n<110),'Reinforcement column is a solid continuation of the wall');
+ assert(result.report.columns>=1,'Column evidence is recorded');
+ assert.equal(result.report.roomNames.length,3,'Room names are positioned from the source');
+ assert(printed.includes('Спальня')&&printed.includes('Санузел'),'Room names reach the actual text renderer');
+ assert(!printed.some(text=>/20[,.]00|м²/.test(text)),'Room areas are not printed in the plan');
  assert(pixel(75,200).every(n=>n<210)&&pixel(150,150).every(n=>n>220),'Compound wall keeps its hole');
  assert(pixel(150,260).every(n=>n>220),'Covered construction marks stay covered');
  const furniture=pixel(180,190),window=pixel(330,105);
  assert(furniture[2]>furniture[0]+10,'Furniture keeps a pale blue fill');
+ assert(window.every(n=>n>210),'A genuine window opening is not filled with wall');
  assert(Math.max(...window)-Math.min(...window)<8,'Windows are neutral despite blue source fills');
  assert(pixel(86,200)[0]<pixel(240,200)[0],'Soft wall contact shadows are visible');
  for(const [name,region] of [['straight and dashed flight',[315,340,395,397]],['winding flight',[385,400,465,480]],['outside steps',[135,520,230,552]]]){
@@ -55,6 +66,6 @@ vm.runInThisContext(fs.readFileSync(path.join(__dirname,'../catalog-plan.js'),'u
  const balcony={...paths.find(p=>p.filled),bounds:{x0:20,y0:150,x1:70,y1:480},filled:true,pattern:true,fill:null,closed:true};
  const expanded=CatalogPlan.chooseStructure([...paths,balcony],info,'floor1');assert(expanded.bounds.x0<=20,'Pattern-only balcony is included');
 
- await task.destroy();console.log(JSON.stringify({planStyle31:'passed',checks:15}));
+ await task.destroy();console.log(JSON.stringify({planStyle31:'passed',checks:21}));
 })().catch(e=>{console.error(e);process.exitCode=1});
 
