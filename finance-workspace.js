@@ -26,47 +26,83 @@ function accepted(j,actor){
 }
 async function refresh(){
  if(refreshing||!owner()||loadAllInFlight)return refreshing;
- const actor={token:session.token,id:session.employeeId};refreshing=(async()=>{try{const r=await sb.rpc('get_financial_journal');if(r.error)throw r.error;if(accepted(r.data,actor)){state.financialLoadedAt=new Date().toISOString();if(state.financialDataReady)state.financialDataError=null;render();}}catch(e){if(actor.token===session?.token){state.financialDataError=e.message||'Журнал не обновлён';render();}}finally{refreshing=null;}})();return refreshing;
+ const actor={token:session.token,id:session.employeeId};refreshing=(async()=>{try{const r=await sb.rpc('get_financial_journal');if(r.error)throw r.error;if(r.data?.revision!==state.financialJournal?.revision||r.data?.workspace?.as_of!==snapshot()?.as_of){await loadAll();lastRead=Date.now();return;}if(accepted(r.data,actor)){state.financialLoadedAt=new Date().toISOString();if(state.financialDataReady)state.financialDataError=null;render();}}catch(e){if(actor.token===session?.token){state.financialDataError=e.message||'Журнал не обновлён';render();}}finally{refreshing=null;}})();return refreshing;
 }
 function schedule(){if(renderQueued)return;renderQueued=true;setTimeout(()=>{renderQueued=false;render();},0);}
+// Actual flows are dated. Outstanding project work spans all contract dates.
+function managementSummary(s,workspace){
+ const minor=v=>Math.round(Number(v||0)*100);
+ const asOf=workspace.as_of,from=[asOf.slice(0,7)+'-01',workspace.start_date||''].sort().at(-1);
+ const projects=getFinancialProjects(),construction=new Set(projects.filter(p=>ARHITTEKCash.constructionProject(s,p)).map(p=>p.id));
+ let revenue=0,expense=0,forecast=0;
+ for(const event of ARHITTEKCash.cashEvents(s)){
+  const r=event.row;
+  if(event.date<from||event.date>asOf||construction.has(r.project_id)||ARHITTEKCash.isAdjustment(r)||ARHITTEKCash.isImportedExpense(r))continue;
+  if(r.type==='withdrawal'||r.category==='Вывод средств')continue;
+  if(event.amount>0||r.type==='client_refund')revenue+=minor(event.amount);
+  else expense-=minor(event.amount);
+ }
+ const budget=ARHITTEKBudget.calculate(s,asOf,{includeAllProjects:true});
+ const details=[];
+ for(const p of projects){
+  if(construction.has(p.id))continue;
+  const invoices=(s.invoices||[]).filter(i=>i.project_id===p.id&&!i.deleted_at&&!i.paid_by_client);
+  const invoiceDue=invoices.reduce((sum,i)=>sum+minor(ARHITTEKCash.invoicePaymentState(s,i,asOf).remaining),0);
+  const obligations=workspace.items.filter(i=>i.project_id===p.id&&i.direction==='expense');
+  const team=new Map(),heldTeam=new Map();
+  for(const fee of ARHITTEKCash.forecastProject(p,budget).payouts)team.set(fee.id,minor(fee.amount));
+  let heldCosts=0,plannedCosts=0;
+  for(const item of obligations){
+   if(item.origin==='funded'&&item.employee_id)heldTeam.set(item.employee_id,(heldTeam.get(item.employee_id)||0)+minor(item.remaining));
+   else if(item.origin==='funded')heldCosts+=minor(item.remaining);
+   else plannedCosts+=minor(item.remaining);
+  }
+  for(const [employee,held] of heldTeam)team.set(employee,Math.max(team.get(employee)||0,held));
+  const costs=Math.max(invoiceDue,heldCosts)+plannedCosts+[...team.values()].reduce((a,b)=>a+b,0);
+  const debt=p.deleted_at?0:minor(ARHITTEKCash.expected(p));
+  if(debt||costs)details.push({name:p.name,debt:debt/100,costs:costs/100});
+  forecast+=debt-costs;
+ }
+ return {revenue:revenue/100,expense:expense/100,net:(revenue-expense)/100,forecast:forecast/100,details,from};
+}
 function render(){
  const view=$('view-finance');if(!view)return;
  if(!enabled()){view.classList.remove('finance-unified');$('financeWorkspace')?.remove();if(!owner())clear();return;}
  view.classList.add('finance-unified');let root=$('financeWorkspace');if(!root){root=document.createElement('section');root.id='financeWorkspace';view.appendChild(root);}
  const s=snapshot(),j=state.financialJournal,balances=s.balances||{},locked=!ready()||busy,zero=s.opening_mode==='zero';
  if(!validWorkspace(j)){root.innerHTML='<article class="fw-card">Сервер не подтвердил полный финансовый снимок. '+btn('Обновить','refresh')+'</article>';bind(root);return;}
- const sum=prefix=>Object.entries(balances).filter(([k])=>k.startsWith(prefix)).reduce((a,[,v])=>a+number(v),0);
- const warnings=[...(s.warnings||[]),...(s.unscheduled_projects?.length?['У '+s.unscheduled_projects.length+' проектов нет согласованного графика поступлений. Эти суммы не включены в прогноз.']:[])];
- let html='<div class="fw-head"><div><h1>Финансы</h1><p>Подтверждённые деньги, обязательства и план оплат.</p></div>'+btn('Обновить','refresh')+'</div>';
+ 
+
+ let html='<div class="fw-head"><div><h1>Финансы</h1><p>Проектный отдел и операции компании. Бюджеты стройки учитываются отдельно.</p></div>'+btn('Обновить','refresh')+'</div>';
  html+='<p class="fw-status">'+(state.financialDataError?'Не удалось обновить: '+esc(state.financialDataError):'Сервер · версия '+j.revision+' · '+esc(new Date(s.generated_at).toLocaleString('ru-RU',{timeZone:'Europe/Moscow'}))+' МСК')+'</p>';
  if(pending())html+='<div class="fw-warning">Предыдущая отправка ещё не подтверждена. '+btn('Повторить подтверждение','retry')+'</div>';
  html+='<nav class="fw-tabs">'+[['overview','Главное'],['calendar','Платежи и долги'],['forecast','Прогноз'],['accounts','Счета'],['settings','Регулярные'],['history','Журнал'],...(zero?[['archive','До начала учёта']]:[])].map(([key,label])=>'<button data-fw-tab="'+key+'" class="'+(tab===key?'active':'')+'">'+label+'</button>').join('')+'</nav>';
- if(zero)html+='<article class="fw-card"><h2>'+(s.active?'Учёт с нуля':'Запланирован старт с нуля')+'</h2><p>С '+esc(fmtDate(s.start_date))+' · резерв, амортизация и остатки счетов на старте — 0 ₽. Начальная сверка не требуется. Прежние операции сохранены отдельно и не переносятся в новые остатки.</p></article>';
+ if(zero&&!s.active)html+='<article class="fw-card"><h2>'+(s.active?'Учёт с нуля':'Запланирован старт с нуля')+'</h2><p>С '+esc(fmtDate(s.start_date))+' · резерв, амортизация и остатки счетов на старте — 0 ₽. Начальная сверка не требуется. Прежние операции сохранены отдельно и не переносятся в новые остатки.</p></article>';
  if(!s.active&&!zero){html+='<article class="fw-card"><h2>Нужна начальная сверка</h2><p>Пересчитайте все деньги на счетах и наличными, проверьте средства заказчиков и невыплаченные обязательства. После подтверждения общий остаток будет распределён внутри журнала. Неподтверждённые цифры не выдаются за точный резерв.</p>'+journalBtn('Сверить и включить журнал','activate')+'<p>Старые оклады, неоплаченные счета и обязательства, отсутствующие в карточках, внесите в платёжный календарь отдельно. Гонорары из сверки появятся автоматически.</p></article>';}
  if(!state.financialDataReady||state.financialDataError){root.innerHTML=html+'<article class="fw-card">Остатки требуют обновления. Денежные действия временно недоступны.</article>';bind(root);return;}
  if(!s.active&&zero&&['overview','forecast'].includes(tab)){root.innerHTML=html+'<article class="fw-card"><h2>Начальные остатки — 0 ₽</h2><p>Учёт включится автоматически с '+esc(fmtDate(s.start_date))+' по московскому времени. Поступления и расходы до этой даты останутся в прежнем периоде. Можно заранее внести будущие платежи и регулярные расходы.</p></article>';bind(root);return;}
  if(!s.active&&['overview','forecast'].includes(tab)){root.innerHTML=html+'<article class="fw-card">Точные остатки и прогноз появятся после начальной сверки. Графики будущих платежей уже можно подготовить во вкладках «Платежи и долги» и «Регулярные».</article>';bind(root);return;}
- if(tab==='overview'){
-  const kpi=(label,value)=>'<article class="fw-card"><small>'+esc(label)+'</small><strong class="fw-amount">'+(s.active?money(value):'Требуется сверка')+'</strong></article>';
-  html+='<div class="fw-grid">'+kpi('Денег всего',s.cash)+kpi('Резерв по журналу',s.reserve)+kpi('Средства проектов и заказчиков',sum('project:'))+kpi('Удержано команде и на расходы',sum('team:')+sum('costs:')+sum('obligation:'))+'</div>';
-  html+='<article class="fw-card"><h2>После ближайших обязательных расходов</h2>'+row('Можно потратить · осторожный расчёт на 30 дней',s.available_30)+'</article>';
-  html+='<article class="fw-card"><h2>Распределение денег</h2>'+row('Все деньги',s.cash)+row('Средства проектов',sum('project:'))+row('Обязательства команды',sum('team:'))+row('Прямые расходы и начисленные долги',sum('costs:')+sum('obligation:'))+row('Амортизация',balances.amortization)+row('Свободный резерв',s.reserve)+'<p>Выплата уже удержанного обязательства уменьшает деньги и долг на одну сумму. Закрытие проекта распределяет имеющиеся деньги.</p></article>';
-  html+='<div class="fw-actions">'+btn('Получил деньги','record-income','',locked||!s.active)+btn('Оплатил расход','record-expense','',locked||!s.active)+btn('Запланировать платёж','expense','',locked)+journalBtn('Распределить деньги','transfer')+btn('Сверить счёт / кассу','wallet-reconcile','',locked)+'</div>';
-  if(s.active)html+='<article class="fw-card"><h2>Ближайшая потребность</h2>'+row('Минимум свободного резерва · 90 дней',s.minimum)+'<p>'+ (s.first_deficit?'Первый дефицит: '+esc(fmtDate(s.first_deficit)):'По внесённым обязательствам дефицит на 90 дней не найден.')+'</p>'+btn('Открыть прогноз','forecast')+'</article>';
-  html+=warnings.map(w=>'<div class="fw-warning">'+esc(w)+'</div>').join('');
-  html+='<details class="fw-card"><summary>Подтвердить финансовое закрытие проектов</summary>'+(state.projects||[]).filter(p=>/заверш/i.test(findStatus(p.status_id)?.name||'')&&!ARHITTEKCash.constructionProject(state,p)).map(p=>'<div class="fw-row"><span>'+esc(p.name)+'</span>'+journalBtn('Проверить закрытие','close',p.id)+'</div>').join('')+'</details>';
+ if(tab==='overview'||tab==='forecast'){
+  const m=managementSummary(state,s);
+  const kpi=(label,value,note)=>'<article class="fw-card"><small>'+label+'</small><strong class="fw-amount">'+money(value)+'</strong><p>'+note+'</p></article>';
+  if(tab==='overview'){
+   const period=esc(fmtDate(m.from))+' — '+esc(fmtDate(s.as_of));
+   html+='<div class="fw-grid">'+kpi('Выручка',m.revenue,'Получено за '+period+', за вычетом возвратов.')+kpi('Расход',m.expense,'Фактические оплаты компании и проектного отдела за тот же период.')+kpi('Чистый доход',m.net,'Выручка минус расход за период.')+kpi('Прогноз',m.forecast,'Остатки оплат по договорам минус предстоящие расходы и гонорары по проектам.')+'</div>';
+   html+='<div class="fw-actions">'+btn('Получил деньги','record-income','',locked)+btn('Оплатил расход','record-expense','',locked)+'</div>';
+  }else{
+   html+='<article class="fw-card"><h2>Прогноз по проектам</h2>'+row('Ожидаемый чистый остаток',m.forecast)+'<p>По всем срокам, включая договоры без графика оплаты.</p></article>';
+   for(const project of m.details)html+='<article class="fw-card"><h3>'+esc(project.name)+'</h3>'+row('Долг клиента',project.debt)+row('Предстоит оплатить',project.costs)+row('Прогноз',project.debt-project.costs)+'</article>';
+  }
  }else if(tab==='calendar'){
   html+='<div class="fw-actions">'+btn('+ Поступление','income','',locked)+btn('+ Обязательство','expense','',locked)+btn('+ Распределение проекта','release','',locked)+'</div>';
   const items=[...(s.items||[])].sort((a,b)=>String(a.due_date||'').localeCompare(String(b.due_date||'')));
   html+=items.map(x=>'<article class="fw-card"><div class="fw-row"><h3>'+esc(x.label)+'</h3><b>'+money(x.remaining)+'</b></div><p>'+esc(x.direction==='income'?'Ожидается поступление':x.direction==='release'?'Распределение внутри денег':'Осталось оплатить')+' · '+(x.due_date?esc(fmtDate(x.due_date)):'Срок не указан')+(x.due_date&&x.due_date<s.as_of?' · просрочено':'')+' · '+esc(accountName(x.funding))+'</p><p>'+esc(x.certainty==='confirmed'?'Подтверждено':'Требует согласования')+'</p><div class="fw-actions">'+btn(x.direction==='income'?'Получил оплату':x.direction==='release'?'Подтвердить распределение':'Оплатить частично / полностью','pay',x.key,locked||!s.active)+btn('Перенести срок','reschedule',x.key,locked)+(x.origin==='plan'?btn('Отменить остаток плана','cancel',x.id,locked):'')+'</div></article>').join('')||'<article class="fw-card">Платежи не внесены.</article>';
   html+='<details class="fw-card"><summary>Оплаты, внесённые вне календаря</summary><p>Если эта сумма погашает внесённый план, свяжите её с ним. Новое движение денег не создаётся. Система проверит назначение и уже связанные суммы.</p>'+(s.unmatched||[]).map(o=>'<div class="fw-row"><span>'+esc(o.reason)+' · '+money(o.remaining)+'</span>'+btn('Связать с планом','link',o.id,locked)+'</div>').join('')+'</details>';
   html+='<article class="fw-card"><h2>Поступления без графика</h2><p>Остаток договора требует согласованной даты оплаты. Срок сдачи проекта не подставляется вместо неё.</p>'+(s.unscheduled_projects||[]).map(p=>'<div class="fw-row"><span>'+esc(p.name)+' · '+money(p.remaining)+'</span>'+btn('Указать график','project-plan',p.id,locked)+'</div>').join('')+'</article>';
- }else if(tab==='forecast'){
-  html+='<article class="fw-card"><h2>Прогноз свободного резерва</h2><p>Осторожный сценарий: обязательные расходы без будущих поступлений. Ожидаемый: дополнительно согласованные оплаты компании и распределения проектов. Просроченные поступления требуют новой даты. Деньги стройки и проектные авансы не становятся свободным резервом.</p>'+warnings.map(w=>'<p class="fw-warning">'+esc(w)+'</p>').join('')+'</article>';
-  html+='<div class="fw-grid">'+[30,60,90].map(days=>{const f=s.forecast?.[days];return '<article class="fw-card"><h3>Через '+days+' дней</h3>'+row('Осторожный сценарий',f?.conservative)+row('Ожидаемый сценарий',f?.expected)+row('Все деньги · осторожный',f?.cash_conservative)+row('Все деньги · ожидаемый',f?.cash_expected)+'</article>'}).join('')+'</div>';
-  html+='<article class="fw-card">'+(s.first_deficit?'Первая дата дефицита: '+esc(fmtDate(s.first_deficit)):'Внесённые обязательства не создают дефицита на горизонте 90 дней.')+(s.first_cash_deficit?'<p>Дефицит общих денег: '+esc(fmtDate(s.first_cash_deficit))+'</p>':'')+'<p>Неподтверждённые будущие оплаты не гарантированы. Полнота прогноза зависит от внесённых обязательств и графиков.</p></article><details class="fw-card"><summary>По дням</summary><div class="fw-table"><table><thead><tr><th>Дата</th><th>Осторожный</th><th>Ожидаемый</th></tr></thead><tbody>'+(s.forecast||[]).map(f=>'<tr><td>'+esc(fmtDate(f.date))+'</td><td>'+money(f.conservative)+'</td><td>'+money(f.expected)+'</td></tr>').join('')+'</tbody></table></div></details>';
  }else if(tab==='accounts'){
   html+='<div class="fw-actions">'+btn('+ Касса или счёт','wallet','',locked)+btn('Перевести между счетами','wallet-transfer','',locked||!s.active)+btn('Сверить счёт / кассу','wallet-reconcile','',locked)+'</div>'+(s.wallets||[]).map(w=>'<article class="fw-card"><h3>'+esc(w.name)+'</h3>'+(s.active?row('Подтверждённый остаток',w.balance):(zero?'<p>Начальный остаток — 0 ₽ с '+esc(fmtDate(s.start_date))+'</p>':'<p>Начальная сумма ещё не подтверждена</p>'))+'</article>').join('')+(zero?'<p>Все счета начинают с нулевого остатка. Переводы между своими счетами не меняют общие деньги.</p>':'<p>Начальная сверка записывается в общую кассу. После проверки распределите деньги по своим счетам переводами. Перевод не меняет общий остаток.</p>');
+  html+=journalBtn('Распределить деньги','transfer');
+  html+='<details class="fw-card"><summary>Подтвердить финансовое закрытие проектов</summary>'+(state.projects||[]).filter(p=>/заверш/i.test(findStatus(p.status_id)?.name||'')&&!ARHITTEKCash.constructionProject(state,p)).map(p=>'<div class="fw-row"><span>'+esc(p.name)+'</span>'+journalBtn('Проверить закрытие','close',p.id)+'</div>').join('')+'</details>';
  }else if(tab==='settings'){
   html+='<article class="fw-card"><h2>Регулярные поступления и расходы</h2><p>Настройки сохраняются на сервере. Изменение суммы действует с нового месяца и сохраняет прежние условия.</p>'+btn('+ Регулярный платёж','rule','',locked)+'</article>'+(s.rules||[]).map(r=>'<article class="fw-card"><h3>'+esc(r.label)+'</h3>'+row(r.direction==='income'?'Поступление в месяц':'Расход в месяц',r.amount)+'<p>До '+r.due_day+' числа · с '+esc(String(r.start_month).slice(0,7))+(r.end_month?' по '+esc(String(r.end_month).slice(0,7)):'')+'</p>'+btn('Новая сумма с нового месяца','replace-rule',r.id,locked)+btn('Остановить после этого месяца','stop-rule',r.id,locked)+'</article>').join('');
   html+='<article class="fw-card"><h2>Оклады из карточек сотрудников</h2><p>Добавьте проверенный оклад как регулярное обязательство. Сумма сохранится снимком, отдельно от дальнейших изменений карточки. Проверяйте уже внесённые выплаты первого месяца.</p>'+(state.employees||[]).filter(e=>e.is_salaried&&e.active!==false&&!e.deleted_at).map(e=>'<div class="fw-row"><span>'+esc(e.name)+' · '+money(e.fixed_salary)+'</span>'+btn('Внести оклад в календарь','salary-rule',e.id,locked)+'</div>').join('')+'</article>';
@@ -97,7 +133,7 @@ async function send(command,payload,restore=null){
 }
 async function act(action,id){
  if(!owner())return;
- if(action==='refresh'){await refresh();return;}if(['overview','calendar','forecast'].includes(action)){tab=action;render();return;}
+ if(action==='refresh'){await loadAll();lastRead=Date.now();render();return;}if(['overview','calendar','forecast'].includes(action)){tab=action;render();return;}
  if(action==='retry'){const p=pending();if(p)await send(p.command,p.payload,p);return;}
  if(!ready())throw new Error('Сначала обновите данные');const s=snapshot();
  const projects=[['','Без проекта'],...(state.financialProjects||state.projects||[]).filter(p=>!p.deleted_at).map(p=>[p.id,p.name])],employees=[['','Без сотрудника'],...(state.employees||[]).filter(e=>!e.deleted_at).map(e=>[e.id,e.name])];
@@ -161,7 +197,7 @@ const style=document.createElement('style');style.textContent=`#view-finance.fin
 for(const name of ['renderAll','renderCashFinance']){const old=window[name];if(typeof old==='function')window[name]=function(){const r=old.apply(this,arguments);schedule();return r;};}
 for(const name of ['renderAnalytics','renderFinanceSalaries']){const old=window[name];if(typeof old==='function')window[name]=function(){if(enabled())return schedule();return old.apply(this,arguments);};}
 const oldClear=ARHITTEKJournal.clear;ARHITTEKJournal.clear=function(){clear();oldClear();};
-window.ARHITTEKFinanceWorkspace={enabled,render,schedule,refresh,accepted,clear,selectedWallet};
+window.ARHITTEKFinanceWorkspace={enabled,render,schedule,refresh,accepted,clear,selectedWallet,managementSummary};
 document.querySelector('.nav-btn[data-view="view-finance"]')?.addEventListener('click',()=>{schedule();if(enabled()&&Date.now()-lastRead>15000)void refresh();});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&enabled()&&Date.now()-lastRead>30000)void refresh();});
 setInterval(()=>{if(enabled()&&!document.hidden&&(snapshot().as_of!==ARHITTEKCash.day()||document.getElementById('view-finance')?.classList.contains('active')&&Date.now()-lastRead>25000))void refresh();},30000);

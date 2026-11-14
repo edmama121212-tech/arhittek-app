@@ -49,6 +49,32 @@ try{
  await page.locator('#financeWorkspace [data-fw-tab="overview"]').click();
  await cmd('activate',activatePayload,201,0);await page.evaluate(()=>loadAll());
  eq(await page.locator('#financeWorkspace h1').textContent(),'Финансы');eq(await page.evaluate(()=>ARHITTEKFinanceWorkspace.enabled()),true);
+ eq(await page.locator('#financeWorkspace .fw-grid small').allTextContents(),['Выручка','Расход','Чистый доход','Прогноз']);
+ const cashCases=await page.evaluate(()=>{
+  const original={...state},day=financeToday();
+  const project={id:'design',name:'Договор',price:50000,advance:0,fee_percent:20,fee_base:'price',employee_id:'worker'};
+  const ledger=[],workspace={as_of:day,items:[]};
+  try{
+   Object.assign(state,{projects:[project],financialProjects:[project],invoices:[],ledger,employees:[{id:'worker',role:'Исполнитель'}],companyIncome:[],companyExpenses:[],financialStatusHistory:[],statuses:[]});
+   const totals=()=>{const {revenue,expense,net,forecast}=ARHITTEKFinanceWorkspace.managementSummary(state,workspace);return [revenue,expense,net,forecast]};
+   const results=[totals()];
+   project.advance=40000;
+   ledger.push({id:'receipt',type:'advance',project_id:project.id,amount:40000,entry_date:day});
+   results.push(totals());
+   workspace.items.push({direction:'expense',origin:'plan',project_id:project.id,remaining:2000.35});
+   results.push(totals());
+   workspace.items[0].remaining=0;
+   ledger.push({type:'project_expense',project_id:project.id,amount:2000.35,entry_date:day});
+   project.fee_paid=2500;
+   ledger.push({type:'fee_payment',project_id:project.id,payee_employee_id:'worker',amount:2500,entry_date:day});
+   results.push(totals());
+   project.advance=50000;
+   ledger.push({type:'final_payment',project_id:project.id,amount:10000,entry_date:day});
+   results.push(totals());
+   return results;
+  }finally{Object.assign(state,original);}
+ });
+ eq(cashCases,[[0,0,0,40000],[40000,0,40000,0],[40000,0,40000,-2000.35],[40000,4500.35,35499.65,2500],[50000,4500.35,45499.65,-7500]]);
  await page.locator('#financeWorkspace [data-fw="record-income"]').click();
  const modal=page.locator('#financeWorkspaceModal');await modal.locator('[name="label"]').fill('Actual company income');await modal.locator('[name="amount"]').fill('1000');await modal.locator('[name="reason"]').fill('Confirmed in isolated database');await modal.locator('[type="submit"]').click();
  await page.waitForFunction(()=>!document.getElementById('financeWorkspaceModal')&&state.financialJournal.workspace.cash===101000);eq((await snapshot()).workspace.reserve,100950);
@@ -58,7 +84,7 @@ try{
  eq((await db.query('select count(*)::int n from public.company_expenses')).rows[0].n,1);
  await page.locator('#financeWorkspace [data-fw-tab="calendar"]').click();await page.locator('#financeWorkspace [data-fw="expense"]').click();await modal.locator('[name="label"]').fill('Known future obligation');await modal.locator('[name="amount"]').fill('3000');await modal.locator('[name="reason"]').fill('Confirmed service agreement');await modal.locator('[type="submit"]').click();await page.waitForSelector('#financeWorkspaceModal',{state:'detached'});
  eq((await snapshot()).workspace.items.some(x=>x.label==='Known future obligation'),true);
- await page.locator('#financeWorkspace [data-fw-tab="forecast"]').click();eq(await page.locator('#financeWorkspace').getByText('Через 30 дней',{exact:true}).isVisible(),true);
+ await page.locator('#financeWorkspace [data-fw-tab="forecast"]').click();eq(await page.locator('#financeWorkspace').getByText('Прогноз по проектам',{exact:true}).isVisible(),true);
  for(const width of [320,390,1024]){await page.setViewportSize({width,height:844});eq(await page.locator('#financeWorkspace').evaluate(e=>e.scrollWidth<=e.clientWidth+1),true);}
  await page.setViewportSize({width:390,height:844});await page.locator('#financeWorkspace [data-fw-tab="overview"]').click();
  if(process.env.FINANCE_SCREENSHOT)await page.screenshot({path:process.env.FINANCE_SCREENSHOT,fullPage:true});

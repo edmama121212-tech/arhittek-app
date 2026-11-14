@@ -80,7 +80,7 @@ function auditData(s){
 }
 function expected(p){const received=typeof isConstructionProject==='function'&&isConstructionProject(p)&&typeof getConstructionFinancials==='function'?getConstructionFinancials(p).received:p.advance;return Math.max(0,n(p.price)-n(received));}
 function dueProjects(s,month){return (s.projects||[]).filter(p=>!p.deleted_at&&String(p.end_date||'').slice(0,7)===month).filter(p=>{const status=(s.statuses||[]).find(x=>x.id===p.status_id);return !/заморож|отмен/i.test(status?.name||'');});}
-window.ARHITTEKCash={day,shift,period,constructionProject,cashEvents,balance,bookBalance,cashCount,cashStatus,isCountedNote,displayNote,amortEvents,amortization,projectBudget,available,monthSummary,flowGroup,flowSummary,isAdjustment,isImportedExpense,invoicePaymentId,invoicePaymentState,auditData,expected,dueProjects,opening:OPENING,cutoff:CUTOFF};
+window.ARHITTEKCash={day,shift,period,constructionProject,cashEvents,balance,bookBalance,cashCount,cashStatus,isCountedNote,displayNote,amortEvents,amortization,projectBudget,available,monthSummary,flowGroup,flowSummary,isAdjustment,isImportedExpense,invoicePaymentId,invoicePaymentState,auditData,forecastProject,expected,dueProjects,opening:OPENING,cutoff:CUTOFF};
 if(typeof document==='undefined')return;
 const $=id=>document.getElementById(id),esc=v=>escapeHtml(String(v??'')),money=v=>v===null?'—':fmtMoney(n(v));let selected=day().slice(0,7),following=true,busy=false,lastDay=day();
 function attachCountField(fieldId){
@@ -167,7 +167,7 @@ function forecastProject(p,budget=projectBudget(state)){
       {id:p.co_employee_id,amount:n(fees.coFeeAmount),paid:n(fees.coPaid)}];
  const byEmployee=new Map();rows.filter(r=>r.id).forEach(r=>{const x=byEmployee.get(r.id)||{id:r.id,amount:0,paid:0};x.amount+=r.amount;x.paid+=r.paid||0;byEmployee.set(r.id,x);});
  const payouts=[...byEmployee.values()].map(r=>{
-   const recorded=(state.ledger||[]).filter(x=>!x.deleted_at&&x.type==='fee_payment'&&x.project_id===p.id&&(x.payee_employee_id||p.employee_id)===r.id&&x.entry_date<=day()).reduce((a,x)=>a+n(x.amount),0);
+   const recorded=(state.ledger||[]).filter(x=>!x.deleted_at&&['fee_payment','salary_payment'].includes(x.type)&&x.project_id===p.id&&(x.payee_employee_id||p.employee_id)===r.id&&x.entry_date<=day()).reduce((a,x)=>a+n(x.amount),0);
    const allocated=allocation?.team.filter(t=>t.employeeId===r.id).reduce((a,t)=>a+t.paid,0)||0;
    return {id:r.id,amount:Math.max(0,rounded(r.amount-Math.max(r.paid,recorded,allocated)))};
  }),unpaid=payouts.reduce((sum,r)=>sum+r.amount,0),release=allocation?.projectHeld||0;

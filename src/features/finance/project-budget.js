@@ -131,7 +131,7 @@ function calculate(s,until,hooks={}){
  // for reconciliation, never a new receipt on completion or an expense offset.
  const counted=typeof cash.cashCount==='function'&&!!cash.cashCount(s,until);
  const companyReserve=round(cashBalance-amortization-projectsHeld-teamHeld-costsHeld);
- return {cashBalance,amortization,projectsHeld,constructionHeld,teamHeld,costsHeld,releasedOpeningFunds,openingFundsUsed,countedCash:counted,companyReserve,available:companyReserve,beforeTeam:round(companyReserve+teamHeld),projects:details.filter(d=>d.eligible),warnings};
+ return {cashBalance,amortization,projectsHeld,constructionHeld,teamHeld,costsHeld,releasedOpeningFunds,openingFundsUsed,countedCash:counted,companyReserve,available:companyReserve,beforeTeam:round(companyReserve+teamHeld),projects:hooks.includeAllProjects?details:details.filter(d=>d.eligible),warnings};
 }
 window.ARHITTEKBudget={calculate,projectRows,completionDate};
 })();
