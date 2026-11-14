@@ -499,5 +499,6 @@
   if(saved.error)throw Error(saved.error.message);if(!saved.data)throw Error('Карточка изменилась на другом устройстве. Обновите каталог и повторите загрузку PDF');
   return {updated:true,card:{...old,...patch}};
  }
+ if(typeof document!=='undefined')CatalogQuality.protectSave();
  root.CatalogPlan=Object.freeze({prepare,refreshExisting,vectors,chooseStructure,labels,dimensions,version:VERSION});
 })(window);

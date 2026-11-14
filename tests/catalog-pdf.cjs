@@ -96,6 +96,7 @@ function coreTests(){
  });
  await context.route('**/*',route=>{
   const u=new URL(route.request().url());let file;
+  let legacy=u.searchParams.get('legacy-catalog')==='1';try{legacy=legacy||route.request().frame().url().includes('legacy-catalog=1')}catch(_){}
   // WebKit exposes PDF.js's generated module-worker blob to routing.
   // Let it load its actual script instead of fulfilling it as an empty stub.
   if(u.protocol==='blob:')return route.continue();
@@ -104,6 +105,17 @@ function coreTests(){
   if(u.href.includes('/@neslinesli93/qpdf-wasm@0.3.0/'))file=path.join(root,'node_modules/@neslinesli93/qpdf-wasm',u.pathname.split('/@neslinesli93/qpdf-wasm@0.3.0/')[1]);
   if(u.href.includes('/pdfjs-dist@6.4.299/'))file=path.join(root,'node_modules/pdfjs-dist',u.pathname.split('/pdfjs-dist@6.4.299/')[1]);
   for(const [key,p]of[['xlsx@','xlsx/dist/xlsx.full.min.js'],['jspdf@','jspdf/dist/jspdf.umd.min.js'],['jspdf-autotable@','jspdf-autotable/dist/jspdf.plugin.autotable.min.js']])if(u.href.includes(key))file=path.join(root,'node_modules',p);
+  if(file&&legacy&&file.endsWith('index.html')){
+   let html=fs.readFileSync(file,'utf8').replace('<script src="catalog-quality.js"></script>','').replace(/<button[^>]*onclick="CatalogQuality\.checkEditor\(\)"[^>]*>[^<]*<\/button>/g,'').replace(/<p id="ce-quality-status"[^>]*><\/p>/g,'');
+   const start=html.indexOf('    let qualityMeta=importMeta'),end=html.indexOf('    payload.images=await uploadCardImages',start);assert(start>0&&end>start);html=html.slice(0,start)+html.slice(end);
+   return route.fulfill({body:html,contentType:'text/html'});
+  }
+  if(file&&legacy&&file.endsWith('catalog-pdf.js')){
+   let code=fs.readFileSync(path.join(root,'src/features/catalog/catalog-pdf.js'),'utf8').replace('draftOnly:true,','').replace('    CatalogQuality.protectSave();\n','');
+   const start=code.indexOf('      const note=result.blocking.length?'),end=code.indexOf('    }catch(e){if(generation===cardEditorGeneration)',start);assert(start>0&&end>start);
+   code=code.slice(0,start)+"      job.saving=true;await saveCard();status('Черновик не сохранён. Проверьте карточку и нажмите «Сохранить проект».',null);\n"+code.slice(end);
+   return route.fulfill({body:code,contentType:'text/javascript'});
+  }
   if(file?.endsWith('pdf.worker.min.mjs')&&process.env.CATALOG_NO_STREAM_ITERATOR==='1')return route.fulfill({body:'Object.defineProperty(ReadableStream.prototype,Symbol.asyncIterator,{value:undefined,configurable:true});\n'+fs.readFileSync(file,'utf8'),contentType:'text/javascript',headers:{'Access-Control-Allow-Origin':'*'}});
   if(file&&fs.existsSync(file))return route.fulfill({path:file,contentType:/\.m?js$/.test(file)?'text/javascript':file.endsWith('.html')?'text/html':file.endsWith('.css')?'text/css':file.endsWith('.wasm')?'application/wasm':'application/octet-stream',headers:{'Access-Control-Allow-Origin':'*'}});
   if(route.request().resourceType()==='image')return route.fulfill({body:'<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"/>',contentType:'image/svg+xml'});
@@ -147,6 +159,18 @@ function coreTests(){
    return {...r,images:r.images.map(x=>x?x.slice(0,23):null),thumbnails:[]};
   });
  }
+ const legacy=await context.newPage(),legacyErrors=[];legacy.on('pageerror',e=>legacyErrors.push(e.message));
+ await legacy.goto('https://app.test/?legacy-catalog=1');await legacy.waitForFunction(()=>typeof isOwner==='function'&&isOwner()&&state.financialDataReady);
+ eq(await legacy.evaluate(()=>[typeof CatalogQuality,!!document.querySelector('[onclick="CatalogQuality.checkEditor()"]')]),['undefined',false],'Already-open legacy shell has no quality module or quality UI');
+ await legacy.evaluate(()=>{window.__legacyUploads=0;window.__legacySaves=0;window.__legacySync=0;const storage=sb.storage.from.bind(sb.storage);sb.storage.from=name=>{const bucket=storage(name),upload=bucket.upload.bind(bucket);bucket.upload=(...a)=>{__legacyUploads++;return upload(...a)};return bucket};const rpc=sb.rpc.bind(sb);sb.rpc=async(n,a)=>{if(n!=='import_catalog_pdf')return rpc(n,a);__legacySaves++;const row={...a.p_card,id:crypto.randomUUID()};(__db.project_cards||=[]).push(row);return {data:{id:row.id,created:true},error:null}};sb.functions={invoke:async()=>{__legacySync++;return {data:{ok:true},error:null}}};});
+ await legacy.locator('#catalog-pdf-file').setInputFiles({name:'legacy-import.pdf',mimeType:'application/pdf',buffer:fixture({floors:1,basement:false})});
+ await legacy.waitForFunction(()=>document.getElementById('ce-pdf-status').textContent.includes('Черновик не сохранён')&&!CatalogPdfImport.busyReading(),null,{timeout:60000});
+ eq(await legacy.evaluate(()=>[typeof CatalogQuality,!!ceImages[2],!!cePdfImportMeta.sources.plans.floor1.quality.passed,__legacyUploads,__legacySaves,__legacySync]),['object',true,true,0,0,0],'Standalone new plan bundle repairs a legacy shell without CatalogQuality; old importer autosave is blocked');
+ await legacy.evaluate(()=>setVal('ce-area','999999'));await legacy.locator('#ce-save-btn').click();
+ eq(await legacy.evaluate(()=>[__legacyUploads,__legacySaves,__legacySync]),[0,0,0],'Legacy inline Save cannot bypass the recovered publication quality gate');
+ await legacy.evaluate(()=>setVal('ce-area','100,00'));await legacy.locator('#ce-save-btn').click();await legacy.waitForFunction(()=>document.getElementById('cardEditorOverlay').style.display==='none');
+ eq(await legacy.evaluate(()=>[__legacyUploads>0,__legacySaves,__legacySync]),[true,1,1],'A trusted explicit Save publishes once after recovery on the old shell');
+ eq(legacyErrors,[],'Legacy shell and new renderer produce no JavaScript ReferenceError');await legacy.close();
  const album=fixture();
  await page.evaluate(()=>{const e=document.createElement('input');e.type='file';e.id='io-pdf';document.body.append(e)});
  await page.locator('#io-pdf').setInputFiles({name:'io.pdf',mimeType:'application/pdf',buffer:album});

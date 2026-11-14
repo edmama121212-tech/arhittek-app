@@ -1,4 +1,3 @@
-global.CatalogQuality=require('../catalog-quality');
 // Reproduce a basement schedule beside an unrelated ground-floor drawing.
 // All PDFs are synthetic. No private albums or production writes.
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict');
