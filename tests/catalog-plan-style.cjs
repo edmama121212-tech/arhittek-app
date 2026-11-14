@@ -1,4 +1,3 @@
-global.CatalogQuality=require('../catalog-quality');
 // Real PDF.js painting, isolated synthetic drawings; no production data.
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict');
 const {jsPDF}=require('jspdf'),canvas=require('@napi-rs/canvas');

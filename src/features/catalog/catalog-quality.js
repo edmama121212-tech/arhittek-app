@@ -42,9 +42,24 @@
  function checkEditor(){
   const value=id=>document.getElementById(id)?.value||'',card={project_number:value('ce-num'),title:value('ce-title'),floors:ceFloorsSelected,total_area:value('ce-area'),price:value('ce-price'),beds:value('ce-beds'),baths:value('ce-baths'),tags:ceFeatureSelected.includes('basement')?['Цокольный этаж']:[],images:ceImages};
   for(const f of CatalogFloors.definitions){card[f.area]=value('ce-area'+f.suffix);card[f.rooms]=parseExpl(value('ce-expl'+f.suffix));}
-  let meta=cePdfImportMeta||cardsData.find(c=>c.id===ceCurrentId)?.pdf_import_meta;if(Object.keys(ceScreenshotPlans).length)meta={...meta,sources:{...meta?.sources,plans:{...meta?.sources?.plans,...ceScreenshotPlans}}};
+  let meta=cePdfImportMeta||cardsData.find(c=>c.id===ceCurrentId)?.pdf_import_meta;const screenshots=typeof ceScreenshotPlans==='undefined'?{}:ceScreenshotPlans;if(Object.keys(screenshots).length)meta={...meta,sources:{...meta?.sources,plans:{...meta?.sources?.plans,...screenshots}}};
   const review=reviewCard(card,meta);show(review);return review;
  }
- root.CatalogQuality=Object.freeze({version:VERSION,fingerprint,scheduleFingerprint,reviewPlan,reviewCard,show,checkEditor});
+ // An already open pre-quality shell still owns its older inline saveCard.
+ // Attach the current publication gate when an import is applied, after that
+ // shell has finished declaring its functions. No page reload or draft loss.
+ function protectSave(){
+  const original=root.saveCard;if(typeof original!=='function'||original.catalogQualityGuard)return;
+  const legacyImporter=root.CatalogPdfImport&&root.CatalogPdfImport.draftOnly!==true;let userSave=false;
+  if(legacyImporter&&typeof document!=='undefined')document.addEventListener('click',event=>{if(event.isTrusted&&event.target?.closest?.('#ce-save-btn'))userSave=true;},true);
+  async function guardedSave(...args){
+   if(legacyImporter&&!userSave)return {ok:false,awaitingManualSave:true};userSave=false;
+   if(typeof canEditCards==='function'&&!canEditCards())return original.apply(this,args);
+   const review=checkEditor();if(!review.passed){if(typeof showToast==='function')showToast('Сохранение заблокировано: нужна проверка карточки');return {ok:false,qualityBlocked:true,error:review.issues.join('. ')};}
+   return original.apply(this,args);
+  }
+  guardedSave.catalogQualityGuard=true;root.saveCard=guardedSave;
+ }
+ root.CatalogQuality=Object.freeze({version:VERSION,fingerprint,scheduleFingerprint,reviewPlan,reviewCard,show,checkEditor,protectSave});
  if(typeof module!=='undefined')module.exports=root.CatalogQuality;
 })(typeof window!=='undefined'?window:globalThis);

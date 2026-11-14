@@ -152,9 +152,11 @@
       "src/features/catalog/catalog-pdf.css"
     ],
     "catalog-pdf.js": [
+      "src/features/catalog/catalog-quality.js",
       "src/features/catalog/catalog-pdf.js"
     ],
     "catalog-plan.js": [
+      "src/features/catalog/catalog-quality.js",
       "src/features/catalog/catalog-plan.js"
     ],
     "catalog.html": [

@@ -227,7 +227,8 @@
     job.cancelled=true;job.optimizeReject?.(abort());job.fileTransport?.abort();unlock(job);active=null;job.textReader?.cancel().catch(()=>{});job.renderTask?.cancel();job.loadingTask?.destroy().catch(()=>{});job.ocrWorker?.terminate().catch(()=>{});status('Импорт отменён. Можно выбрать другой PDF',null);
   }
   function apply(result){
-    ceScreenshotPlans={};
+    CatalogQuality.protectSave();
+    if(typeof ceScreenshotPlans!=='undefined')ceScreenshotPlans={};
     const d=result.data;
     const fields={project_number:'ce-num',title:'ce-title',total_area:'ce-area',footprint:'ce-footprint',beds:'ce-beds',baths:'ce-baths'};
     for(const [key,id]of Object.entries(fields))setVal(id,d[key]??'');
@@ -298,5 +299,5 @@
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',installDrop,{once:true});else installDrop();
   function reset(){cancel();status('Загрузите альбом — приложение заполнит черновик. Сохранение только по кнопке «Сохранить проект».',null);const block=document.getElementById('ce-pdf-import');if(block)block.hidden=!!ceCurrentId;}
-  root.CatalogPdfImport=Object.freeze({read,start,startFile,cancel,reset,busyReading:()=>!!active&&!active.saving,apply,pdfItems,exportImage,readTextContent,imageRegions,photo});
+  root.CatalogPdfImport=Object.freeze({draftOnly:true,read,start,startFile,cancel,reset,busyReading:()=>!!active&&!active.saving,apply,pdfItems,exportImage,readTextContent,imageRegions,photo});
 })(window);

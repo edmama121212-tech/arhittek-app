@@ -98,3 +98,15 @@ facade presence and consistent floor/total areas. A manual screenshot has no
 automatic geometry receipt and cannot bypass this imported-card gate.
 These deterministic checks do not claim universal visual perfection for arbitrary
 PDFs; unsupported or unresolved source data needs correction before publication.
+
+## Mixed-version shell recovery
+
+The PDF import and plan-rendering bundles each include the same stateless quality
+module. An old open shell does not need a new head-script dependency in order
+to execute a new renderer. The standalone quality file remains available to
+older shells which reference it. A renderer loaded by an older importer also
+wraps its inline save handler: old automatic saves are rejected, and explicit
+Save clicks still run the current publication gate. Native bootstrap tests
+start with no quality global. Chromium/WebKit regression recreates an old shell
+without its quality script/UI/save gate, loads the new renderer, and verifies
+recovery, no autosave, invalid-card blocking and a single explicit publication.
