@@ -297,7 +297,8 @@
           const page=await doc.getPage(candidate);
           try{
             let prepared=await CatalogPlan.prepare({pdfjs,page,info:pages[candidate-1],table:result.levels[asset.key].table,key:asset.key,optionalContent,reference:asset.key!=='floor1'?result.sources.plans?.floor1:null,knownFootprint:result.sources.footprint?.from==='dimension_lines'?{value:result.data.footprint,page:result.sources.footprint.page}:null,check:()=>check(job)});check(job);
-            if(!prepared.ok&&prepared.code==='room-labels'&&prepared.region){
+            if(!prepared.ok&&prepared.code==='room-labels'&&prepared.region&&!job.planOcrUnavailable){
+              try{
               progress(job,'Распознаю номера и подписи комнат на плане, лист '+candidate+'…',70);
               const recovered=await ocrPage(doc,pages[candidate-1],job,prepared.region,{mergeNative:true});check(job);
               prepared=await CatalogPlan.prepare({pdfjs,page,info:recovered,table:result.levels[asset.key].table,key:asset.key,optionalContent,reference:asset.key!=='floor1'?result.sources.plans?.floor1:null,check:()=>check(job)});
@@ -311,6 +312,7 @@
                 prepared=await CatalogPlan.prepare({pdfjs,page,info:markerInfo,table:result.levels[asset.key].table,key:asset.key,optionalContent,reference:asset.key!=='floor1'?result.sources.plans?.floor1:null,check:()=>check(job)});
               }
               if(prepared.ok)(result.sources.plan_ocr??={})[asset.key]={page:candidate,confidence:recovered.confidence};
+              }catch(e){check(job);if(e.name==='AbortError')throw e;job.planOcrUnavailable=true;(result.sources.plan_ocr_unavailable??=[]).push({page:candidate,error:e.name||'Error'});result.warnings.push('Дополнительное распознавание подписей временно недоступно. Найденные данные сохранены в черновике; неподтверждённые планы не опубликованы');}
             }
             attempts.push({page:candidate,passed:prepared.ok,reason:prepared.reason||null,foundRooms:prepared.foundRooms,diagnostics:prepared.diagnostics});
             if(prepared.ok){result.levels[asset.key].plan.page=candidate;(result.sources[asset.key]??={}).planPage=candidate;images[asset.index]=prepared.image;thumbnails[asset.index]=prepared.thumbnail;(result.sources.plans??={})[asset.key]=prepared.report;
