@@ -309,7 +309,7 @@ function openCardEditor(id){
       setVal('ce-tags', (card.tags||[]).join(', '));
       CatalogFloors.definitions.forEach(f=>{
         setVal('ce-area'+f.suffix,card[f.area]||'');
-        setVal('ce-expl'+f.suffix,(card[f.rooms]||[]).map(r=>`${r.name}: ${r.area}`).join('\n'));
+        setVal('ce-expl'+f.suffix,CatalogFloors.normalizeRooms(card[f.rooms],{expectedArea:card[f.area]}).map(r=>`${r.name}: ${r.area}`).join('\n'));
       });
       selectFloors(card.floors||2);
       // Load style and features from tags

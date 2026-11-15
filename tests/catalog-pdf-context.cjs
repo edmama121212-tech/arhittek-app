@@ -24,7 +24,7 @@ result=core.analyze([title(),p1(),page(3,table({values:[40,10]})),page(4,plan(2)
 eq(result.data.total_area,undefined,'Conflicting neighbouring floors leave unlabelled table ambiguous');
 assert(result.blocking.some(s=>s.includes('2-й этаж')));passed++;
 result=core.analyze([title(),p1(),page(3,[...plan(2),...table()]),page(4,[w('Общая площадь дома: 45,00 м²',20,20)])]);
-eq(result.data.total_area,'45,00','Explicit whole-house area takes priority');
+eq(result.data.total_area,'50,00','Catalogue area sums floor schedules even when the printed house total differs');
 eq(core.floorIn('План II этажа'),'floor2','Roman floor heading');
 
 eq(core.floorIn('План 2-го этажа. Стены подвала'),'floor2','Basement note cannot override named second floor');
