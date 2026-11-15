@@ -5,18 +5,18 @@ const root=path.resolve(__dirname,'..'),png=fs.readFileSync(path.join(root,'icon
  const browser=await(process.env.CATALOG_BROWSER==='webkit'?webkit:chromium).launch({executablePath:process.env.BROWSER_EXECUTABLE||undefined,headless:true,args:process.env.CATALOG_BROWSER==='webkit'?[]:['--no-sandbox','--disable-dev-shm-usage']});
  try{
  const context=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
- await context.addInitScript({path:path.join(__dirname,'mock.js')});
- await context.addInitScript(()=>{
+ const prepare=()=>{
   const form='00000000-0000-4000-8000-000000000001',url='https://chbkkoxwzpaghanofvqk.supabase.co/storage/v1/object/public/tz-references/tz-refs/'+form+'/own.png';
   window.__tz={id:form,answers:{ar_refs_files:[url]}};window.__privateCache=[];
-  const native=window.fetch;window.fetch=(u,o)=>{if(String(u).startsWith('https://media.test/'))__privateCache.push(o?.cache);return native(u,o);};
+  const native=window.fetch;window.fetch=(u,o)=>{if(String(u).startsWith('https://media.test/'))__privateCache.push(o?.cache);return native.call(window,u,o);};
   const create=supabase.createClient;supabase.createClient=function(u,k,options){
    window.__mediaOptions=options;
    const c=create(u,k,options),from=c.storage.from;c.storage.from=function(bucket){
     const object=from.call(this,bucket);object.download=async path=>{const r=await options.global.fetch('https://media.test/'+path,{headers:options.global.headers});return r.ok?{data:await r.blob(),error:null}:{data:null,error:{message:'denied'}};};return object;
    };return c;
   };
- });
+ };
+ await context.addInitScript({content:fs.readFileSync(path.join(__dirname,'mock.js'),'utf8')+';('+prepare.toString()+')()'});
  let deny=false,raw=0;
  await context.route('**/*',route=>{
   const u=new URL(route.request().url());
@@ -35,7 +35,7 @@ const root=path.resolve(__dirname,'..'),png=fs.readFileSync(path.join(root,'icon
  await page.goto('https://app.test/tz.html?token=private-fixture');
  await page.waitForFunction(()=>typeof tzForm!=='undefined'&&tzForm&&window.ARHITTEKBriefMedia);
  await page.evaluate(()=>{document.getElementById('app').innerHTML=renderField({id:'ar_refs',type:'refs',label:'Референсы'});});
- await page.waitForFunction(()=>{const i=document.querySelector('img[data-brief-ref]');return i?.src.startsWith('blob:')&&i.complete&&i.naturalWidth===32;});
+ await page.waitForFunction(()=>{const i=document.querySelector('img[data-brief-ref]');return i?.src.startsWith('blob:')&&i.complete&&i.naturalWidth===32;}).catch(async e=>{throw Error(e.message+' '+JSON.stringify({errors,detail:await page.evaluate(()=>({html:document.getElementById('app').innerHTML,cache:window.__privateCache,actor:token,form:tzForm?.id}))}));});
  assert.equal(raw,0);
  assert.deepEqual(await page.evaluate(()=>__privateCache),['no-store']);
  assert.equal(await page.evaluate(()=>__mediaOptions.auth.persistSession),false);
