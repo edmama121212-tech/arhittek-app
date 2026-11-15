@@ -170,6 +170,12 @@ function cePreview(){
   initCardFloorEditor();
   const v=id=>document.getElementById(id)?.value||'';
   const set=(id,val)=>{const el=document.getElementById(id);if(el)el.textContent=val;};
+  const calculationCard={floors:ceFloorsSelected,tags:ceFeatureSelected.includes('basement')?['Цокольный этаж']:[],...Object.fromEntries(CatalogFloors.definitions.flatMap(f=>[[f.area,v('ce-area'+f.suffix)],[f.rooms,parseExpl(v('ce-expl'+f.suffix),v('ce-area'+f.suffix))]]))};
+  const calculated=CatalogFloors.calculateAreas(calculationCard);
+  for(const [field,value]of Object.entries(calculated.patch)){const f=CatalogFloors.definitions.find(f=>f.area===field);if(f){const el=document.getElementById('ce-area'+f.suffix);if(el)el.value=value;}}
+  if(calculated.complete)document.getElementById('ce-area').value=calculated.patch.total_area;
+  const titleInput=document.getElementById('ce-title');
+  if(titleInput&&(!titleInput.value.trim()||titleInput.dataset?.autoTitle===titleInput.value)){titleInput.value=CatalogFloors.defaultTitle(calculationCard);if(titleInput.dataset)titleInput.dataset.autoTitle=titleInput.value;}
   const num=v('ce-num'),title=v('ce-title');
   const card={floors:ceFloorsSelected,tags:ceFeatureSelected.includes('basement')?['Цокольный этаж']:[]};
   set('prev-title',num?`Проект №${num}${title?' — '+title:''}`:'Проект №—');
@@ -187,7 +193,7 @@ function cePreview(){
     if(!visible&&panel.style.display==='block')cePrevTab('prev-facade',document.querySelector('#prev-tabs > div'));
     const area=v('ce-area'+f.suffix)||'—';
     set('prev-a'+f.suffix+'-badge',area+' м²');set('prev-total'+f.suffix,area+' м²');
-    document.getElementById('prev-expl'+f.suffix+'-rows').innerHTML=CatalogFloors.rows(parseExpl(v('ce-expl'+f.suffix)));
+    document.getElementById('prev-expl'+f.suffix+'-rows').innerHTML=CatalogFloors.rows(parseExpl(v('ce-expl'+f.suffix),v('ce-area'+f.suffix)));
     const img=document.getElementById('prev-plan'+f.suffix+'-img'),src=ceImages[f.image];
     if(src)img.src=src;else img.removeAttribute('src');
     img.style.display=src?'block':'none';
@@ -200,14 +206,7 @@ function cePreview(){
   ['basement','mansard','flat'].forEach(id=>document.getElementById('feature-btn-'+id)?.setAttribute('aria-pressed',String(ceFeatureSelected.includes(id))));
 }
 
-function parseExpl(text){
-  return (text||'').split('\n').filter(l=>l.trim()).map((l,i)=>{
-    const parts = l.split(':');
-    const area = parts.pop().trim().replace('.',',');
-    const name = parts.join(':').trim();
-    return { name, area };
-  });
-}
+function parseExpl(text,expectedArea){return CatalogFloors.normalizeRooms(text,{expectedArea});}
 
 // dataURL → Blob (для выгрузки base64-картинок в Storage)
 function dataURLtoBlob(dataurl){
@@ -285,7 +284,7 @@ async function saveCard(){
       })(),
       ...Object.fromEntries(CatalogFloors.definitions.flatMap(f=>[
         [f.area,document.getElementById('ce-area'+f.suffix).value.trim()],
-        [f.rooms,parseExpl(document.getElementById('ce-expl'+f.suffix).value)]
+        [f.rooms,parseExpl(document.getElementById('ce-expl'+f.suffix).value,document.getElementById('ce-area'+f.suffix).value)]
       ])),
       images,
       thumbnails: thumbs,

@@ -56,11 +56,12 @@ const eq=(actual,expected,name)=>{assert.deepEqual(actual,expected,name);results
   await saveCard();const card=__db.project_cards.find(c=>c.project_number==='00157-A');localStorage.setItem('catalog-floor-test',JSON.stringify(card));return card;
  });
  assert(saved?.id,'New card persisted');results.push('Create succeeds');
- eq([saved.project_number,saved.floors,saved.price,saved.floor3_area,saved.basement_area],['00157-A',3,'77777','45,25','60'],'Project number, manual price and separate areas survive save');
+ eq([saved.project_number,saved.floors,saved.price,saved.floor3_area,saved.basement_area],['00157-A',3,'77777','45,25','60,00'],'Project number, manual price and separate areas survive save');
+ eq(saved.total_area,'255,25','Overall area sums all three floors and basement instead of keeping the stale manual total');
  eq([saved.expl3,saved.expl_basement],[[{name:'Кабинет',area:'45,25'}],[{name:'Кладовая',area:'60'}]],'Separate new explications survive save');
  eq(saved.images.map(x=>x.split('/').pop()),['facade1.jpg','facade2.jpg','plan1.jpg','plan2.jpg','plan3.jpg','basement.jpg'],'Existing and new image slots are preserved');
  await fresh();await page.evaluate(async id=>{await loadCards();openCardEditor(id)},saved.id);
- eq(await page.evaluate(()=>[document.getElementById('ce-area3').value,document.getElementById('ce-areab').value,document.getElementById('ce-expl3').value,ceImages[5]]),['45,25','60','Кабинет: 45,25','https://images.test/basement.jpg'],'Full page reload restores all new fields');
+ eq(await page.evaluate(()=>[document.getElementById('ce-area3').value,document.getElementById('ce-areab').value,document.getElementById('ce-expl3').value,ceImages[5]]),['45,25','60,00','Кабинет: 45,25','https://images.test/basement.jpg'],'Full page reload restores all new fields');
  await page.locator('#prev-tab-floor3').click();
  eq(await page.locator('#prev-floor3 .expl-name').textContent(),'Кабинет','Third floor preview shows its own explication');
  await page.locator('#prev-tab-basement').click();

@@ -1,0 +1,13 @@
+const assert=require('node:assert/strict');global.window=global;require('../catalog-floors.js');const F=CatalogFloors;
+assert.deepEqual(F.normalizeRooms('Спальня 1 — 20,40\nКухня: 12.50\nКотельная 5,10'),[{name:'Спальня 1',area:'20,40'},{name:'Кухня',area:'12,50'},{name:'Котельная',area:'5,10'}]);
+assert.deepEqual(F.normalizeRooms([{name:'',area:'Зал - 40,51'}]),[{name:'Зал',area:'40,51'}]);
+assert.deepEqual(F.normalizeRooms([{name:'',area:'СП - 19-63'}],{expectedArea:'19,63'}),[{name:'СП',area:'19,63'}]);
+assert.equal(F.normalizeRooms([{name:'',area:'СП - 19-63'}])[0].name,'','An ambiguous decimal is not turned into a 63 square metre room');
+assert.equal(F.normalizeRooms([{name:'',area:'СП - 19-63'}],{expectedArea:25})[0].name,'','An OCR repair must agree with the independent floor total');
+const c={floors:2,tags:['Цокольный этаж'],expl1:[{name:'',area:'Зал - 20,10'}],expl2:[{name:'СП',area:'30,20'}],expl_basement:[{name:'Подвал',area:'5,05'}],expl3:[{name:'Неактивный этаж',area:'999'}],total_area:'9999'};
+const sum=F.calculateAreas(c);assert.equal(sum.patch.total_area,'55,35');assert.equal(sum.patch.floor1_area,'20,10');assert.equal(c.total_area,'9999','Calculations do not mutate source records');
+assert.equal(F.calculateAreas({floors:2,expl1:c.expl1}).complete,false,'Missing second floor cannot be silently counted as zero');
+assert.equal(F.defaultTitle({floors:3}),'Трёхэтажный дом');
+assert(F.rows([{name:'',area:'Зал - 40,51'}]).includes('Зал'));
+assert.deepEqual(F.normalizeRooms([{name:'',area:'Гардероб - 09,20,'}]),[{name:'Гардероб',area:'09,20'}]);
+console.log(JSON.stringify({catalogDataNormalization:'passed',checks:12}));

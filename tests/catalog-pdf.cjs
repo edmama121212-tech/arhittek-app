@@ -3,7 +3,7 @@ const fs=require('fs'),path=require('path'),assert=require('node:assert/strict')
 const {PGlite}=require('@electric-sql/pglite'),{chromium,webkit}=require(process.env.CATALOG_PLAYWRIGHT_MODULE||'playwright'),{jsPDF}=require('jspdf');
 const core=require('../catalog-pdf-core'),root=path.resolve(__dirname,'..');
 let passed=0;const eq=(a,b,label)=>{assert.deepEqual(a,b,label);passed++};
-function fixture({retryPlan=false,number='00157-A',floors=3,basement=true,padding=0,embeddedFacade=false,coverOnly=false,duplicateIds=false,mismatchArea=false,compound=false,noRoomNames=false,noDimensions=false}={}){
+function fixture({retryPlan=false,number='00157-A',floors=3,basement=true,padding=0,embeddedFacade=false,coverOnly=false,duplicateIds=false,mismatchArea=false,compound=false,noRoomNames=false,noDimensions=false,noVisual=false}={}){
  const pdf=new jsPDF({unit:'pt',format:[900,640],orientation:'landscape'});
  if(padding)pdf.internal.write('%'+'x'.repeat(padding));
  const legacy=s=>s.replace(/[А-Яа-яЁё№]/g,c=>c==='№'?'¹':c==='Ё'?'¨':c==='ё'?'¸':String.fromCharCode(c.charCodeAt(0)-0x410+0xc0));
@@ -22,7 +22,7 @@ function fixture({retryPlan=false,number='00157-A',floors=3,basement=true,paddin
   text('Проект №'+number,590,590);text('План '+label,590,610);
  }
  // Bright facade illustrations exercise rendering and image selection.
- for(const color of (coverOnly?[]:[[60,120,170],[90,150,100]])){pdf.addPage();pdf.setFillColor(...color);pdf.rect(60,40,780,560,'F');pdf.setFillColor(230,220,200);pdf.rect(220,210,460,300,'F');if(embeddedFacade){pdf.setFillColor(255);pdf.rect(0,0,900,640,'F');pdf.addImage('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAALUlEQVR4nO3NsQ0AIAzAsCAx9HiO5gnYHGX3qjP17930NQAAAAAAAAAAAPCqCxaJAvodmQr4AAAAAElFTkSuQmCC','PNG',240,150,400,300);text('Дополнительные сведения и пояснения к проекту. Архитектурные материалы, отделка и комплектация здания.',60,80);}}
+ for(const color of (coverOnly||noVisual?[]:[[60,120,170],[90,150,100]])){pdf.addPage();pdf.setFillColor(...color);pdf.rect(60,40,780,560,'F');pdf.setFillColor(230,220,200);pdf.rect(220,210,460,300,'F');if(embeddedFacade){pdf.setFillColor(255);pdf.rect(0,0,900,640,'F');pdf.addImage('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAALUlEQVR4nO3NsQ0AIAzAsCAx9HiO5gnYHGX3qjP17930NQAAAAAAAAAAAPCqCxaJAvodmQr4AAAAAElFTkSuQmCC','PNG',240,150,400,300);text('Дополнительные сведения и пояснения к проекту. Архитектурные материалы, отделка и комплектация здания.',60,80);}}
  return Buffer.from(pdf.output('arraybuffer'));
 }
 async function sqlTests(){
@@ -296,6 +296,7 @@ function coreTests(){
  const unnamed=await read(fixture({number:'00009',floors:1,basement:false,noRoomNames:true}));eq([!!unnamed.images[2],unnamed.blocking.some(s=>s.includes('подписать'))],[false,true],'A plan with unverified room positions is blocked instead of publishing missing names');
  const undimensioned=await read(fixture({number:'00010',floors:1,basement:false,noDimensions:true}));eq([!!undimensioned.images[2],undimensioned.sources.plans.floor1.widthMm,undimensioned.warnings.some(s=>s.includes('без размеров'))],[true,null,true],'Unknown overall dimensions are not invented');
  const noVector=await page.evaluate(()=>CatalogPlan.prepare({pdfjs:{OPS:{}},page:{getOperatorList:async()=>({fnArray:[],argsArray:[]}),getViewport:()=>({transform:[1,0,0,1,0,0]})},info:{width:900,height:640,items:[],phrases:[],text:'',tables:[]},table:{rows:[]},key:'floor1'}));eq([noVector.ok,noVector.image],[false,undefined],'An unsupported scan cannot silently bypass clean-plan preparation');
+ const skipped=await read(fixture({number:'00011',floors:1,basement:false,noVisual:true}));eq([skipped.excluded,skipped.exclusionReason,skipped.images.some(Boolean),skipped.blocking],[true,'no-visualization',false,[]],'Albums without facade visualizations are excluded before plan processing');
  const one=await read(fixture({number:'00002',floors:1,basement:false}));eq([one.data.floors,one.data.tags.includes('Цокольный этаж')],[1,false],'Legend alone cannot enable basement');
  await page.evaluate(()=>{openCardEditor();CatalogPdfImport.apply(__parsed);window.__importFailure=true;});
  const failed=await page.evaluate(()=>saveCard());eq(failed.ok,false,'Failed import reports failure');

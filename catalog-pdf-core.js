@@ -204,20 +204,20 @@
       if(!l.plan)blocking.push('Не найден план: '+label);
       total+=l.table.total;sources[key]={page:l.table.page,planPage:l.plan?.page,area:'table',association:l.table.association||'explicit'};
     }
-    // Prefer an explicitly named whole-building area; otherwise sum distinct floors once.
+    // Catalogue area is the sum of distinct confirmed floor schedules. The printed total is only a cross-check.
     let explicitArea=null;const areaCandidates=[];
     for(const p of pages)for(const l of p.lines){const m=l.text.match(/(?:общая\s+площадь\s+(?:дома|здания)|площадь\s+дома)\s*[:=—-]?\s*(\d+(?:[.,]\d{1,2})?)\s*(?:м[²2])?/iu);if(m&&number(m[1])>0)areaCandidates.push({value:number(m[1]),page:p.page});}
     if(areaCandidates.length){
       explicitArea=areaCandidates[0].value;sources.total_area={page:areaCandidates[0].page,area:'explicit'};
-      if(areaCandidates.some(a=>Math.abs(a.value-explicitArea)>.01))blocking.push('Общая площадь: в альбоме разные значения');
+      if(areaCandidates.some(a=>Math.abs(a.value-explicitArea)>.01))warnings.push('Общая площадь: напечатанные значения различаются; используется сумма этажей');
     }
-    if(explicitArea)data.total_area=area(number(explicitArea));
-    else if(complete){data.total_area=area(total);sources.total_area={pages:activeKeys.map(k=>levels[k].table.page),area:'sum_of_floor_tables'};}
+    if(complete){data.total_area=area(total);sources.total_area={pages:activeKeys.map(k=>levels[k].table.page),area:'sum_of_floor_tables'};if(explicitArea&&Math.abs(explicitArea-total)>.05)warnings.push('Общая площадь рассчитана как сумма этажей; напечатанное значение отличается');}
+    else if(explicitArea)warnings.push('Общая площадь будет рассчитана после распознавания всех этажей');
     const rooms=activeKeys.flatMap(k=>levels[k]?.table?.rows||[]);
     if(!explicitArea&&complete&&rooms.some(r=>/террас|навес|балкон|лоджи/iu.test(r.name)))warnings.push('Общая площадь взята из экспликаций, включая открытые помещения');
     if(complete){
-      data.beds=rooms.filter(r=>/спальн|^сп(?:\s|[-–—.]|\d|$)|детск/iu.test(r.name)).length;
-      data.baths=rooms.filter(r=>/^(?:с\s*[\/.]?\s*у)(?:\s|[-–.]|\d|$)|сануз|ванн|душев|туалет/iu.test(r.name)).length;
+      data.beds=rooms.filter(r=>/спальн|^м?\s*сп(?:\s|[-–—.]|\d|$)|детск/iu.test(r.name)).length;
+      data.baths=rooms.filter(r=>/^(?:м?с\s*[\/.]?\s*у)(?:\s|[-–.]|\d|$)|сануз|ванн|душев|туалет/iu.test(r.name)).length;
     }
     const text=pages.map(p=>p.text).join('\n');
     if(/газ[оа]б{1,2}л{1,2}ок/iu.test(text))data.tags.push('Газоблок');

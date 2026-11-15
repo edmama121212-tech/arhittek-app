@@ -216,6 +216,11 @@
       const selected=facadeCandidates.sort((a,b)=>b.score-a.score||a.page-b.page).slice(0,2),facades=selected.map(f=>f.page);
       const usedPages=new Set(Object.values(result.levels).map(l=>l.table?.page));
       if(pages.some(p=>usedPages.has(p.page)&&p.ocr&&(!Number.isFinite(p.confidence)||p.confidence<70)))result.blocking.push('Качество скана требует проверки распознанных данных');
+      if(!facades.length){
+        result.excluded=true;result.exclusionReason='no-visualization';result.blocking=[];result.images=CatalogFloors.slots();result.thumbnails=CatalogFloors.slots();result.sha256=sha256;result.sources.facades=[];
+        result.sources.file={originalBytes:file.size,workingBytes:prepared.file.size,optimized:prepared.optimized,lossless:true};
+        progress(job,'Проект пропущен: в альбоме нет визуализации фасада',95);return result;
+      }
       const optionalContent=await doc.getOptionalContentConfig({intent:'display'});check(job);
       const images=CatalogFloors.slots(),thumbnails=CatalogFloors.slots();
       if(!facades.length)result.blocking.push('Не найдена визуализация фасада');
@@ -319,7 +324,9 @@
     const panel=document.getElementById('cardEditorOverlay');job.controls=[...panel.querySelectorAll('input,textarea,select,button')].filter(el=>el.id!=='ce-pdf-cancel'&&!String(el.getAttribute('onclick')).includes('closeCardEditor')).map(el=>[el,el.disabled]);
     job.controls.forEach(([el])=>el.disabled=true);document.getElementById('ce-pdf-cancel').hidden=false;
     try{
-      const result=await read(file,{job});check(job);unlock(job);apply(result);
+      const result=await read(file,{job});check(job);unlock(job);
+      if(result.excluded){status('Проект пропущен: в альбоме не найдена визуализация фасада. Карточка не создана.',null);const report=document.getElementById('cards-pdf-result');if(report){report.hidden=false;report.textContent='Пропущен: нет визуализации фасада.';}document.getElementById('ce-save-btn').disabled=true;return;}
+      apply(result);
       const note=result.blocking.length?'Нужна проверка: '+result.blocking.join('. ')+'. ':'Данные из PDF извлечены. ';
       status(note+'Черновик не сохранён. Проверьте карточку и нажмите «Сохранить проект».',null);
       const report=document.getElementById('cards-pdf-result');if(report){report.hidden=false;report.textContent='PDF прочитан. Открыт черновик карточки — сохранение только по кнопке «Сохранить проект».';}
