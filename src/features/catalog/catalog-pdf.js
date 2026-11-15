@@ -92,7 +92,7 @@
     const thumbnail=thumb.toDataURL('image/jpeg',.75);crop.width=crop.height=thumb.width=thumb.height=0;
     return {image,thumbnail};
   }
-  async function ocrPage(doc,pageInfo,job,region){
+  async function ocrPage(doc,pageInfo,job,region,{mergeNative=false,digitsOnly=false}={}){
     if(!job.ocrWorker){
       progress(job,'Подготавливаю распознавание таблиц…',40);await loadTesseractScript();check(job);
       job.ocrWorker=await Tesseract.createWorker('rus+eng',Tesseract.OEM.LSTM_ONLY,{logger:m=>{if(m.status==='recognizing text'&&!job.cancelled)job.onProgress?.('Распознаю таблицу, страница '+pageInfo.page+'…',45);}});check(job);
@@ -101,17 +101,54 @@
     const canvas=document.createElement('canvas');canvas.width=Math.ceil((box.x1-box.x0)*scale);canvas.height=Math.ceil((box.y1-box.y0)*scale);
     try{
       job.renderTask=page.render({canvasContext:canvas.getContext('2d'),viewport,transform:[1,0,0,1,-box.x0*scale,-box.y0*scale],background:'rgb(255,255,255)'});await job.renderTask.promise;job.renderTask=null;check(job);
+      if(digitsOnly)await job.ocrWorker.setParameters({tessedit_char_whitelist:'0123456789'});
       const recognized=await CatalogOcr.recognize(job.ocrWorker,canvas,{check:()=>check(job),onProgress:pass=>progress(job,'Перечитываю таблицу: лист '+pageInfo.page+', проход '+pass,45)});
       const words=recognized.words.map(w=>({...w,x0:w.x0/scale+box.x0,x1:w.x1/scale+box.x0,y0:w.y0/scale+box.y0,y1:w.y1/scale+box.y0}));
-      const native=region?pageInfo.items.filter(w=>w.cx<box.x0||w.cx>box.x1||w.cy<box.y0||w.cy>box.y1):[];
-      const result=CatalogPdfCore.pageFromItems([...native,...words],pageInfo.width,pageInfo.height,pageInfo.page,true);result.confidence=recognized.confidence;return result;
-    }finally{job.renderTask=null;canvas.width=canvas.height=0;page.cleanup();}
+      const native=mergeNative?pageInfo.items:region?pageInfo.items.filter(w=>w.cx<box.x0||w.cx>box.x1||w.cy<box.y0||w.cy>box.y1):[];
+      const fresh=mergeNative?words.filter(w=>!native.some(n=>String(n.text).replace(/\s/g,'')===String(w.text).replace(/\s/g,'')&&Math.abs(n.cx-(w.x0+w.x1)/2)<Math.max(n.h,w.y1-w.y0)&&Math.abs(n.cy-(w.y0+w.y1)/2)<Math.max(n.h,w.y1-w.y0))):words;
+      const result=CatalogPdfCore.pageFromItems([...native,...fresh],pageInfo.width,pageInfo.height,pageInfo.page,true);result.confidence=recognized.confidence;return result;
+    }finally{if(digitsOnly)await job.ocrWorker.setParameters({tessedit_char_whitelist:''});job.renderTask=null;canvas.width=canvas.height=0;page.cleanup();}
   }
   function tableRegion(info,table){
     const header=info.items.find(w=>/^наименование/iu.test(w.text));if(!table&&!header)return null;
     const h=header?.h||10,left=table?.left??header.x0-h*4,top=table?.top??header.y0;
     const area=info.items.find(w=>/^площадь/iu.test(w.text)&&w.x0>left&&Math.abs(w.cy-top)<h*3);
     return {x0:Math.max(0,left-h*2),y0:Math.max(0,top-h*3),x1:Math.min(info.width,(table?.right??area?.x1??info.width)+h*4),y1:info.height};
+  }
+  async function ocrRoomMarkers(doc,info,job,region,markers){
+    if(!job.ocrWorker)return info;
+    const page=await doc.getPage(info.page),scale=3000/Math.max(region.x1-region.x0,region.y1-region.y0),canvas=document.createElement('canvas'),strip=document.createElement('canvas');
+    canvas.width=Math.ceil((region.x1-region.x0)*scale);canvas.height=Math.ceil((region.y1-region.y0)*scale);
+    try{
+      job.renderTask=page.render({canvasContext:canvas.getContext('2d'),viewport:page.getViewport({scale}),transform:[1,0,0,1,-region.x0*scale,-region.y0*scale],background:'#fff'});await job.renderTask.promise;job.renderTask=null;check(job);
+      // Room bubbles can be fragmented paths or raster glyphs, invisible to
+      // text extraction. Find closed circular ink components in the source.
+      const W=canvas.width,H=canvas.height,pixels=canvas.getContext('2d').getImageData(0,0,W,H).data,seen=new Uint8Array(W*H),circles=[];
+      const ink=i=>pixels[i*4]<220&&pixels[i*4+1]<220&&pixels[i*4+2]<220;
+      for(let seed=0;seed<seen.length;seed++){
+        if(seen[seed]||!ink(seed))continue;const queue=[seed];seen[seed]=1;let minX=W,maxX=0,minY=H,maxY=0;
+        for(let n=0;n<queue.length;n++){const i=queue[n],x=i%W,y=Math.floor(i/W);minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);
+          for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){if(!dx&&!dy||x+dx<0||x+dx>=W||y+dy<0||y+dy>=H)continue;const q=i+dy*W+dx;if(!seen[q]&&ink(q)){seen[q]=1;queue.push(q);}}
+        }
+        const w=maxX-minX,h=maxY-minY,cx=(minX+maxX)/2,cy=(minY+maxY)/2,r=(w+h)/4;
+        if(w<15||w>Math.min(W,H)*.09||Math.abs(w/h-1)>.12||queue.length<25||queue.length>w*h*.3)continue;
+        if(queue.filter(i=>Math.abs(Math.hypot(i%W-cx,Math.floor(i/W)-cy)/r-1)<.16).length<queue.length*.94)continue;
+        circles.push({x0:region.x0+minX/scale,y0:region.y0+minY/scale,x1:region.x0+maxX/scale,y1:region.y0+maxY/scale});
+      }
+      if(circles.length>=3){const groups=circles.map(b=>circles.filter(q=>Math.abs((q.x1-q.x0)/(b.x1-b.x0)-1)<.15)).sort((a,b)=>b.length-a.length);if(groups[0].length>=3)markers=groups[0];}
+      if(markers.length<3){info.markerRecovery={detected:markers.length,decoded:0};return info;}
+      strip.width=180;strip.height=markers.length*110;
+      const ctx=strip.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,strip.width,strip.height);
+      markers.forEach((b,i)=>{const w=b.x1-b.x0,h=b.y1-b.y0;ctx.drawImage(canvas,(b.x0-region.x0+w*.19)*scale,(b.y0-region.y0+h*.22)*scale,w*.62*scale,h*.56*scale,34,i*110+20,112,70);});
+      await job.ocrWorker.setParameters({tessedit_pageseg_mode:6,tessedit_char_whitelist:'0123456789',preserve_interword_spaces:'1'});
+      const {data}=await job.ocrWorker.recognize(strip,{}, {blocks:true,text:true});check(job);
+      const decoded=CatalogOcr.words(data).filter(w=>/^\d{1,3}$/.test(w.text)&&w.confidence>=40),items=[];
+      for(let i=0;i<markers.length;i++){
+        const matches=decoded.filter(w=>Math.floor((w.y0+w.y1)/2/110)===i);if(matches.length!==1)continue;
+        const b=markers[i],h=(b.y1-b.y0)*.45,cx=(b.x0+b.x1)/2,cy=(b.y0+b.y1)/2,w=matches[0];items.push({text:w.text,confidence:w.confidence,markerVerified:true,x0:cx-h*.3*w.text.length,x1:cx+h*.3*w.text.length,y0:cy-h/2,y1:cy+h/2});
+      }
+      const recovered=CatalogPdfCore.pageFromItems([...info.items,...items],info.width,info.height,info.page,true);recovered.markerRecovery={detected:markers.length,decoded:items.length,ids:items.map(w=>w.text)};return recovered;
+    }finally{await job.ocrWorker.setParameters({tessedit_char_whitelist:''});canvas.width=canvas.height=strip.width=strip.height=0;page.cleanup();}
   }
   async function read(file,options={}){
     const job=options.job||{...options,cancelled:false};let task;
@@ -152,6 +189,13 @@
         }catch(e){if(e.name==='AbortError')throw e;recoveryWarnings.push('Не удалось повторно распознать таблицу на листе '+n+'. Проверьте её вручную');}
       }
       result.warnings.push(...recoveryWarnings);
+      const folderNumber=options.projectNumber||CatalogPdfCore.folderNumber(options.sourceFolder||file.webkitRelativePath);
+      if(folderNumber&&/^\d{4,5}$/.test(folderNumber)){
+        result.data.project_number=folderNumber;result.sources.project_number={from:'folder',value:folderNumber};
+        result.blocking=result.blocking.filter(w=>!/^Номер проекта:|Не указан номер проекта/iu.test(w));
+        result.warnings=result.warnings.filter(w=>!/^Номер проекта выбран/iu.test(w));
+      }
+
       const facadeCandidates=[],isVisual=p=>/визуализац|перспектив|экстерьер|общий\s+вид|3[dд]\s*вид/iu.test(p.text);
       for(const p of pages.slice().sort((a,b)=>Number(isVisual(b))-Number(isVisual(a))||Number(meaningful(a))-Number(meaningful(b))||a.page-b.page)){
         check(job);if(CatalogPdfCore.planInfos(p,result.data.floors).length||p.tables.length)continue;
@@ -187,8 +231,26 @@
           progress(job,'Перепроверяю план: попытка '+(attempts.length+1)+' из '+candidates.length+'…',65+i/assets.length*25);
           const page=await doc.getPage(candidate);
           try{
-            const prepared=await CatalogPlan.prepare({pdfjs,page,info:pages[candidate-1],table:result.levels[asset.key].table,key:asset.key,optionalContent,reference:asset.key!=='floor1'?result.sources.plans?.floor1:null,knownFootprint:result.sources.footprint?.from==='dimension_lines'?{value:result.data.footprint,page:result.sources.footprint.page}:null,check:()=>check(job)});check(job);attempts.push({page:candidate,passed:prepared.ok,reason:prepared.reason||null});
-            if(prepared.ok){result.levels[asset.key].plan.page=candidate;result.sources[asset.key].planPage=candidate;images[asset.index]=prepared.image;thumbnails[asset.index]=prepared.thumbnail;(result.sources.plans??={})[asset.key]=prepared.report;
+            let prepared=await CatalogPlan.prepare({pdfjs,page,info:pages[candidate-1],table:result.levels[asset.key].table,key:asset.key,optionalContent,reference:asset.key!=='floor1'?result.sources.plans?.floor1:null,knownFootprint:result.sources.footprint?.from==='dimension_lines'?{value:result.data.footprint,page:result.sources.footprint.page}:null,check:()=>check(job)});check(job);
+            if(!prepared.ok&&prepared.code==='room-labels'&&prepared.region&&!job.planOcrUnavailable){
+              try{
+              progress(job,'Распознаю номера и подписи комнат на плане, лист '+candidate+'…',70);
+              const recovered=await ocrPage(doc,pages[candidate-1],job,prepared.region,{mergeNative:true});check(job);
+              prepared=await CatalogPlan.prepare({pdfjs,page,info:recovered,table:result.levels[asset.key].table,key:asset.key,optionalContent,reference:asset.key!=='floor1'?result.sources.plans?.floor1:null,check:()=>check(job)});
+              if(!prepared.ok&&prepared.code==='room-labels'){
+                const digits=await ocrPage(doc,pages[candidate-1],job,prepared.region,{mergeNative:true,digitsOnly:true});
+                prepared=await CatalogPlan.prepare({pdfjs,page,info:digits,table:result.levels[asset.key].table,key:asset.key,optionalContent,reference:asset.key!=='floor1'?result.sources.plans?.floor1:null,check:()=>check(job)});
+              }
+              if(!prepared.ok&&prepared.code==='room-labels'){
+                const markerInfo=await ocrRoomMarkers(doc,pages[candidate-1],job,prepared.region,prepared.markers||[]);
+                (result.sources.marker_recovery??={})[asset.key]=markerInfo.markerRecovery;
+                prepared=await CatalogPlan.prepare({pdfjs,page,info:markerInfo,table:result.levels[asset.key].table,key:asset.key,optionalContent,reference:asset.key!=='floor1'?result.sources.plans?.floor1:null,check:()=>check(job)});
+              }
+              if(prepared.ok)(result.sources.plan_ocr??={})[asset.key]={page:candidate,confidence:recovered.confidence};
+              }catch(e){check(job);if(e.name==='AbortError')throw e;job.planOcrUnavailable=true;(result.sources.plan_ocr_unavailable??=[]).push({page:candidate,error:e.name||'Error'});result.warnings.push('Дополнительное распознавание подписей временно недоступно. Найденные данные сохранены в черновике; неподтверждённые планы не опубликованы');}
+            }
+            attempts.push({page:candidate,passed:prepared.ok,reason:prepared.reason||null,foundRooms:prepared.foundRooms,diagnostics:prepared.diagnostics});
+            if(prepared.ok){result.levels[asset.key].plan.page=candidate;(result.sources[asset.key]??={}).planPage=candidate;images[asset.index]=prepared.image;thumbnails[asset.index]=prepared.thumbnail;(result.sources.plans??={})[asset.key]=prepared.report;
               if(prepared.report.basis==='source-room-area-consensus')result.warnings.push('Габариты '+(asset.key==='basement'?'цоколя':asset.key.slice(5)+'-го этажа')+' рассчитаны по геометрии и площадям '+prepared.report.calibratedRooms+' помещений');
               if(prepared.report.basis==='matching-scale-and-footprint')result.warnings.push('Габариты '+asset.key.slice(5)+'-го этажа перенесены с 1-го по совпадающим контуру и масштабу');
               if(prepared.report.basis==='unavailable')result.warnings.push('Габариты '+(asset.key==='basement'?'цоколя':asset.key.slice(5)+'-го этажа')+' не подтверждены — план подготовлен без размеров');

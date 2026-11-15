@@ -83,6 +83,9 @@ vm.runInThisContext(fs.readFileSync(path.join(__dirname,'../catalog-plan.js'),'u
  const outlineTask=pdfjs.getDocument({data:new Uint8Array(outlinePdf.output('arraybuffer'))}),outlineDoc=await outlineTask.promise,outlinePage=await outlineDoc.getPage(1);
  const outline=await CatalogPlan.prepare({pdfjs,page:outlinePage,info:{...info,items:[]},table:{rows:[]},key:'floor1',optionalContent:await outlineDoc.getOptionalContentConfig({intent:'display'})});assert(outline.ok,outline.reason);
  const outlineImage=await canvas.loadImage(outline.image),outlineCanvas=canvas.createCanvas(outlineImage.width,outlineImage.height),outlineCtx=outlineCanvas.getContext('2d');outlineCtx.drawImage(outlineImage,0,0);const outlinePixels=outlineCtx.getImageData(0,0,outlineImage.width,outlineImage.height).data;let wallInk=0;for(let i=0;i<outlinePixels.length;i+=4)if(outlinePixels[i]<70&&outlinePixels[i+1]<90&&outlinePixels[i+2]<100)wallInk++;assert(wallInk>10000,'Stroke-only source wall outlines remain visible');await outlineTask.destroy();
- await task.destroy();console.log(JSON.stringify({planStyle31:'passed',checks:29}));
+ const blobPdf=new jsPDF({unit:'pt',format:[900,640],orientation:'landscape'});blobPdf.setFillColor(90);for(const [x,y,w,h]of [[70,100,420,10],[70,510,420,10],[70,100,10,420],[480,100,10,420],[180,220,90,90]])blobPdf.rect(x,y,w,h,'F');
+ const blobTask=pdfjs.getDocument({data:new Uint8Array(blobPdf.output('arraybuffer'))}),blobDoc=await blobTask.promise;
+ const blob=await CatalogPlan.prepare({pdfjs,page:await blobDoc.getPage(1),info:{...info,items:[]},table:{rows:[]},key:'floor1',optionalContent:await blobDoc.getOptionalContentConfig({intent:'display'})});assert.equal(blob.ok,false,'A large unexplained solid fill must block publication');assert.equal(blob.code,'solid-wall-artifact');await blobTask.destroy();
+ await task.destroy();console.log(JSON.stringify({planStyle31:'passed',checks:30}));
 })().catch(e=>{console.error(e);process.exitCode=1});
 
