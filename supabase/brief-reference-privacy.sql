@@ -42,6 +42,24 @@ create policy tz_staff_reference_delete on storage.objects for delete to anon,au
  using(bucket_id='tz-references' and arhittek_security.tz_staff_reference_access(name));
 create policy tz_staff_reference_insert on storage.objects for insert to anon,authenticated
  with check(bucket_id='tz-references' and arhittek_security.tz_staff_reference_access(name));
+-- The remaining public bucket is exclusively for published catalogue media.
+-- An old client cannot accidentally place a new private reference there.
+drop policy if exists "session upload expense-photos" on storage.objects;
+drop policy if exists "session delete expense-photos" on storage.objects;
+drop policy if exists "session read expense-photos" on storage.objects;
+drop policy if exists catalog_media_insert on storage.objects;
+drop policy if exists catalog_media_update on storage.objects;
+drop policy if exists catalog_media_delete on storage.objects;
+drop policy if exists catalog_media_select on storage.objects;
+create policy catalog_media_insert on storage.objects for insert to anon,authenticated
+ with check(bucket_id='expense-photos' and name like 'cards/%' and name !~ '(^|/)[.][.]?(/|$)' and arhittek_security.can_edit_catalog());
+create policy catalog_media_update on storage.objects for update to anon,authenticated
+ using(bucket_id='expense-photos' and name like 'cards/%' and arhittek_security.can_edit_catalog())
+ with check(bucket_id='expense-photos' and name like 'cards/%' and name !~ '(^|/)[.][.]?(/|$)' and arhittek_security.can_edit_catalog());
+create policy catalog_media_delete on storage.objects for delete to anon,authenticated
+ using(bucket_id='expense-photos' and name like 'cards/%' and arhittek_security.can_edit_catalog());
+create policy catalog_media_select on storage.objects for select to anon,authenticated
+ using(bucket_id='expense-photos' and name like 'cards/%' and arhittek_security.can_edit_catalog());
 update storage.buckets set public=false where id='tz-references';
 notify pgrst,'reload schema';
 commit;

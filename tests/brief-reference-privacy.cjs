@@ -32,6 +32,10 @@ const U=n=>'71000000-0000-4000-8000-'+String(n).padStart(12,'0');
  for(const path of ['tz-refs/'+U(20)+'/../'+U(21)+'/b.png','tz-refs/'+U(20)+'/./a.png','tz-refs/'+U(20)+'//','tz-refs/invalid/a.png']){
  eq((await as({'x-tz-token':'brief-A-fixture'},'select arhittek_security.tz_reference_access($1) ok',[path])).rows[0].ok,false);
  }
+ const owner={'x-session-token':'private-media-fixture-'+'1'.repeat(45)};
+ await assert.rejects(()=>as(owner,"insert into storage.objects(bucket_id,name) values('expense-photos','old-private-reference.jpg')"));n++;
+ eq((await as(owner,"insert into storage.objects(bucket_id,name) values('expense-photos','cards/public-card.png') returning name")).rows.length,1);
+ await assert.rejects(()=>as({},"insert into storage.objects(bucket_id,name) values('expense-photos','cards/anonymous.png')"));n++;
  await db.query("update public.projects set deleted_at=now() where id=$1",[U(10)]);
  eq(await visible({'x-tz-token':'brief-A-fixture'}),[]);
  console.log('Private brief reference RLS checks passed: '+n);
