@@ -20,7 +20,11 @@ const root=path.resolve(__dirname,'..'),png=fs.readFileSync(path.join(root,'icon
  let deny=false,raw=0;
  await context.route('**/*',route=>{
   const u=new URL(route.request().url());
-  if(u.hostname==='media.test')return route.fulfill(deny?{status:403,body:'denied'}:{body:png,contentType:'image/png'});
+  if(u.hostname==='media.test'){
+   const headers={'Access-Control-Allow-Origin':'https://app.test','Access-Control-Allow-Headers':'x-tz-token','Access-Control-Allow-Methods':'GET,OPTIONS'};
+   if(route.request().method()==='OPTIONS')return route.fulfill({status:204,headers,body:''});
+   return route.fulfill(deny?{status:403,headers,body:'denied'}:{body:png,headers,contentType:'image/png'});
+  }
   if(u.hostname==='chbkkoxwzpaghanofvqk.supabase.co'){raw++;return route.fulfill({status:403,body:'no direct image'});}
   if(u.hostname==='app.test'){
    const f=path.join(root,u.pathname.slice(1));if(fs.existsSync(f))return route.fulfill({path:f,contentType:f.endsWith('.js')?'text/javascript':f.endsWith('.html')?'text/html':undefined});
