@@ -97,6 +97,7 @@ try{
  await page.evaluate(async()=>{__db.ledger_entries=await __receiptRows();await loadAll();});
  const receiptCash=(await snapshot()).workspace.cash;
  await page.locator('#financeWorkspace [data-fw-tab="history"]').click();
+ await page.locator('#financeWorkspace summary').filter({hasText:'Исправить дату или учёт оплаты клиента'}).click();
  await page.locator('[data-fw="correct-receipt"][data-id="'+U(901)+'"]').click();
  await modal.locator('[name="mode"]').selectOption('before');
  eq(await modal.locator('[name="date"]').isDisabled(),true);
