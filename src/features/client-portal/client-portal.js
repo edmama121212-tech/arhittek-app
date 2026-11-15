@@ -206,7 +206,7 @@
   }
   function renderReceipts(s) { $('receipts-content').append(listPanel(s.receipts,receipt => { const item = el('div','item'), header = el('div','item-heading'); header.append(el('div','item-title',receipt.title),el('div','item-amount','+ ' + rubles(receipt.amount_kopeks))); item.append(header,el('div','item-meta',dayFormat(receipt.date))); return item; },'Переводов компании пока нет.')); }
   function renderRefunds(s) { $('refunds-section').hidden = !s.refunds.length; if (s.refunds.length) $('refunds-content').append(listPanel(s.refunds,refund => { const item = el('div','item'), header = el('div','item-heading'); header.append(el('div','item-title',refund.title),el('div','item-amount',rubles(refund.amount_kopeks))); item.append(header,el('div','item-meta',dayFormat(refund.date))); return item; },'')); }
-  let access = null, snapshot = null, epoch = 0, request = null, refreshTimer = null, expiryTimer = null;
+  let access = null, boundScope = null, snapshot = null, epoch = 0, request = null, refreshTimer = null, expiryTimer = null;
   const controllers = new Set(), downloading = new Set(), blobURLs = new Set();
   const enabled = doc.querySelector('meta[name="arhittek-client-portal-enabled"]')?.content === 'true';
   const API_ORIGIN = 'https://chbkkoxwzpaghanofvqk.supabase.co', API_PATH = '/functions/v1/construction-client-portal/';
@@ -224,7 +224,7 @@
     for (const url of blobURLs) root.URL.revokeObjectURL(url); blobURLs.clear();
   }
   function stop(title,message) {
-    epoch++; access = null; request = null;
+    epoch++; access = null; boundScope = null; request = null;
     for (const controller of controllers) controller.abort(); controllers.clear(); downloading.clear();
     resetView(title,message);
   }
@@ -277,6 +277,10 @@
         const bytes = await responseBytes(response,MAX_JSON_BYTES), raw = JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
         const valid = validateSnapshot(raw);
         if (currentEpoch !== epoch || !access) return;
+        if(boundScope !== null && valid.project.reference !== boundScope){
+          stop('Доступ закрыт','Привязка объекта изменилась. Запросите новую ссылку у ARHITTEK.');return;
+        }
+        boundScope = valid.project.reference;
         snapshot = valid; render(valid);
       } catch (error) {
         if (currentEpoch !== epoch || !access) return;
