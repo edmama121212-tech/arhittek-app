@@ -22,4 +22,27 @@ const doors=api.segmentedDoors([leaf,...arc],s,wall);
 assert(doors.has(leaf)&&arc.every(p=>doors.has(p)),'Disconnected CAD door-swing dashes and their actual source leaf survive');
 assert.equal(api.segmentedDoors(arc,s,wall).size,0,'An unsupported arc without a source leaf cannot add marks');
 assert.equal(api.segmentedDoors([leaf,...hatch],s,wall).size,0,'Repeated hatch strokes cannot masquerade as a door swing');
-console.log(JSON.stringify({cleanArchitecturalDetails:'passed',checks:7}));
+// Real CAD exports offset a swing centre from the structural mask by a
+// finish/jamb thickness. Keep both source parts, not an invented arc.
+const swing={...line(140,100,100,140),curved:true,commands:[[0,140,100],[2,140,122.0914,122.0914,140,100,140]]};
+const offsetWall=(x,y)=>x>=87&&x<=91&&y>=96&&y<=104;
+const offset=api.architecturalDetails([leaf,swing],s,{items:[]},offsetWall,new Set());
+assert(offset.selected.has(swing)&&offset.selected.has(leaf),'Finish-face offset must not erase the source door and leaf');
+assert(!api.architecturalDetails([swing],s,{items:[]},offsetWall,new Set()).selected.has(swing),'A curve without a radial source leaf is not a door');
+const upper=Array.from({length:6},(_,i)=>({...line(200,270+i*5,260,270+i*5),dash:true}));
+const flights=api.architecturalDetails([...stairs,...upper,grid,...hatch],s,{items:[]},()=>false,new Set());
+assert(upper.every(p=>flights.selected.has(p)),'An unnamed dashed upper flight survives beside a named lower flight');
+assert(!flights.selected.has(grid),'Adding an upper flight does not reintroduce the room grid');
+// A frame may be one compound PDF path: its first segment is a short jamb,
+// later segments carry the glazing. Only those source segments may be drawn.
+const aperture={...line(100,30,180,50),filled:true,stroked:false,fill:{gray:1},bounds:{x0:100,y0:30,x1:180,y1:50}};
+const frame={...line(100,39,180,41),commands:[[0,100,39],[1,100,41],[1,180,41],[1,180,39],[1,100,39],[0,250,200],[1,350,200]],bounds:{x0:100,y0:39,x1:350,y1:200}};
+const jambs=(x,y)=>((x>=85&&x<100)||(x>180&&x<=195))&&y>=30&&y<=50;
+const glazing=api.architecturalDetails([aperture,frame],s,{items:[]},jambs,new Set());
+assert(glazing.selected.has(frame),'A compound frame is recognised from the full source aperture');
+assert(glazing.strokes.get(frame).every(c=>c[1]<=180),'Unrelated segments in a compound path are not copied with the window');
+const textBox=api.architecturalDetails([aperture,frame],s,{items:[{text:'Спальня',cx:140,cy:40,h:8}]},jambs,new Set());
+assert(!textBox.selected.has(frame),'A room-label table cannot become a window');
+const coarse=Array.from({length:6},(_,i)=>line(100+40*Math.cos(i*Math.PI/12),100+40*Math.sin(i*Math.PI/12),100+40*Math.cos((i+1)*Math.PI/12),100+40*Math.sin((i+1)*Math.PI/12)));
+assert(coarse.every(p=>api.segmentedDoors([leaf,...coarse],s,(x,y)=>x>=92&&x<=95&&y>=96&&y<=104).has(p)),'Coarse flattened swing chords longer than the partition thickness survive');
+console.log(JSON.stringify({cleanArchitecturalDetails:'passed',checks:15}));

@@ -110,3 +110,9 @@ Save clicks still run the current publication gate. Native bootstrap tests
 start with no quality global. Chromium/WebKit regression recreates an old shell
 without its quality script/UI/save gate, loads the new renderer, and verifies
 recovery, no autosave, invalid-card blocking and a single explicit publication.
+
+## Source openings, renderer 10
+
+Preserve source door swings only with a matching radial source leaf and a nearby jamb, allowing finish-face offsets. Door geometry can reside on a furniture layer: rescue the verified pair without copying furniture. Validate window apertures as a whole before retaining their short frame/mullion segments. For compound paths, draw only accepted segments. Do not classify room-label boxes as glazing. Named stairs must not suppress an unnamed or dashed upper flight; exterior source steps remain part of the plan.
+
+Real-PDF comparisons cover 9424 (missing swings), 13325 (flights and compound glazing), 10925 (doors on the furniture layer), 15526 and 3223. Successful extraction alone is not a claim that every source opening was identified.
