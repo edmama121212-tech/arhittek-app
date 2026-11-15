@@ -116,6 +116,23 @@ async function browsers() {
   await check('An unknown advance is not converted into zero by derived arithmetic',async()=>{const s=fixture();s.cash.classification_ok=false;s.cash.company_spent_kopeks=s.cash.held_kopeks=s.cash.accountable_outstanding_kopeks=null;await open({snapshot:s});const text=await page.locator('#money-content').textContent();assert(!text.includes('Расчётный остаток без подотчёта'));assert(!text.includes('Непогашенный подотчёт'));assert.equal(await page.locator('.metric.featured .metric-value').textContent(),'—');});
   await check('A client refund is visible and reduces the same project remainder',async()=>{const s=fixture();s.refunds=[{id:'refund-1',scope_ref:SCOPE,title:'Возврат вам',date:'2026-10-19',amount_kopeks:1000000}];s.row_counts.refunds=1;s.cash.refunded_kopeks=1000000;s.cash.held_kopeks-=1000000;await open({snapshot:s});assert.equal(await page.locator('#refunds-section').isVisible(),true);assert((await page.locator('.metric.featured .metric-value').textContent()).includes('210'));assert((await page.locator('#refunds-content').textContent()).includes('Возврат вам'));});
   await check('A negative balance is visible as a deficit, not clamped to zero',async()=>{const s=fixture();s.cash.received_kopeks=1000000;s.receipts[0].amount_kopeks=1000000;s.cash.held_kopeks=-17000000;await open({snapshot:s});assert.equal(await page.locator('.metric.featured.negative').count(),1);assert((await page.locator('.warning').textContent()).includes('отрицательный'));});
+
+  await check('A fully valid foreign snapshot on refresh is blocked by the pinned object',async()=>{
+   let count=0;
+   await open({snapshotHandler:route=>{
+    const s=fixture();
+    if(++count>1){s.project.reference='scope-project-b';s.project.name='FOREIGN_CUSTOMER_SECRET';
+     for(const rows of [s.stages,s.work_items,s.invoices,s.receipts,s.refunds,s.other_costs,...s.invoices.map(i=>i.documents)])
+      for(const row of rows)row.scope_ref='scope-project-b';
+    }
+    return route.fulfill({contentType:'application/json',body:JSON.stringify(s)});
+   }});
+   await page.locator('#refresh-portal').click();
+   await page.waitForFunction(()=>document.getElementById('state-title').textContent==='Доступ закрыт');
+   assert.equal(await page.locator('#portal-content').isVisible(),false);
+   assert.equal(await page.locator('#project-name').textContent(),'');
+   assert(!(await page.content()).includes('FOREIGN_CUSTOMER_SECRET'));
+  });
   await check('Mixed project documents fail closed without showing any project data',async()=>{const s=fixture();s.invoices[0].documents[0].scope_ref='other-project';await open({snapshot:s});assert.equal(await page.locator('#portal-content').isVisible(),false);assert.equal(await page.locator('#project-name').textContent(),'');assert.equal(await page.locator('#state-title').textContent(),'Данные недоступны');});
   await check('Unknown internal response fields are rejected and never rendered',async()=>{const s=fixture();s.project.internal_note='DO NOT SHOW PRIVATE PAYROLL';await open({snapshot:s});assert.equal(await page.locator('#portal-content').isVisible(),false);assert(!(await page.locator('body').textContent()).includes('PRIVATE PAYROLL'));});
   await check('HTML, broken JSON and truncated snapshots never become financial zeroes',async()=>{for(const options of [{contentType:'text/html',rawBody:'<h1>Not API</h1>'},{rawBody:'{"broken"'},{snapshot:{...fixture(),complete:false}}]){await open(options);assert.equal(await page.locator('#portal-content').isVisible(),false);assert.equal(await page.locator('#money-content').textContent(),'');}});
