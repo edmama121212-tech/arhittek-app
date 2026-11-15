@@ -96,7 +96,7 @@ try{
  await db.query("insert into public.ledger_entries(id,project_id,type,amount,entry_date,description) values($1,$2,'advance',50000,$3,'Forgotten customer payment')",[U(901),U(10),receiptDay]);
  await page.evaluate(async()=>{__db.ledger_entries=await __receiptRows();await loadAll();});
  const receiptCash=(await snapshot()).workspace.cash;
- await page.locator('#financeWorkspace [data-fw-tab="journal"]').click();
+ await page.locator('#financeWorkspace [data-fw-tab="history"]').click();
  await page.locator('[data-fw="correct-receipt"][data-id="'+U(901)+'"]').click();
  await modal.locator('[name="mode"]').selectOption('before');
  eq(await modal.locator('[name="date"]').isDisabled(),true);
