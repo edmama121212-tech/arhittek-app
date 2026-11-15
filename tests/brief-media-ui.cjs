@@ -20,6 +20,7 @@ const root=path.resolve(__dirname,'..'),png=fs.readFileSync(path.join(root,'icon
  let deny=false,raw=0;
  await context.route('**/*',route=>{
   const u=new URL(route.request().url());
+  if(u.protocol==='blob:')return route.continue();
   if(u.hostname==='media.test'){
    const headers={'Access-Control-Allow-Origin':'https://app.test','Access-Control-Allow-Headers':'x-tz-token','Access-Control-Allow-Methods':'GET,OPTIONS'};
    if(route.request().method()==='OPTIONS')return route.fulfill({status:204,headers,body:''});
