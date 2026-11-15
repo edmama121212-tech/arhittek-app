@@ -94,8 +94,17 @@ function coreTests(){
  if(process.env.CATALOG_NO_STREAM_ITERATOR==='1')await context.addInitScript(()=>{
   Object.defineProperty(ReadableStream.prototype,Symbol.asyncIterator,{value:undefined,configurable:true});
  });
+ let generatedMode=false,generatedCalls=0,badGenerated=false;
  await context.route('**/*',route=>{
   const u=new URL(route.request().url());let file;
+  if(u.pathname.endsWith('/functions/v1/catalog-plan-generate')){
+   const headers={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'apikey,content-type,x-session-token'};
+   if(route.request().method()==='OPTIONS')return route.fulfill({status:204,headers});
+   if(route.request().method()==='GET')return route.fulfill({json:{version:generatedMode?'catalog-generated-1':'legacy',configured:generatedMode},headers});
+   const body=route.request().postDataJSON();generatedCalls++;
+   const review={walls:true,openings:!badGenerated,stairs:true,columns:true,rooms:true,labels:true,noArtifacts:true,confidence:.99,issues:[],bounds:[.05,.05,.95,.95]};
+   return route.fulfill({json:{id:'33333333-3333-4333-8333-333333333333',state:'approved',attempt:1,version:'catalog-generated-1',manifest:{version:'catalog-generated-1',...body.manifest},review,image:body.source},headers});
+  }
   let legacy=u.searchParams.get('legacy-catalog')==='1';try{legacy=legacy||route.request().frame().url().includes('legacy-catalog=1')}catch(_){}
   // WebKit exposes PDF.js's generated module-worker blob to routing.
   // Let it load its actual script instead of fulfilling it as an empty stub.
@@ -333,6 +342,20 @@ function coreTests(){
    console.log('REAL_ALBUM',id,JSON.stringify({data:actual.data,sources:actual.sources,warnings:actual.warnings}));
   }
  }
+ generatedMode=true;
+ const generated=await read(fixture({number:'GEN-01',floors:1,basement:false}));
+ eq(generated.sources.plans.floor1.renderer,'ai-furnished-source-reviewed','Normal PDF import uses configured generation service');
+ eq(generated.sources.plans.floor1.quality.method,'generated-source-vision-review','Generation has its own evidence method');
+ eq(generated.sources.plans.floor1.quality.dimensionsConfirmed,true,'Overall dimensions are confirmed and drawn outside generated image');
+ eq(generatedCalls,1,'One generation request for one floor');
+ const beforeMissing=generatedCalls;
+ const missingGeneratedDimensions=await read(fixture({number:'GEN-02',floors:1,basement:false,noDimensions:true}));
+ eq(missingGeneratedDimensions.images[2],null,'Unconfirmed dimensions block generated plan');
+ eq(generatedCalls,beforeMissing,'No paid request when dimensions are absent');
+ badGenerated=true;
+ const invalidGenerated=await read(fixture({number:'GEN-03',floors:1,basement:false}));
+ eq(invalidGenerated.images[2],null,'Rejected generated openings cannot enter a catalogue draft');
+ eq(invalidGenerated.blocking.some(x=>x.includes('не подтвердил')),true,'Rejected generation reports a blocking issue');
  eq(errors,[],'No browser JavaScript errors');console.log(JSON.stringify({passed,failed:[]}));
  }finally{await browser.close()}
 })().catch(e=>{console.error(e);process.exitCode=1});

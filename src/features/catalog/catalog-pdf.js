@@ -118,6 +118,14 @@
     try{
       if(!file||file.size===0)throw new Error('PDF-файл пуст');
       if(!(await file.slice(0,1024).text()).includes('%PDF-'))throw new Error('Выберите PDF-файл архитектурного альбома');
+      let generation=null;
+      if(options.generation!==false&&typeof CatalogPlanGeneration!=='undefined'&&typeof SUPABASE_URL!=='undefined'&&typeof SUPABASE_KEY!=='undefined'&&typeof session!=='undefined'&&session?.token&&typeof isOwner==='function'&&isOwner()){
+       const actor=session.token;
+       const connection=CatalogPlanGeneration.client({url:SUPABASE_URL,key:SUPABASE_KEY,token:actor,check:()=>{check(job);if(session?.token!==actor)throw abort();}});
+       // Older installations and isolated fixtures have no generation endpoint.
+       // A configured endpoint always uses generation and reports failures.
+       if(await connection.available())generation=connection;
+      }
       progress(job,'Открываю PDF…',2);const pdfjs=await library();check(job);
       const prepared=await CatalogPdfIO.prepare(file,job);check(job);
       progress(job,'Проверяю альбом…',3);const sha256=await CatalogPdfIO.hash(file,job);
@@ -187,7 +195,13 @@
           progress(job,'Перепроверяю план: попытка '+(attempts.length+1)+' из '+candidates.length+'…',65+i/assets.length*25);
           const page=await doc.getPage(candidate);
           try{
-            const prepared=await CatalogPlan.prepare({pdfjs,page,info:pages[candidate-1],table:result.levels[asset.key].table,key:asset.key,optionalContent,reference:asset.key!=='floor1'?result.sources.plans?.floor1:null,knownFootprint:result.sources.footprint?.from==='dimension_lines'?{value:result.data.footprint,page:result.sources.footprint.page}:null,check:()=>check(job)});check(job);attempts.push({page:candidate,passed:prepared.ok,reason:prepared.reason||null});
+            const sourceOptions={pdfjs,page,info:pages[candidate-1],table:result.levels[asset.key].table,key:asset.key,optionalContent,reference:asset.key!=='floor1'?result.sources.plans?.floor1:null,knownFootprint:result.sources.footprint?.from==='dimension_lines'?{value:result.data.footprint,page:result.sources.footprint.page}:null,check:()=>check(job)};
+            let prepared;
+            if(generation){
+             const sourcePlan=await CatalogPlan.generationSource(sourceOptions);
+             prepared=sourcePlan.ok?await CatalogPlanGeneration.prepare({source:sourcePlan,connection:generation,check:()=>check(job),onProgress:(state,attempt)=>progress(job,(state==='reviewing'?'Сверяю с исходным чертежом':state==='rejected'?'Исправляю расхождения':'Создаю объёмную планировку')+' · '+(asset.key==='basement'?'цоколь':asset.key.slice(5)+'-й этаж')+' · вариант '+attempt,65+i/assets.length*25)}):sourcePlan;
+            }else prepared=await CatalogPlan.prepare(sourceOptions);
+            check(job);attempts.push({page:candidate,passed:prepared.ok,reason:prepared.reason||null});
             if(prepared.ok){result.levels[asset.key].plan.page=candidate;result.sources[asset.key].planPage=candidate;images[asset.index]=prepared.image;thumbnails[asset.index]=prepared.thumbnail;(result.sources.plans??={})[asset.key]=prepared.report;
               if(prepared.report.basis==='source-room-area-consensus')result.warnings.push('Габариты '+(asset.key==='basement'?'цоколя':asset.key.slice(5)+'-го этажа')+' рассчитаны по геометрии и площадям '+prepared.report.calibratedRooms+' помещений');
               if(prepared.report.basis==='matching-scale-and-footprint')result.warnings.push('Габариты '+asset.key.slice(5)+'-го этажа перенесены с 1-го по совпадающим контуру и масштабу');
@@ -195,7 +209,7 @@
               if(asset.key==='floor1'&&!result.data.footprint&&prepared.report.widthMm>0&&prepared.report.heightMm>0)result.data.footprint=(prepared.report.widthMm/1000).toLocaleString('ru-RU')+' × '+(prepared.report.heightMm/1000).toLocaleString('ru-RU');
               failure=null;break;
             }else if(!failure||(prepared.foundRooms||0)>(failure.foundRooms||0))failure=prepared;
-          }finally{page.cleanup();}
+          }catch(error){if(error.name==='AbortError')throw error;failure={ok:false,reason:error.message};attempts.push({page:candidate,passed:false,reason:error.message});if(generation)break;}finally{page.cleanup();}
           }
           (result.sources.plan_review??={})[asset.key]={passed:!failure,attempts};
           if(failure)result.blocking.push('План '+(asset.key==='basement'?'цоколя':asset.key.slice(5)+'-го этажа')+': '+failure.reason+'. Нужна проверка исходного листа');

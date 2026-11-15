@@ -9,6 +9,14 @@
   const issues=Object.keys(checks).filter(k=>!checks[k]).map(k=>reasons[k]);
   return {version:VERSION,passed:!issues.length,checks,issues,wallLoss:wallSamples?wallLost/wallSamples:1,dimensionsConfirmed:dimensions?.widthMm>0&&dimensions?.heightMm>0,imageFingerprint:fingerprint(image),scheduleFingerprint:roomSchedule?scheduleFingerprint(roomSchedule):null};
  }
+ function reviewGeneratedPlan({image,rows,review,dimensions,jobId}){
+  const valid=CatalogPlanGeneration.verified(review);
+  const checks={sourceWalls:review?.walls===true,wallIntegrity:valid,roomLabels:review?.labels===true&&review?.rooms===true,stairScope:review?.stairs===true,approvedPrimitives:valid};
+  const issues=valid?[]:['Сгенерированный план не соответствует исходному чертежу'];
+  if(!jobId)issues.push('Не подтверждено серверное задание');
+  if(!(dimensions?.widthMm>0&&dimensions?.heightMm>0))issues.push('Не подтверждены общие габариты');
+  return {version:VERSION,method:'generated-source-vision-review',passed:!issues.length,checks,issues,dimensionsConfirmed:dimensions?.widthMm>0&&dimensions?.heightMm>0,imageFingerprint:fingerprint(image),scheduleFingerprint:scheduleFingerprint(rows),jobId};
+ }
  const floors=[['basement','basement_area','expl_basement',5,'Цоколь'],['floor1','floor1_area','expl1',2,'1-й этаж'],['floor2','floor2_area','expl2',3,'2-й этаж'],['floor3','floor3_area','expl3',4,'3-й этаж']];
  const num=s=>Number(String(s??'').replace(/\s/g,'').replace(',','.'));
  function reviewCard(card,meta,{strict=!!meta}={}){
@@ -38,7 +46,7 @@
   return {version:VERSION,passed:!issues.length,issues:[...new Set(issues)],scope:'pdf-card'};
  }
 
- function show(review){const box=document.getElementById('ce-quality-status');if(!box)return;box.hidden=false;box.textContent=review.passed?(review.scope==='manual-card'?'Заполненные данные проверены. Автоматическая проверка геометрии доступна для планов из PDF.':'Проверка пройдена: планы, экспликации и данные согласованы. Можно сохранить проект.'):'Сохранение заблокировано. Исправьте:\n• '+review.issues.join('\n• ');box.style.whiteSpace='pre-line';}
+ function show(review){const box=document.getElementById('ce-quality-status');if(!box)return;box.hidden=false;box.textContent=review.passed?(review.scope==='manual-card'?'Заполненные данные проверены. Автоматическая проверка геометрии доступна для планов из PDF.':'Автоматическая проверка завершена. Просмотрите планы и данные перед сохранением проекта.'):'Сохранение заблокировано. Исправьте:\n• '+review.issues.join('\n• ');box.style.whiteSpace='pre-line';}
  function checkEditor(){
   const value=id=>document.getElementById(id)?.value||'',card={project_number:value('ce-num'),title:value('ce-title'),floors:ceFloorsSelected,total_area:value('ce-area'),price:value('ce-price'),beds:value('ce-beds'),baths:value('ce-baths'),tags:ceFeatureSelected.includes('basement')?['Цокольный этаж']:[],images:ceImages};
   for(const f of CatalogFloors.definitions){card[f.area]=value('ce-area'+f.suffix);card[f.rooms]=parseExpl(value('ce-expl'+f.suffix));}
@@ -60,6 +68,6 @@
   }
   guardedSave.catalogQualityGuard=true;root.saveCard=guardedSave;
  }
- root.CatalogQuality=Object.freeze({version:VERSION,fingerprint,scheduleFingerprint,reviewPlan,reviewCard,show,checkEditor,protectSave});
+ root.CatalogQuality=Object.freeze({version:VERSION,fingerprint,scheduleFingerprint,reviewPlan,reviewGeneratedPlan,reviewCard,show,checkEditor,protectSave});
  if(typeof module!=='undefined')module.exports=root.CatalogQuality;
 })(typeof window!=='undefined'?window:globalThis);

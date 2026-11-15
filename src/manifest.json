@@ -153,6 +153,7 @@
     ],
     "catalog-pdf.js": [
       "src/features/catalog/catalog-quality.js",
+      "src/features/catalog/catalog-plan-generation.js",
       "src/features/catalog/catalog-pdf.js"
     ],
     "catalog-plan.js": [
