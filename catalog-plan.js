@@ -538,7 +538,13 @@
   const original=new Uint8Array(W*H);let wallInk=0;for(let i=0;i<original.length;i++)wallInk+=original[i]=pixels[i*4+3]>240?1:0;
   const filter=(input,horizontal,grow)=>{const output=new Uint8Array(input.length);for(let y=0;y<H;y++)for(let x=0;x<W;x++){let value=grow?0:1;for(let d=-radius;d<=radius;d++){const xx=x+(horizontal?d:0),yy=y+(horizontal?0:d),v=xx>=0&&yy>=0&&xx<W&&yy<H?input[yy*W+xx]:0;if(grow?v:!v){value=grow?1:0;break;}}output[y*W+x]=value;}return output;};
   const closed=filter(filter(filter(filter(original,true,true),false,true),true,false),false,false);let added=0;for(let i=0;i<closed.length;i++)if(closed[i]&&!original[i])added++;
-  const wallRepair={radiusPixels:radius,addedPixels:added,applied:added<=wallInk*.12};
+  // A wall cut must not turn a room or stair landing into a solid blob.
+  // Measure the interior distance against the upper band of actual wall widths.
+  const distances=new Uint16Array(W*H);let deepest=0;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x;if(original[i])distances[i]=1+Math.min(x?distances[i-1]:0,y?distances[i-W]:0);}
+  for(let y=H-1;y>=0;y--)for(let x=W-1;x>=0;x--){const i=y*W+x;if(!original[i])continue;distances[i]=Math.min(distances[i],1+Math.min(x+1<W?distances[i+1]:0,y+1<H?distances[i+W]:0));deepest=Math.max(deepest,distances[i]);}
+  const widths=s.walls.map(p=>Math.min(width(p.bounds),height(p.bounds))).filter(v=>v>.2&&v<Math.max(width(b),height(b))*.06).sort((a,b)=>a-b),wallBand=Math.max(t,widths[Math.floor(widths.length*.9)]||t)*scale;
+  const wallRepair={radiusPixels:radius,addedPixels:added,applied:added<=wallInk*.12,largestSolidRadius:deepest,wallBandPixels:wallBand,suspiciousSolidFill:deepest>Math.max(6,wallBand*1.6)};
   if(wallRepair.applied&&added){for(let i=0;i<closed.length;i++)if(closed[i]&&!original[i]){pixels[i*4]=40;pixels[i*4+1]=58;pixels[i*4+2]=70;pixels[i*4+3]=255;}m.putImageData(new ImageData(pixels,W,H),0,0);}
   const inWall=(x,y)=>{const q=map(x,y),ix=Math.round(q[0]),iy=Math.round(q[1]);return ix>=0&&iy>=0&&ix<mask.width&&iy<mask.height&&pixels[(iy*mask.width+ix)*4+3]>240;};
   const rescuedDoors=segmentedDoors((s.context||s.local).filter(p=>contains(crop,p.bounds,.7)&&!tables.some(r=>contains(r,p.bounds))),s,inWall);
@@ -624,6 +630,7 @@
   // Missing positions are reported; an incomplete plan cannot silently publish.
   if(!dims)dims={widthMm:null,heightMm:null,derived:[],basis:'unavailable'};
   check();const rendered=await draw(structure,roomLabels,dims,key,info,page,optionalContent,check);
+  if(!structure.fallback&&rendered.wallRepair.suspiciousSolidFill)return {ok:false,code:'solid-wall-artifact',reason:'обнаружена неподтверждённая сплошная заливка вместо стен или лестницы',wallRepair:rendered.wallRepair};
   if(paths.filter(p=>/лест|ступен|stair|step/iu.test(p.layer||'')&&p.stroked).length>=3&&!rendered.details.stairs)return {ok:false,reason:'не удалось подтвердить сохранность лестницы на чистом плане'};
   const quality=CatalogQuality.reviewPlan({...rendered,roomSchedule:table?.rows,labelsComplete:!table?.rows?.length||roomLabels.complete,wallCount:structure.walls.length,dimensions:dims});
   if(!quality.passed)return {ok:false,reason:'Контроль качества: '+quality.issues.join('. '),quality,foundRooms:roomLabels.items.length};
