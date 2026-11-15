@@ -8,6 +8,10 @@
   function repairText(text){
     return clean(String(text||'').replace(/[\u00c0-\u00ff\u00a8\u00b8]/g,c=>cp1251.decode(new Uint8Array([c.charCodeAt(0)]))).replace(/¹/g,'№'));
   }
+  function folderNumber(path){
+    const parts=String(path||'').split(/[\\/]/).filter(Boolean),name=/\.pdf$/i.test(parts.at(-1)||'')?parts.at(-2):parts.at(-1);
+    return name?.match(/(?:проект\s*№?\s*|№\s*)(\d{4,5})(?!\d)/iu)?.[1]||null;
+  }
   function rows(items){
     const out=[];
     for(const w of items.filter(w=>!w.vertical&&w.text).slice().sort((a,b)=>a.cy-b.cy||a.x0-b.x0)){
@@ -39,13 +43,13 @@
   }
   function tables(page){
     const result=[],compact=s=>clean(s).replace(/\s/g,''),words=page.items;
-    const headers=[...words,...(page.phrases||[])].filter(w=>/^наименование|^названиепомещ/iu.test(compact(w.text)));
+    const headers=[...words,...(page.phrases||[])].filter(w=>/^наименовани|^названиепомещ/iu.test(compact(w.text)));
     for(const header of headers){
       if(result.some(t=>Math.abs(t.top-header.y0)<header.h&&Math.abs(t.nameX-header.x0)<header.h))continue;
       const a=[...words,...(page.phrases||[])].filter(w=>/^площадь/iu.test(compact(w.text))&&w.x0>header.x0&&Math.abs(w.cy-header.cy)<Math.max(header.h,w.h)*2).sort((x,y)=>x.x0-y.x0)[0];
       if(!a)continue;
       const id=words.filter(w=>/^(?:№|N|N°|поз\.?)$/iu.test(w.text)&&w.x0<header.x0&&Math.abs(w.cy-header.cy)<header.h*2).sort((x,y)=>y.x0-x.x0)[0];
-      const left=id?id.x0-header.h*.5:header.x0-header.h*2,right=a.x1+a.h*2;
+      const left=id?id.x0-header.h*.5:header.x0-header.h*2,right=(()=>{const next=words.filter(w=>/^об[ъь]?[её]м/iu.test(w.text)&&w.x0>a.x1&&Math.abs(w.cy-a.cy)<a.h*2).sort((x,y)=>x.x0-y.x0)[0];return next?(a.x1+next.x0)/2:a.x1+a.h*2})();
       const areaLeft=Math.max((header.x0+a.x0)/2,a.x0-a.h*2);
       const numeric=words.filter(w=>!w.vertical&&w.cy>Math.max(header.cy,a.cy)+header.h*.5&&w.x0>=areaLeft&&w.x0<right&&/^[\d\s.,м²]+$/iu.test(w.text));
       const cells=rows(numeric).map(line=>{
@@ -85,7 +89,7 @@
     return result;
   }
   const summaryTable=t=>/общая|общий|генерал|генплан|строений|участк/iu.test(t.label);
-  const planPattern=/^(?:план(?:\s+помещений)?\s+(?:подвал|цокол)|обмерный\s+[1-3]\s*[-–]?\s*этаж|план\s+обмерный|планировочн.{0,12}решен|план.{0,25}(?:этаж|мебел|помещ)|привязк[аи]\s+мебел|марк[еи]р[оа]вочн.{0,8}план|кладочн.{0,15}план)/iu;
+  const planPattern=/^(?:план(?:\s+помещений)?\s+(?:подвал|цокол)|обмерный\s+план|обмерный\s+[1-3]\s*[-–]?\s*этаж|план\s+обмерный|планировочн.{0,12}решен|план.{0,25}(?:этаж|мебел|помещ)|привязк[аи]\s+мебел|марк[еи]р[оа]вочн.{0,8}план|кладочн.{0,15}план)/iu;
   function planInfos(page,declared){
     const headings=[...(page.phrases||[]),...page.items].filter(w=>planPattern.test(w.text)||/^(?:[−-]\s*1\s*[-–]?\s*(?:й|ый|го)?\s*этаж|подвальн[а-яё]*\s+этаж|[1-3]\s*[-–]?\s*(?:й|ый|ой)?\s*этаж|(?:перв|втор|трет)[а-яё]*\s+этаж|цокольный\s+этаж)(?:\s*\(\d+\))?$/iu.test(w.text.trim()));
     if(/содержание|ведомость\s+рабочих\s+чертеж/iu.test(page.text)&&headings.length>3)return [];
@@ -108,7 +112,9 @@
     const all=pages.flatMap(p=>p.tables),distance=(table,plan,page)=>Math.abs(table.cx-plan.cx)/page.width+Math.abs(table.top-plan.cy)/page.height*.25;
     for(const page of pages){
       const local=plans.filter(p=>p.page===page.page),floors=[...new Set(local.map(p=>p.floor))],unknown=page.tables.filter(t=>!t.floor&&!summaryTable(t));
+      const tableHeadings=[...new Set(page.phrases.filter(w=>/^экспликац/iu.test(w.text)).map(w=>floorIn(w.text)).filter(Boolean))];
       for(const table of unknown){
+        if(tableHeadings.length===1&&unknown.length===1){table.floor=tableHeadings[0];table.association='explicit_page_heading';continue;}
         if(floors.length===1&&unknown.length===1){table.floor=floors[0];table.association='same_plan';continue;}
         if(floors.length>1){
           const ranked=local.map(plan=>({plan,score:distance(table,plan,page)})).sort((a,b)=>a.score-b.score);
@@ -160,6 +166,16 @@
     const explicit=plans.map(p=>p.floor).filter(Boolean);
     if(!declared){const nums=explicit.filter(f=>/^floor/.test(f)).map(f=>Number(f.slice(5)));if(nums.length)declared=Math.max(...nums);}
     associateTables(pages,plans,declared);
+    const scheduleKey=t=>JSON.stringify(t.rows.map(r=>[clean(r.name).toLowerCase(),number(r.area)]));
+    const verified=pages.flatMap(p=>p.tables).filter(t=>t.verified&&!summaryTable(t));
+    for(const t of verified.filter(t=>!t.floor)){
+      const matches=[...new Set(verified.filter(q=>q!==t&&q.floor&&scheduleKey(q)===scheduleKey(t)).map(q=>q.floor))];
+      if(matches.length===1){t.floor=matches[0];t.association='matching_schedule';}
+    }
+    const missingLevels=Array.from({length:Math.min(declared||0,3)},(_,i)=>'floor'+(i+1)).filter(k=>!verified.some(t=>t.floor===k)),unassigned=verified.filter(t=>!t.floor&&pages[t.page-1].phrases.some(w=>planPattern.test(w.text))&&!/баня|гостевой\s+дом|хозблок/iu.test(pages[t.page-1].text));
+    if(missingLevels.length===1&&new Set(unassigned.map(scheduleKey)).size===1)for(const t of unassigned){t.floor=missingLevels[0];t.association='unique_missing_level_schedule';}
+    for(const p of pages)for(const info of planInfos(p,declared)){const existing=plans.find(v=>v.page===info.page&&v.floor===info.floor);if(!existing)plans.push({...info,source:p});else if(info.score>existing.score)Object.assign(existing,info);}
+
     const mansard=pages.some(p=>/мансард/iu.test(p.text)),occupied=pages.flatMap(p=>p.tables).filter(t=>t.verified&&/^floor/.test(t.floor||'')&&!summaryTable(t)).map(t=>Number(t.floor.slice(5)));
     if(mansard&&occupied.length&&Math.max(...occupied)>declared){declared=Math.max(...occupied);warnings.push('Этажность уточнена по планам и экспликациям мансарды');}
     if(mansard)data.tags.push('Мансарда');
@@ -222,6 +238,6 @@
     if(pages.some(p=>p.ocr))warnings.push('Часть данных распознана со скана');
     return {data,levels,sources,warnings,blocking:[...new Set(blocking)],pages:pages.length};
   }
-  root.CatalogPdfCore=Object.freeze({repairText,pageFromItems,tables,analyze,floorIn,area,number,planInfos});
+  root.CatalogPdfCore=Object.freeze({folderNumber,repairText,pageFromItems,tables,analyze,floorIn,area,number,planInfos});
   if(typeof module!=='undefined')module.exports=root.CatalogPdfCore;
 })(typeof window!=='undefined'?window:globalThis);
