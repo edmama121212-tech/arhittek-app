@@ -139,6 +139,7 @@ document.getElementById('kpBack').addEventListener('click', ()=>{
   window.scrollTo(0,0);
 });
 document.getElementById('kpAddService').addEventListener('click', addKpService);
+document.getElementById('kp-advance-percent').addEventListener('change', updateKpTotals);
 document.getElementById('kp-discount-type').addEventListener('change', updateKpTotals);
 document.getElementById('kp-discount-value').addEventListener('input', updateKpTotals);
 document.getElementById('kpExportPdf').addEventListener('click', exportKpToPdf);

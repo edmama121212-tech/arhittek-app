@@ -39,6 +39,10 @@
           <input type="text" id="kp-start" placeholder="например: после аванса">
         </div>
       </div>
+      <div class="field">
+        <label for="kp-comment">Комментарий для клиента</label>
+        <textarea id="kp-comment" rows="3" maxlength="2000" placeholder="Например: в стоимость включены два варианта планировки"></textarea>
+      </div>
     </div>
 
     <div class="section-label"><span class="lbl-text">Реквизиты в PDF</span><span class="section-label-line"></span></div>
@@ -64,7 +68,7 @@
     <div id="kpServicesList"></div>
     <button class="btn btn-secondary" id="kpAddService">+ Добавить услугу</button>
 
-    <div class="section-label"><span class="lbl-text">Скидка</span><span class="section-label-line"></span></div>
+    <div class="section-label"><span class="lbl-text">Дополнительная скидка на всё КП</span><span class="section-label-line"></span></div>
     <div class="card">
       <div class="field-row">
         <div class="field">
@@ -82,12 +86,19 @@
     </div>
 
     <div class="section-label"><span class="lbl-text">Итог</span><span class="section-label-line"></span></div>
+    <div class="card field">
+      <label for="kp-advance-percent">Условия оплаты</label>
+      <select id="kp-advance-percent">
+        <option value="50">Аванс 50%, остаток 50%</option>
+        <option value="100">Оплата 100% одним платежом</option>
+      </select>
+    </div>
     <div class="fee-card">
       <div class="fee-row"><div class="fl">Сумма услуг</div><div class="fv" id="kp-subtotal">0 ₽</div></div>
-      <div class="fee-row"><div class="fl">Скидка</div><div class="fv" id="kp-discount-amount">0 ₽</div></div>
+      <div class="fee-row"><div class="fl">Дополнительная скидка</div><div class="fv" id="kp-discount-amount">0 ₽</div></div>
       <div class="fee-row total"><div class="fl">Итого к оплате</div><div class="fv" id="kp-total">0 ₽</div></div>
-      <div class="fee-row remaining"><div class="fl">Аванс (50%)</div><div class="fv" id="kp-advance">0 ₽</div></div>
-      <div class="fee-row"><div class="fl">Остаток после аванса</div><div class="fv" id="kp-remainder">0 ₽</div></div>
+      <div class="fee-row remaining"><div class="fl" id="kp-advance-label">Аванс (50%)</div><div class="fv" id="kp-advance">0 ₽</div></div>
+      <div class="fee-row"><div class="fl">Остаток</div><div class="fv" id="kp-remainder">0 ₽</div></div>
     </div>
 
     <button class="btn btn-primary" id="kpExportPdf">Скачать PDF</button>
