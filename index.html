@@ -21,6 +21,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="brief-media.js" defer></script>
 <script src="data-access.js"></script>
 <script src="catalog-floors.js"></script>
 <link rel="stylesheet" href="catalog-floors.css">
@@ -2258,6 +2259,10 @@ function applySessionToken(token){
   window.sb = sb;
 }
 
+
+document.addEventListener('DOMContentLoaded',()=>window.ARHITTEKBriefMedia?.attach({
+ client:()=>sb,actor:()=>hasVerifiedAccess()?session.token:null
+}));
 // ============================================================
 // STATE
 // ============================================================
@@ -2512,6 +2517,7 @@ function canAccessView(id){
   return false;
 }
 function clearPrivateState(){
+  window.ARHITTEKBriefMedia?.clear();
   for(const key of ['projects','financialProjects','financialStatusHistory','ledger','photos','history','cashCounts','invoices','tzForms','tzReferences','kpForms','kpCatalog','timesheetPayments','companyExpenses','companyIncome','projectStages','projectMembers'])state[key]=[];
   state.employees=(state.employees||[]).map(e=>({id:e.id,name:e.name,active:e.active}));
   if(typeof resetContractCustomer==='function')resetContractCustomer();
@@ -9049,7 +9055,7 @@ async function createTzForm(){
   const p = state.projects.find(x=>x.id===editingProjectId);
   if(!p) return;
 
-  const token = crypto.randomUUID().replace(/-/g,'').slice(0,16);
+  const token = Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>b.toString(16).padStart(2,'0')).join('');
 
   try{
     const {data, error} = await sb.from('tz_forms').insert({
@@ -9125,7 +9131,7 @@ function viewTzAnswers(tzFormId){
     html += `<div style="padding:8px 0;">
       <div class="fl" style="margin-bottom:6px;">${escapeHtml(label)} — референсы</div>
       <div class="photo-grid">
-        ${val.map(url=>`<div class="photo-thumb"><img src="${escapeHtml(url)}" loading="lazy"></div>`).join('')}
+        ${val.map(url=>`<div class="photo-thumb"><img data-brief-ref="${escapeHtml(url)}" loading="lazy" alt="Референс ТЗ"></div>`).join('')}
       </div>
     </div>`;
   });

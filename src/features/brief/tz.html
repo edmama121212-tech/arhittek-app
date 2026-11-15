@@ -2,6 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
+<meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>ARHITTEK · Техническое задание</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -179,6 +180,7 @@
   .toast.show{opacity:1; transform:translateX(-50%) translateY(-6px);}
 </style>
 <link rel="stylesheet" href="client.css">
+<script src="./brief-media.js" defer></script>
 </head>
 <body>
 
@@ -205,9 +207,13 @@
 const SUPABASE_URL = 'https://chbkkoxwzpaghanofvqk.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_fOLaPnbXjzQnJwG__wVzzg_D0nMO-n0';
 // Reference uploads are scoped by the same token as this public brief.
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {global:{headers:{
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},global:{fetch:(input,options)=>fetch(input,{...options,cache:'no-store'}),headers:{
   'x-tz-token': new URLSearchParams(window.location.search).get('token') || ''
 }}});
+
+document.addEventListener('DOMContentLoaded',()=>window.ARHITTEKBriefMedia?.attach({
+ client:()=>sb,actor:()=>token&&tzForm?token+':'+tzForm.id:null
+}));
 
 function showToast(msg){
   const t = document.getElementById('toast');
@@ -695,7 +701,7 @@ function renderField(field){
       ${field.hint?`<div class="q-hint">${escapeHtml(field.hint)}</div>`:''}
       <div class="ref-grid" id="refgrid-${field.id}">
         ${existingRefs.map((url,i)=>`
-          <div class="ref-thumb"><img src="${escapeHtml(url)}"><button class="ref-remove" data-field="${field.id}" data-idx="${i}" data-existing="1">✕</button></div>
+          <div class="ref-thumb"><img data-brief-ref="${escapeHtml(url)}" alt="Референс ТЗ"><button class="ref-remove" data-field="${field.id}" data-idx="${i}" data-existing="1">✕</button></div>
         `).join('')}
       </div>
       <label class="ref-upload" for="reffile-${field.id}">📷 Добавить фото-референсы</label>
@@ -728,7 +734,7 @@ function addRefThumbFromUrl(fieldId, url, idx){
   if(!grid) return;
   const div = document.createElement('div');
   div.className = 'ref-thumb';
-  div.innerHTML = `<img src="${escapeHtml(url)}"><button class="ref-remove" data-field="${escapeHtml(fieldId)}" data-idx="${idx}" data-existing="1">✕</button>`;
+  div.innerHTML = `<img data-brief-ref="${escapeHtml(url)}" alt="Референс ТЗ"><button class="ref-remove" data-field="${escapeHtml(fieldId)}" data-idx="${idx}" data-existing="1">✕</button>`;
   bindRefRemoveButton(div.querySelector('.ref-remove'));
   grid.appendChild(div);
 }

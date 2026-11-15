@@ -168,7 +168,7 @@ async function createTzForm(){
   const p = state.projects.find(x=>x.id===editingProjectId);
   if(!p) return;
 
-  const token = crypto.randomUUID().replace(/-/g,'').slice(0,16);
+  const token = Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>b.toString(16).padStart(2,'0')).join('');
 
   try{
     const {data, error} = await sb.from('tz_forms').insert({
@@ -244,7 +244,7 @@ function viewTzAnswers(tzFormId){
     html += `<div style="padding:8px 0;">
       <div class="fl" style="margin-bottom:6px;">${escapeHtml(label)} — референсы</div>
       <div class="photo-grid">
-        ${val.map(url=>`<div class="photo-thumb"><img src="${escapeHtml(url)}" loading="lazy"></div>`).join('')}
+        ${val.map(url=>`<div class="photo-thumb"><img data-brief-ref="${escapeHtml(url)}" loading="lazy" alt="Референс ТЗ"></div>`).join('')}
       </div>
     </div>`;
   });

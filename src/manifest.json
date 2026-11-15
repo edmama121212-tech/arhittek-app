@@ -200,6 +200,9 @@
     ],
     "catalog-quality.js": [
       "src/features/catalog/catalog-quality.js"
+    ],
+    "brief-media.js": [
+      "src/features/brief/brief-media.js"
     ]
   }
 }

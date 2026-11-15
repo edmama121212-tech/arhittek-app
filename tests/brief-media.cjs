@@ -1,0 +1,22 @@
+'use strict';
+const fs=require('node:fs'),assert=require('node:assert/strict'),{JSDOM}=require('jsdom');
+(async()=>{
+ const dom=new JSDOM('<body></body>',{url:'https://app.test/tz.html',runScripts:'outside-only',pretendToBeVisual:true});
+ const w=dom.window;let who='brief-A',calls=[],seq=0,revoked=[],resolve;
+ w.URL.createObjectURL=()=> 'blob:private-ref-'+(++seq);w.URL.revokeObjectURL=v=>revoked.push(v);
+ w.eval(fs.readFileSync('brief-media.js','utf8'));
+ const media=w.ARHITTEKBriefMedia,base='https://chbkkoxwzpaghanofvqk.supabase.co/storage/v1/object/public/tz-references/';
+ for(const bad of ['https://evil.test/file.png',base+'../secret',base+'a/%2e%2e/secret',base+'a.png?token=secret',base+'a.png#secret'])assert.equal(media.path(bad),null);
+ const client={storage:{from:bucket=>({download:async path=>{calls.push([bucket,path,who]);if(path.includes('foreign'))return {error:{message:'denied'}};if(path.includes('delayed'))return await new Promise(r=>resolve=r);return {data:new w.Blob(['fixture'],{type:'image/png'}),error:null};}})}};
+ const adapter=media.attach({client:()=>client,actor:()=>who});
+ const tick=()=>new Promise(r=>setTimeout(r,15));
+ const image=p=>{const img=w.document.createElement('img');img.dataset.briefRef=base+p;w.document.body.append(img);return img;};
+ const a=image('tz-refs/a/image.png');await tick();assert.equal(a.src,'blob:private-ref-1');assert.deepEqual(calls[0],['tz-references','tz-refs/a/image.png','brief-A']);
+ const foreign=image('tz-refs/b/foreign.png');await tick();assert.equal(foreign.getAttribute('src'),null);assert.match(foreign.alt,/недоступен/);
+ const delayed=image('tz-refs/a/delayed.png');await tick();who=null;adapter.clear();resolve({data:new w.Blob(['old'],{type:'image/png'}),error:null});await tick();
+ assert.equal(delayed.getAttribute('src'),null);assert.equal(a.getAttribute('src'),null);assert.ok(revoked.includes('blob:private-ref-1'));
+ assert.equal(w.localStorage.length,0);assert.equal(w.sessionStorage.length,0);
+ who='brief-B';adapter.scan();await tick();assert.ok(a.src.startsWith('blob:'));a.remove();await tick();assert.equal(revoked.length,2);
+ adapter.detach();dom.window.close();
+ console.log('Private image loading, URL validation, denied files, account switch, late response and blob cleanup passed');
+})().catch(e=>{console.error(e);process.exitCode=1});
