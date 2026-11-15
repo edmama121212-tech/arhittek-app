@@ -19,7 +19,7 @@
   function normalizeRooms(values,{expectedArea}={}){
     const rows=typeof values==='string'?values.split(/\r?\n/).filter(v=>v.trim()):Array.isArray(values)?values:[];
     const normalized=rows.map(row=>{
-      let name=typeof row==='string'?'':String(row?.name||'').trim(),area=typeof row==='string'?row:String(row?.area??'').trim();
+      let name=typeof row==='string'?'':String(row?.name||'').trim(),area=(typeof row==='string'?row:String(row?.area??'')).trim().replace(/(\d[.,]\d{1,2})[.,;]+$/,'$1');
       if(areaNumber(area)===null){
         const m=/\d[-ю]\d{2}\s*(?:м[²2])?$/iu.test(area)?null:area.replace(/^:\s*/,'').match(/^(.*\S)\s*(?::|[–—-]|\s)\s*(\d+(?:[.,]\d{1,2})?)\s*(?:м[²2])?\s*$/iu);
         if(m&&(!name||name===m[1].trim())){name=m[1].trim().replace(/[:–—-]\s*$/,'').trim();area=m[2];}

@@ -33,7 +33,7 @@
    }
   }
   if(!Number.isFinite(total)||Math.abs(total-num(card.total_area))>.05)issues.push('Общая площадь не совпадает с суммой площадей этажей');
-  const beds=rooms.filter(r=>/спальн|^м?\s*сп(?:\s|[-–—.]|\d|$)|детск/iu.test(r.name)).length,baths=rooms.filter(r=>/^(?:с\s*[\/.]?\s*у)(?:\s|[-–.]|\d|$)|сануз|ванн|душев|туалет/iu.test(r.name)).length;
+  const beds=rooms.filter(r=>/спальн|^м?\s*сп(?:\s|[-–—.]|\d|$)|детск/iu.test(r.name)).length,baths=rooms.filter(r=>/^(?:м?с\s*[\/.]?\s*у)(?:\s|[-–.]|\d|$)|сануз|ванн|душев|туалет/iu.test(r.name)).length;
   if(Number(card.beds||0)!==beds)issues.push('Количество спален не совпадает с экспликациями');if(Number(card.baths||0)!==baths)issues.push('Количество санузлов не совпадает с экспликациями');
   return {version:VERSION,passed:!issues.length,issues:[...new Set(issues)],scope:'pdf-card'};
  }

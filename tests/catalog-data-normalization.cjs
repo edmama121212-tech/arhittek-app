@@ -9,4 +9,5 @@ const sum=F.calculateAreas(c);assert.equal(sum.patch.total_area,'55,35');assert.
 assert.equal(F.calculateAreas({floors:2,expl1:c.expl1}).complete,false,'Missing second floor cannot be silently counted as zero');
 assert.equal(F.defaultTitle({floors:3}),'Трёхэтажный дом');
 assert(F.rows([{name:'',area:'Зал - 40,51'}]).includes('Зал'));
-console.log(JSON.stringify({catalogDataNormalization:'passed',checks:11}));
+assert.deepEqual(F.normalizeRooms([{name:'',area:'Гардероб - 09,20,'}]),[{name:'Гардероб',area:'09,20'}]);
+console.log(JSON.stringify({catalogDataNormalization:'passed',checks:12}));

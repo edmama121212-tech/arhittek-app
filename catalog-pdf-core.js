@@ -217,7 +217,7 @@
     if(!explicitArea&&complete&&rooms.some(r=>/террас|навес|балкон|лоджи/iu.test(r.name)))warnings.push('Общая площадь взята из экспликаций, включая открытые помещения');
     if(complete){
       data.beds=rooms.filter(r=>/спальн|^м?\s*сп(?:\s|[-–—.]|\d|$)|детск/iu.test(r.name)).length;
-      data.baths=rooms.filter(r=>/^(?:с\s*[\/.]?\s*у)(?:\s|[-–.]|\d|$)|сануз|ванн|душев|туалет/iu.test(r.name)).length;
+      data.baths=rooms.filter(r=>/^(?:м?с\s*[\/.]?\s*у)(?:\s|[-–.]|\d|$)|сануз|ванн|душев|туалет/iu.test(r.name)).length;
     }
     const text=pages.map(p=>p.text).join('\n');
     if(/газ[оа]б{1,2}л{1,2}ок/iu.test(text))data.tags.push('Газоблок');
