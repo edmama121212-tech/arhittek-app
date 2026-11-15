@@ -9,6 +9,14 @@
   const issues=Object.keys(checks).filter(k=>!checks[k]).map(k=>reasons[k]);
   return {version:VERSION,passed:!issues.length,checks,issues,wallLoss:wallSamples?wallLost/wallSamples:1,dimensionsConfirmed:dimensions?.widthMm>0&&dimensions?.heightMm>0,imageFingerprint:fingerprint(image),scheduleFingerprint:roomSchedule?scheduleFingerprint(roomSchedule):null};
  }
+ function reviewGeneratedPlan({image,rows,review,dimensions,jobId}){
+  const valid=CatalogPlanGeneration.verified(review);
+  const checks={sourceWalls:review?.walls===true,wallIntegrity:valid,roomLabels:review?.labels===true&&review?.rooms===true,stairScope:review?.stairs===true,approvedPrimitives:valid};
+  const issues=valid?[]:['Сгенерированный план не соответствует исходному чертежу'];
+  if(!jobId)issues.push('Не подтверждено серверное задание');
+  if(!(dimensions?.widthMm>0&&dimensions?.heightMm>0))issues.push('Не подтверждены общие габариты');
+  return {version:VERSION,method:'generated-source-vision-review',passed:!issues.length,checks,issues,dimensionsConfirmed:dimensions?.widthMm>0&&dimensions?.heightMm>0,imageFingerprint:fingerprint(image),scheduleFingerprint:scheduleFingerprint(rows),jobId};
+ }
  const floors=[['basement','basement_area','expl_basement',5,'Цоколь'],['floor1','floor1_area','expl1',2,'1-й этаж'],['floor2','floor2_area','expl2',3,'2-й этаж'],['floor3','floor3_area','expl3',4,'3-й этаж']];
  const num=s=>Number(String(s??'').replace(/\s/g,'').replace(',','.'));
  function reviewCard(card,meta,{strict=!!meta}={}){
@@ -38,7 +46,7 @@
   return {version:VERSION,passed:!issues.length,issues:[...new Set(issues)],scope:'pdf-card'};
  }
 
- function show(review){const box=document.getElementById('ce-quality-status');if(!box)return;box.hidden=false;box.textContent=review.passed?(review.scope==='manual-card'?'Заполненные данные проверены. Автоматическая проверка геометрии доступна для планов из PDF.':'Проверка пройдена: планы, экспликации и данные согласованы. Можно сохранить проект.'):'Сохранение заблокировано. Исправьте:\n• '+review.issues.join('\n• ');box.style.whiteSpace='pre-line';}
+ function show(review){const box=document.getElementById('ce-quality-status');if(!box)return;box.hidden=false;box.textContent=review.passed?(review.scope==='manual-card'?'Заполненные данные проверены. Автоматическая проверка геометрии доступна для планов из PDF.':'Автоматическая проверка завершена. Просмотрите планы и данные перед сохранением проекта.'):'Сохранение заблокировано. Исправьте:\n• '+review.issues.join('\n• ');box.style.whiteSpace='pre-line';}
  function checkEditor(){
   const value=id=>document.getElementById(id)?.value||'',card={project_number:value('ce-num'),title:value('ce-title'),floors:ceFloorsSelected,total_area:value('ce-area'),price:value('ce-price'),beds:value('ce-beds'),baths:value('ce-baths'),tags:ceFeatureSelected.includes('basement')?['Цокольный этаж']:[],images:ceImages};
   for(const f of CatalogFloors.definitions){card[f.area]=value('ce-area'+f.suffix);card[f.rooms]=parseExpl(value('ce-expl'+f.suffix));}
@@ -60,8 +68,83 @@
   }
   guardedSave.catalogQualityGuard=true;root.saveCard=guardedSave;
  }
- root.CatalogQuality=Object.freeze({version:VERSION,fingerprint,scheduleFingerprint,reviewPlan,reviewCard,show,checkEditor,protectSave});
+ root.CatalogQuality=Object.freeze({version:VERSION,fingerprint,scheduleFingerprint,reviewPlan,reviewGeneratedPlan,reviewCard,show,checkEditor,protectSave});
  if(typeof module!=='undefined')module.exports=root.CatalogQuality;
+})(typeof window!=='undefined'?window:globalThis);
+/* Generation supplies presentation. Measured dimensions are drawn locally. */
+(function(root){
+ 'use strict';
+ const VERSION='catalog-generated-1',checks=['walls','openings','stairs','columns','rooms','labels','noArtifacts'];
+ function verified(review){
+  const b=review?.bounds;
+  return review?.confidence>=.97&&review.confidence<=1&&checks.every(k=>review[k]===true)&&Array.isArray(review.issues)&&review.issues.length===0&&
+   Array.isArray(b)&&b.length===4&&b.every(n=>Number.isFinite(n)&&n>=0&&n<=1)&&b[2]-b[0]>.1&&b[3]-b[1]>.1;
+ }
+ function client({url,key,token,check=()=>{},fetch:request=root.fetch,delay=ms=>new Promise(r=>setTimeout(r,ms))}){
+  const endpoint=url+'/functions/v1/catalog-plan-generate';
+  async function call(payload){
+   check();const response=await request(endpoint,{method:'POST',headers:{apikey:key,'Content-Type':'application/json','x-session-token':token},body:JSON.stringify(payload)});
+   check();const data=await response.json();if(!response.ok||data.error&&!data.state)throw Error(data.error||'Ошибка сервера генерации');return data;
+  }
+  async function available(){
+   check();const response=await request(endpoint,{headers:{apikey:key}});check();
+   if(!response.ok)throw Error('Сервер генерации недоступен');
+   const data=await response.json();
+   if(data.version!==VERSION)return false;
+   if(!data.configured)throw Error('Не подключена генерация: проверьте OPENAI_API_KEY на сервере');
+   return true;
+  }
+  async function generate(source,manifest,onProgress=()=>{}){
+   let result=await call({action:'start',source,manifest});
+   if(result.state==='failed')result=await call({action:'retry',id:result.id});
+   const started=Date.now();
+   for(;;){
+    check();if(Date.now()-started>600000)throw Error('Генерация заняла больше времени. Повторный импорт проверит готовое задание');
+    onProgress(result.state,result.attempt);
+    if(result.state==='approved'){
+     if(result.version!==VERSION||!verified(result.review)||JSON.stringify(result.manifest)!==JSON.stringify({version:VERSION,...manifest})||!result.image?.startsWith('data:image/png;base64,'))throw Error('Сервер не подтвердил соответствие плана');
+     return result;
+    }
+    if(result.state==='failed')throw Error(result.error||'Генерация не завершилась');
+    if(result.state==='rejected'&&result.attempt>=2)throw Error('План не прошёл проверку: '+(result.review?.issues||[]).join('. '));
+    if(!['generating','generated','reviewing','rejected'].includes(result.state))throw Error('Неизвестный статус генерации');
+    const action=result.state==='generated'?'review':result.state==='rejected'?'retry':'status';
+    await delay(1500);check();result=await call({action,id:result.id});
+   }
+  }
+  return {available,generate};
+ }
+ function drawDimensions(image,manifest,bounds,createCanvas=()=>document.createElement('canvas')){
+  if(![manifest.widthMm,manifest.heightMm].every(n=>Number.isFinite(n)&&n>=500&&n<=500000))throw Error('Не подтверждены общие размеры');
+  const canvas=createCanvas(),pad=Math.ceil(Math.max(image.width,image.height)*.07);
+  canvas.width=image.width+pad*2;canvas.height=image.height+pad*2;
+  const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(image,pad,pad);
+  const [x0,y0,x1,y1]=bounds.map((n,i)=>pad+n*(i%2?image.height:image.width));
+  const dx=pad*.5,dy=pad+image.height+pad*.45,stroke=Math.max(1,image.width/1200),font=Math.max(16,image.width*.016);
+  ctx.strokeStyle='#6d716c';ctx.fillStyle='#464d48';ctx.lineWidth=stroke;ctx.font='500 '+font+'px Arial, sans-serif';ctx.textAlign='center';
+  ctx.beginPath();ctx.moveTo(x0,dy);ctx.lineTo(x1,dy);ctx.moveTo(dx,y0);ctx.lineTo(dx,y1);ctx.stroke();
+  ctx.strokeStyle='#b6bcb7';ctx.beginPath();
+  for(const x of [x0,x1]){ctx.moveTo(x,y1+6);ctx.lineTo(x,dy+5);ctx.moveTo(x-4,dy+4);ctx.lineTo(x+4,dy-4);}
+  for(const y of [y0,y1]){ctx.moveTo(dx-5,y);ctx.lineTo(x0-6,y);ctx.moveTo(dx-4,y+4);ctx.lineTo(dx+4,y-4);}
+  ctx.stroke();
+  const label=n=>(n/1000).toLocaleString('ru-RU',{maximumFractionDigits:3})+' м';
+  ctx.fillText(label(manifest.widthMm),(x0+x1)/2,dy+font*1.35);
+  ctx.save();ctx.translate(dx-font*.6,(y0+y1)/2);ctx.rotate(-Math.PI/2);ctx.fillText(label(manifest.heightMm),0,0);ctx.restore();
+  return canvas;
+ }
+ async function prepare({source,connection,check=()=>{},onProgress=()=>{}}){
+  if(!source.ok)return source;
+  const manifest={floor:source.key,rooms:source.rooms,widthMm:source.report.widthMm,heightMm:source.report.heightMm};
+  const result=await connection.generate(source.image,manifest,onProgress);check();
+  const image=await new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(Error('Не удалось открыть сгенерированный план'));img.src=result.image;});check();
+  const canvas=drawDimensions(image,manifest,result.review.bounds);
+  const full=canvas.toDataURL('image/png'),thumb=document.createElement('canvas');thumb.width=270;thumb.height=Math.round(270*canvas.height/canvas.width);thumb.getContext('2d').drawImage(canvas,0,0,thumb.width,thumb.height);
+  const thumbnail=thumb.toDataURL('image/jpeg',.86),quality=CatalogQuality.reviewGeneratedPlan({image:full,rows:source.rooms,review:result.review,dimensions:manifest,jobId:result.id});
+  canvas.width=canvas.height=thumb.width=thumb.height=0;check();
+  return {ok:quality.passed,image:full,thumbnail,reason:quality.issues.join('. '),report:{...source.report,style:VERSION,renderer:'ai-furnished-source-reviewed',sourceGeometry:false,quality,serverJobId:result.id,review:result.review,rooms:source.rooms.length,roomNames:source.rooms.map(r=>r.name)}};
+ }
+ root.CatalogPlanGeneration=Object.freeze({version:VERSION,client,verified,drawDimensions,prepare});
+ if(typeof module!=='undefined'&&module.exports)module.exports=root.CatalogPlanGeneration;
 })(typeof window!=='undefined'?window:globalThis);
 (function(root){
   'use strict';
@@ -183,6 +266,14 @@
     try{
       if(!file||file.size===0)throw new Error('PDF-файл пуст');
       if(!(await file.slice(0,1024).text()).includes('%PDF-'))throw new Error('Выберите PDF-файл архитектурного альбома');
+      let generation=null;
+      if(options.generation!==false&&typeof CatalogPlanGeneration!=='undefined'&&typeof SUPABASE_URL!=='undefined'&&typeof SUPABASE_KEY!=='undefined'&&typeof session!=='undefined'&&session?.token&&typeof isOwner==='function'&&isOwner()){
+       const actor=session.token;
+       const connection=CatalogPlanGeneration.client({url:SUPABASE_URL,key:SUPABASE_KEY,token:actor,check:()=>{check(job);if(session?.token!==actor)throw abort();}});
+       // Older installations and isolated fixtures have no generation endpoint.
+       // A configured endpoint always uses generation and reports failures.
+       if(await connection.available())generation=connection;
+      }
       progress(job,'Открываю PDF…',2);const pdfjs=await library();check(job);
       const prepared=await CatalogPdfIO.prepare(file,job);check(job);
       progress(job,'Проверяю альбом…',3);const sha256=await CatalogPdfIO.hash(file,job);
@@ -252,7 +343,13 @@
           progress(job,'Перепроверяю план: попытка '+(attempts.length+1)+' из '+candidates.length+'…',65+i/assets.length*25);
           const page=await doc.getPage(candidate);
           try{
-            const prepared=await CatalogPlan.prepare({pdfjs,page,info:pages[candidate-1],table:result.levels[asset.key].table,key:asset.key,optionalContent,reference:asset.key!=='floor1'?result.sources.plans?.floor1:null,knownFootprint:result.sources.footprint?.from==='dimension_lines'?{value:result.data.footprint,page:result.sources.footprint.page}:null,check:()=>check(job)});check(job);attempts.push({page:candidate,passed:prepared.ok,reason:prepared.reason||null});
+            const sourceOptions={pdfjs,page,info:pages[candidate-1],table:result.levels[asset.key].table,key:asset.key,optionalContent,reference:asset.key!=='floor1'?result.sources.plans?.floor1:null,knownFootprint:result.sources.footprint?.from==='dimension_lines'?{value:result.data.footprint,page:result.sources.footprint.page}:null,check:()=>check(job)};
+            let prepared;
+            if(generation){
+             const sourcePlan=await CatalogPlan.generationSource(sourceOptions);
+             prepared=sourcePlan.ok?await CatalogPlanGeneration.prepare({source:sourcePlan,connection:generation,check:()=>check(job),onProgress:(state,attempt)=>progress(job,(state==='reviewing'?'Сверяю с исходным чертежом':state==='rejected'?'Исправляю расхождения':'Создаю объёмную планировку')+' · '+(asset.key==='basement'?'цоколь':asset.key.slice(5)+'-й этаж')+' · вариант '+attempt,65+i/assets.length*25)}):sourcePlan;
+            }else prepared=await CatalogPlan.prepare(sourceOptions);
+            check(job);attempts.push({page:candidate,passed:prepared.ok,reason:prepared.reason||null});
             if(prepared.ok){result.levels[asset.key].plan.page=candidate;result.sources[asset.key].planPage=candidate;images[asset.index]=prepared.image;thumbnails[asset.index]=prepared.thumbnail;(result.sources.plans??={})[asset.key]=prepared.report;
               if(prepared.report.basis==='source-room-area-consensus')result.warnings.push('Габариты '+(asset.key==='basement'?'цоколя':asset.key.slice(5)+'-го этажа')+' рассчитаны по геометрии и площадям '+prepared.report.calibratedRooms+' помещений');
               if(prepared.report.basis==='matching-scale-and-footprint')result.warnings.push('Габариты '+asset.key.slice(5)+'-го этажа перенесены с 1-го по совпадающим контуру и масштабу');
@@ -260,7 +357,7 @@
               if(asset.key==='floor1'&&!result.data.footprint&&prepared.report.widthMm>0&&prepared.report.heightMm>0)result.data.footprint=(prepared.report.widthMm/1000).toLocaleString('ru-RU')+' × '+(prepared.report.heightMm/1000).toLocaleString('ru-RU');
               failure=null;break;
             }else if(!failure||(prepared.foundRooms||0)>(failure.foundRooms||0))failure=prepared;
-          }finally{page.cleanup();}
+          }catch(error){if(error.name==='AbortError')throw error;failure={ok:false,reason:error.message};attempts.push({page:candidate,passed:false,reason:error.message});if(generation)break;}finally{page.cleanup();}
           }
           (result.sources.plan_review??={})[asset.key]={passed:!failure,attempts};
           if(failure)result.blocking.push('План '+(asset.key==='basement'?'цоколя':asset.key.slice(5)+'-го этажа')+': '+failure.reason+'. Нужна проверка исходного листа');

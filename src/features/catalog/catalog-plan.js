@@ -468,13 +468,33 @@
   if(!regions.length&&!explicit)return null;
   return {...s,activeRegions:regions,fullLevel:true,focused:false,recognition:'full-level-with-usable-rooms'};
  }
- async function prepare({pdfjs,page,info,table,key,knownFootprint,reference,optionalContent,check=()=>{}}){
+ async function inspectSource({pdfjs,page,info,table,key,knownFootprint,reference,optionalContent,check=()=>{}}){
   check();const operators=await page.getOperatorList();check();const paths=vectors(pdfjs,operators,page.getViewport({scale:1}),check,optionalContent),selected=chooseStructure(paths,info,key),structure=selected&&key==='basement'?focusBasement(selected,info,table):selected;
   if(!structure)return {ok:false,reason:key==='basement'?'таблица цоколя не подтверждена отдельным планом или границами подвального помещения':'не удалось однозначно выделить векторные стены и отдельный план этажа'};
   const roomLabels=labels(info,structure,table);let dims=dimensions(info,structure,roomLabels);
   if(key==='floor1'&&knownFootprint&&(!dims||dims.basis==='source-room-area-consensus')){const values=String(knownFootprint.value).split(/[×xх]/i).map(v=>CatalogPdfCore.number(v)*1000);if(values.length===2&&values.every(n=>n>0)&&Math.abs((values[0]/values[1])/(width(structure.bounds)/height(structure.bounds))-1)<.015)dims={widthMm:values[0],heightMm:values[1],derived:[],basis:'album-dimension-lines',dimensionPage:knownFootprint.page};}
   const scales=info.items.filter(w=>/^1\s*:\s*(20|25|50|75|100|150|200)$/.test(w.text)&&w.cx>=structure.bounds.x0&&w.cx<=structure.bounds.x1).sort((a,b)=>Math.abs(a.cy-structure.bounds.y0)-Math.abs(b.cy-structure.bounds.y0)),drawingScale=scales.length?Number(scales[0].text.split(':')[1]):null;
   if(!dims&&reference?.widthMm>0&&reference.heightMm>0&&drawingScale&&reference.drawingScale===drawingScale&&Math.abs(width(structure.bounds)/width(reference.bounds)-1)<.005&&Math.abs(height(structure.bounds)/height(reference.bounds)-1)<.005)dims={widthMm:reference.widthMm,heightMm:reference.heightMm,derived:['width','height'],basis:'matching-scale-and-footprint',referenceFloor:'floor1'};
+  return {ok:true,paths,structure,roomLabels,dims,drawingScale};
+ }
+ async function generationSource(options){
+  const {pdfjs,page,info,table,key,optionalContent,check=()=>{}}=options;
+  const found=await inspectSource(options);if(!found.ok)return found;
+  const {structure,roomLabels,dims,drawingScale}=found;
+  if(!table?.verified||!table.rows?.length)return {ok:false,reason:'Не подтверждена экспликация этажа'};
+  if(!(dims?.widthMm>0&&dims?.heightMm>0))return {ok:false,reason:'Не подтверждены общие размеры этажа'};
+  const crop=cropBounds(structure,info),scale=2304/Math.max(width(crop),height(crop));
+  const canvas=document.createElement('canvas');canvas.width=Math.ceil(width(crop)*scale);canvas.height=Math.ceil(height(crop)*scale);
+  try{
+   const task=page.render({canvasContext:canvas.getContext('2d'),viewport:page.getViewport({scale}),transform:[1,0,0,1,-crop.x0*scale,-crop.y0*scale],optionalContentConfigPromise:Promise.resolve(optionalContent),background:'rgb(255,255,255)'});
+   await task.promise;check();
+   return {ok:true,image:canvas.toDataURL('image/png'),key,rooms:table.rows.map(r=>({name:roomName(r.name),area:CatalogPdfCore.number(r.area)})),report:{...dims,sourceCrop:crop,bounds:structure.bounds,drawingScale}};
+  }finally{canvas.width=canvas.height=0;}
+ }
+ async function prepare(options){
+  const {pdfjs,page,info,table,key,optionalContent,check=()=>{}}=options;
+  const found=await inspectSource(options);if(!found.ok)return found;
+  const {paths,structure,roomLabels,drawingScale}=found;let dims=found.dims;
   if(table?.verified&&!roomLabels.complete)return {ok:false,reason:'не все помещения удалось достоверно подписать на плане',foundRooms:roomLabels.items.length};
   // Missing positions are reported; an incomplete plan cannot silently publish.
   if(!dims)dims={widthMm:null,heightMm:null,derived:[],basis:'unavailable'};
@@ -500,5 +520,5 @@
   return {updated:true,card:{...old,...patch}};
  }
  if(typeof document!=='undefined')CatalogQuality.protectSave();
- root.CatalogPlan=Object.freeze({prepare,refreshExisting,vectors,chooseStructure,labels,dimensions,version:VERSION});
+ root.CatalogPlan=Object.freeze({prepare,refreshExisting,vectors,chooseStructure,labels,dimensions,generationSource,version:VERSION});
 })(window);

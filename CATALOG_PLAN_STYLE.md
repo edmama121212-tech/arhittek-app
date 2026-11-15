@@ -110,3 +110,15 @@ Save clicks still run the current publication gate. Native bootstrap tests
 start with no quality global. Chromium/WebKit regression recreates an old shell
 without its quality script/UI/save gate, loads the new renderer, and verifies
 recovery, no autosave, invalid-card blocking and a single explicit publication.
+
+## Generated furnished plans
+
+The optional server endpoint `catalog-plan-generate` renders a cropped original PDF drawing and a verified room schedule. It uses GPT Image 2.5 Sunburst for presentation and an independent GPT-5.4 visual comparison. Embedded columns must merge into wall surfaces. Verification includes walls, openings, full stairs, columns, room labels and visible artifacts. This is probabilistic visual verification, not a mathematical guarantee of architectural correctness.
+
+Generation jobs and their source/result PNGs are private, accessible through an owner-authenticated endpoint. A persistent source/manifest hash prevents duplicate generation on repeated imports. Review and generation run in separate background stages. A rejected geometric comparison permits one corrective generation. A provider failure can be retried during a subsequent manual import. A stale worker requires attention instead of automatically issuing another paid request.
+
+Only a result accepted by the comparison enters the draft. Overall width and height are read from the PDF analysis and drawn by canvas outside the generated building bounds. Missing dimensions or schedules block generation. The owner still explicitly saves the catalogue card. Image fingerprints invalidate a changed result. This feature does not publish or rewrite existing cards automatically.
+
+Set `OPENAI_API_KEY` in Edge Function secrets. Model overrides are `CATALOG_IMAGE_MODEL` and `CATALOG_REVIEW_MODEL`. Deploy the additive `catalog_generated_plans` migration before the endpoint. `verify_jwt=false` is deliberate because the function verifies the application's owner session through `get_employee_access` on each operation. Public health responses contain only configuration/model availability, never credentials.
+
+Validation includes mocked provider transactions, owner isolation, deduplication, review retries, cancellation, exact dimension labels and browser PDF import. Live provider validation is pending usable API credits after a real edit request returned `credit_balance_exhausted`. The client must remain unreleased until that prerequisite and the visual comparison test pass.
