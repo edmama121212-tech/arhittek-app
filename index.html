@@ -912,6 +912,10 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
           <input type="text" id="kp-start" placeholder="например: после аванса">
         </div>
       </div>
+      <div class="field">
+        <label for="kp-comment">Комментарий для клиента</label>
+        <textarea id="kp-comment" rows="3" maxlength="2000" placeholder="Например: в стоимость включены два варианта планировки"></textarea>
+      </div>
     </div>
 
     <div class="section-label"><span class="lbl-text">Реквизиты в PDF</span><span class="section-label-line"></span></div>
@@ -937,7 +941,7 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
     <div id="kpServicesList"></div>
     <button class="btn btn-secondary" id="kpAddService">+ Добавить услугу</button>
 
-    <div class="section-label"><span class="lbl-text">Скидка</span><span class="section-label-line"></span></div>
+    <div class="section-label"><span class="lbl-text">Дополнительная скидка на всё КП</span><span class="section-label-line"></span></div>
     <div class="card">
       <div class="field-row">
         <div class="field">
@@ -955,12 +959,19 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
     </div>
 
     <div class="section-label"><span class="lbl-text">Итог</span><span class="section-label-line"></span></div>
+    <div class="card field">
+      <label for="kp-advance-percent">Условия оплаты</label>
+      <select id="kp-advance-percent">
+        <option value="50">Аванс 50%, остаток 50%</option>
+        <option value="100">Оплата 100% одним платежом</option>
+      </select>
+    </div>
     <div class="fee-card">
       <div class="fee-row"><div class="fl">Сумма услуг</div><div class="fv" id="kp-subtotal">0 ₽</div></div>
-      <div class="fee-row"><div class="fl">Скидка</div><div class="fv" id="kp-discount-amount">0 ₽</div></div>
+      <div class="fee-row"><div class="fl">Дополнительная скидка</div><div class="fv" id="kp-discount-amount">0 ₽</div></div>
       <div class="fee-row total"><div class="fl">Итого к оплате</div><div class="fv" id="kp-total">0 ₽</div></div>
-      <div class="fee-row remaining"><div class="fl">Аванс (50%)</div><div class="fv" id="kp-advance">0 ₽</div></div>
-      <div class="fee-row"><div class="fl">Остаток после аванса</div><div class="fv" id="kp-remainder">0 ₽</div></div>
+      <div class="fee-row remaining"><div class="fl" id="kp-advance-label">Аванс (50%)</div><div class="fv" id="kp-advance">0 ₽</div></div>
+      <div class="fee-row"><div class="fl">Остаток</div><div class="fv" id="kp-remainder">0 ₽</div></div>
     </div>
 
     <button class="btn btn-primary" id="kpExportPdf">Скачать PDF</button>
@@ -8953,7 +8964,7 @@ function renderKpListForProject(projectId){
     return `<div class="list-item">
       <div style="cursor:pointer; flex:1;" onclick="loadKpFormById('${kp.id}')">
         <div class="li-name">${escapeHtml(kp.client_name || 'Без имени')}</div>
-        <div class="li-meta">${fmtDate(kp.kp_date)} · ${fmtMoney(total)}${kp.payment_method==='card'?' · карта':' · счёт'}</div>
+        <div class="li-meta">${fmtDate(kp.kp_date)} · ${kpMoney(total)}${kp.payment_method==='card'?' · карта':' · счёт'}</div>
       </div>
       <div class="li-actions">
         <button class="icon-btn" title="Редактировать" onclick="loadKpFormById('${kp.id}')">✏️</button>
@@ -9324,7 +9335,7 @@ function renderKpServices(){
   list.innerHTML = kpServices.map((s, idx)=>{
     const item = kpServiceItem(s);
     const effectiveRate = (s.customRate !== null && s.customRate !== undefined) ? s.customRate : item.rate;
-    const sum = effectiveRate * (Number(s.qty)||0);
+    const sum = kpLineTotal(s);
     const isCustom = effectiveRate !== item.rate;
     const selectedIndex=flat.findIndex(it=>it.name===item.name && it.unit===item.unit && Number(it.rate)===Number(item.rate) && (it.desc||'')===(item.desc||'') && (!item.id || it.id===item.id));
     let optionsHtml = selectedIndex<0 ? `<option value="snapshot" selected>Согласовано: ${escapeHtml(item.name)} (${fmt(item.rate)} ₽/${escapeHtml(item.unit)})</option>` : '';
@@ -9351,16 +9362,17 @@ function renderKpServices(){
       <div class="field-row">
         <div class="field">
           <label>${item.unit === 'м²' ? 'Площадь, м²' : 'Количество, шт'}</label>
-          <input type="number" value="${s.qty}" min="0" step="0.1" onchange="updateKpService('${s.id}','qty', this.value)">
+          <input type="number" value="${s.qty}" min="0" step="0.01" onchange="updateKpService('${s.id}','qty', this.value)">
         </div>
         <div class="field">
-          <label>Договорная цена, ₽/${item.unit}${isCustom ? ` <span style="color:var(--gold); text-transform:none;">(прайс: ${fmt(item.rate)})</span>` : ''}</label>
-          <input type="number" value="${effectiveRate}" onchange="updateKpService('${s.id}','customRate', this.value)" style="${isCustom ? 'color:var(--gold); border-color:var(--gold);' : ''}">
+          <label>Цена для клиента, ₽/${escapeHtml(item.unit)}</label>
+          <input type="number" min="0" step="0.01" value="${effectiveRate}" onchange="updateKpService('${s.id}','customRate', this.value)" style="${isCustom ? 'color:var(--gold); border-color:var(--gold);' : ''}">
         </div>
       </div>
+      <div class="hint">По тарифу: ${kpMoney(item.rate)}/${escapeHtml(item.unit)}${effectiveRate < item.rate ? ` · Скидка: ${kpMoney(item.rate-effectiveRate)}/${escapeHtml(item.unit)}` : ''}</div>
       ${isCustom ? `<button class="icon-btn" style="font-size:11px; color:var(--text-dim); padding:0; margin-bottom:6px;" onclick="updateKpService('${s.id}','customRate','')">↺ Вернуть цену из прайса</button>` : ''}
       ${item.unit === 'м²' ? `<label style="display:flex;gap:10px;align-items:center;margin:10px 0"><input type="checkbox" ${s.preliminaryArea?'checked':''} onchange="updateKpService('${s.id}','preliminaryArea',this.checked)" style="width:auto">Предварительная площадь</label>${s.preliminaryArea?'<div class="note">Площадь и стоимость могут увеличиться или уменьшиться в ходе проектирования. Итоговый расчёт — по уточнённой площади и согласованному тарифу за м².</div>':''}` : ''}
-      <div class="kp-service-sum">${s.preliminaryArea&&item.unit==='м²'?'≈ ':''}${fmtMoney(sum)}</div>
+      <div class="kp-service-sum">${s.preliminaryArea&&item.unit==='м²'?'≈ ':''} ${Number(s.qty)||0} ${escapeHtml(item.unit)} × ${kpMoney(effectiveRate)} = ${kpMoney(sum)}</div>
     </div>`;
   }).join('');
 
@@ -9383,34 +9395,35 @@ function updateKpService(id, field, value){
   renderKpServices();
 }
 
+function kpRound(value){ return Math.round((value + Number.EPSILON) * 100) / 100; }
+function kpNumber(value){ return Number(value).toLocaleString('ru-RU',{maximumFractionDigits:2}); }
+function kpMoney(value){ return kpNumber(value)+' ₽'; }
+function kpLineTotal(service){
+  return kpRound((service.customRate ?? kpServiceItem(service).rate) * (Number(service.qty)||0));
+}
+function kpAmounts(services, discountType, discountValue, advancePercent){
+  const subtotal = kpRound(services.reduce((sum, service)=>sum + kpLineTotal(service), 0));
+  const rawDiscount = discountType === 'percent' ? subtotal * discountValue / 100 : discountValue;
+  const discountAmount = kpRound(Math.max(0, Math.min(subtotal, rawDiscount)));
+  const total = kpRound(subtotal - discountAmount);
+  const advance = advancePercent === 100 ? total : kpRound(total / 2);
+  return {subtotal,discountAmount,total,advance,remainder:kpRound(total-advance),advancePercent};
+}
+
 function updateKpTotals(){
-  const flat = kpFlatCatalog();
-  const subtotal = kpServices.reduce((sum,s)=>{
-    const item = kpServiceItem(s);
-    const rate = (s.customRate !== null && s.customRate !== undefined) ? s.customRate : item.rate;
-    return sum + rate * (Number(s.qty)||0);
-  }, 0);
-
-  const discType = document.getElementById('kp-discount-type').value;
-  const discVal = parseFloat(document.getElementById('kp-discount-value').value) || 0;
-  let discountAmount = 0;
-  if(discType === 'percent') discountAmount = subtotal * discVal / 100;
-  else discountAmount = discVal;
-  if(discountAmount > subtotal) discountAmount = subtotal;
-  if(discountAmount < 0) discountAmount = 0;
-
-  const total = subtotal - discountAmount;
-  const advance = total * 0.5;
-  const remainder = total - advance;
-
+  const totals = kpAmounts(kpServices, document.getElementById('kp-discount-type').value,
+    Number(document.getElementById('kp-discount-value').value)||0,
+    document.getElementById('kp-advance-percent').value==='100' ? 100 : 50);
+  const {subtotal, discountAmount, total, advance, remainder, advancePercent} = totals;
+  document.getElementById('kp-advance-label').textContent=advancePercent===100?'Оплата (100%)':'Аванс (50%)';
   const prefix = kpServices.some(s=>s.preliminaryArea&&kpServiceItem(s).unit==='м²')?'≈ ':'';
-  document.getElementById('kp-subtotal').textContent = prefix+fmtMoney(subtotal);
-  document.getElementById('kp-discount-amount').textContent = fmtMoney(discountAmount);
-  document.getElementById('kp-total').textContent = prefix+fmtMoney(total);
-  document.getElementById('kp-advance').textContent = prefix+fmtMoney(advance);
-  document.getElementById('kp-remainder').textContent = prefix+fmtMoney(remainder);
+  document.getElementById('kp-subtotal').textContent = prefix+kpMoney(subtotal);
+  document.getElementById('kp-discount-amount').textContent = kpMoney(discountAmount);
+  document.getElementById('kp-total').textContent = prefix+kpMoney(total);
+  document.getElementById('kp-advance').textContent = prefix+kpMoney(advance);
+  document.getElementById('kp-remainder').textContent = prefix+kpMoney(remainder);
 
-  return {subtotal, discountAmount, total, advance, remainder};
+  return totals;
 }
 
 // ============================================================
@@ -10068,6 +10081,7 @@ function getKpData(){
     date: document.getElementById('kp-date').value || financeToday(),
     object: document.getElementById('kp-object').value.trim(),
     deadline: document.getElementById('kp-deadline').value.trim(),
+    comment: document.getElementById('kp-comment').value.trim(),
     startDate: document.getElementById('kp-start').value.trim(),
     showCompany: document.getElementById('kp-show-company')?.checked !== false,
     showAccount: document.getElementById('kp-show-account')?.checked === true,
@@ -10096,7 +10110,7 @@ function getKpData(){
         listRate: item.rate,
         desc: item.desc || '',
         qty: Number(s.qty)||0,
-        sum: rate * (Number(s.qty)||0),
+        sum: kpLineTotal(s),
       };
     }),
     discountType: document.getElementById('kp-discount-type').value,
@@ -10141,7 +10155,7 @@ function registerPdfFonts(doc){
 }
 
 function pdfMoney(n){
-  return fmt(n) + ' руб.';
+  return kpNumber(n) + ' руб.';
 }
 
 function exportKpToPdf(){
@@ -10196,31 +10210,33 @@ function exportKpToPdf(){
     String(i+1),
     s.name,
     `${s.qty} ${s.unit}${s.preliminaryArea?' (предв.)':''}`,
-    s.rate !== s.listRate ? `${pdfMoney(s.rate)}*` : `${pdfMoney(s.rate)}`,
+    pdfMoney(s.listRate) + '/' + s.unit,
+    pdfMoney(s.rate) + '/' + s.unit,
     `${pdfMoney(s.sum)}${s.preliminaryArea?' (предв.)':''}`,
   ]);
   const preliminary = data.services.some(s=>s.preliminaryArea);
-  const hasCustomRates = data.services.some(s=>s.rate !== s.listRate);
 
   doc.autoTable({
     startY: y,
-    head: [['№', 'Услуга', 'Объём', 'Ставка', 'Сумма']],
+    head: [['№', 'Услуга', 'Объём', 'По тарифу', 'Для клиента', 'Сумма']],
     body: rows,
     theme: 'grid',
     headStyles: {fillColor: [69,134,236], textColor: [255,255,255], fontStyle:'bold', font:'Roboto'},
     styles: {fontSize: 9, cellPadding: 3, font:'Roboto'},
-    columnStyles: {0:{cellWidth:10}, 2:{cellWidth:25}, 3:{cellWidth:30}, 4:{cellWidth:30}},
+    columnStyles: {0:{cellWidth:10}, 2:{cellWidth:21}, 3:{cellWidth:30}, 4:{cellWidth:30}, 5:{cellWidth:29}},
     margin: {left: margin, right: margin},
   });
 
   let finalY = doc.lastAutoTable.finalY + 5;
 
-  if(hasCustomRates){
-    doc.setFontSize(8);
-    doc.setTextColor(140);
-    doc.text('* индивидуальная договорная цена', margin, finalY);
-    doc.setTextColor(0);
-    finalY += 6;
+  if(data.comment){
+    doc.setFont('Roboto','normal');doc.setFontSize(10);
+    const lines=doc.splitTextToSize('Комментарий: '+data.comment,pageWidth-margin*2);
+    for(const line of lines){
+      if(finalY>270){doc.addPage();finalY=20;}
+      doc.text(line,margin,finalY);finalY+=5;
+    }
+    finalY+=4;
   }
 
   if(preliminary){
@@ -10266,7 +10282,7 @@ function exportKpToPdf(){
   finalY += 6;
 
   if(data.discountAmount > 0){
-    doc.text('Скидка:', labelX, finalY, {align:'right'});
+    doc.text('Дополнительная скидка:', labelX, finalY, {align:'right'});
     doc.text(`- ${pdfMoney(data.discountAmount)}`, valueX, finalY, {align:'right'});
     finalY += 6;
   }
@@ -10279,10 +10295,10 @@ function exportKpToPdf(){
 
   doc.setFont('Roboto','normal');
   doc.setFontSize(10);
-  doc.text('Аванс (50%):', labelX, finalY, {align:'right'});
+  doc.text(data.advancePercent===100?'Оплата (100%):':'Аванс (50%):', labelX, finalY, {align:'right'});
   doc.text(pdfMoney(data.advance), valueX, finalY, {align:'right'});
   finalY += 6;
-  doc.text('Остаток после аванса:', labelX, finalY, {align:'right'});
+  doc.text('Остаток:', labelX, finalY, {align:'right'});
   doc.text(pdfMoney(data.remainder), valueX, finalY, {align:'right'});
 
   finalY += 14;
@@ -10352,16 +10368,17 @@ function exportKpToXlsx(){
   if(data.object) rows.push(['Объект', data.object]);
   rows.push(['Дата', fmtDate(data.date)]);
   rows.push([]);
-  rows.push(['№','Услуга','Объём','Ед.','Цена по прайсу, ₽','Договорная цена, ₽','Сумма, ₽']);
+  if(data.comment) rows.push(['Комментарий', data.comment]);
+  rows.push(['№','Услуга','Объём','Ед.','По тарифу, ₽ за ед.','Для клиента, ₽ за ед.','Сумма, ₽']);
   data.services.forEach((s,i)=>{
     rows.push([i+1, s.name, s.qty, s.unit, s.listRate, s.rate, s.sum]);
   });
   rows.push([]);
   rows.push(['', '', '', '', '', 'Сумма услуг:', data.subtotal]);
-  if(data.discountAmount > 0) rows.push(['', '', '', '', '', 'Скидка:', -data.discountAmount]);
+  if(data.discountAmount > 0) rows.push(['', '', '', '', '', 'Дополнительная скидка:', -data.discountAmount]);
   rows.push(['', '', '', '', '', 'Итого:', data.total]);
-  rows.push(['', '', '', '', '', 'Аванс (50%):', data.advance]);
-  rows.push(['', '', '', '', '', 'Остаток после аванса:', data.remainder]);
+  rows.push(['', '', '', '', '', data.advancePercent===100?'Оплата (100%):':'Аванс (50%):', data.advance]);
+  rows.push(['', '', '', '', '', 'Остаток:', data.remainder]);
 
   const withDesc = data.services.filter(s=>s.desc);
   if(withDesc.length){
@@ -10438,6 +10455,8 @@ function resetKpForm(){
   document.getElementById('kp-date').value = financeToday();
   document.getElementById('kp-deadline').value = '';
   document.getElementById('kp-start').value = '';
+  document.getElementById('kp-comment').value = '';
+  document.getElementById('kp-advance-percent').value = '50';
   document.getElementById('kp-discount-type').value = 'percent';
   document.getElementById('kp-discount-value').value = '';
   kpPaymentMethod = 'account';
@@ -10454,6 +10473,8 @@ function loadKpForm(kp){
   document.getElementById('kp-date').value = kp.kp_date || financeToday();
   document.getElementById('kp-deadline').value = kp.deadline || '';
   document.getElementById('kp-start').value = kp.start_date || '';
+  document.getElementById('kp-comment').value = kp.client_comment || '';
+  document.getElementById('kp-advance-percent').value = Number(kp.advance_percent)===100?'100':'50';
   document.getElementById('kp-discount-type').value = kp.discount_type || 'percent';
   document.getElementById('kp-discount-value').value = kp.discount_value || '';
 
@@ -10486,6 +10507,8 @@ async function saveKpForm(){
     kp_date: document.getElementById('kp-date').value || financeToday(),
     deadline: document.getElementById('kp-deadline').value.trim(),
     start_date: document.getElementById('kp-start').value.trim(),
+    client_comment: data.comment,
+    advance_percent: data.advancePercent,
     payment_method: kpPaymentMethod,
     discount_type: document.getElementById('kp-discount-type').value,
     discount_value: parseFloat(document.getElementById('kp-discount-value').value) || 0,
@@ -10536,18 +10559,7 @@ async function deleteKpForm(id){
 }
 
 function kpRowSummary(kp){
-  const flat = kpFlatCatalog();
-  const services = kp.services || [];
-  let subtotal = 0;
-  services.forEach(s=>{
-    const item = kpServiceItem(s);
-    const rate = (s.customRate!==null && s.customRate!==undefined) ? s.customRate : item.rate;
-    subtotal += rate * (Number(s.qty)||0);
-  });
-  let discountAmount = 0;
-  if(kp.discount_type === 'percent') discountAmount = subtotal * (Number(kp.discount_value)||0) / 100;
-  else discountAmount = Number(kp.discount_value)||0;
-  return Math.max(0, subtotal - discountAmount);
+  return kpAmounts(kp.services || [], kp.discount_type || 'percent', Number(kp.discount_value)||0, Number(kp.advance_percent)||50).total;
 }
 
 function loadKpFormById(id){
@@ -10571,7 +10583,7 @@ function renderKpSavedList(){
     return `<div class="list-item">
       <div style="cursor:pointer; flex:1;" onclick="loadKpFormById('${kp.id}')">
         <div class="li-name">${escapeHtml(kp.client_name || 'Без имени')}</div>
-        <div class="li-meta">${escapeHtml(kp.object||'')}${proj?' · '+escapeHtml(proj.name):''} · ${fmtDate(kp.kp_date)} · ${fmtMoney(total)}</div>
+        <div class="li-meta">${escapeHtml(kp.object||'')}${proj?' · '+escapeHtml(proj.name):''} · ${fmtDate(kp.kp_date)} · ${kpMoney(total)}</div>
       </div>
       <div class="li-actions">
         <button class="icon-btn" title="Редактировать" onclick="loadKpFormById('${kp.id}')">✏️</button>
@@ -10784,6 +10796,7 @@ document.getElementById('kpBack').addEventListener('click', ()=>{
   window.scrollTo(0,0);
 });
 document.getElementById('kpAddService').addEventListener('click', addKpService);
+document.getElementById('kp-advance-percent').addEventListener('change', updateKpTotals);
 document.getElementById('kp-discount-type').addEventListener('change', updateKpTotals);
 document.getElementById('kp-discount-value').addEventListener('input', updateKpTotals);
 document.getElementById('kpExportPdf').addEventListener('click', exportKpToPdf);

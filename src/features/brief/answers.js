@@ -101,7 +101,7 @@ function renderKpListForProject(projectId){
     return `<div class="list-item">
       <div style="cursor:pointer; flex:1;" onclick="loadKpFormById('${kp.id}')">
         <div class="li-name">${escapeHtml(kp.client_name || 'Без имени')}</div>
-        <div class="li-meta">${fmtDate(kp.kp_date)} · ${fmtMoney(total)}${kp.payment_method==='card'?' · карта':' · счёт'}</div>
+        <div class="li-meta">${fmtDate(kp.kp_date)} · ${kpMoney(total)}${kp.payment_method==='card'?' · карта':' · счёт'}</div>
       </div>
       <div class="li-actions">
         <button class="icon-btn" title="Редактировать" onclick="loadKpFormById('${kp.id}')">✏️</button>
@@ -472,7 +472,7 @@ function renderKpServices(){
   list.innerHTML = kpServices.map((s, idx)=>{
     const item = kpServiceItem(s);
     const effectiveRate = (s.customRate !== null && s.customRate !== undefined) ? s.customRate : item.rate;
-    const sum = effectiveRate * (Number(s.qty)||0);
+    const sum = kpLineTotal(s);
     const isCustom = effectiveRate !== item.rate;
     const selectedIndex=flat.findIndex(it=>it.name===item.name && it.unit===item.unit && Number(it.rate)===Number(item.rate) && (it.desc||'')===(item.desc||'') && (!item.id || it.id===item.id));
     let optionsHtml = selectedIndex<0 ? `<option value="snapshot" selected>Согласовано: ${escapeHtml(item.name)} (${fmt(item.rate)} ₽/${escapeHtml(item.unit)})</option>` : '';
@@ -499,16 +499,17 @@ function renderKpServices(){
       <div class="field-row">
         <div class="field">
           <label>${item.unit === 'м²' ? 'Площадь, м²' : 'Количество, шт'}</label>
-          <input type="number" value="${s.qty}" min="0" step="0.1" onchange="updateKpService('${s.id}','qty', this.value)">
+          <input type="number" value="${s.qty}" min="0" step="0.01" onchange="updateKpService('${s.id}','qty', this.value)">
         </div>
         <div class="field">
-          <label>Договорная цена, ₽/${item.unit}${isCustom ? ` <span style="color:var(--gold); text-transform:none;">(прайс: ${fmt(item.rate)})</span>` : ''}</label>
-          <input type="number" value="${effectiveRate}" onchange="updateKpService('${s.id}','customRate', this.value)" style="${isCustom ? 'color:var(--gold); border-color:var(--gold);' : ''}">
+          <label>Цена для клиента, ₽/${escapeHtml(item.unit)}</label>
+          <input type="number" min="0" step="0.01" value="${effectiveRate}" onchange="updateKpService('${s.id}','customRate', this.value)" style="${isCustom ? 'color:var(--gold); border-color:var(--gold);' : ''}">
         </div>
       </div>
+      <div class="hint">По тарифу: ${kpMoney(item.rate)}/${escapeHtml(item.unit)}${effectiveRate < item.rate ? ` · Скидка: ${kpMoney(item.rate-effectiveRate)}/${escapeHtml(item.unit)}` : ''}</div>
       ${isCustom ? `<button class="icon-btn" style="font-size:11px; color:var(--text-dim); padding:0; margin-bottom:6px;" onclick="updateKpService('${s.id}','customRate','')">↺ Вернуть цену из прайса</button>` : ''}
       ${item.unit === 'м²' ? `<label style="display:flex;gap:10px;align-items:center;margin:10px 0"><input type="checkbox" ${s.preliminaryArea?'checked':''} onchange="updateKpService('${s.id}','preliminaryArea',this.checked)" style="width:auto">Предварительная площадь</label>${s.preliminaryArea?'<div class="note">Площадь и стоимость могут увеличиться или уменьшиться в ходе проектирования. Итоговый расчёт — по уточнённой площади и согласованному тарифу за м².</div>':''}` : ''}
-      <div class="kp-service-sum">${s.preliminaryArea&&item.unit==='м²'?'≈ ':''}${fmtMoney(sum)}</div>
+      <div class="kp-service-sum">${s.preliminaryArea&&item.unit==='м²'?'≈ ':''} ${Number(s.qty)||0} ${escapeHtml(item.unit)} × ${kpMoney(effectiveRate)} = ${kpMoney(sum)}</div>
     </div>`;
   }).join('');
 
@@ -531,33 +532,34 @@ function updateKpService(id, field, value){
   renderKpServices();
 }
 
+function kpRound(value){ return Math.round((value + Number.EPSILON) * 100) / 100; }
+function kpNumber(value){ return Number(value).toLocaleString('ru-RU',{maximumFractionDigits:2}); }
+function kpMoney(value){ return kpNumber(value)+' ₽'; }
+function kpLineTotal(service){
+  return kpRound((service.customRate ?? kpServiceItem(service).rate) * (Number(service.qty)||0));
+}
+function kpAmounts(services, discountType, discountValue, advancePercent){
+  const subtotal = kpRound(services.reduce((sum, service)=>sum + kpLineTotal(service), 0));
+  const rawDiscount = discountType === 'percent' ? subtotal * discountValue / 100 : discountValue;
+  const discountAmount = kpRound(Math.max(0, Math.min(subtotal, rawDiscount)));
+  const total = kpRound(subtotal - discountAmount);
+  const advance = advancePercent === 100 ? total : kpRound(total / 2);
+  return {subtotal,discountAmount,total,advance,remainder:kpRound(total-advance),advancePercent};
+}
+
 function updateKpTotals(){
-  const flat = kpFlatCatalog();
-  const subtotal = kpServices.reduce((sum,s)=>{
-    const item = kpServiceItem(s);
-    const rate = (s.customRate !== null && s.customRate !== undefined) ? s.customRate : item.rate;
-    return sum + rate * (Number(s.qty)||0);
-  }, 0);
-
-  const discType = document.getElementById('kp-discount-type').value;
-  const discVal = parseFloat(document.getElementById('kp-discount-value').value) || 0;
-  let discountAmount = 0;
-  if(discType === 'percent') discountAmount = subtotal * discVal / 100;
-  else discountAmount = discVal;
-  if(discountAmount > subtotal) discountAmount = subtotal;
-  if(discountAmount < 0) discountAmount = 0;
-
-  const total = subtotal - discountAmount;
-  const advance = total * 0.5;
-  const remainder = total - advance;
-
+  const totals = kpAmounts(kpServices, document.getElementById('kp-discount-type').value,
+    Number(document.getElementById('kp-discount-value').value)||0,
+    document.getElementById('kp-advance-percent').value==='100' ? 100 : 50);
+  const {subtotal, discountAmount, total, advance, remainder, advancePercent} = totals;
+  document.getElementById('kp-advance-label').textContent=advancePercent===100?'Оплата (100%)':'Аванс (50%)';
   const prefix = kpServices.some(s=>s.preliminaryArea&&kpServiceItem(s).unit==='м²')?'≈ ':'';
-  document.getElementById('kp-subtotal').textContent = prefix+fmtMoney(subtotal);
-  document.getElementById('kp-discount-amount').textContent = fmtMoney(discountAmount);
-  document.getElementById('kp-total').textContent = prefix+fmtMoney(total);
-  document.getElementById('kp-advance').textContent = prefix+fmtMoney(advance);
-  document.getElementById('kp-remainder').textContent = prefix+fmtMoney(remainder);
+  document.getElementById('kp-subtotal').textContent = prefix+kpMoney(subtotal);
+  document.getElementById('kp-discount-amount').textContent = kpMoney(discountAmount);
+  document.getElementById('kp-total').textContent = prefix+kpMoney(total);
+  document.getElementById('kp-advance').textContent = prefix+kpMoney(advance);
+  document.getElementById('kp-remainder').textContent = prefix+kpMoney(remainder);
 
-  return {subtotal, discountAmount, total, advance, remainder};
+  return totals;
 }
 
