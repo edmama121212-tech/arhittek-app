@@ -400,16 +400,22 @@ function exportKpToPdf(){
     finalY += 3;
   }
 
-  if(finalY > 250){ doc.addPage(); finalY = 20; }
+  if(finalY > 238){ doc.addPage(); finalY = 20; }
 
   const labelX = pageWidth - margin - 45;
   const valueX = pageWidth - margin;
 
   doc.setFontSize(10);
   doc.setFont('Roboto','normal');
-  doc.text('Сумма услуг:', labelX, finalY, {align:'right'});
-  doc.text(pdfMoney(data.subtotal), valueX, finalY, {align:'right'});
+  doc.text('Стоимость до скидок:', labelX, finalY, {align:'right'});
+  doc.text(pdfMoney(data.beforeDiscounts), valueX, finalY, {align:'right'});
   finalY += 6;
+  if(data.tariffSaving>0){
+    doc.setFont('Roboto','bold');
+    doc.text('Скидка на тарифы:',labelX,finalY,{align:'right'});
+    doc.text('- '+pdfMoney(data.tariffSaving),valueX,finalY,{align:'right'});
+    doc.setFont('Roboto','normal');finalY+=6;
+  }
 
   if(data.discountAmount > 0){
     doc.text('Дополнительная скидка:', labelX, finalY, {align:'right'});
@@ -504,7 +510,8 @@ function exportKpToXlsx(){
     rows.push([i+1, s.name, s.qty, s.unit, s.listRate, s.rate, s.sum]);
   });
   rows.push([]);
-  rows.push(['', '', '', '', '', 'Сумма услуг:', data.subtotal]);
+  rows.push(['', '', '', '', '', 'Стоимость до скидок:', data.beforeDiscounts]);
+  if(data.tariffSaving>0) rows.push(['', '', '', '', '', 'Скидка на тарифы:', -data.tariffSaving]);
   if(data.discountAmount > 0) rows.push(['', '', '', '', '', 'Дополнительная скидка:', -data.discountAmount]);
   rows.push(['', '', '', '', '', 'Итого:', data.total]);
   rows.push(['', '', '', '', '', data.advancePercent===100?'Оплата (100%):':'Аванс (50%):', data.advance]);

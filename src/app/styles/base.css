@@ -524,3 +524,9 @@
   #pf-compensation-block .method-pill{display:flex;gap:6px;}
   #pf-compensation-summary .comp-total{font-family:'Space Grotesk',sans-serif;font-weight:700;color:var(--gold);}
   .payroll-note{font-size:10px;color:var(--text-dim);line-height:1.45;}
+
+#view-kp [hidden]{display:none!important}
+#view-kp .kp-saving{display:flex;flex-wrap:wrap;gap:4px 16px;justify-content:space-between;align-items:center;margin:10px 0;padding:10px 12px;border-inline-start:3px solid var(--green);border-radius:6px;background:var(--green-soft);color:var(--green);font-size:14px}
+#view-kp .kp-saving strong{font-size:16px}
+#view-kp .kp-saving-row{background:var(--green-soft);padding:9px 8px;gap:8px}
+#view-kp .kp-saving-row :is(.fl,.fv){font-size:15px;color:var(--green);font-weight:700}
