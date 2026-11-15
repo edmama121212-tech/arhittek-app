@@ -19,7 +19,7 @@ const snapshot=async()=>(await db.query('select public.get_financial_journal() j
 const cmd=(c,p,id,rev)=>db.query('select public.confirm_financial_operation($1,$2,$3,$4) j',[c,p,U(id),rev]);
 const eq=(a,b)=>{assert.deepEqual(a,b);checks++};
 
-await db.exec(fs.readFileSync('supabase/migrations/20261030192422_finance_workspace.sql','utf8'));await role(1);
+await db.exec(fs.readFileSync('supabase/migrations/20261030192422_finance_workspace.sql','utf8'));await db.exec(fs.readFileSync('supabase/receipt-timing.sql','utf8'));await role(1);
 let j=await snapshot();const activatePayload={reason:'Isolated verified cash',confirmed:true,fingerprint:j.fingerprint,cash:100000,amortization:0,projects:[]};
 const path=require('path'),{chromium,webkit}=require('playwright'),root=path.resolve(__dirname,'..');
 const browser=await(process.env.CATALOG_BROWSER==='webkit'?webkit:chromium).launch({executablePath:process.env.BROWSER_EXECUTABLE||undefined,headless:true,args:process.env.CATALOG_BROWSER==='webkit'?[]:['--no-sandbox','--disable-dev-shm-usage']});
@@ -30,6 +30,7 @@ try{
  for(const [key,p]of[['xlsx@','xlsx/dist/xlsx.full.min.js'],['jspdf@','jspdf/dist/jspdf.umd.min.js'],['jspdf-autotable@','jspdf-autotable/dist/jspdf.plugin.autotable.min.js']])if(u.href.includes(key))file=path.join(root,'node_modules',p);
  if(file&&fs.existsSync(file))return route.fulfill({path:file,contentType:/\.js$/.test(file)?'text/javascript':file.endsWith('.html')?'text/html':file.endsWith('.css')?'text/css':undefined});return route.fulfill({body:'',contentType:'text/javascript'});});
  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.exposeFunction('__receiptRows',async()=>(await db.query('select * from public.ledger_entries')).rows);
  await page.exposeFunction('__financeRPC',async({name,args={}})=>{try{let data;
  if(name==='get_financial_journal')data=await snapshot();
  else if(name==='confirm_finance_workspace')data=(await db.query('select public.confirm_finance_workspace($1,$2,$3,$4) j',[args.p_command,args.p_payload,args.p_operation,args.p_revision])).rows[0].j;
@@ -89,6 +90,26 @@ try{
  await page.setViewportSize({width:390,height:844});await page.locator('#financeWorkspace [data-fw-tab="overview"]').click();
  if(process.env.FINANCE_SCREENSHOT)await page.screenshot({path:process.env.FINANCE_SCREENSHOT,fullPage:true});
  const before=(await snapshot()).workspace.cash;eq(await page.evaluate(()=>{const old=state.financialJournal;return ARHITTEKFinanceWorkspace.accepted({...old,revision:old.revision-1,workspace:{...old.workspace,revision:old.revision-1}},{token:session.token,id:session.employeeId})}),false);eq((await snapshot()).workspace.cash,before);
+
+ // Correct a current receipt as previously received; real DB backs the form.
+ const receiptDay=(await snapshot()).workspace.as_of;
+ await db.query("insert into public.ledger_entries(id,project_id,type,amount,entry_date,description) values($1,$2,'advance',50000,$3,'Forgotten customer payment')",[U(901),U(10),receiptDay]);
+ await page.evaluate(async()=>{__db.ledger_entries=await __receiptRows();await loadAll();});
+ const receiptCash=(await snapshot()).workspace.cash;
+ await page.locator('#financeWorkspace [data-fw-tab="history"]').click();
+ await page.locator('#financeWorkspace summary').filter({hasText:'Исправить дату или учёт оплаты клиента'}).click();
+ await page.locator('[data-fw="correct-receipt"][data-id="'+U(901)+'"]').click();
+ await modal.locator('[name="mode"]').selectOption('before');
+ eq(await modal.locator('[name="date"]').isDisabled(),true);
+ await modal.locator('[name="reason"]').fill('Was received before opening cash was confirmed');
+ await modal.locator('[type="submit"]').click();
+ await page.waitForSelector('#financeWorkspaceModal',{state:'detached'});
+ eq((await snapshot()).workspace.cash,receiptCash-50000);
+ await page.evaluate(async()=>{__db.ledger_entries=await __receiptRows();await loadAll();});
+ const receipt=(await db.query('select * from public.ledger_entries where id=$1',[U(901)])).rows[0];
+ eq(receipt.received_before_start,true);eq(Number(receipt.amount),50000);
+ const excluded=await page.evaluate(()=>!ARHITTEKCash.cashEvents(state).some(x=>x.row.id==='20000000-0000-4000-8000-000000000901'));
+ eq(excluded,true);
  eq(errors,[]);console.log(JSON.stringify({passed:checks,failed:[]}));
 }finally{await browser.close();await db.close();}
 })().catch(e=>{console.error(e);process.exitCode=1});

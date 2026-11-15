@@ -37,7 +37,7 @@ function managementSummary(s,workspace){
  let revenue=0,expense=0,forecast=0;
  for(const event of ARHITTEKCash.cashEvents(s)){
   const r=event.row;
-  if(event.date<from||event.date>asOf||construction.has(r.project_id)||ARHITTEKCash.isAdjustment(r)||ARHITTEKCash.isImportedExpense(r))continue;
+  if(r.received_before_start||event.date<from||event.date>asOf||construction.has(r.project_id)||ARHITTEKCash.isAdjustment(r)||ARHITTEKCash.isImportedExpense(r))continue;
   if(r.type==='withdrawal'||r.category==='Вывод средств')continue;
   if(event.amount>0||r.type==='client_refund')revenue+=minor(event.amount);
   else expense-=minor(event.amount);
@@ -111,7 +111,8 @@ function render(){
   html+='<article class="fw-card"><h2>Операции до '+esc(fmtDate(s.start_date))+'</h2><p>Сохранённая история прежнего учёта. Эти записи не меняют новый резерв, амортизацию или остатки счетов. При необходимости прежний долг можно отдельно внести в платёжный календарь.</p></article>'+events.slice(0,100).map(x=>'<article class="fw-card"><p>'+esc(fmtDate(x.date))+' · '+esc(x.row.description||x.row.category||x.row.type||'Операция')+'</p>'+row(x.amount>0?'Поступление':'Расход',Math.abs(x.amount))+'</article>').join('')+(events.length>100?'<p>Показаны последние 100 архивных операций; остальные записи сохранены в исходных разделах.</p>':'');
  }else{
   const ops=[...(j.operations||[]),...(j.history||[])],reversed=new Set(ops.map(x=>x.reverses).filter(Boolean));
-  html+='<article class="fw-card"><h2>Подтверждённые операции</h2><p>Изменение оформляется отдельной отменой с причиной. Исходная запись сохраняется.</p>'+btn('Корректировать резерв','reserve-adjust','',locked)+'</article>'+ops.map(o=>'<article class="fw-card"><h3>'+esc(o.reason)+'</h3><p>'+esc(new Date(o.created_at).toLocaleString('ru-RU',{timeZone:'Europe/Moscow'}))+' · №'+o.revision+'</p>'+row('Изменение денег',o.cash_delta)+row('Резерв после',o.balances_after?.reserve)+(!['activate','obligation','obligation_release'].includes(o.kind)&&!o.reverses&&!o.is_reversed&&!reversed.has(o.id)?journalBtn('Отменить с причиной','reverse',o.id):'<p>Зафиксировано / отменено отдельной записью</p>')+'</article>').join('')+btn('Более ранние операции','history','',locked)+'<details class="fw-card"><summary>Связи ранее внесённых оплат</summary>'+(s.links||[]).map(l=>'<div class="fw-row"><span>'+esc(l.reason)+' · '+money(l.amount)+'</span>'+btn('Отменить связь','unlink',l.id,locked)+'</div>').join('')+'</details><details class="fw-card"><summary>История планов и переводов</summary>'+(s.changes||[]).map(h=>'<div class="fw-card"><b>'+esc(h.after_value?.label||h.after_value?.reason||({plan:'План платежа',pay:'Фактическая оплата',rule:'Регулярное обязательство',wallet_transfer:'Перевод между счетами',reschedule:'Перенос срока',cancel:'Отмена остатка плана',wallet:'Новый счёт',stop_rule:'Остановка регулярного платежа'}[h.entity]||'Финансовое действие'))+'</b><p>'+esc(new Date(h.created_at).toLocaleString('ru-RU'))+'</p>'+(h.before_value?.amount?row('Сумма до',h.before_value.amount):'')+(h.after_value?.amount?row('Сумма после / операции',h.after_value.amount):'')+'<p>Прежний срок: '+esc(h.before_value?.due_date||'—')+' · Новый срок: '+esc(h.after_value?.due_date||'—')+'</p></div>').join('')+'</details>';
+  html+='<details class="fw-card"><summary>Исправить дату или учёт оплаты клиента</summary><p>Оплата до начала текущего учёта сохраняется в проекте, но не прибавляется к уже подтверждённому начальному остатку. Каждое исправление требует причины.</p>'+ (state.ledger||[]).filter(x=>!x.deleted_at&&['advance','final_payment','income','materials_budget','construction_budget'].includes(x.type)).map(x=>'<div class="fw-row"><span>'+esc((state.projects||[]).find(p=>p.id===x.project_id)?.name||'Оплата клиента')+' · '+money(x.amount)+' · '+esc(x.received_before_start?'Ранее получено, дата неизвестна':fmtDate(x.entry_date))+'</span>'+btn('Исправить дату / учёт','correct-receipt',x.id,locked)+'</div>').join('')+'</details>';
+  html+='<article class="fw-card"><h2>Подтверждённые операции</h2><p>Изменение оформляется отдельной отменой с причиной. Исходная запись сохраняется.</p>'+btn('Корректировать резерв','reserve-adjust','',locked)+'</article>'+ops.map(o=>'<article class="fw-card"><h3>'+esc(o.reason)+'</h3><p>'+esc(new Date(o.created_at).toLocaleString('ru-RU',{timeZone:'Europe/Moscow'}))+' · №'+o.revision+'</p>'+row('Изменение денег',o.cash_delta)+row('Резерв после',o.balances_after?.reserve)+(!['activate','obligation','obligation_release','receipt_correction','historical_receipt'].includes(o.kind)&&!o.reverses&&!o.is_reversed&&!reversed.has(o.id)?journalBtn('Отменить с причиной','reverse',o.id):'<p>Зафиксировано / отменено отдельной записью</p>')+'</article>').join('')+btn('Более ранние операции','history','',locked)+'<details class="fw-card"><summary>Связи ранее внесённых оплат</summary>'+(s.links||[]).map(l=>'<div class="fw-row"><span>'+esc(l.reason)+' · '+money(l.amount)+'</span>'+btn('Отменить связь','unlink',l.id,locked)+'</div>').join('')+'</details><details class="fw-card"><summary>История планов и переводов</summary>'+(s.changes||[]).map(h=>'<div class="fw-card"><b>'+esc(h.after_value?.label||h.after_value?.reason||({plan:'План платежа',pay:'Фактическая оплата',rule:'Регулярное обязательство',wallet_transfer:'Перевод между счетами',reschedule:'Перенос срока',cancel:'Отмена остатка плана',wallet:'Новый счёт',stop_rule:'Остановка регулярного платежа'}[h.entity]||'Финансовое действие'))+'</b><p>'+esc(new Date(h.created_at).toLocaleString('ru-RU'))+'</p>'+(h.before_value?.amount?row('Сумма до',h.before_value.amount):'')+(h.after_value?.amount?row('Сумма после / операции',h.after_value.amount):'')+'<p>Прежний срок: '+esc(h.before_value?.due_date||'—')+' · Новый срок: '+esc(h.after_value?.due_date||'—')+'</p></div>').join('')+'</details>';
  }
  root.innerHTML=html;bind(root);
 }
@@ -131,8 +132,21 @@ async function send(command,payload,restore=null){
  try{const r=await sb.rpc('confirm_finance_workspace',{p_command:request.command,p_payload:request.payload,p_operation:request.operation,p_revision:request.revision});if(r.error){if(/^(22|23|40|42)/.test(String(r.error.code||''))||r.error.code==='PGRST202'){sessionStorage.removeItem(key);}throw new Error(r.error.message||'Операция не подтверждена');}if(!accepted(r.data,actor))throw new Error('Сервер вернул устаревшую версию. Обновите журнал.');sessionStorage.removeItem(key);await loadAll();showToast('Финансовые данные подтверждены');}
  finally{busy=false;render();}
 }
+function correctReceipt(id){
+ if(!ready())throw new Error('Обновите финансовые данные');
+ const e=(state.ledger||[]).find(x=>x.id===id);if(!e)return;
+ form('Исправить дату / учёт оплаты',row('Оплата клиента',e.amount)+
+ select('Как получены деньги','mode',[['date','Известна фактическая дата'],['before','До начала текущего учёта · дата неизвестна']])+
+ input('Фактическая дата получения','date',e.entry_date,'date')+
+ '<p>До '+esc(fmtDate(snapshot().start_date))+' — прежняя оплата: долг клиента уменьшится, но текущие деньги и выручка не увеличатся. Сумма и проект не меняются.</p>',
+ f=>({command:'correct_receipt',payload:{source:id,date:f.mode==='date'?f.date:null,before_start:f.mode==='before',reason:f.reason}}));
+ const mode=modal.querySelector('[name="mode"]'),date=modal.querySelector('[name="date"]');
+ mode.value=e.received_before_start?'before':'date';date.max=snapshot().as_of;
+ const sync=()=>{date.disabled=mode.value==='before';};mode.onchange=sync;sync();
+}
 async function act(action,id){
  if(!owner())return;
+ if(action==='correct-receipt'){correctReceipt(id);return;}
  if(action==='refresh'){await loadAll();lastRead=Date.now();render();return;}if(['overview','calendar','forecast'].includes(action)){tab=action;render();return;}
  if(action==='retry'){const p=pending();if(p)await send(p.command,p.payload,p);return;}
  if(!ready())throw new Error('Сначала обновите данные');const s=snapshot();
@@ -197,7 +211,7 @@ const style=document.createElement('style');style.textContent=`#view-finance.fin
 for(const name of ['renderAll','renderCashFinance']){const old=window[name];if(typeof old==='function')window[name]=function(){const r=old.apply(this,arguments);schedule();return r;};}
 for(const name of ['renderAnalytics','renderFinanceSalaries']){const old=window[name];if(typeof old==='function')window[name]=function(){if(enabled())return schedule();return old.apply(this,arguments);};}
 const oldClear=ARHITTEKJournal.clear;ARHITTEKJournal.clear=function(){clear();oldClear();};
-window.ARHITTEKFinanceWorkspace={enabled,render,schedule,refresh,accepted,clear,selectedWallet,managementSummary};
+window.ARHITTEKFinanceWorkspace={correctReceipt,enabled,render,schedule,refresh,accepted,clear,selectedWallet,managementSummary};
 document.querySelector('.nav-btn[data-view="view-finance"]')?.addEventListener('click',()=>{schedule();if(enabled()&&Date.now()-lastRead>15000)void refresh();});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&enabled()&&Date.now()-lastRead>30000)void refresh();});
 setInterval(()=>{if(enabled()&&!document.hidden&&(snapshot().as_of!==ARHITTEKCash.day()||document.getElementById('view-finance')?.classList.contains('active')&&Date.now()-lastRead>25000))void refresh();},30000);

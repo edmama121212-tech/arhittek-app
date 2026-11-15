@@ -16,6 +16,7 @@ function openPaymentSheet(projectId){
   paymentProjectId = projectId || editingProjectId;
   if(!paymentProjectId) return;
   paymentType = 'advance';
+  document.getElementById('payment-before-start').checked=false;
   document.querySelectorAll('#payment-type .yn-btn').forEach(b=>b.classList.toggle('selected', b.dataset.value==='advance'));
   document.getElementById('payment-amount').value = '';
   document.getElementById('payment-note').value = '';
@@ -65,6 +66,8 @@ async function savePayment(){
   const payeeEmployeeId=paymentType==='fee_payment'?document.getElementById('payment-payee').value:null;
   if(paymentType==='fee_payment'&&!payeeEmployeeId){showToast('Укажите сотрудника в команде проекта');return;}
 
+  const historical=document.getElementById('payment-before-start').checked;
+  if(historical&&!['advance','final_payment','income','materials_budget','construction_budget'].includes(paymentType)){showToast('Прежняя оплата доступна только для поступлений клиента');return;}
   const updates = {};
   if(paymentType === 'fee_payment'){
     const field=projectFeePaidField(p,{payee_employee_id:payeeEmployeeId});
@@ -88,6 +91,7 @@ async function savePayment(){
       type: paymentType, project_id: projectId, description, amount, entry_date,
       ...(paymentType==='fee_payment'?{payee_employee_id:payeeEmployeeId}:{}),
       received_by: session ? session.employeeId : null,
+      received_before_start:historical,
     }).select().single();
     if(error) throw error;
     insertedPayment=data;

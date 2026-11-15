@@ -28,11 +28,13 @@
         <input type="number" id="payment-amount" placeholder="0">
       </div>
       <div class="field">
-        <label>Дата платежа</label>
+        <label>Фактическая дата платежа (можно прошедшую)</label>
         <input type="date" id="payment-date">
       </div>
     </div>
 
+    <label style="display:flex;align-items:center;gap:10px"><input type="checkbox" id="payment-before-start" style="width:auto">Получено до начала текущего учёта, точная дата неизвестна</label>
+    <p class="note">Прежняя оплата уменьшит долг клиента, но не увеличит сегодняшнюю выручку или деньги сверх начального остатка.</p>
     <div class="field">
       <label>Комментарий</label>
       <input type="text" id="payment-note" placeholder="например: наличными / переводом на карту / причина вывода средств...">

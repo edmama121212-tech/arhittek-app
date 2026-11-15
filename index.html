@@ -1983,11 +1983,13 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
         <input type="number" id="payment-amount" placeholder="0">
       </div>
       <div class="field">
-        <label>Дата платежа</label>
+        <label>Фактическая дата платежа (можно прошедшую)</label>
         <input type="date" id="payment-date">
       </div>
     </div>
 
+    <label style="display:flex;align-items:center;gap:10px"><input type="checkbox" id="payment-before-start" style="width:auto">Получено до начала текущего учёта, точная дата неизвестна</label>
+    <p class="note">Прежняя оплата уменьшит долг клиента, но не увеличит сегодняшнюю выручку или деньги сверх начального остатка.</p>
     <div class="field">
       <label>Комментарий</label>
       <input type="text" id="payment-note" placeholder="например: наличными / переводом на карту / причина вывода средств...">
@@ -6298,9 +6300,10 @@ function renderPaymentHistory(projectId){
       return `<div class="list-item">
         <div>
           <div class="li-name">${t.label} — <span style="color:${t.cls}">${t.sign}${fmtMoney(e.amount)}</span></div>
-          <div class="li-meta">${fmtDate(e.entry_date)}${emp?' · принял: '+escapeHtml(emp.name):''}${e.description && e.description!==t.label?' · '+escapeHtml(e.description):''}</div>
+          <div class="li-meta">${e.received_before_start?'До начала текущего учёта · точная дата неизвестна':fmtDate(e.entry_date)}${emp?' · принял: '+escapeHtml(emp.name):''}${e.description && e.description!==t.label?' · '+escapeHtml(e.description):''}</div>
         </div>
         <div class="li-actions">
+          ${isOwner()&&['advance','final_payment','income','materials_budget','construction_budget'].includes(e.type)?`<button class="icon-btn" type="button" onclick="ARHITTEKFinanceWorkspace.correctReceipt('${e.id}')">Исправить дату / учёт</button>`:''}
           <button class="icon-btn danger" title="Отменить платёж" onclick="cancelPayment('${e.id}')">↩</button>
         </div>
       </div>`;
@@ -6744,6 +6747,7 @@ function openPaymentSheet(projectId){
   paymentProjectId = projectId || editingProjectId;
   if(!paymentProjectId) return;
   paymentType = 'advance';
+  document.getElementById('payment-before-start').checked=false;
   document.querySelectorAll('#payment-type .yn-btn').forEach(b=>b.classList.toggle('selected', b.dataset.value==='advance'));
   document.getElementById('payment-amount').value = '';
   document.getElementById('payment-note').value = '';
@@ -6793,6 +6797,8 @@ async function savePayment(){
   const payeeEmployeeId=paymentType==='fee_payment'?document.getElementById('payment-payee').value:null;
   if(paymentType==='fee_payment'&&!payeeEmployeeId){showToast('Укажите сотрудника в команде проекта');return;}
 
+  const historical=document.getElementById('payment-before-start').checked;
+  if(historical&&!['advance','final_payment','income','materials_budget','construction_budget'].includes(paymentType)){showToast('Прежняя оплата доступна только для поступлений клиента');return;}
   const updates = {};
   if(paymentType === 'fee_payment'){
     const field=projectFeePaidField(p,{payee_employee_id:payeeEmployeeId});
@@ -6816,6 +6822,7 @@ async function savePayment(){
       type: paymentType, project_id: projectId, description, amount, entry_date,
       ...(paymentType==='fee_payment'?{payee_employee_id:payeeEmployeeId}:{}),
       received_by: session ? session.employeeId : null,
+      received_before_start:historical,
     }).select().single();
     if(error) throw error;
     insertedPayment=data;
