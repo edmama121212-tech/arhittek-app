@@ -20,6 +20,7 @@ function canAccessView(id){
   return false;
 }
 function clearPrivateState(){
+  window.ARHITTEKBriefMedia?.clear();
   for(const key of ['projects','financialProjects','financialStatusHistory','ledger','photos','history','cashCounts','invoices','tzForms','tzReferences','kpForms','kpCatalog','timesheetPayments','companyExpenses','companyIncome','projectStages','projectMembers'])state[key]=[];
   state.employees=(state.employees||[]).map(e=>({id:e.id,name:e.name,active:e.active}));
   if(typeof resetContractCustomer==='function')resetContractCustomer();

@@ -20,3 +20,7 @@ function applySessionToken(token){
   window.sb = sb;
 }
 
+
+document.addEventListener('DOMContentLoaded',()=>window.ARHITTEKBriefMedia?.attach({
+ client:()=>sb,actor:()=>hasVerifiedAccess()?session.token:null
+}));
