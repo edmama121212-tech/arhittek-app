@@ -56,9 +56,10 @@ function renderPaymentHistory(projectId){
       return `<div class="list-item">
         <div>
           <div class="li-name">${t.label} — <span style="color:${t.cls}">${t.sign}${fmtMoney(e.amount)}</span></div>
-          <div class="li-meta">${fmtDate(e.entry_date)}${emp?' · принял: '+escapeHtml(emp.name):''}${e.description && e.description!==t.label?' · '+escapeHtml(e.description):''}</div>
+          <div class="li-meta">${e.received_before_start?'До начала текущего учёта · точная дата неизвестна':fmtDate(e.entry_date)}${emp?' · принял: '+escapeHtml(emp.name):''}${e.description && e.description!==t.label?' · '+escapeHtml(e.description):''}</div>
         </div>
         <div class="li-actions">
+          ${isOwner()&&['advance','final_payment','income','materials_budget','construction_budget'].includes(e.type)?`<button class="icon-btn" type="button" onclick="ARHITTEKFinanceWorkspace.correctReceipt('${e.id}')">Исправить дату / учёт</button>`:''}
           <button class="icon-btn danger" title="Отменить платёж" onclick="cancelPayment('${e.id}')">↩</button>
         </div>
       </div>`;
