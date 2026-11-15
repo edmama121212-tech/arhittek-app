@@ -51,7 +51,7 @@ jobs:
 
       - name: Check contract tariffs, discounts and document exports
         if: ${{ !cancelled() }}
-        run: node tests/brief-reference-privacy.cjs && node tests/brief-media.cjs && node tests/receipt-timing.cjs && node tests/proposal-terms.cjs && node tests/contract-pricing.cjs && node tests/contract-pricing-ui.cjs && node tests/contract-customer.cjs && node tests/contract-customer-ui.cjs
+        run: node tests/brief-reference-privacy.cjs && node tests/brief-media.cjs && node tests/brief-media-ui.cjs && node tests/receipt-timing.cjs && node tests/proposal-terms.cjs && node tests/contract-pricing.cjs && node tests/contract-pricing-ui.cjs && node tests/contract-customer.cjs && node tests/contract-customer-ui.cjs
 
       - name: Check cash accounting and payroll
         if: ${{ !cancelled() }}
@@ -99,5 +99,5 @@ jobs:
         env:
           CATALOG_BROWSER: webkit
           CATALOG_NO_STREAM_ITERATOR: '1'
-        run: timeout 180s npm run test:catalog:pdf && timeout 90s node tests/finance-workspace-ui.cjs && TEST_BROWSER=webkit timeout 90s node tests/employee-salary-history-ui.cjs
+        run: node tests/brief-media-ui.cjs && timeout 180s npm run test:catalog:pdf && timeout 90s node tests/finance-workspace-ui.cjs && TEST_BROWSER=webkit timeout 90s node tests/employee-salary-history-ui.cjs
 
