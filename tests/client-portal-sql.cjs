@@ -58,6 +58,20 @@ const checks=[];async function check(name,fn){try{await fn();checks.push({name,p
  await check('An explicitly reviewed mapping cannot bind foreign project Storage either',async()=>{await db.exec(`insert into arhittek_client_private.documents(id,project_id,invoice_id,bucket_id,object_path,object_version,filename,media_type,size_bytes,published,reviewed_at,reviewed_by) values('${ID(15)}','${ID(1)}','${ID(4)}','construction-documents','${ID(2)}/foreign.pdf','foreign-v1','Foreign.pdf','application/pdf',20,true,now(),'${ID(9)}');`);assert.equal((await db.query(`select count(*)::int n from arhittek_client_private.document_sources where id='${ID(15)}'`)).rows[0].n,0);await db.exec(`set test.employee_session='';set role service_role;`);await assert.rejects(db.query(`select public.construction_client_document('${digest}','https://edmama121212-tech.github.io','${ID(15)}')`),/Access denied/);await db.exec(`reset role;delete from arhittek_client_private.documents where id='${ID(15)}';`);});
  await check('An internal company expense document remains inaccessible even within the same object',async()=>{await db.exec(`insert into arhittek_client_private.cost_facts(id,project_id,invoice_id,cost_scope,amount,entry_date,confirmed_by) values('${ID(13)}','${ID(1)}','${ID(4)}','company_fee',110000,current_date,'${ID(9)}');set test.employee_session='';set role service_role;`);await assert.rejects(db.query(`select public.construction_client_document('${digest}','https://edmama121212-tech.github.io','${documentId}')`),/Access denied/);await db.exec(`reset role;delete from arhittek_client_private.cost_facts where id='${ID(13)}';`);});
 
+
+ await check('A valid document of object B is downloadable by B but never by A',async()=>{
+  await db.exec(`set test.employee_session='admin';insert into public.invoices values('${ID(20)}','${ID(2)}','FOREIGN',current_date,'Материал',2000,false,'https://chbkkoxwzpaghanofvqk.supabase.co/storage/v1/object/public/construction-documents/${ID(2)}/private-b.pdf','FOREIGN_CUSTOMER_SECRET');
+   insert into storage.objects values('${ID(21)}','construction-documents','${ID(2)}/private-b.pdf','b-v1','{"mimetype":"application/pdf","size":20}',false,null);`);
+  const b=(await db.query(`select public.issue_construction_client_grant('${ID(2)}',now()+interval '1 day') g`)).rows[0].g;
+  const bd=(await db.query(`select token_digest from arhittek_client_private.grants where id='${b.grant_id}'`)).rows[0].token_digest;
+  const document=(await db.query(`select public.get_construction_finance_sources('${ID(2)}') s`)).rows[0].s.documents.find(x=>x.invoice_id===ID(20));
+  await db.exec("set test.employee_session='';set role service_role;");
+  assert.equal((await db.query(`select public.construction_client_document('${bd}','https://edmama121212-tech.github.io','${document.id}') d`)).rows[0].d.id,document.id);
+  await assert.rejects(db.query(`select public.construction_client_document('${digest}','https://edmama121212-tech.github.io','${document.id}')`),/Access denied/);
+  const source=(await db.query(`select public.construction_client_sources('${digest}','https://edmama121212-tech.github.io') s`)).rows[0].s;
+  assert(!JSON.stringify(source).includes('FOREIGN_CUSTOMER_SECRET'));
+  await db.exec('reset role');
+ });
  await check('Grant cannot be silently rebound to another project or scope',async()=>{
   await db.exec("set test.employee_session='admin';");
   await assert.rejects(db.query(`update arhittek_client_private.grants set project_id='${ID(2)}' where id='${grant.grant_id}'`),/immutable/);
@@ -66,6 +80,8 @@ const checks=[];async function check(name,fn){try{await fn();checks.push({name,p
  await check('Changing customer identity revokes links and unpublishes the object',async()=>{
   await db.exec(`update public.projects set client_name='A new customer' where id='${ID(2)}';`);
   assert.equal((await db.query(`select published from arhittek_client_private.project_settings where project_id='${ID(2)}'`)).rows[0].published,false);
+  assert.equal((await db.query(`select count(*)::int n from arhittek_client_private.grants where project_id='${ID(2)}' and revoked_at is null`)).rows[0].n,0);
+  assert.equal((await db.query(`select revoked_at from arhittek_client_private.grants where id='${grant.grant_id}'`)).rows[0].revoked_at,null);
  });
  await check('Revocation denies the next access',async()=>{await db.exec("set test.employee_session='admin';");assert.equal((await db.query(`select public.revoke_construction_client_grant('${grant.grant_id}') ok`)).rows[0].ok,true);await db.exec("set test.employee_session='';set role service_role;");await assert.rejects(db.query(`select public.construction_client_sources('${digest}','https://edmama121212-tech.github.io')`),/Access denied/);await db.exec('reset role');});
  await check('Expired grants cannot be reused',async()=>{await db.exec("set test.employee_session='admin';");const g=(await db.query(`select public.issue_construction_client_grant('${ID(1)}',now()+interval '1 day') g`)).rows[0].g;await db.exec(`alter table arhittek_client_private.grants disable trigger client_grant_identity;update arhittek_client_private.grants set expires_at=now()-interval '1 second' where id='${g.grant_id}';alter table arhittek_client_private.grants enable trigger client_grant_identity;set test.employee_session='';set role service_role;`);const hash=(await db.query(`select encode(extensions.digest('${g.access}','sha256'),'hex') d`)).rows[0].d;await assert.rejects(db.query(`select public.construction_client_sources('${hash}','https://edmama121212-tech.github.io')`),/Access denied/);await db.exec('reset role');});
