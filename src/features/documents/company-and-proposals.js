@@ -12,6 +12,7 @@ function openCompanyView(){
   document.getElementById('co-ogrn').value = c.ogrn || '';
   document.getElementById('co-tax-system').value = c.tax_system || '';
   document.getElementById('co-legal-addr').value = c.legal_address || '';
+  document.getElementById('co-office-addr').value = companyOfficeAddress();
   document.getElementById('co-phone').value = c.phone || '';
   document.getElementById('co-email').value = c.email || '';
   document.getElementById('co-bank-name').value = c.bank_name || '';
@@ -67,6 +68,7 @@ async function saveCompanyInfo(){
     ogrn: document.getElementById('co-ogrn').value.trim(),
     tax_system: document.getElementById('co-tax-system').value.trim(),
     legal_address: document.getElementById('co-legal-addr').value.trim(),
+    office_address: document.getElementById('co-office-addr').value.trim(),
     phone: document.getElementById('co-phone').value.trim(),
     email: document.getElementById('co-email').value.trim(),
     bank_name: document.getElementById('co-bank-name').value.trim(),
@@ -106,6 +108,7 @@ function getCompanyExportSections(scope){
       'ОГРН': document.getElementById('co-ogrn').value,
       'Система налогообложения': document.getElementById('co-tax-system').value,
       'Юридический адрес': document.getElementById('co-legal-addr').value,
+      'Фактический адрес': document.getElementById('co-office-addr').value,
       'Телефон': document.getElementById('co-phone').value,
       'Email': document.getElementById('co-email').value,
   };
@@ -220,7 +223,7 @@ function getKpData(){
     inn: c.inn || '',
     kpp: c.kpp || '',
     ogrn: c.ogrn || '',
-    legalAddr: companyDocumentAddress(),
+    officeAddr: companyOfficeAddress(),
     bankAcc: c.bank_account || '',
     bankName: c.bank_name || '',
     bik: c.bik || '',
@@ -254,11 +257,14 @@ const ROBOTO_BOLD_B64 = "AAEAAAAOAIAAAwBgR0RFRg1ADOgAAIuYAAAAQEdQT1O2PMHJAACL2AA
 
 const ARHITTEK_LOGO_B64 = "data:image/png;base64,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";
 
+function companyOfficeAddress(){
+  return String(state.companyInfo?.office_address ?? 'г. Грозный, ул. Умара Гимаева, 14').trim();
+}
 function companyDocumentAddress(){
   return String(state.companyInfo?.legal_address || '').trim();
 }
-function pdfCompanyAddress(doc, margin, y, reservedWidth=0){
-  const address=companyDocumentAddress();if(!address)return;
+function pdfCompanyAddress(doc, margin, y, reservedWidth=0, address=companyDocumentAddress()){
+  if(!address)return;
   const width=doc.internal.pageSize.getWidth()-margin*2-reservedWidth;
   const lines=doc.splitTextToSize(address,width);
   const maxY=doc.internal.pageSize.getHeight()-5;
@@ -458,7 +464,7 @@ function exportKpToPdf(){
     if(data.showCompany){
       if(data.company) reqRows.push(`Компания: ${data.company}`);
       if(data.inn) reqRows.push(`ИНН: ${data.inn}${data.kpp?' | КПП: '+data.kpp:''}${data.ogrn?' | ОГРН: '+data.ogrn:''}`);
-      if(data.legalAddr) reqRows.push(`Адрес: ${data.legalAddr}`);
+      if(data.officeAddr) reqRows.push(`Фактический адрес: ${data.officeAddr}`);
       if(data.companyPhone) reqRows.push(`Тел.: ${data.companyPhone}`);
     }
 
@@ -476,16 +482,19 @@ function exportKpToPdf(){
       if(data.cardBank) reqRows.push(`Банк карты: ${data.cardBank}`);
     }
 
-    reqRows.forEach(r=>{ doc.text(r, margin, finalY); finalY += 4.5; });
+    reqRows.forEach(r=>{ for(const line of doc.splitTextToSize(r,pageWidth-2*margin)){
+      if(finalY>268){doc.addPage();finalY=20;}
+      doc.text(line,margin,finalY);finalY+=4.5;
+    } });
     finalY += 4;
     doc.setTextColor(140);
   }else{
     doc.setFont('Roboto','normal'); doc.setFontSize(8); doc.setTextColor(140);
   }
 
-  if(finalY > 272) finalY = 272;
+  if(finalY > 272){doc.addPage();finalY=20;}
   doc.text('ARHITTEK — архитектурное проектирование, дизайн интерьера, ремонт под ключ', margin, finalY);
-  pdfCompanyAddress(doc, margin, finalY+5, 0);
+  pdfCompanyAddress(doc, margin, finalY+5, 0, data.officeAddr);
 
   const fileName = kpFileName(data, 'pdf');
   doc.save(fileName);
@@ -544,7 +553,7 @@ function exportKpToXlsx(){
     if(data.showCompany){
       if(data.company) rows.push(['Компания', data.company]);
       if(data.inn) rows.push(['ИНН / КПП / ОГРН', [data.inn, data.kpp, data.ogrn].filter(Boolean).join(' / ')]);
-      if(data.legalAddr) rows.push(['Юридический адрес', data.legalAddr]);
+      if(data.officeAddr) rows.push(['Фактический адрес', data.officeAddr]);
       if(data.companyPhone) rows.push(['Телефон', data.companyPhone]);
     }
     if(data.showAccount){
