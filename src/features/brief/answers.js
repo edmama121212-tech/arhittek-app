@@ -168,7 +168,7 @@ async function createTzForm(){
   const p = state.projects.find(x=>x.id===editingProjectId);
   if(!p) return;
 
-  const token = crypto.randomUUID().replace(/-/g,'').slice(0,16);
+  const token = Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>b.toString(16).padStart(2,'0')).join('');
 
   try{
     const {data, error} = await sb.from('tz_forms').insert({
