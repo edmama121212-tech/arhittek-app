@@ -290,6 +290,8 @@ async function saveCard(){
       thumbnails: thumbs,
       updated_at: new Date().toISOString(),
     };
+    const resolvedPrice=CatalogFloors.price(payload,getCatalogPricePerSqm());
+    if(resolvedPrice!==null)payload.price=String(resolvedPrice);
     let qualityMeta=importMeta||JSON.parse(JSON.stringify(cardsData.find(c=>c.id===cardId)?.pdf_import_meta||null));
     if(Object.keys(screenshotPlans).length)qualityMeta={...qualityMeta,sources:{...qualityMeta?.sources,plans:{...qualityMeta?.sources?.plans,...screenshotPlans}}};
     const publicationReview=CatalogQuality.reviewCard(payload,qualityMeta);CatalogQuality.show(publicationReview);
@@ -685,7 +687,7 @@ ${CatalogFloors.panels(card)}
 </div>
 <div class="price-block">
   <div class="price-label">Стоимость проекта</div>
-  <div class="price">${escapeHtml(card.price||'')} ₽</div>
+  <div class="price">${escapeHtml(CatalogFloors.priceText(card))}</div>
   <div class="btn-row">
     <button class="btn-primary" onclick="window.open('https://wa.me/79226593872','_blank')">Получить проект</button>
     <button class="btn-secondary" onclick="window.open('https://wa.me/79226593872','_blank')">Консультация</button>

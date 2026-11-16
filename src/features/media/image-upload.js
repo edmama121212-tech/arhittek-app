@@ -136,8 +136,7 @@ function getCatalogPricePerSqm(){
 // Поле цены остаётся редактируемым: если поправить его вручную и не менять
 // площадь дальше, ручное значение сохранится.
 function ceAutoPrice(){
-  const areaRaw = document.getElementById('ce-area').value;
-  const area = parseFloat((areaRaw||'').replace(',','.'));
+  const area = CatalogFloors.areaNumber(document.getElementById('ce-area').value);
   if(area > 0){
     const price = Math.round(area * getCatalogPricePerSqm());
     document.getElementById('ce-price').value = price;
