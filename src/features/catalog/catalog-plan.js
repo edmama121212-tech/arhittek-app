@@ -89,9 +89,19 @@
   if(range&&/стен|wall|перегор/iu.test(layer)){const n=Number(key.replace('floor',''));return Number.isFinite(n)&&n>=Math.min(+range[1],+range[2])&&n<=Math.max(+range[1],+range[2]);}
   const floor=CatalogPdfCore.floorIn(layer);return !floor||floor===key;
  }
+ // Flattened circular room-number badges may be exported on the wall layer.
+ // A source digit inside a small closed ring distinguishes them from columns.
+ function technicalDisks(paths,info){
+  const rings=paths.filter(p=>{const b=p.bounds,w=width(b),h=height(b),extent=Math.max(w,h);if(!p.filled||!p.closed||p.commands.length<8||extent>Math.min(info.width,info.height)*.05||w/h<.75||w/h>1.33||/колонн|column/iu.test(p.layer||''))return false;const pts=p.points||[],cx=(b.x0+b.x1)/2,cy=(b.y0+b.y1)/2,rs=pts.map(q=>Math.hypot((q[0]-cx)/(w/2),(q[1]-cy)/(h/2)));return rs.length>=8&&rs.every(r=>r>.75&&r<1.2);});
+  const proven=rings.filter(p=>info.items.some(q=>/^\d{1,3}$/.test(q.text.trim())&&inside(q.cx,q.cy,p.bounds))),result=new Set(proven);
+  // A missing glyph may share the exact marker kit with several readable
+  // badges. Match its layer, fill, tessellation and physical diameter.
+  for(const p of rings){if(result.has(p))continue;const siblings=proven.filter(q=>q.layer===p.layer&&q.commands.length===p.commands.length&&Math.abs((q.fill?.gray||0)-(p.fill?.gray||0))<.01&&Math.abs(width(q.bounds)/width(p.bounds)-1)<.025&&Math.abs(height(q.bounds)/height(p.bounds)-1)<.025);if(siblings.length>=3)result.add(p);}
+  return result;
+ }
  function chooseStructure(paths,info,key,table=(info.tables||[]).find(t=>t.floor===key&&t.verified)){
   const headings=CatalogPdfCore.planInfos(info,3),heading=headings.find(h=>h.floor===key);
-  let extraWalls=[];let walls=paths.filter(p=>drawingLayer(p,key)&&p.filled&&(p.fill&&p.fill.saturation<.08&&p.fill.gray<.85||p.pattern&&/стен|wall|перегор/iu.test(p.layer||''))&&!info.items.some(w=>p.commands.length<=12&&contains(p.bounds,w,w.h*.25)&&height(p.bounds)<w.h*2.8&&(!/стен|wall|перегор/iu.test(p.layer||'')||width(p.bounds)<w.x1-w.x0+w.h*4))&&!(width(p.bounds)>info.width*.6&&(p.bounds.y1<info.height*.07||p.bounds.y0>info.height*.9))&&!(p.commands.length<=4&&p.fill?.gray<.1&&!/стен|wall|перегор/iu.test(p.layer||'')&&Math.max(width(p.bounds),height(p.bounds))<Math.min(info.width,info.height)*.02)&&width(p.bounds)*height(p.bounds)>1&&!p.curved&&width(p.bounds)<info.width*.95&&height(p.bounds)<info.height*.9);
+  const annotationDisks=technicalDisks(paths,info);let extraWalls=[];let walls=paths.filter(p=>!annotationDisks.has(p)&&drawingLayer(p,key)&&p.filled&&(p.fill&&p.fill.saturation<.08&&p.fill.gray<.85||p.pattern&&/стен|wall|перегор/iu.test(p.layer||''))&&!info.items.some(w=>p.commands.length<=12&&contains(p.bounds,w,w.h*.25)&&height(p.bounds)<w.h*2.8&&(!/стен|wall|перегор/iu.test(p.layer||'')||width(p.bounds)<w.x1-w.x0+w.h*4))&&!(width(p.bounds)>info.width*.6&&(p.bounds.y1<info.height*.07||p.bounds.y0>info.height*.9))&&!(p.commands.length<=4&&p.fill?.gray<.1&&!/стен|wall|перегор/iu.test(p.layer||'')&&Math.max(width(p.bounds),height(p.bounds))<Math.min(info.width,info.height)*.02)&&width(p.bounds)*height(p.bounds)>1&&!p.curved&&width(p.bounds)<info.width*.95&&height(p.bounds)<info.height*.9);
   const namedWalls=walls.filter(p=>/стен|wall|перегор/iu.test(p.layer||''));
   if(namedWalls.length>=3){const gap=Math.max(1,median(namedWalls.map(p=>Math.min(width(p.bounds),height(p.bounds))).filter(v=>v>.5&&v<15))*2);walls=walls.filter(p=>p.layer||namedWalls.some(w=>intersects(w.bounds,p.bounds,gap)));}
   {
@@ -101,7 +111,7 @@
    for(const p of paths.filter(p=>p.stroked&&!p.curved&&!p.dash&&p.stroke&&p.stroke.gray<.85)){
     let previous;for(const c of p.commands){if(c[0]===0){previous=[c[1],c[2]];continue;}if(c[0]!==1||!previous)continue;const next=[c[1],c[2]],b=box([previous,next]),ratio=width(b)/height(b);if(width(b)>.3&&height(b)>.3&&ratio>.65&&ratio<1.5)hatches.push({bounds:b,sequence:p.sequence});previous=next;}
    }
-   const hatched=paths.filter(p=>drawingLayer(p,key)&&p.filled&&p.fill?.gray>.985&&!p.curved&&width(p.bounds)*height(p.bounds)>2&&(/стен|wall|перегор/iu.test(p.layer||'')||Math.min(width(p.bounds),height(p.bounds))<Math.max(info.width,info.height)*.045||p.commands.filter(c=>c[0]===0).length>1)&&(hatches.filter(h=>contains(p.bounds,h.bounds,.15)).length>=2||/фундамент|foundation/iu.test(p.layer||'')&&Math.min(width(p.bounds),height(p.bounds))/Math.max(width(p.bounds),height(p.bounds))<.15));
+   const hatched=paths.filter(p=>!annotationDisks.has(p)&&drawingLayer(p,key)&&p.filled&&p.fill?.gray>.985&&!p.curved&&width(p.bounds)*height(p.bounds)>2&&(/стен|wall|перегор/iu.test(p.layer||'')||Math.min(width(p.bounds),height(p.bounds))<Math.max(info.width,info.height)*.045||p.commands.filter(c=>c[0]===0).length>1)&&(hatches.filter(h=>contains(p.bounds,h.bounds,.15)).length>=2||/фундамент|foundation/iu.test(p.layer||'')&&Math.min(width(p.bounds),height(p.bounds))/Math.max(width(p.bounds),height(p.bounds))<.15));
    const extent=ps=>ps.reduce((v,p)=>v+Math.max(width(p.bounds),height(p.bounds)),0);if(hatched.length>=3&&extent(hatched)>extent(walls)*1.3)walls=hatched;else extraWalls=hatched;
   }
   let fallback=false;
@@ -144,7 +154,7 @@
   selected.paths=walls.filter(p=>contains(bounds,p.bounds,.7)&&!otherWalls.has(p));
   const local=paths.filter(p=>contains(bounds,p.bounds,.7));
   const thickness=median(selected.paths.map(p=>Math.min(width(p.bounds),height(p.bounds))).filter(n=>n>.2&&n<Math.max(width(bounds),height(bounds))*.06));
-  return {context:paths,bounds,walls:selected.paths,extraWalls:extraWalls.filter(p=>contains(bounds,p.bounds,2)),floors:attached,local,thickness:Math.max(.6,thickness),fallback};
+  return {annotationDisks,context:paths,bounds,walls:selected.paths,extraWalls:extraWalls.filter(p=>contains(bounds,p.bounds,2)),floors:attached,local,thickness:Math.max(.6,thickness),fallback};
  }
  function structuralColumns(s){
   const paths=s.context||s.local,t=s.thickness,columns=[];
@@ -485,7 +495,7 @@
   const materialMarks=materialHatches(local,s);
   const notes=info.items.filter(w=>inside(w.cx,w.cy,crop)&&(/[а-яё]/iu.test(w.text)||/^(?:UP|DOWN)$/i.test(w.text))).map(w=>({x0:w.x0-w.h*2,y0:w.y0-w.h*2,x1:w.x1+w.h*2,y1:w.y1+w.h*3}));
   const words=info.items.filter(w=>inside(w.cx,w.cy,crop));
-  const annotation=p=>!wallSet.has(p)&&(p.stroke?.saturation>.2&&columns.some(q=>contains(q.bounds,p.bounds,t*.4))||!p.curved&&notes.some(a=>contains(a,p.bounds))||p.curved&&(p.closed||p.points.length>2&&Math.hypot(p.points[0][0]-p.points.at(-1)[0],p.points[0][1]-p.points.at(-1)[1])<.2)&&Math.max(width(p.bounds),height(p.bounds))<t*5&&words.some(w=>/^\d{1,3}$/.test(w.text)&&contains(p.bounds,w,.3)));
+  const annotation=p=>s.annotationDisks?.has(p)||!wallSet.has(p)&&(p.stroke?.saturation>.2&&columns.some(q=>contains(q.bounds,p.bounds,t*.4))||!p.curved&&notes.some(a=>contains(a,p.bounds))||p.curved&&(p.closed||p.points.length>2&&Math.hypot(p.points[0][0]-p.points.at(-1)[0],p.points[0][1]-p.points.at(-1)[1])<.2)&&Math.max(width(p.bounds),height(p.bounds))<t*5&&words.some(w=>/^\d{1,3}$/.test(w.text)&&contains(p.bounds,w,.3)));
   const wallHatch=p=>!p.filled&&!p.curved&&p.lineWidth===0&&p.commands.length===2&&width(p.bounds)>.1&&height(p.bounds)>.1&&Math.max(width(p.bounds),height(p.bounds))<t*2&&width(p.bounds)/height(p.bounds)>.65&&width(p.bounds)/height(p.bounds)<1.5;
   const clipped=(ctx,p,fn)=>{ctx.save();for(const clip of p.clips||[]){ctx.beginPath();for(const q of clip.paths)path(ctx,q,map,false);ctx.clip(clip.rule);}fn();ctx.restore();};
   // Build only the visible wall silhouette in source paint order; opaque later
