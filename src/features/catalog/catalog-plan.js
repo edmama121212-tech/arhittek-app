@@ -93,7 +93,7 @@
  // A source digit inside a small closed ring distinguishes them from columns.
  function technicalDisks(paths,info){
   const rings=paths.filter(p=>{const b=p.bounds,w=width(b),h=height(b),extent=Math.max(w,h);if(!p.filled||!p.closed||p.commands.length<8||extent>Math.min(info.width,info.height)*.05||w/h<.75||w/h>1.33||/колонн|column/iu.test(p.layer||''))return false;const pts=p.points||[],cx=(b.x0+b.x1)/2,cy=(b.y0+b.y1)/2,rs=pts.map(q=>Math.hypot((q[0]-cx)/(w/2),(q[1]-cy)/(h/2)));return rs.length>=8&&rs.every(r=>r>.75&&r<1.2);});
-  const proven=rings.filter(p=>info.items.some(q=>/^\d{1,3}$/.test(q.text.trim())&&inside(q.cx,q.cy,p.bounds))),result=new Set(proven);
+  const proven=rings.filter(p=>info.items.some(q=>/^(?:\d{1,3}|[хx]{1,3}|\?)$/iu.test(q.text.trim())&&inside(q.cx,q.cy,p.bounds))),result=new Set(proven);
   // A missing glyph may share the exact marker kit with several readable
   // badges. Match its layer, fill, tessellation and physical diameter.
   for(const p of rings){if(result.has(p))continue;const siblings=proven.filter(q=>q.layer===p.layer&&q.commands.length===p.commands.length&&Math.abs((q.fill?.gray||0)-(p.fill?.gray||0))<.01&&Math.abs(width(q.bounds)/width(p.bounds)-1)<.025&&Math.abs(height(q.bounds)/height(p.bounds)-1)<.025);if(siblings.length>=3)result.add(p);}
