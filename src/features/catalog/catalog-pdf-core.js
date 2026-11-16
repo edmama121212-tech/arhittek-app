@@ -38,7 +38,7 @@
     const verbal=text.match(/(перв|втор|трет)[а-яё]*\s+этаж/iu);
     if(verbal)return 'floor'+({перв:1,втор:2,трет:3}[verbal[1].toLowerCase()]);
     const roman=text.match(/(?:^|[\s(])(IV|III|II|I)\s*[-–]?\s*(?:этаж[а-яё]*|эт\.?)(?:\s|$)/iu);if(roman)return 'floor'+({I:1,II:2,III:3,IV:4}[roman[1].toUpperCase()]);
-    if(/цокольн[а-яё]*\s+этаж|подвальн[а-яё]*\s+этаж|(?:план|экспликация)(?:\s+помещений)?\s+(?:цоколь|цоколя|подвал|подвала)|^(?:цоколь|подвал)$/iu.test(clean(text)))return 'basement';
+    if(/цокольн[а-яё]*\s+этаж|подвальн[а-яё]*\s+этаж|(?:план(?:ировочн[а-яё]*\s+решени[а-яё]*)?|экспликация)(?:\s+помещений)?\s+(?:цоколь|цоколя|подвал|подвала)|^(?:цоколь|подвал)$/iu.test(clean(text)))return 'basement';
     return null;
   }
   function tables(page){
@@ -88,8 +88,8 @@
     }
     return result;
   }
-  const summaryTable=t=>/общая|общий|генерал|генплан|строений|участк/iu.test(t.label);
-  const planPattern=/^(?:план(?:\s+помещений)?\s+(?:подвал|цокол)|обмерный\s+план|обмерный\s+[1-3]\s*[-–]?\s*этаж|план\s+обмерный|планировочн.{0,12}решен|план.{0,25}(?:этаж|мебел|помещ)|привязк[аи]\s+мебел|марк[еи]р[оа]вочн.{0,8}план|кладочн.{0,15}план)/iu;
+  const summaryTable=t=>/общая|общий|генерал|генплан|строений|участк|(?:^|\s)гп(?:\s|\(|$)/iu.test(t.label)||(!t.rows?.length&&!!t.excludedRows?.length);
+  const planPattern=/^(?:план(?:\s+помещений)?\s+(?:подвал|цокол)|обмерный\s+план|обмерный\s+[1-3]\s*[-–]?\s*этаж|план\s+обмерный|планировочн.{0,12}решен|план.{0,25}(?:этаж|мебел|помещ)|привязк[аи]\s+мебел|марк[еи]р[оа]вочн.{0,8}план|кладочн.{0,15}(?:план|[1-3]\s*[-–]?\s*этаж))/iu;
   function planInfos(page,declared){
     const headings=[...(page.phrases||[]),...page.items].filter(w=>planPattern.test(w.text)||/^(?:[−-]\s*1\s*[-–]?\s*(?:й|ый|го)?\s*этаж|подвальн[а-яё]*\s+этаж|[1-3]\s*[-–]?\s*(?:й|ый|ой)?\s*этаж|(?:перв|втор|трет)[а-яё]*\s+этаж|цокольный\s+этаж)(?:\s*\(\d+\))?$/iu.test(w.text.trim()));
     if(/содержание|ведомость\s+рабочих\s+чертеж/iu.test(page.text)&&headings.length>3)return [];
@@ -176,7 +176,7 @@
     if(missingLevels.length===1&&new Set(unassigned.map(scheduleKey)).size===1)for(const t of unassigned){t.floor=missingLevels[0];t.association='unique_missing_level_schedule';}
     for(const p of pages)for(const info of planInfos(p,declared)){const existing=plans.find(v=>v.page===info.page&&v.floor===info.floor);if(!existing)plans.push({...info,source:p});else if(info.score>existing.score)Object.assign(existing,info);}
 
-    const mansard=pages.some(p=>/мансард/iu.test(p.text)),occupied=pages.flatMap(p=>p.tables).filter(t=>t.verified&&/^floor/.test(t.floor||'')&&!summaryTable(t)).map(t=>Number(t.floor.slice(5)));
+    const mansard=pages.some(p=>/мансард/iu.test(p.text)),occupied=[...pages.flatMap(p=>p.tables).filter(t=>t.verified&&/^floor/.test(t.floor||'')&&!summaryTable(t)).map(t=>Number(t.floor.slice(5))),...explicit.filter(f=>/^floor/.test(f)).map(f=>Number(f.slice(5)))];
     if(mansard&&occupied.length&&Math.max(...occupied)>declared){declared=Math.max(...occupied);warnings.push('Этажность уточнена по планам и экспликациям мансарды');}
     if(mansard)data.tags.push('Мансарда');
     data.floors=declared;
