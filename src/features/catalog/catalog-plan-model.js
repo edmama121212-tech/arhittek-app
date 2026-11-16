@@ -26,6 +26,12 @@
   for(const p of curves){const pts=p.commands.flatMap(q=>q[0]===4?[]:Array.from({length:(q.length-1)/2},(_,i)=>[q[i*2+1],q[i*2+2]])),span=Math.max(...[0,1].map(axis=>Math.max(...pts.map(p=>p[axis]))-Math.min(...pts.map(p=>p[axis]))));if(p.closed&&span<t*2)continue;const key=JSON.stringify(p.commands);if(!seen.has(key)){seen.add(key);result.push(p);}}
   return result;
  }
+ function presentationContours(walls,t,windows=[],doors=[]){
+  const box=p=>({x0:Math.min(...p.map(q=>q[0])),x1:Math.max(...p.map(q=>q[0])),y0:Math.min(...p.map(q=>q[1])),y1:Math.max(...p.map(q=>q[1]))}),area=p=>p.reduce((v,q,i)=>v+q[0]*p[(i+1)%p.length][1]-p[(i+1)%p.length][0]*q[1],0)/2;
+  const small=walls.map((p,i)=>({p,i,b:box(p),a:area(p)})).filter(v=>v.a<0&&Math.max(...wh(v.b))<t*.7&&Math.abs(v.a)<t*t*.5&&!windows.some(w=>v.b.x0<w.x1&&v.b.x1>w.x0&&v.b.y0<w.y1&&v.b.y1>w.y0)&&!doors.some(d=>Math.hypot((v.b.x0+v.b.x1)/2-d.hinge[0],(v.b.y0+v.b.y1)/2-d.hinge[1])<t));
+  const hidden=new Set();for(const a of small){const [w,h]=wh(a.b),siblings=small.filter(b=>b!==a&&Math.abs(wh(b.b)[0]-w)<t*.08&&Math.abs(wh(b.b)[1]-h)<t*.08&&Math.hypot((b.b.x0+b.b.x1-a.b.x0-a.b.x1)/2,(b.b.y0+b.b.y1-a.b.y0-a.b.y1)/2)<t*2);if(siblings.length)hidden.add(a.i);}
+  return {walls:walls.filter((_,i)=>!hidden.has(i)),hiddenEmbeddedVoids:hidden.size};
+ }
  function build({mask,map,crop,structure:s,roomLabels,dimensions,details,rescuedDoors,landings=[]}){
   const origin=map(0,0),unit=map(1,0)[0]-origin[0],unmap=(x,y)=>[(x-origin[0])/unit,(y-origin[1])/unit],mc=mask.getContext('2d'),mp=mc.getImageData(0,0,mask.width,mask.height).data;
   const solid=(x,y)=>{const p=map(x,y),ix=Math.round(p[0]),iy=Math.round(p[1]);return ix>=0&&iy>=0&&ix<mask.width&&iy<mask.height&&mp[(iy*mask.width+ix)*4+3]>240;};let materialJoins=0;
@@ -41,8 +47,9 @@
   const apertures=[];for(const b of details.apertures||[]){const a=wh(b);if(apertures.some(q=>{const z=wh(q);return Math.abs(q.x0-b.x0)+Math.abs(q.y0-b.y0)+Math.abs(z[0]-a[0])+Math.abs(z[1]-a[1])<s.thickness*.4;}))continue;apertures.push({...b});}
   const stairs=[],seen=new Set();for(const p of details.selected){if(details.roles.get(p)!=='stairs')continue;const commands=details.strokes.get(p)||p.commands,key=JSON.stringify(commands.map(q=>q.map(n=>Math.round(n*20)/20)));if(seen.has(key))continue;seen.add(key);stairs.push({commands,dash:p.dash,pattern:p.dashPattern||[],closed:p.closed,filled:p.filled});}
   const stairSurfaces=(s.context||s.local||[]).filter(p=>p.filled&&!p.curved&&/лест|ступен|stair|step/iu.test(p.layer||'')&&wh(p.bounds).reduce((a,b)=>a*b,1)>s.thickness*s.thickness&&inside([(p.bounds.x0+p.bounds.x1)/2,(p.bounds.y0+p.bounds.y1)/2],crop)).map(p=>({commands:p.commands,evenOdd:p.evenOdd}));
+  const presentation=presentationContours(walls,s.thickness,apertures,doors);
   const floors=s.floors.filter(p=>!/мебел|furniture|лест|stair|ступен|step|стен|wall|окон|window|двер|door/iu.test(p.layer||'')&&inside([(p.bounds.x0+p.bounds.x1)/2,(p.bounds.y0+p.bounds.y1)/2],crop)).map(p=>({commands:p.commands,bounds:p.bounds,evenOdd:p.evenOdd}));
-  return {schema:'arhittek-semantic-floor/1',materialJoins,template:VERSION,units:'source-pdf-points',bounds:s.bounds,crop,thickness:s.thickness,walls,doors,windows:apertures,stairs:cleanStairStrokes(stairs,s.thickness),stairSurfaces,floors,rooms:roomLabels.items.map(r=>({name:r.name,raw:r.raw,x:r.x,y:r.y})),landings,dimensions,sourceGeometry:true};
+  return {schema:'arhittek-semantic-floor/1',materialJoins,template:VERSION,units:'source-pdf-points',bounds:s.bounds,crop,thickness:s.thickness,walls:presentation.walls,hiddenEmbeddedVoids:presentation.hiddenEmbeddedVoids,doors,windows:apertures,stairs:cleanStairStrokes(stairs,s.thickness),stairSurfaces,floors,rooms:roomLabels.items.map(r=>({name:r.name,raw:r.raw,x:r.x,y:r.y})),landings,dimensions,sourceGeometry:true};
  }
  function render(model,{wallRepair,check=()=>{}}={}){
   const b=model.crop,[bw,bh]=wh(b),W=2400,H=Math.max(2200,Math.min(3600,Math.round(2100*bh/bw+520))),canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;const c=canvas.getContext('2d'),scale=Math.min((W-540)/bw,(H-660)/bh),left=(W-bw*scale)/2,top=230+(H-660-bh*scale)/2,map=(x,y)=>[left+(x-b.x0)*scale,top+(y-b.y0)*scale],t=model.thickness;
@@ -69,5 +76,5 @@
   let samples=0,lost=0;const out=c.getImageData(0,0,W,H).data;for(let i=0;i<sourceInk.length;i+=64){if(sourceInk[i+3]<245)continue;samples++;if(out[i]>130||out[i+1]>150||out[i+2]>160)lost++;}const image=canvas.toDataURL('image/png'),thumb=document.createElement('canvas');thumb.width=270;thumb.height=Math.round(H/W*270);thumb.getContext('2d').drawImage(canvas,0,0,thumb.width,thumb.height);const thumbnail=thumb.toDataURL('image/jpeg',.85);canvas.width=canvas.height=wallLayer.width=wallLayer.height=thumb.width=thumb.height=0;
   return {image,thumbnail,sourceCrop:model.crop,details:{stairs:model.stairs.length,doors:model.doors.length,windows:model.windows.length},wallSamples:samples,wallLost:lost,wallRepair,model,labelCollisions};
  }
- root.CatalogPlanModel=Object.freeze({version:VERSION,build,render,wallContours,cleanStairStrokes});
+ root.CatalogPlanModel=Object.freeze({version:VERSION,build,render,wallContours,cleanStairStrokes,presentationContours});
 })(typeof window==='undefined'?globalThis:window);

@@ -1,7 +1,7 @@
 /* Deterministic catalogue drawings: source geometry, never invented walls. */
 (function(root){
  'use strict';
- const VERSION='arhittek-plan-11',INK='#283a46',BLUE='#2877c9';
+ const VERSION='arhittek-plan-12',INK='#283a46',BLUE='#2877c9';
  const norm=s=>String(s||'').toLowerCase().replace(/ё/g,'е').replace(/[^а-яa-z0-9]/g,'');
  const roomNorm=s=>norm(s).replace(/^сп(?=\d|$)/,'спальня').replace(/^су(?=\d|$)/,'санузел').replace(/^каридор$/,'коридор').replace(/^кательная$/,'котельная');
  const roomName=s=>({кух:'Кухня',тамбр:'Тамбур',тамбp:'Тамбур',сп:'Спальня',мсп:'Мастер-спальня',су:'Санузел',котельная:'Котельная',кательная:'Котельная',каридор:'Коридор',призожая:'Прихожая',кл:'Кладовая'}[norm(s)]||String(s).replace(/^СП[-–\s]*(\d+)$/iu,'Спальня $1').replace(/^С[\/.]?У\s*[-–]?\s*\d*\s*этаж.*$/iu,'Санузел'));

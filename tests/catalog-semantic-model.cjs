@@ -12,3 +12,11 @@ assert.equal(stairs.length,3,'Coincident reversed tread skins collapse; separate
 assert(stairs.some(s=>s.commands[0][2]===20),'Second actual tread is preserved');
 assert(stairs.some(s=>s.commands[0][1]===70),'Gap in source is never joined');
 console.log(JSON.stringify({semanticModel:'passed',checks:8}));
+
+// A repeated small service-symbol kit inside a wall is presentation clutter;
+// real room voids and identified glazing must stay open.
+const ring=(x,y,w,h,negative=false)=>{const p=[[x,y],[x+w,y],[x+w,y+h],[x,y+h]];return negative?p.reverse():p;};
+const raw=[ring(0,0,100,30),ring(10,5,3,6,true),ring(17,5,3,6,true),ring(40,5,30,20,true)];
+const plain=CatalogPlanModel.presentationContours(raw,10);assert.equal(plain.hiddenEmbeddedVoids,2);assert(plain.walls.includes(raw[3]),'Actual room-size opening is retained');
+const glazed=CatalogPlanModel.presentationContours(raw,10,[{x0:9,y0:4,x1:21,y1:12}]);assert.equal(glazed.hiddenEmbeddedVoids,0,'Identified glazing is never filled');
+console.log(JSON.stringify({embeddedServiceSymbols:'passed',checks:3}));
