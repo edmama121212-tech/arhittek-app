@@ -79,12 +79,9 @@
 
       <div class='section-label' id='catalogPriceSection' style='display:none;'><span class='lbl-text'>Цена готовых проектов (каталог)</span><span class='section-label-line'></span></div>
       <div class='card' id='catalogPriceCard' style='display:none;'>
-        <div class='field'>
-          <label>Ставка за м², ₽</label>
-          <input type='number' id='catalog-price-per-sqm' placeholder='150'>
-        </div>
-        <div class='note' style='margin-bottom:10px;'>Цена в карточках каталога считается автоматически: площадь этажа × эта ставка. При сохранении новой ставки поле цены в карточке можно подправить вручную под конкретный проект.</div>
-        <button class='btn btn-primary' id='catalogPriceSaveBtn'>Сохранить ставку</button>
+        <div class='note'>Цена готового проекта = общая площадь дома × ставка за м².</div>
+        <table style="width:100%;margin:12px 0;border-collapse:collapse;"><tr><th style="text-align:left">Общая площадь</th><th style="text-align:right">Ставка</th></tr><tr><td>Менее 100 м²</td><td style="text-align:right">150 ₽/м²</td></tr><tr><td>От 100 до 400 м² включительно</td><td style="text-align:right">100 ₽/м²</td></tr><tr><td>Свыше 400 м²</td><td style="text-align:right">80 ₽/м²</td></tr></table>
+        <div class='note'>Ставка применяется ко всей площади, включая цоколь, если он учтён в общей площади. Цена округляется до рубля. Индивидуальную цену можно указать в редакторе карточки.</div>
       </div>
 
     </div>

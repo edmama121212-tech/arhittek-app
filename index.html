@@ -867,12 +867,9 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
 
       <div class='section-label' id='catalogPriceSection' style='display:none;'><span class='lbl-text'>Цена готовых проектов (каталог)</span><span class='section-label-line'></span></div>
       <div class='card' id='catalogPriceCard' style='display:none;'>
-        <div class='field'>
-          <label>Ставка за м², ₽</label>
-          <input type='number' id='catalog-price-per-sqm' placeholder='150'>
-        </div>
-        <div class='note' style='margin-bottom:10px;'>Цена в карточках каталога считается автоматически: площадь этажа × эта ставка. При сохранении новой ставки поле цены в карточке можно подправить вручную под конкретный проект.</div>
-        <button class='btn btn-primary' id='catalogPriceSaveBtn'>Сохранить ставку</button>
+        <div class='note'>Цена готового проекта = общая площадь дома × ставка за м².</div>
+        <table style="width:100%;margin:12px 0;border-collapse:collapse;"><tr><th style="text-align:left">Общая площадь</th><th style="text-align:right">Ставка</th></tr><tr><td>Менее 100 м²</td><td style="text-align:right">150 ₽/м²</td></tr><tr><td>От 100 до 400 м² включительно</td><td style="text-align:right">100 ₽/м²</td></tr><tr><td>Свыше 400 м²</td><td style="text-align:right">80 ₽/м²</td></tr></table>
+        <div class='note'>Ставка применяется ко всей площади, включая цоколь, если он учтён в общей площади. Цена округляется до рубля. Индивидуальную цену можно указать в редакторе карточки.</div>
       </div>
 
     </div>
@@ -9963,23 +9960,6 @@ function renderCatalogPriceSettings(){
   if(!canEditCards()){ section.style.display = 'none'; card.style.display = 'none'; return; }
   section.style.display = '';
   card.style.display = '';
-  const input = document.getElementById('catalog-price-per-sqm');
-  if(input) input.value = getCatalogPricePerSqm();
-}
-
-async function saveCatalogPricePerSqm(){
-  if(!session?.isAdmin){showToast("Требуются права администратора");return;}
-  const val = parseFloat(document.getElementById('catalog-price-per-sqm').value);
-  if(!val || val <= 0){ showToast('Укажите положительную ставку'); return; }
-  showToast('Сохранение…');
-  try{
-    if(state.companyInfo && state.companyInfo.id){
-      const {error} = await sb.from('company_info').update({price_per_sqm: val}).eq('id', state.companyInfo.id);
-      if(error) throw error;
-    }
-    state.companyInfo = {...(state.companyInfo||{}), price_per_sqm: val};
-    showToast('Ставка сохранена');
-  }catch(e){ console.error(e); showToast('Ошибка сохранения'); }
 }
 
 async function saveCompanyInfo(){
@@ -10893,7 +10873,6 @@ document.getElementById('companySaveBtn').addEventListener('click', saveCompanyI
     if(typeof renderNotifSettings === 'function') renderNotifSettings();
     renderCatalogPriceSettings();
   });
-  document.getElementById('catalogPriceSaveBtn').addEventListener('click', saveCatalogPricePerSqm);
   document.getElementById('settingsBack').addEventListener('click', ()=>{
     document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
     document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
@@ -11480,23 +11459,12 @@ function cePrevTab(panelId,tabEl){
   tabEl.style.color='#3D8FE0'; tabEl.style.borderBottomColor='#3D8FE0'; tabEl.style.fontWeight='600';
 }
 
-// Текущая ставка за м² для каталога готовых проектов (Ещё → Настройки)
-function getCatalogPricePerSqm(){
-  return Number(state.companyInfo?.price_per_sqm) || 150;
-}
-
-// Автоподстановка цены в редакторе карточки при вводе площади — площадь × ставка.
-// Поле цены остаётся редактируемым: если поправить его вручную и не менять
-// площадь дальше, ручное значение сохранится.
+// Price uses the whole-house area tariff. Explicit manual prices remain editable.
 function ceAutoPrice(){
-  const area = CatalogFloors.areaNumber(document.getElementById('ce-area').value);
-  if(area > 0){
-    const price = Math.round(area * getCatalogPricePerSqm());
-    document.getElementById('ce-price').value = price;
-  }
+  const price=CatalogFloors.autoPrice(document.getElementById('ce-area').value);
+  document.getElementById('ce-price').value=price===null?'':String(price);
   cePreview();
 }
-
 // ============================================================
 // СКАНИРОВАНИЕ ЭКСПЛИКАЦИИ (OCR) — фото/камера → список комнат с площадями
 // ============================================================
@@ -11789,7 +11757,7 @@ async function saveCard(){
       thumbnails: thumbs,
       updated_at: new Date().toISOString(),
     };
-    const resolvedPrice=CatalogFloors.price(payload,getCatalogPricePerSqm());
+    const resolvedPrice=CatalogFloors.price(payload);
     if(resolvedPrice!==null)payload.price=String(resolvedPrice);
     let qualityMeta=importMeta||JSON.parse(JSON.stringify(cardsData.find(c=>c.id===cardId)?.pdf_import_meta||null));
     if(Object.keys(screenshotPlans).length)qualityMeta={...qualityMeta,sources:{...qualityMeta?.sources,plans:{...qualityMeta?.sources?.plans,...screenshotPlans}}};

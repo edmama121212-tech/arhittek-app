@@ -290,7 +290,7 @@ async function saveCard(){
       thumbnails: thumbs,
       updated_at: new Date().toISOString(),
     };
-    const resolvedPrice=CatalogFloors.price(payload,getCatalogPricePerSqm());
+    const resolvedPrice=CatalogFloors.price(payload);
     if(resolvedPrice!==null)payload.price=String(resolvedPrice);
     let qualityMeta=importMeta||JSON.parse(JSON.stringify(cardsData.find(c=>c.id===cardId)?.pdf_import_meta||null));
     if(Object.keys(screenshotPlans).length)qualityMeta={...qualityMeta,sources:{...qualityMeta?.sources,plans:{...qualityMeta?.sources?.plans,...screenshotPlans}}};

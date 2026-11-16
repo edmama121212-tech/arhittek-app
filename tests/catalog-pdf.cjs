@@ -210,7 +210,7 @@ function coreTests(){
  eq([r.data.project_number,r.data.floors,r.data.total_area,r.data.beds,r.data.baths],['00157-A',3,'400,00',4,4],'Real PDF.js extracts number, 3 floors, basement and room counts');
  eq(r.blocking,[],'Complete album has no blockers');eq(r.images.every(Boolean),true,'Facade and all four floor image slots populated');
  eq(r.data.tags.includes('Цокольный этаж'),true,'Basement comes from its actual plan');
- eq(await page.evaluate(()=>{openCardEditor();CatalogPdfImport.apply(__parsed);return [ceFloorsSelected,ceFeatureSelected,document.getElementById('ce-area3').value,document.getElementById('ce-areab').value,document.getElementById('ce-price').value]}),[3,['basement'],'100,00','100,00','60000'],'Card apply uses level data and current catalogue rate');
+ eq(await page.evaluate(()=>{openCardEditor();CatalogPdfImport.apply(__parsed);return [ceFloorsSelected,ceFeatureSelected,document.getElementById('ce-area3').value,document.getElementById('ce-areab').value,document.getElementById('ce-price').value]}),[3,['basement'],'100,00','100,00','40000'],'Card apply uses whole-house area tariff');
  const scan=await page.evaluate(async()=>{
   const saved=window.Tesseract,calls=[];let attempts=0,terminated=false;
   const word=(text,x,y,confidence=90)=>({text,confidence,bbox:{x0:x,x1:x+text.length*10,y0:y,y1:y+18}});

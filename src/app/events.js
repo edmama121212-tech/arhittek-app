@@ -165,7 +165,6 @@ document.getElementById('companySaveBtn').addEventListener('click', saveCompanyI
     if(typeof renderNotifSettings === 'function') renderNotifSettings();
     renderCatalogPriceSettings();
   });
-  document.getElementById('catalogPriceSaveBtn').addEventListener('click', saveCatalogPricePerSqm);
   document.getElementById('settingsBack').addEventListener('click', ()=>{
     document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
     document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
