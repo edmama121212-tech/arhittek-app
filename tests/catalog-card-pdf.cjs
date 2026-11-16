@@ -1,7 +1,7 @@
 const fs=require('fs'),path=require('path'),assert=require('assert/strict'),{chromium,webkit}=require('playwright');
 (async()=>{const engine=process.env.CATALOG_BROWSER==='webkit'?webkit:chromium;const browser=await engine.launch({executablePath:process.env.BROWSER_EXECUTABLE||undefined,headless:true,args:engine===chromium?['--no-sandbox']:[]});try{
 const page=await browser.newPage();await page.goto('about:blank');
-await page.addScriptTag({path:require.resolve('jspdf/dist/jspdf.umd.min.js')});await page.addScriptTag({path:require.resolve('jspdf-autotable/dist/jspdf.plugin.autotable.min.js')});
+await page.addScriptTag({path:require.resolve('jspdf/dist/jspdf.umd.min.js')});await page.addScriptTag({path:path.join(path.dirname(require.resolve('jspdf-autotable')),'jspdf.plugin.autotable.min.js')});
 for(const file of ['catalog-floors.js','src/features/catalog/card-pdf-export.js'])await page.addScriptTag({path:path.resolve(file)});
 const fonts=fs.readFileSync('index.html','utf8'),regular=fonts.match(/const ROBOTO_REGULAR_B64\s*=\s*"([^"]+)"/),bold=fonts.match(/const ROBOTO_BOLD_B64\s*=\s*"([^"]+)"/);
 assert(regular&&bold,'Production Cyrillic font data exists');
