@@ -157,6 +157,7 @@
     ],
     "catalog-plan.js": [
       "src/features/catalog/catalog-quality.js",
+      "src/features/catalog/catalog-plan-model.js",
       "src/features/catalog/catalog-plan.js"
     ],
     "catalog.html": [
@@ -203,6 +204,9 @@
     ],
     "brief-media.js": [
       "src/features/brief/brief-media.js"
+    ],
+    "catalog-plan-model.js": [
+      "src/features/catalog/catalog-plan-model.js"
     ]
   }
 }

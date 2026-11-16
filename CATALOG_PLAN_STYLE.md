@@ -116,3 +116,10 @@ recovery, no autosave, invalid-card blocking and a single explicit publication.
 Preserve source door swings only with a matching radial source leaf and a nearby jamb, allowing finish-face offsets. Door geometry can reside on a furniture layer: rescue the verified pair without copying furniture. Validate window apertures as a whole before retaining their short frame/mullion segments. For compound paths, draw only accepted segments. Do not classify room-label boxes as glazing. Named stairs must not suppress an unnamed or dashed upper flight; exterior source steps remain part of the plan.
 
 Real-PDF comparisons cover 9424 (missing swings), 13325 (flights and compound glazing), 10925 (coarse flattened door swings and narrow window frames), 15526 and 3223. Successful extraction alone is not a claim that every source opening was identified.
+
+
+## Approved semantic template, 16 November 2026
+
+Renderer 11 builds a separate source geometry model before presentation. Walls are traced as compound contours, with real openings retained; doors require source leaves and radial evidence. Windows use neutral glazing profiles without inventing sash counts. Rooms use warm restrained tones, charcoal green walls, soft shadows, room names without areas and overall dimensions. Source stair treads are deduplicated geometrically while preserving separate steps. Explicit landing geometry is allowed only with recorded source evidence or user confirmation; it must not be inferred from an arbitrary gap.
+
+The approved 13325 first-floor model has two user-confirmed exterior landings. Its approximate main-body dimensions differ from the footprint including the terrace. Existing card data must remain unchanged during plan replacement. Automatic checks do not establish visual perfection: compare each published model with its source and retain unsupported old plans rather than fabricate geometry.

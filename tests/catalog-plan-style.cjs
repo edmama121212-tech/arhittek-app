@@ -42,15 +42,15 @@ vm.runInThisContext(fs.readFileSync(path.join(__dirname,'../catalog-plan.js'),'u
  const items=[['Спальня',135,200],['С/У',350,200],['Кухня гостиная',130,420]].map(([text,x,y])=>({text,x0:x,y0:y,x1:x+text.length*5,y1:y+10,cx:x+text.length*2.5,cy:y+5,h:10}));
  const info={width:viewport.width,height:viewport.height,items,tables:[],phrases:[],text:''},table={rows:items.map(w=>({name:w.text,area:'20,00'}))};
  const result=await CatalogPlan.prepare({pdfjs,page,info,table,key:'floor1',optionalContent});assert(result.ok,result.reason);
- assert.equal(result.report.renderer,'source-vector-relief');assert.equal(result.report.template,'3.1');assert.equal(result.report.windows,'neutral');
+ assert.equal(result.report.renderer,'semantic-model');assert.equal(result.report.template,'semantic-1');assert.equal(result.report.windows,'neutral');
  assert(result.report.sourceCrop.y1>550,'Exterior landing and all steps fit inside the crop');
  assert(result.report.sourceCrop.y1<610,'Sheet table rows cannot expand the crop as steps');
  const image=await canvas.loadImage(result.image),out=canvas.createCanvas(image.width,image.height),ctx=out.getContext('2d');ctx.drawImage(image,0,0);
- const b=result.report.sourceCrop,scale=Math.min(1420/(b.x1-b.x0),1290/(b.y1-b.y0)),left=(1800-(b.x1-b.x0)*scale)/2+25,top=65+(1290-(b.y1-b.y0)*scale)/2;
+ const b=result.report.sourceCrop,scale=result.model.output.scale/2,left=result.model.output.left/2,top=result.model.output.top/2;
  const reference=canvas.createCanvas(Math.ceil((b.x1-b.x0)*scale*2),Math.ceil((b.y1-b.y0)*scale*2));
  await page.render({canvasContext:reference.getContext('2d'),viewport:page.getViewport({scale:scale*2}),transform:[1,0,0,1,-b.x0*scale*2,-b.y0*scale*2],background:'#fff',optionalContentConfigPromise:Promise.resolve(optionalContent)}).promise;
  const pixel=(x,y)=>Array.from(ctx.getImageData(Math.round((left+(x-b.x0)*scale)*2),Math.round((top+(y-b.y0)*scale)*2),1,1).data).slice(0,3);
- assert(result.report.details.doors>=2,'Shallow door arc and its leaf are retained');
+ assert(result.report.details.doors>=1&&result.model.doors.some(d=>d.radius>0&&d.tip&&d.closed),'Shallow source door retains both the leaf and swing in one semantic object');
  assert(pixel(280,206).every(n=>n<110),'Both triangular halves of a wall junction remain solid');
  assert(pixel(170,170).every(n=>n>220),'Unrelated room-interior construction line is omitted');
  assert(pixel(280,310).every(n=>n<110),'Reinforcement column is a solid continuation of the wall');

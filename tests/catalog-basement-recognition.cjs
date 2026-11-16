@@ -31,7 +31,7 @@ const word=(text,x,y)=>({text,x0:x,x1:x+text.length*5,y0:y,y1:y+10,cx:x+text.len
  const ambiguous=await prepare({room:true,ambiguous:true});assert.equal(ambiguous.ok,false,'Overlapping but different footprints require another source instead of guessing');checks++;
  const technical=await prepare({caption:'План фундамента'});assert.equal(technical.ok,false,'A foundation without a basement region cannot be uploaded as the basement');checks++;
  const clean=await prepare({room:true,hatches:true});assert(clean.ok);const image=await canvas.loadImage(clean.image),out=canvas.createCanvas(image.width,image.height),ctx=out.getContext('2d');ctx.drawImage(image,0,0);
- const b=clean.report.sourceCrop,scale=Math.min(1420/(b.x1-b.x0),1290/(b.y1-b.y0)),left=(1800-(b.x1-b.x0)*scale)/2+25,top=65+(1290-(b.y1-b.y0)*scale)/2;
+ const b=clean.report.sourceCrop,scale=clean.model.output.scale/2,left=clean.model.output.left/2,top=clean.model.output.top/2;
  const pixel=(x,y)=>Array.from(ctx.getImageData(Math.round((left+(x-b.x0)*scale)*2),Math.round((top+(y-b.y0)*scale)*2),1,1).data).slice(0,3);
  assert(pixel(307.5,354).every(n=>n>215),'Repeated floor hatching is removed');checks++;
  const stairInk=[];for(let y=349;y<=351;y+=.1)stairInk.push(...pixel(430,y));assert(Math.min(...stairInk)<210,'Long stair treads in the same clipping region survive hatch removal');checks++;
