@@ -76,8 +76,13 @@ eq(renderer.dimensions(page(1,[w('2000',20,224)]),{...structure,context:[line]},
 const dup=renderer.labels(page(1,[w('1',50,50)]),structure,{rows:[{name:'Спальня',area:'10'},{name:'СУ',area:'5'}],roomIds:['1','1']});eq(dup.complete,false,'Duplicate room IDs never establish automatic label placement');
 console.log(JSON.stringify({recognitionTotal:passed,failed:[]}));
 
-for(const heading of ['План подвала','План помещений цоколя','−1-й этаж','Подвальный этаж']){
+for(const heading of ['План подвала','План помещений цоколя','−1-й этаж','Подвальный этаж','Планировочное решение Цоколь']){
  const info=page(1,[w(heading,20,20)]);eq(core.planInfos(info,2).map(p=>p.floor),['basement'],'Basement drawing heading '+heading);
 }
 const inferred=page(1,[]);inferred.tables=[{verified:true,floor:'basement',label:'',cx:500,top:80}];eq(core.planInfos(inferred,2)[0].inferredFromTable,true,'Inferred table candidate keeps its evidence type');
 console.log(JSON.stringify({recognitionTotal:passed,failed:[]}));
+eq(core.planInfos(page(1,[w('Кладочный 2 этаж',20,20)]),1).map(p=>p.floor),['floor2'],'A numbered masonry drawing reveals an additional level instead of silently losing it');
+const site=page(2,[w('План 1-го этажа',20,20),...table({caption:'Экспликация ГП (1)'})]);
+eq(core.analyze([page(1,[w('Одноэтажный дом',20,20)]),site]).data.total_area,undefined,'A site schedule cannot become a house room schedule');
+const attic=core.analyze([page(1,[w('1-этажный дом с мансардой',20,20)]),p1(),page(3,[w('Кладочный 2 этаж',20,20)])]);
+eq([attic.data.floors,attic.data.total_area],[2,undefined],'A drawn mansard requires its own schedule; first-floor area is never advertised as the complete house');
