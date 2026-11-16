@@ -38,20 +38,25 @@ vm.runInThisContext(fs.readFileSync(path.join(__dirname,'../catalog-plan.js'),'u
  pdf.setFillColor(255);pdf.rect(274,304,12,12,'F');pdf.setDrawColor(160,100,0);pdf.setLineWidth(.2);
  pdf.line(274,308,278,304);pdf.line(274,314,284,304);pdf.line(278,316,286,308);
  pdf.setDrawColor(170,20,0);pdf.line(274,304,286,304);
+ // Flattened numbered room badge must not turn into a circular wall post.
+ pdf.setFillColor(255);for(let i=0;i<=16;i++){const a=i*Math.PI/8,x=195+7*Math.cos(a),y=450+7*Math.sin(a);if(i===0)pdf.moveTo(x,y);else pdf.lineTo(x,y);}pdf.close().fill();
+ pdf.setDrawColor(50);pdf.line(190,450,195,445);pdf.line(194,455,201,448);
  const task=pdfjs.getDocument({data:new Uint8Array(pdf.output('arraybuffer'))});const doc=await task.promise,page=await doc.getPage(1),viewport=page.getViewport({scale:1}),optionalContent=await doc.getOptionalContentConfig({intent:'display'});
  const items=[['Спальня',135,200],['С/У',350,200],['Кухня гостиная',130,420]].map(([text,x,y])=>({text,x0:x,y0:y,x1:x+text.length*5,y1:y+10,cx:x+text.length*2.5,cy:y+5,h:10}));
  const info={width:viewport.width,height:viewport.height,items,tables:[],phrases:[],text:''},table={rows:items.map(w=>({name:w.text,area:'20,00'}))};
+ info.items.push({text:'77',x0:192,x1:198,y0:447,y1:453,cx:195,cy:450,h:6});
  const result=await CatalogPlan.prepare({pdfjs,page,info,table,key:'floor1',optionalContent});assert(result.ok,result.reason);
- assert.equal(result.report.renderer,'source-vector-relief');assert.equal(result.report.template,'3.1');assert.equal(result.report.windows,'neutral');
+ assert.equal(result.report.renderer,'semantic-model');assert.equal(result.report.template,'semantic-1');assert.equal(result.report.windows,'neutral');
  assert(result.report.sourceCrop.y1>550,'Exterior landing and all steps fit inside the crop');
  assert(result.report.sourceCrop.y1<610,'Sheet table rows cannot expand the crop as steps');
  const image=await canvas.loadImage(result.image),out=canvas.createCanvas(image.width,image.height),ctx=out.getContext('2d');ctx.drawImage(image,0,0);
- const b=result.report.sourceCrop,scale=Math.min(1420/(b.x1-b.x0),1290/(b.y1-b.y0)),left=(1800-(b.x1-b.x0)*scale)/2+25,top=65+(1290-(b.y1-b.y0)*scale)/2;
+ const b=result.report.sourceCrop,scale=result.model.output.scale/2,left=result.model.output.left/2,top=result.model.output.top/2;
  const reference=canvas.createCanvas(Math.ceil((b.x1-b.x0)*scale*2),Math.ceil((b.y1-b.y0)*scale*2));
  await page.render({canvasContext:reference.getContext('2d'),viewport:page.getViewport({scale:scale*2}),transform:[1,0,0,1,-b.x0*scale*2,-b.y0*scale*2],background:'#fff',optionalContentConfigPromise:Promise.resolve(optionalContent)}).promise;
  const pixel=(x,y)=>Array.from(ctx.getImageData(Math.round((left+(x-b.x0)*scale)*2),Math.round((top+(y-b.y0)*scale)*2),1,1).data).slice(0,3);
- assert(result.report.details.doors>=2,'Shallow door arc and its leaf are retained');
+ assert(result.report.details.doors>=1&&result.model.doors.some(d=>d.radius>0&&d.tip&&d.closed),'Shallow source door retains both the leaf and swing in one semantic object');
  assert(pixel(280,206).every(n=>n<110),'Both triangular halves of a wall junction remain solid');
+ assert(pixel(195,450).every(n=>n>210),'Numbered polygon badge is not painted as an isolated wall column');
  assert(pixel(170,170).every(n=>n>220),'Unrelated room-interior construction line is omitted');
  assert(pixel(280,310).every(n=>n<110),'Reinforcement column is a solid continuation of the wall');
  assert(result.report.columns>=1,'Column evidence is recorded');

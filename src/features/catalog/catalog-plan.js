@@ -1,10 +1,10 @@
 /* Deterministic catalogue drawings: source geometry, never invented walls. */
 (function(root){
  'use strict';
- const VERSION='arhittek-plan-10',INK='#283a46',BLUE='#2877c9';
+ const VERSION='arhittek-plan-11',INK='#283a46',BLUE='#2877c9';
  const norm=s=>String(s||'').toLowerCase().replace(/ё/g,'е').replace(/[^а-яa-z0-9]/g,'');
  const roomNorm=s=>norm(s).replace(/^сп(?=\d|$)/,'спальня').replace(/^су(?=\d|$)/,'санузел').replace(/^каридор$/,'коридор').replace(/^кательная$/,'котельная');
- const roomName=s=>({сп:'Спальня',мсп:'Мастер-спальня',су:'Санузел',котельная:'Котельная',кательная:'Котельная',каридор:'Коридор',призожая:'Прихожая',кл:'Кладовая'}[norm(s)]||String(s).replace(/^СП[-–\s]*(\d+)$/iu,'Спальня $1').replace(/^С[\/.]?У\s*[-–]?\s*\d*\s*этаж.*$/iu,'Санузел'));
+ const roomName=s=>({кух:'Кухня',тамбр:'Тамбур',тамбp:'Тамбур',сп:'Спальня',мсп:'Мастер-спальня',су:'Санузел',котельная:'Котельная',кательная:'Котельная',каридор:'Коридор',призожая:'Прихожая',кл:'Кладовая'}[norm(s)]||String(s).replace(/^СП[-–\s]*(\d+)$/iu,'Спальня $1').replace(/^С[\/.]?У\s*[-–]?\s*\d*\s*этаж.*$/iu,'Санузел'));
  const box=points=>({x0:Math.min(...points.map(p=>p[0])),y0:Math.min(...points.map(p=>p[1])),x1:Math.max(...points.map(p=>p[0])),y1:Math.max(...points.map(p=>p[1]))});
  const width=b=>b.x1-b.x0,height=b=>b.y1-b.y0;
  const union=bs=>({x0:Math.min(...bs.map(b=>b.x0)),y0:Math.min(...bs.map(b=>b.y0)),x1:Math.max(...bs.map(b=>b.x1)),y1:Math.max(...bs.map(b=>b.y1))});
@@ -89,9 +89,19 @@
   if(range&&/стен|wall|перегор/iu.test(layer)){const n=Number(key.replace('floor',''));return Number.isFinite(n)&&n>=Math.min(+range[1],+range[2])&&n<=Math.max(+range[1],+range[2]);}
   const floor=CatalogPdfCore.floorIn(layer);return !floor||floor===key;
  }
+ // Flattened circular room-number badges may be exported on the wall layer.
+ // A source digit inside a small closed ring distinguishes them from columns.
+ function technicalDisks(paths,info){
+  const rings=paths.filter(p=>{const b=p.bounds,w=width(b),h=height(b),extent=Math.max(w,h);if(!p.filled||!p.closed||p.commands.length<8||extent>Math.min(info.width,info.height)*.05||w/h<.75||w/h>1.33||/колонн|column/iu.test(p.layer||''))return false;const pts=p.points||[],cx=(b.x0+b.x1)/2,cy=(b.y0+b.y1)/2,rs=pts.map(q=>Math.hypot((q[0]-cx)/(w/2),(q[1]-cy)/(h/2)));return rs.length>=8&&rs.every(r=>r>.75&&r<1.2);});
+  const proven=rings.filter(p=>info.items.some(q=>/^(?:\d{1,3}|[хx]{1,3}|\?)$/iu.test(q.text.trim())&&inside(q.cx,q.cy,p.bounds))),result=new Set(proven);
+  // A missing glyph may share the exact marker kit with several readable
+  // badges. Match its layer, fill, tessellation and physical diameter.
+  for(const p of rings){if(result.has(p))continue;const siblings=proven.filter(q=>q.layer===p.layer&&q.commands.length===p.commands.length&&Math.abs((q.fill?.gray||0)-(p.fill?.gray||0))<.01&&Math.abs(width(q.bounds)/width(p.bounds)-1)<.025&&Math.abs(height(q.bounds)/height(p.bounds)-1)<.025);if(siblings.length>=3)result.add(p);}
+  return result;
+ }
  function chooseStructure(paths,info,key,table=(info.tables||[]).find(t=>t.floor===key&&t.verified)){
   const headings=CatalogPdfCore.planInfos(info,3),heading=headings.find(h=>h.floor===key);
-  let extraWalls=[];let walls=paths.filter(p=>drawingLayer(p,key)&&p.filled&&(p.fill&&p.fill.saturation<.08&&p.fill.gray<.85||p.pattern&&/стен|wall|перегор/iu.test(p.layer||''))&&!info.items.some(w=>p.commands.length<=12&&contains(p.bounds,w,w.h*.25)&&height(p.bounds)<w.h*2.8&&(!/стен|wall|перегор/iu.test(p.layer||'')||width(p.bounds)<w.x1-w.x0+w.h*4))&&!(width(p.bounds)>info.width*.6&&(p.bounds.y1<info.height*.07||p.bounds.y0>info.height*.9))&&!(p.commands.length<=4&&p.fill?.gray<.1&&!/стен|wall|перегор/iu.test(p.layer||'')&&Math.max(width(p.bounds),height(p.bounds))<Math.min(info.width,info.height)*.02)&&width(p.bounds)*height(p.bounds)>1&&!p.curved&&width(p.bounds)<info.width*.95&&height(p.bounds)<info.height*.9);
+  const annotationDisks=technicalDisks(paths,info);let extraWalls=[];let walls=paths.filter(p=>!annotationDisks.has(p)&&drawingLayer(p,key)&&p.filled&&(p.fill&&p.fill.saturation<.08&&p.fill.gray<.85||p.pattern&&/стен|wall|перегор/iu.test(p.layer||''))&&!info.items.some(w=>p.commands.length<=12&&contains(p.bounds,w,w.h*.25)&&height(p.bounds)<w.h*2.8&&(!/стен|wall|перегор/iu.test(p.layer||'')||width(p.bounds)<w.x1-w.x0+w.h*4))&&!(width(p.bounds)>info.width*.6&&(p.bounds.y1<info.height*.07||p.bounds.y0>info.height*.9))&&!(p.commands.length<=4&&p.fill?.gray<.1&&!/стен|wall|перегор/iu.test(p.layer||'')&&Math.max(width(p.bounds),height(p.bounds))<Math.min(info.width,info.height)*.02)&&width(p.bounds)*height(p.bounds)>1&&!p.curved&&width(p.bounds)<info.width*.95&&height(p.bounds)<info.height*.9);
   const namedWalls=walls.filter(p=>/стен|wall|перегор/iu.test(p.layer||''));
   if(namedWalls.length>=3){const gap=Math.max(1,median(namedWalls.map(p=>Math.min(width(p.bounds),height(p.bounds))).filter(v=>v>.5&&v<15))*2);walls=walls.filter(p=>p.layer||namedWalls.some(w=>intersects(w.bounds,p.bounds,gap)));}
   {
@@ -101,7 +111,7 @@
    for(const p of paths.filter(p=>p.stroked&&!p.curved&&!p.dash&&p.stroke&&p.stroke.gray<.85)){
     let previous;for(const c of p.commands){if(c[0]===0){previous=[c[1],c[2]];continue;}if(c[0]!==1||!previous)continue;const next=[c[1],c[2]],b=box([previous,next]),ratio=width(b)/height(b);if(width(b)>.3&&height(b)>.3&&ratio>.65&&ratio<1.5)hatches.push({bounds:b,sequence:p.sequence});previous=next;}
    }
-   const hatched=paths.filter(p=>drawingLayer(p,key)&&p.filled&&p.fill?.gray>.985&&!p.curved&&width(p.bounds)*height(p.bounds)>2&&(/стен|wall|перегор/iu.test(p.layer||'')||Math.min(width(p.bounds),height(p.bounds))<Math.max(info.width,info.height)*.045||p.commands.filter(c=>c[0]===0).length>1)&&(hatches.filter(h=>contains(p.bounds,h.bounds,.15)).length>=2||/фундамент|foundation/iu.test(p.layer||'')&&Math.min(width(p.bounds),height(p.bounds))/Math.max(width(p.bounds),height(p.bounds))<.15));
+   const hatched=paths.filter(p=>!annotationDisks.has(p)&&drawingLayer(p,key)&&p.filled&&p.fill?.gray>.985&&!p.curved&&width(p.bounds)*height(p.bounds)>2&&(/стен|wall|перегор/iu.test(p.layer||'')||Math.min(width(p.bounds),height(p.bounds))<Math.max(info.width,info.height)*.045||p.commands.filter(c=>c[0]===0).length>1)&&(hatches.filter(h=>contains(p.bounds,h.bounds,.15)).length>=2||/фундамент|foundation/iu.test(p.layer||'')&&Math.min(width(p.bounds),height(p.bounds))/Math.max(width(p.bounds),height(p.bounds))<.15));
    const extent=ps=>ps.reduce((v,p)=>v+Math.max(width(p.bounds),height(p.bounds)),0);if(hatched.length>=3&&extent(hatched)>extent(walls)*1.3)walls=hatched;else extraWalls=hatched;
   }
   let fallback=false;
@@ -144,7 +154,7 @@
   selected.paths=walls.filter(p=>contains(bounds,p.bounds,.7)&&!otherWalls.has(p));
   const local=paths.filter(p=>contains(bounds,p.bounds,.7));
   const thickness=median(selected.paths.map(p=>Math.min(width(p.bounds),height(p.bounds))).filter(n=>n>.2&&n<Math.max(width(bounds),height(bounds))*.06));
-  return {context:paths,bounds,walls:selected.paths,extraWalls:extraWalls.filter(p=>contains(bounds,p.bounds,2)),floors:attached,local,thickness:Math.max(.6,thickness),fallback};
+  return {annotationDisks,context:paths,bounds,walls:selected.paths,extraWalls:extraWalls.filter(p=>contains(bounds,p.bounds,2)),floors:attached,local,thickness:Math.max(.6,thickness),fallback};
  }
  function structuralColumns(s){
   const paths=s.context||s.local,t=s.thickness,columns=[];
@@ -330,9 +340,10 @@
  // unnumbered/winding stairs, thin wall outlines and clipped compound paths.
  function cropBounds(s,info){
   const b=s.bounds,pad=s.focused?0:Math.max(s.thickness*3,Math.min(width(b),height(b))*.025);
-  const visual=union([b,...outsideSteps(s,info)]);
+  const named=nearbyStairs(s),visual=union([b,...outsideSteps(s,info),...named.map(p=>p.bounds),...(info.confirmedLandings||[]).map(r=>box(r.polygon))]);
   return {x0:Math.max(0,visual.x0-pad),y0:Math.max(0,visual.y0-pad),x1:Math.min(info.width,visual.x1+pad),y1:Math.min(info.height,visual.y1+pad)};
  }
+ function nearbyStairs(s){const b=s.bounds,t=s.thickness,span=Math.max(width(b),height(b));return (s.context||s.local||[]).filter(p=>/лест|ступен|stair|step/iu.test(p.layer||'')&&Math.max(width(p.bounds),height(p.bounds))<span*.6&&intersects(b,p.bounds,Math.max(t*10,span*.15)));}
  function outsideSteps(s,info){
   if(s.focused)return [];
   const b=s.bounds,t=s.thickness,span=Math.max(width(b),height(b)),lines=[];
@@ -344,7 +355,7 @@
   const zones=[];
   for(const seed of lines){
    const run=lines.filter(l=>l.horizontal===seed.horizontal&&Math.abs(l.lo-seed.lo)<t*.2&&Math.abs(l.hi-seed.hi)<t*.2&&Math.abs(l.axis-seed.axis)<t*8).sort((a,b)=>a.axis-b.axis);
-   const unique=run.filter((l,i)=>!i||l.axis-run[i-1].axis>.2);if(unique.length<3)continue;
+   const unique=run.filter((l,i)=>!i||l.axis-run[i-1].axis>Math.max(.2,t*.12));if(unique.length<3)continue;
    const gaps=unique.slice(1).map((l,i)=>l.axis-unique[i].axis);
    if(gaps.some(g=>g<t*.12||g>t*3)||Math.max(...gaps)/Math.min(...gaps)>1.35||unique.at(-1).axis-unique[0].axis>t*8)continue;
    const r=union(unique.map(l=>l.p.bounds));
@@ -378,7 +389,7 @@
   const t=s.thickness,tolerance=Math.max(.035,t*.015),nodes=[],cells=new Map(),edges=[],leaves=[];
   const node=(x,y)=>{const ix=Math.round(x/tolerance),iy=Math.round(y/tolerance);for(let a=-1;a<=1;a++)for(let b=-1;b<=1;b++){const n=cells.get((ix+a)+','+(iy+b));if(n&&Math.hypot(n.x-x,n.y-y)<tolerance)return n;}const n={x,y,edges:[]};cells.set(ix+','+iy,n);nodes.push(n);return n;};
   for(const p of paths){if(!p.stroked||p.filled||p.curved||p.dash||p.commands.length!==2||p.commands[1][0]!==1)continue;const a=p.commands[0].slice(1),b=p.commands[1].slice(1),length=Math.hypot(a[0]-b[0],a[1]-b[1]);if(length>t*1.4&&length<t*13)leaves.push({p,a,b,length});if(length<.02||length>t*2)continue;const u=node(...a),v=node(...b),e={p,u,v};u.edges.push(e);v.edges.push(e);edges.push(e);}
-  const result=new Set(),seen=new Set(),wall=(x,y)=>[0,t*.35,-t*.35,t*.75,-t*.75].some(dx=>[0,t*.35,-t*.35,t*.75,-t*.75].some(dy=>inWall(x+dx,y+dy)));
+  const result=new Set();result.assemblies=[];const seen=new Set(),wall=(x,y)=>[0,t*.35,-t*.35,t*.75,-t*.75].some(dx=>[0,t*.35,-t*.35,t*.75,-t*.75].some(dy=>inWall(x+dx,y+dy)));
   for(const start of nodes){if(start.edges.length!==1||seen.has(start.edges[0]))continue;const chain=[],points=[start];let n=start,previous=null;
    while(chain.length<500){const e=n.edges.find(e=>e!==previous&&!seen.has(e));if(!e)break;seen.add(e);chain.push(e);n=e.u===n?e.v:e.u;points.push(n);previous=e;if(n.edges.length!==2)break;}
    if(chain.length<4||n.edges.length!==1)continue;const a=points[0],b=points[Math.floor(points.length/2)],c=points.at(-1),den=2*(a.x*(b.y-c.y)+b.x*(c.y-a.y)+c.x*(a.y-b.y));if(Math.abs(den)<.001)continue;
@@ -386,7 +397,7 @@
    if(r<t*1.4||r>t*12||!wall(hx,hy)||points.some(p=>Math.abs(Math.hypot(p.x-hx,p.y-hy)-r)>Math.max(.06,r*.012)))continue;
    let sweep=0,direction=0,valid=true;for(let i=1;i<points.length;i++){let d=Math.atan2(points[i].y-hy,points[i].x-hx)-Math.atan2(points[i-1].y-hy,points[i-1].x-hx);d=Math.atan2(Math.sin(d),Math.cos(d));if(direction&&Math.sign(d)!==direction){valid=false;break;}direction=Math.sign(d);sweep+=Math.abs(d);}if(!valid||sweep<.18||sweep>Math.PI*.56)continue;
    const leaf=leaves.find(l=>Math.abs(l.length-r)<t*.3&&[a,c].some(q=>(Math.hypot(l.a[0]-hx,l.a[1]-hy)<t*.25&&Math.hypot(l.b[0]-q.x,l.b[1]-q.y)<t*.25)||(Math.hypot(l.b[0]-hx,l.b[1]-hy)<t*.25&&Math.hypot(l.a[0]-q.x,l.a[1]-q.y)<t*.25)));if(!leaf)continue;
-   result.add(leaf.p);for(const e of chain)result.add(e.p);
+   const tip=Math.hypot(leaf.a[0]-hx,leaf.a[1]-hy)<t*.25?leaf.b:leaf.a,closed=Math.hypot(tip[0]-a.x,tip[1]-a.y)>Math.hypot(tip[0]-c.x,tip[1]-c.y)?[a.x,a.y]:[c.x,c.y];result.assemblies.push({hinge:[hx,hy],tip,closed,source:'segmented-circle'});result.add(leaf.p);for(const e of chain)result.add(e.p);
   }
   // Dashed swings are often exported as disconnected short chords, without
   // any PDF dash operator. The original leaf fixes the centre and radius;
@@ -394,7 +405,7 @@
   for(const leaf of leaves)for(const [h,q]of [[leaf.a,leaf.b],[leaf.b,leaf.a]]){
    if(!wall(...h)||wall(...q))continue;const r=leaf.length,base=Math.atan2(q[1]-h[1],q[0]-h[0]),near=[];
    for(const e of edges){const a=[e.u.x-h[0],e.u.y-h[1]],b=[e.v.x-h[0],e.v.y-h[1]],error=Math.max(.1,r*.018);if(Math.abs(Math.hypot(...a)-r)>error||Math.abs(Math.hypot(...b)-r)>error)continue;const angle=Math.atan2(Math.sin(Math.atan2(a[1]+b[1],a[0]+b[0])-base),Math.cos(Math.atan2(a[1]+b[1],a[0]+b[0])-base));if(Math.abs(angle)>Math.PI*.56)continue;near.push({e,angle,length:Math.hypot(e.u.x-e.v.x,e.u.y-e.v.y)});}
-   for(const sign of [-1,1]){const arc=near.filter(e=>e.angle*sign>=-.03).sort((a,b)=>a.angle*sign-b.angle*sign);if(arc.length<4||arc[0].angle*sign>.23||arc.at(-1).angle*sign<.3)continue;let end=1;for(;end<arc.length;end++)if((arc[end].angle-arc[end-1].angle)*sign>.4)break;const run=arc.slice(0,end),sweep=(run.at(-1).angle-run[0].angle)*sign;if(run.length<4||sweep<.3||run.reduce((n,e)=>n+e.length/r,0)<sweep*.35)continue;result.add(leaf.p);for(const e of run)result.add(e.e.p);}
+   for(const sign of [-1,1]){const arc=near.filter(e=>e.angle*sign>=-.03).sort((a,b)=>a.angle*sign-b.angle*sign);if(arc.length<4||arc[0].angle*sign>.23||arc.at(-1).angle*sign<.3)continue;let end=1;for(;end<arc.length;end++)if((arc[end].angle-arc[end-1].angle)*sign>.4)break;const run=arc.slice(0,end),sweep=(run.at(-1).angle-run[0].angle)*sign;if(run.length<4||sweep<.3||run.reduce((n,e)=>n+e.length/r,0)<sweep*.35)continue;const arcEnd=run.at(-1).e,u=[arcEnd.u.x,arcEnd.u.y],v=[arcEnd.v.x,arcEnd.v.y],closed=Math.hypot(u[0]-q[0],u[1]-q[1])>Math.hypot(v[0]-q[0],v[1]-q[1])?u:v;result.assemblies.push({hinge:h,tip:q,closed,source:'segmented-dashes'});result.add(leaf.p);for(const e of run)result.add(e.e.p);}
   }return result;
  }
  function architecturalDetails(paths,s,info,inWall,wallSet,annotation=()=>false){
@@ -444,12 +455,12 @@
   // A window is also exported as a white wall opening with several short
   // frame/glass segments. Validate the whole aperture before preserving its
   // segments; testing each mullion against distant wall ends loses the frame.
-  const apertures=paths.filter(p=>p.filled&&!wallSet.has(p)&&!p.curved&&p.fill?.gray>.94&&Math.max(width(p.bounds),height(p.bounds))<span*.4&&!info.items.some(w=>inside(w.cx,w.cy,p.bounds))&&Math.max(width(p.bounds),height(p.bounds))>t*2&&Math.min(width(p.bounds),height(p.bounds))>t*.6&&Math.min(width(p.bounds),height(p.bounds))<t*8&&Math.max(width(p.bounds),height(p.bounds))>Math.min(width(p.bounds),height(p.bounds))*1.3).map(p=>{
+  const apertures=paths.filter(p=>p.filled&&!wallSet.has(p)&&!p.curved&&(p.fill?.gray>.94||p.fill?.saturation>.1)&&Math.max(width(p.bounds),height(p.bounds))<span*.4&&!info.items.some(w=>inside(w.cx,w.cy,p.bounds))&&Math.max(width(p.bounds),height(p.bounds))>t*2&&(Math.min(width(p.bounds),height(p.bounds))>t*.6||p.fill?.saturation>.1&&Math.min(width(p.bounds),height(p.bounds))>t*.1)&&Math.min(width(p.bounds),height(p.bounds))<t*8&&Math.max(width(p.bounds),height(p.bounds))>Math.min(width(p.bounds),height(p.bounds))*1.3).map(p=>{
    const b=p.bounds,h=width(b)>height(b),lo=h?b.x0:b.y0,hi=h?b.x1:b.y1,axis=h?(b.y0+b.y1)/2:(b.x0+b.x1)/2,short=h?height(b):width(b),near=(v)=>[.1,.3,.6,1].some(d=>h?jambAt(v+d*t,axis):jambAt(axis,v+d*t));
    const cross=Math.max(short*.65,t*2.5),mid=(lo+hi)/2;
    if(!near(lo)||!near(hi)||(h?inWall(mid,axis-cross)||inWall(mid,axis+cross):inWall(axis-cross,mid)||inWall(axis+cross,mid)))return null;
    const glass=lines.filter(l=>!l.p.dash&&!dimensionLine(l)&&contains(b,box([l.a,l.b]),t*.05)&&(h?l.horizontal:l.vertical)&&l.length>(hi-lo)*.32&&Math.abs((h?l.a[1]:l.a[0])-axis)<=short*.51);
-   return glass.length>=2?b:null;
+   return glass.length>=2||p.fill?.saturation>.1&&Math.max(width(b),height(b))>Math.min(width(b),height(b))*4?b:null;
   }).filter(Boolean);
   const selected=new Set(),roles=new Map(),strokes=new Map(),counts={stairs:0,doors:0,windows:0};
   const acceptLines=(p,ls,role)=>{selected.add(p);roles.set(p,role);strokes.set(p,ls.flatMap(l=>[[0,...l.a],[1,...l.b]]));counts[role]++;};
@@ -466,7 +477,7 @@
    // do not terminate against two ends of the same wall band.
    if(!p.dash&&line.length>t*1.5&&!inWall(...mid)&&wallAt(line.a[0]-ux*t*2,line.a[1]-uy*t*2)&&wallAt(line.b[0]+ux*t*2,line.b[1]+uy*t*2)&&!wallAt(line.a[0]-ux*t*2-uy*t*2,line.a[1]-uy*t*2+ux*t*2)&&!wallAt(line.b[0]+ux*t*2-uy*t*2,line.b[1]+uy*t*2+ux*t*2)&&!wallAt(mid[0]-uy*t*.8,mid[1]+ux*t*.8)&&!wallAt(mid[0]+uy*t*.8,mid[1]-ux*t*.8)){selected.add(p);roles.set(p,'windows');counts.windows++;}
   }
-  return {selected,counts,zones,roles,strokes};
+  const doorAssemblies=doors.flatMap(d=>{for(const h of d.hinges)for(const tip of [d.a,d.b])if(leafAt(h,tip).length)return [{hinge:h,tip,closed:tip===d.a?d.b:d.a,source:'source-curve'}];return [];});return {selected,counts,zones,roles,strokes,apertures,doorAssemblies};
  }
  // Template 3.1 is drawn from source paths, never a generated replacement layout.
  async function draw(s,roomLabels,dims,key,info,page,optionalContent,check){
@@ -479,12 +490,12 @@
   const m=mask.getContext('2d');
   const columns=structuralColumns(s),wallSet=new Set([...s.walls,...(s.extraWalls||[]),...columns]),t=s.thickness;
   const tables=(info.tables||[]).map(v=>({x0:v.left-4,y0:v.top-10,x1:v.right+4,y1:v.bottom+8})).filter(r=>!s.walls.some(p=>intersects(p.bounds,r)));
-  const steps=outsideSteps(s,info),supports=[...s.walls,...columns,...s.floors,...steps.map(bounds=>({bounds}))];
-  const local=(s.context||s.local).filter(p=>drawingLayer(p,key)&&(wallSet.has(p)||contains(b,p.bounds,.7)||steps.some(r=>contains(r,p.bounds,t))||p.curved&&Math.max(width(p.bounds),height(p.bounds))>t&&Math.max(width(p.bounds),height(p.bounds))<Math.max(width(b),height(b))*.18)&&contains(crop,p.bounds,.7)&&!tables.some(r=>contains(r,p.bounds))&&supports.some(q=>intersects(q.bounds,p.bounds,t*.5)));
+  const namedStairs=nearbyStairs(s),steps=outsideSteps(s,info),supports=[...s.walls,...columns,...s.floors,...steps.map(bounds=>({bounds})),...namedStairs];
+  const local=(s.context||s.local).filter(p=>drawingLayer(p,key)&&(wallSet.has(p)||namedStairs.includes(p)||contains(b,p.bounds,.7)||steps.some(r=>contains(r,p.bounds,t))||p.curved&&Math.max(width(p.bounds),height(p.bounds))>t&&Math.max(width(p.bounds),height(p.bounds))<Math.max(width(b),height(b))*.18)&&contains(crop,p.bounds,.7)&&!tables.some(r=>contains(r,p.bounds))&&supports.some(q=>intersects(q.bounds,p.bounds,t*.5)));
   const materialMarks=materialHatches(local,s);
   const notes=info.items.filter(w=>inside(w.cx,w.cy,crop)&&(/[а-яё]/iu.test(w.text)||/^(?:UP|DOWN)$/i.test(w.text))).map(w=>({x0:w.x0-w.h*2,y0:w.y0-w.h*2,x1:w.x1+w.h*2,y1:w.y1+w.h*3}));
   const words=info.items.filter(w=>inside(w.cx,w.cy,crop));
-  const annotation=p=>!wallSet.has(p)&&(p.stroke?.saturation>.2&&columns.some(q=>contains(q.bounds,p.bounds,t*.4))||!p.curved&&notes.some(a=>contains(a,p.bounds))||p.curved&&(p.closed||p.points.length>2&&Math.hypot(p.points[0][0]-p.points.at(-1)[0],p.points[0][1]-p.points.at(-1)[1])<.2)&&Math.max(width(p.bounds),height(p.bounds))<t*5&&words.some(w=>/^\d{1,3}$/.test(w.text)&&contains(p.bounds,w,.3)));
+  const annotation=p=>s.annotationDisks?.has(p)||!wallSet.has(p)&&(p.stroke?.saturation>.2&&columns.some(q=>contains(q.bounds,p.bounds,t*.4))||!p.curved&&notes.some(a=>contains(a,p.bounds))||p.curved&&(p.closed||p.points.length>2&&Math.hypot(p.points[0][0]-p.points.at(-1)[0],p.points[0][1]-p.points.at(-1)[1])<.2)&&Math.max(width(p.bounds),height(p.bounds))<t*5&&words.some(w=>/^\d{1,3}$/.test(w.text)&&contains(p.bounds,w,.3)));
   const wallHatch=p=>!p.filled&&!p.curved&&p.lineWidth===0&&p.commands.length===2&&width(p.bounds)>.1&&height(p.bounds)>.1&&Math.max(width(p.bounds),height(p.bounds))<t*2&&width(p.bounds)/height(p.bounds)>.65&&width(p.bounds)/height(p.bounds)<1.5;
   const clipped=(ctx,p,fn)=>{ctx.save();for(const clip of p.clips||[]){ctx.beginPath();for(const q of clip.paths)path(ctx,q,map,false);ctx.clip(clip.rule);}fn();ctx.restore();};
   // Build only the visible wall silhouette in source paint order; opaque later
@@ -495,7 +506,7 @@
   }
   const pixels=m.getImageData(0,0,mask.width,mask.height).data;
   // Seal only hairline seams within a wall cut. A 35 mm radius cannot bridge
-  // a real door/window span; cap it at three preview pixels and 12% new ink.
+  // a real door/window span; cap it at three preview pixels and 25% new ink.
   const radius=Math.max(1,Math.min(3,Math.ceil(dims?.widthMm>0?35*width(b)*scale/dims.widthMm:t*scale*.12))),W=mask.width,H=mask.height;
   const original=new Uint8Array(W*H);let wallInk=0;for(let i=0;i<original.length;i++)wallInk+=original[i]=pixels[i*4+3]>240?1:0;
   const filter=(input,horizontal,grow)=>{const output=new Uint8Array(input.length);for(let y=0;y<H;y++)for(let x=0;x<W;x++){let value=grow?0:1;for(let d=-radius;d<=radius;d++){const xx=x+(horizontal?d:0),yy=y+(horizontal?0:d),v=xx>=0&&yy>=0&&xx<W&&yy<H?input[yy*W+xx]:0;if(grow?v:!v){value=grow?1:0;break;}}output[y*W+x]=value;}return output;};
@@ -506,7 +517,7 @@
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x;if(original[i])distances[i]=1+Math.min(x?distances[i-1]:0,y?distances[i-W]:0);}
   for(let y=H-1;y>=0;y--)for(let x=W-1;x>=0;x--){const i=y*W+x;if(!original[i])continue;distances[i]=Math.min(distances[i],1+Math.min(x+1<W?distances[i+1]:0,y+1<H?distances[i+W]:0));deepest=Math.max(deepest,distances[i]);}
   const widths=s.walls.map(p=>Math.min(width(p.bounds),height(p.bounds))).filter(v=>v>.2&&v<Math.max(width(b),height(b))*.06).sort((a,b)=>a-b),wallBand=Math.max(t,widths[Math.floor(widths.length*.9)]||t)*scale;
-  const wallRepair={radiusPixels:radius,addedPixels:added,applied:added<=wallInk*.12,largestSolidRadius:deepest,wallBandPixels:wallBand,suspiciousSolidFill:deepest>Math.max(6,wallBand*1.6)};
+  const wallRepair={radiusPixels:radius,addedPixels:added,applied:added<=wallInk*.25,largestSolidRadius:deepest,wallBandPixels:wallBand,suspiciousSolidFill:deepest>Math.max(6,wallBand*1.6)};
   if(wallRepair.applied&&added){for(let i=0;i<closed.length;i++)if(closed[i]&&!original[i]){pixels[i*4]=40;pixels[i*4+1]=58;pixels[i*4+2]=70;pixels[i*4+3]=255;}m.putImageData(new ImageData(pixels,W,H),0,0);}
   const inWall=(x,y)=>{const q=map(x,y),ix=Math.round(q[0]),iy=Math.round(q[1]);return ix>=0&&iy>=0&&ix<mask.width&&iy<mask.height&&pixels[(iy*mask.width+ix)*4+3]>240;};
   const rescuedDoors=segmentedDoors((s.context||s.local).filter(p=>contains(crop,p.bounds,.7)&&!tables.some(r=>contains(r,p.bounds))),s,inWall);
@@ -518,6 +529,7 @@
   const details=architecturalDetails(detailInput,s,info,inWall,wallSet,annotation);
   for(const p of furnitureDoors)if(!local.includes(p)&&details.selected.has(p)){if(details.roles.get(p)==='doors')local.push(p);else {details.counts[details.roles.get(p)]--;details.selected.delete(p);details.roles.delete(p);details.strokes.delete(p);}}
   for(const p of rescuedDoors){if(!details.selected.has(p))details.counts.doors++;details.selected.add(p);details.roles.set(p,'doors');}
+  if(root.CatalogPlanModel){const model=root.CatalogPlanModel.build({mask,map,crop,structure:s,roomLabels,dimensions:dims,details,rescuedDoors,landings:info.confirmedLandings||[]});return root.CatalogPlanModel.render(model,{wallRepair,check});}
   for(let i=0;i<local.length;i++){
    if(i%300===0)check();const p=local[i];if(!rescuedDoors.has(p)&&!details.selected.has(p)&&(annotation(p)||wallHatch(p)||materialMarks.has(p)))continue;
    clipped(c,p,()=>{
@@ -599,9 +611,9 @@
   check();const rendered=await draw(structure,roomLabels,dims,key,info,page,optionalContent,check);
   if(!structure.fallback&&rendered.wallRepair.suspiciousSolidFill)return {ok:false,code:'solid-wall-artifact',reason:'обнаружена неподтверждённая сплошная заливка вместо стен или лестницы',wallRepair:rendered.wallRepair};
   if(paths.filter(p=>/лест|ступен|stair|step/iu.test(p.layer||'')&&p.stroked).length>=3&&!rendered.details.stairs)return {ok:false,reason:'не удалось подтвердить сохранность лестницы на чистом плане'};
-  const quality=CatalogQuality.reviewPlan({...rendered,roomSchedule:table?.rows,labelsComplete:!table?.rows?.length||roomLabels.complete,wallCount:structure.walls.length,dimensions:dims});
+  const quality=CatalogQuality.reviewPlan({...rendered,roomSchedule:table?.rows,labelsComplete:(!table?.rows?.length||roomLabels.complete)&&!(rendered.labelCollisions||[]).length,wallCount:structure.walls.length,dimensions:dims});
   if(!quality.passed)return {ok:false,reason:'Контроль качества: '+quality.issues.join('. '),quality,foundRooms:roomLabels.items.length};
-  return {ok:true,...rendered,report:{style:VERSION,quality,template:'3.1',renderer:'source-vector-relief',detailPolicy:'walls-openings-stairs-room-names-overall-dimensions',windows:'neutral',shadows:'soft',sourceCrop:rendered.sourceCrop,details:rendered.details,wallRepair:rendered.wallRepair,recognition:structure.recognition||'level-drawing',focused:!!structure.focused,fullLevel:key==='basement',highlightedRooms:structure.activeRegions?.length||0,columns:structuralColumns(structure).length,roomNames:roomLabels.items.map(r=>r.name),drawingScale,bounds:structure.bounds,...dims,rooms:roomLabels.items.length,wallPaths:structure.walls.length,sourceGeometry:true}};
+  return {ok:true,...rendered,report:{style:VERSION,quality,template:'semantic-1',renderer:'semantic-model',layout:rendered.model?.output,detailPolicy:'walls-openings-stairs-room-names-overall-dimensions',windows:'neutral',shadows:'soft',sourceCrop:rendered.sourceCrop,details:rendered.details,wallRepair:rendered.wallRepair,semanticModel:rendered.model?{schema:rendered.model.schema,wallContours:rendered.model.walls.length,doors:rendered.model.doors.length,windows:rendered.model.windows.length,stairs:rendered.model.stairs.length}:null,recognition:structure.recognition||'level-drawing',focused:!!structure.focused,fullLevel:key==='basement',highlightedRooms:structure.activeRegions?.length||0,columns:structuralColumns(structure).length,roomNames:roomLabels.items.map(r=>r.name),drawingScale,bounds:structure.bounds,...dims,rooms:roomLabels.items.length,wallPaths:structure.walls.length,sourceGeometry:true}};
  }
  async function refreshExisting({id,incoming,client,allowed,actor}){
   const reports=incoming.pdf_import_meta?.sources?.plans;if(!reports||!id)return {updated:false};

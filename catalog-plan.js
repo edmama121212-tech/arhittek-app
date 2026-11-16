@@ -63,13 +63,86 @@
  root.CatalogQuality=Object.freeze({version:VERSION,fingerprint,scheduleFingerprint,reviewPlan,reviewCard,show,checkEditor,protectSave});
  if(typeof module!=='undefined')module.exports=root.CatalogQuality;
 })(typeof window!=='undefined'?window:globalThis);
+/* Approved semantic catalogue template: separate source walls/openings/stairs/rooms. */
+(function(root){
+ 'use strict';
+ const VERSION='arhittek-semantic-1',INK='#34443f',PAPER='#fcfbf8',LINE='#879a8c';
+ const wh=b=>[b.x1-b.x0,b.y1-b.y0],inside=(p,b)=>p[0]>=b.x0&&p[0]<=b.x1&&p[1]>=b.y0&&p[1]<=b.y1;
+ function drawPath(c,commands,map,begin=true){if(begin)c.beginPath();for(const q of commands){if(q[0]===4){c.closePath();continue;}const v=[];for(let i=1;i<q.length;i+=2)v.push(...map(q[i],q[i+1]));if(q[0]===0)c.moveTo(...v);else if(q[0]===1)c.lineTo(...v);else if(q[0]===2)c.bezierCurveTo(...v);else if(q[0]===3)c.quadraticCurveTo(...v);}}
+ const polygon=(c,points,map,begin=true)=>{if(begin)c.beginPath();points.forEach((p,i)=>i?c.lineTo(...map(...p)):c.moveTo(...map(...p)));c.closePath();};
+ function simplify(points,tol=.55){
+  function open(a){if(a.length<3)return a;const p=a[0],q=a.at(-1),dx=q[0]-p[0],dy=q[1]-p[1],den=dx*dx+dy*dy;let at=0,max=0;for(let i=1;i<a.length-1;i++){const u=den?Math.max(0,Math.min(1,((a[i][0]-p[0])*dx+(a[i][1]-p[1])*dy)/den)):0,d=Math.hypot(a[i][0]-p[0]-u*dx,a[i][1]-p[1]-u*dy);if(d>max){max=d;at=i;}}return max>tol?[...open(a.slice(0,at+1)).slice(0,-1),...open(a.slice(at))]:[p,q];}
+  if(points.length<5)return points;const first=points[0];let far=1;for(let i=2;i<points.length;i++)if(Math.hypot(points[i][0]-first[0],points[i][1]-first[1])>Math.hypot(points[far][0]-first[0],points[far][1]-first[1]))far=i;return [...open(points.slice(0,far+1)).slice(0,-1),...open([...points.slice(far),first]).slice(0,-1)];
+ }
+ function wallContours(canvas,unmap){
+  const W=canvas.width,H=canvas.height,p=canvas.getContext('2d').getImageData(0,0,W,H).data,N=W+1,edges=new Map(),ink=(x,y)=>x>=0&&y>=0&&x<W&&y<H&&p[(y*W+x)*4+3]>240;
+  const add=(x,y,a,b)=>{const k=y*N+x,list=edges.get(k)||[];list.push(b*N+a);edges.set(k,list);};
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(ink(x,y)){if(!ink(x,y-1))add(x,y,x+1,y);if(!ink(x+1,y))add(x+1,y,x+1,y+1);if(!ink(x,y+1))add(x+1,y+1,x,y+1);if(!ink(x-1,y))add(x,y+1,x,y);}
+  const result=[];while(edges.size){const start=edges.keys().next().value;let n=start,points=[],count=0;do{points.push([n%N,Math.floor(n/N)]);const list=edges.get(n);if(!list?.length)break;const next=list.pop();if(!list.length)edges.delete(n);n=next;}while(n!==start&&++count<W*H);if(n!==start||points.length<4)continue;const area=points.reduce((sum,p,i)=>{const q=points[(i+1)%points.length];return sum+p[0]*q[1]-q[0]*p[1];},0)/2;if(Math.abs(area)<2)continue;result.push(simplify(points).map(p=>unmap(...p)));}return result;
+ }
+ function cleanStairStrokes(stairs,t){
+  // Merge coincident CAD tread skins, including reversed duplicates. Separate
+  // steps and actual gaps remain separate; no replacement stair is invented.
+  const lines=[],curves=[],tol=Math.max(.04,t*.1);
+  for(const p of stairs){let previous=null;for(const q of p.commands){if(q[0]===0){previous=q.slice(1);continue;}if(q[0]!==1){curves.push(p);break;}if(previous){let a=previous,b=q.slice(1),length=Math.hypot(b[0]-a[0],b[1]-a[1]);if(length>=t*.18){if(a[0]>b[0]||a[0]===b[0]&&a[1]>b[1])[a,b]=[b,a];lines.push({a,b,length,dash:p.dash,pattern:p.pattern});}}previous=q.slice(1);}}
+  lines.sort((a,b)=>b.length-a.length);const kept=[];
+  for(const l of lines){const ux=(l.b[0]-l.a[0])/l.length,uy=(l.b[1]-l.a[1])/l.length;let duplicate=false;for(const k of kept){if(k.dash!==l.dash)continue;const vx=(k.b[0]-k.a[0])/k.length,vy=(k.b[1]-k.a[1])/k.length;if(Math.abs(ux*vy-uy*vx)>.012)continue;const dist=p=>Math.abs((p[0]-k.a[0])*vy-(p[1]-k.a[1])*vx);if(dist(l.a)>tol||dist(l.b)>tol)continue;const a=(l.a[0]-k.a[0])*vx+(l.a[1]-k.a[1])*vy,b=(l.b[0]-k.a[0])*vx+(l.b[1]-k.a[1])*vy;if(a>k.length+tol||b< -tol)continue;const lo=Math.min(0,a),hi=Math.max(k.length,b),origin=k.a;k.a=[origin[0]+vx*lo,origin[1]+vy*lo];k.b=[origin[0]+vx*hi,origin[1]+vy*hi];k.length=hi-lo;duplicate=true;break;}if(!duplicate)kept.push({...l});}
+  const seen=new Set(),result=kept.map(l=>({commands:[[0,...l.a],[1,...l.b]],dash:l.dash,pattern:l.pattern}));
+  for(const p of curves){const pts=p.commands.flatMap(q=>q[0]===4?[]:Array.from({length:(q.length-1)/2},(_,i)=>[q[i*2+1],q[i*2+2]])),span=Math.max(...[0,1].map(axis=>Math.max(...pts.map(p=>p[axis]))-Math.min(...pts.map(p=>p[axis]))));if(p.closed&&span<t*2)continue;const key=JSON.stringify(p.commands);if(!seen.has(key)){seen.add(key);result.push(p);}}
+  return result;
+ }
+ function build({mask,map,crop,structure:s,roomLabels,dimensions,details,rescuedDoors,landings=[]}){
+  const origin=map(0,0),unit=map(1,0)[0]-origin[0],unmap=(x,y)=>[(x-origin[0])/unit,(y-origin[1])/unit],mc=mask.getContext('2d'),mp=mc.getImageData(0,0,mask.width,mask.height).data;
+  const solid=(x,y)=>{const p=map(x,y),ix=Math.round(p[0]),iy=Math.round(p[1]);return ix>=0&&iy>=0&&ix<mask.width&&iy<mask.height&&mp[(iy*mask.width+ix)*4+3]>240;};let materialJoins=0;
+  // Composite exterior walls: the PDF may leave white insulation between two
+  // parallel structural skins. Join only narrow source wall-material polygons
+  // proven to have wall ink on both sides; glazing has air on either side.
+  for(const p of s.context||s.local||[]){const r=p.bounds,[w,h]=wh(r),short=Math.min(w,h),long=Math.max(w,h),horizontal=w>h,near=Math.min(Math.abs(r.x0-s.bounds.x0),Math.abs(r.x1-s.bounds.x1),Math.abs(r.y0-s.bounds.y0),Math.abs(r.y1-s.bounds.y1));if(!p.filled||p.curved||p.commands.length>6||p.fill?.gray<.98||!/стен|wall|фундамент/iu.test(p.layer||'')||short>s.thickness*2||long<short*4||near>s.thickness*6||!inside([(r.x0+r.x1)/2,(r.y0+r.y1)/2],crop))continue;let proven=0;for(const f of [.2,.5,.8]){const x=horizontal?r.x0+w*f:(r.x0+r.x1)/2,y=horizontal?(r.y0+r.y1)/2:r.y0+h*f;if([.2,.4,.6,1,1.5,2].some(v=>{const d=short/2+s.thickness*v;return horizontal?solid(x,y-d)&&solid(x,y+d):solid(x-d,y)&&solid(x+d,y);}))proven++;}if(proven===3){drawPath(mc,p.commands,map);mc.fillStyle=INK;mc.fill(p.evenOdd?'evenodd':'nonzero');materialJoins++;}}
+  const walls=wallContours(mask,unmap),doors=[];
+  const addDoor=d=>{if(!d||!d.hinge||!d.tip||!d.closed)return;if(doors.some(q=>Math.hypot(q.hinge[0]-d.hinge[0],q.hinge[1]-d.hinge[1])<s.thickness*.25&&Math.hypot(q.tip[0]-d.tip[0],q.tip[1]-d.tip[1])<s.thickness*.25))return;doors.push(d);};
+  for(const d of details.doorAssemblies||[])addDoor(d);for(const d of rescuedDoors.assemblies||[])addDoor(d);
+  const nearestWall=p=>{const a=map(...p),pix=mask.getContext('2d').getImageData(0,0,mask.width,mask.height).data;let best=null;const radius=Math.ceil(s.thickness*unit*1.4);for(let r=0;r<=radius&&!best;r++)for(let k=0;k<24;k++){const x=Math.round(a[0]+Math.cos(k*Math.PI/12)*r),y=Math.round(a[1]+Math.sin(k*Math.PI/12)*r);if(x>=0&&y>=0&&x<mask.width&&y<mask.height&&pix[(y*mask.width+x)*4+3]>240){best=unmap(x,y);break;}}return best;};
+  for(const d of doors){d.jamb=nearestWall(d.hinge);d.radius=Math.hypot(d.tip[0]-d.hinge[0],d.tip[1]-d.hinge[1]);}
+  const apertures=[];for(const b of details.apertures||[]){const a=wh(b);if(apertures.some(q=>{const z=wh(q);return Math.abs(q.x0-b.x0)+Math.abs(q.y0-b.y0)+Math.abs(z[0]-a[0])+Math.abs(z[1]-a[1])<s.thickness*.4;}))continue;apertures.push({...b});}
+  const stairs=[],seen=new Set();for(const p of details.selected){if(details.roles.get(p)!=='stairs')continue;const commands=details.strokes.get(p)||p.commands,key=JSON.stringify(commands.map(q=>q.map(n=>Math.round(n*20)/20)));if(seen.has(key))continue;seen.add(key);stairs.push({commands,dash:p.dash,pattern:p.dashPattern||[],closed:p.closed,filled:p.filled});}
+  const stairSurfaces=(s.context||s.local||[]).filter(p=>p.filled&&!p.curved&&/лест|ступен|stair|step/iu.test(p.layer||'')&&wh(p.bounds).reduce((a,b)=>a*b,1)>s.thickness*s.thickness&&inside([(p.bounds.x0+p.bounds.x1)/2,(p.bounds.y0+p.bounds.y1)/2],crop)).map(p=>({commands:p.commands,evenOdd:p.evenOdd}));
+  const floors=s.floors.filter(p=>!/мебел|furniture|лест|stair|ступен|step|стен|wall|окон|window|двер|door/iu.test(p.layer||'')&&inside([(p.bounds.x0+p.bounds.x1)/2,(p.bounds.y0+p.bounds.y1)/2],crop)).map(p=>({commands:p.commands,bounds:p.bounds,evenOdd:p.evenOdd}));
+  return {schema:'arhittek-semantic-floor/1',materialJoins,template:VERSION,units:'source-pdf-points',bounds:s.bounds,crop,thickness:s.thickness,walls,doors,windows:apertures,stairs:cleanStairStrokes(stairs,s.thickness),stairSurfaces,floors,rooms:roomLabels.items.map(r=>({name:r.name,raw:r.raw,x:r.x,y:r.y})),landings,dimensions,sourceGeometry:true};
+ }
+ function render(model,{wallRepair,check=()=>{}}={}){
+  const b=model.crop,[bw,bh]=wh(b),W=2400,H=Math.max(2200,Math.min(3600,Math.round(2100*bh/bw+520))),canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;const c=canvas.getContext('2d'),scale=Math.min((W-540)/bw,(H-660)/bh),left=(W-bw*scale)/2,top=230+(H-660-bh*scale)/2,map=(x,y)=>[left+(x-b.x0)*scale,top+(y-b.y0)*scale],t=model.thickness;
+  model.output={width:W,height:H,scale,left,top};c.fillStyle=PAPER;c.fillRect(0,0,W,H);c.fillStyle=INK;c.font='bold 39px Arial, sans-serif';c.fillText('ARHITTEK',145,108);c.fillStyle='#838980';c.font='25px Arial, sans-serif';c.fillText('Планировка',145,157);
+  const floorTone=name=>/сануз|ванн|душ|^су|^т$/iu.test(name)?'#e3e9e5':/спальн|детск|гостин|кабин|столов|^зал/iu.test(name)?'#eae0d2':'#f0ece3';
+  c.fillStyle='#f0ece3';for(const f of model.floors){drawPath(c,f.commands,map);c.fill(f.evenOdd?'evenodd':'nonzero');}
+  const regionFor=new Map(),areas=model.floors.slice().sort((a,b)=>wh(a.bounds).reduce((a,b)=>a*b,1)-wh(b.bounds).reduce((a,b)=>a*b,1));
+  for(const r of model.rooms){const f=areas.find(f=>{if(!inside([r.x,r.y],f.bounds))return false;drawPath(c,f.commands,(x,y)=>[x,y]);return c.isPointInPath(r.x,r.y,f.evenOdd?'evenodd':'nonzero');});if(f){regionFor.set(r,f);drawPath(c,f.commands,map);c.fillStyle=floorTone(r.name);c.fill(f.evenOdd?'evenodd':'nonzero');}}
+  for(const slab of model.stairSurfaces||[]){drawPath(c,slab.commands,map);c.fillStyle='#f2f0e9';c.fill(slab.evenOdd?'evenodd':'nonzero');}
+  for(const landing of model.landings){polygon(c,landing.polygon,map);c.fillStyle='#f2f0e9';c.fill();c.strokeStyle='#aeb9ad';c.lineWidth=1.5;c.stroke();}
+  const wallLayer=document.createElement('canvas');wallLayer.width=W;wallLayer.height=H;const wc=wallLayer.getContext('2d');wc.beginPath();for(const p of model.walls)polygon(wc,p,map,false);wc.fillStyle=INK;wc.fill('nonzero');for(const w of model.windows){const a=map(w.x0,w.y0),d=map(w.x1,w.y1);wc.clearRect(a[0],a[1],d[0]-a[0],d[1]-a[1]);}c.save();c.shadowColor='rgba(41,58,48,.15)';c.shadowBlur=12;c.shadowOffsetX=5;c.shadowOffsetY=8;c.drawImage(wallLayer,0,0);c.restore();
+  const sourceInk=wc.getImageData(0,0,W,H).data,inWall=(x,y)=>{const p=map(x,y),ix=Math.round(p[0]),iy=Math.round(p[1]);return ix>=0&&iy>=0&&ix<W&&iy<H&&sourceInk[(iy*W+ix)*4+3]>240;};
+  for(const w of model.windows){const [ww,hh]=wh(w),h=ww>hh,a=map(w.x0,w.y0),d=map(w.x1,w.y1);c.fillStyle='#fafcfb';c.fillRect(a[0],a[1],d[0]-a[0],d[1]-a[1]);c.strokeStyle=LINE;c.lineWidth=1.7;for(const f of [.25,.5,.75]){c.beginPath();if(h){c.moveTo(a[0],a[1]+(d[1]-a[1])*f);c.lineTo(d[0],a[1]+(d[1]-a[1])*f);}else{c.moveTo(a[0]+(d[0]-a[0])*f,a[1]);c.lineTo(a[0]+(d[0]-a[0])*f,d[1]);}c.stroke();}c.strokeRect(a[0],a[1],d[0]-a[0],d[1]-a[1]);}
+  const stairBox=model.stairs.map(p=>p.commands.flatMap(q=>q[0]===4?[]:q.slice(1).filter((_,i)=>i%2===0).map((x,i)=>[x,q[i*2+2]]))).flat();
+  for(const stair of model.stairs){check();drawPath(c,stair.commands,map);c.strokeStyle='#8c9990';c.lineWidth=1.5;c.setLineDash(stair.dash?stair.pattern.map(n=>n*scale):[]);c.stroke();}c.setLineDash([]);
+  for(const d of model.doors){const h=map(...d.hinge),q=map(...d.tip);if(d.jamb){const j=map(...d.jamb);c.beginPath();c.moveTo(...j);c.lineTo(...h);c.strokeStyle='#7e9286';c.lineWidth=Math.max(2.5,t*scale*.14);c.stroke();}c.beginPath();c.moveTo(...h);c.lineTo(...q);c.strokeStyle='#6c8475';c.lineWidth=2.4;c.stroke();const start=Math.atan2(d.tip[1]-d.hinge[1],d.tip[0]-d.hinge[0]),end=Math.atan2(d.closed[1]-d.hinge[1],d.closed[0]-d.hinge[0]),sweep=Math.atan2(Math.sin(end-start),Math.cos(end-start));c.beginPath();c.arc(h[0],h[1],d.radius*scale,start,start+sweep,sweep<0);c.strokeStyle='#9aa99d';c.lineWidth=1.4;c.stroke();}
+  c.drawImage(wallLayer,0,0);const labelCollisions=[];
+  for(const r of model.rooms){let [x,y]=map(r.x,r.y),lx=r.x,rx=r.x;const step=Math.max(.25,t/5);for(let n=0;n<1000&&lx>b.x0;n++){if(inWall(lx-step,r.y))break;lx-=step;}for(let n=0;n<1000&&rx<b.x1;n++){if(inWall(rx+step,r.y))break;rx+=step;}let uy=r.y,dy=r.y;for(let n=0;n<1000&&uy>b.y0;n++){if(inWall(r.x,uy-step))break;uy-=step;}for(let n=0;n<1000&&dy<b.y1;n++){if(inWall(r.x,dy+step))break;dy+=step;}const max=Math.max(35,Math.min(470,(rx-lx)*scale-22));let size=34;c.font='600 '+size+'px Arial, sans-serif';while(size>23&&c.measureText(r.name).width>max){size--;c.font='600 '+size+'px Arial, sans-serif';}const lines=[];let line='';for(const word of String(r.name).split(/[\s-]+/)){const next=line?line+' '+word:word;if(line&&c.measureText(next).width>max){lines.push(line);line=word;}else line=next;}if(line)lines.push(line);const tw=Math.min(max,Math.max(...lines.map(l=>c.measureText(l).width))),th=lines.length*(size+7),ax=map(lx,r.y)[0]+tw/2+7,bx=map(rx,r.y)[0]-tw/2-7,ay=map(r.x,uy)[1]+th/2+5,by=map(r.x,dy)[1]-th/2-5;if(ax<=bx)x=Math.max(ax,Math.min(bx,x));if(ay<=by)y=Math.max(ay,Math.min(by,y));
+   const region=regionFor.get(r),valid=(px,py)=>{for(let yy=-th/2;yy<=th/2;yy+=Math.max(3,th/5))for(let xx=-tw/2;xx<=tw/2;xx+=Math.max(3,tw/10)){const sx=b.x0+(px+xx-left)/scale,sy=b.y0+(py+yy-top)/scale;if(inWall(sx,sy))return false;}return true;};
+   if(!valid(x,y)){const candidates=[];for(let yy=-4;yy<=4;yy++)for(let xx=-4;xx<=4;xx++){const sx=r.x+xx*t*.7,sy=r.y+yy*t*.7;if(region){drawPath(c,region.commands,(a,b)=>[a,b]);if(!c.isPointInPath(sx,sy,region.evenOdd?'evenodd':'nonzero'))continue;}const q=map(sx,sy);if(valid(...q))candidates.push({q,d:Math.hypot(q[0]-x,q[1]-y)});}candidates.sort((a,b)=>a.d-b.d);if(candidates.length)[x,y]=candidates[0].q;}
+   if(!valid(x,y))labelCollisions.push(r.name);
+   c.fillStyle=INK;c.textAlign='center';c.textBaseline='middle';lines.forEach((l,i)=>c.fillText(l,x,y+(i-(lines.length-1)/2)*(size+7),max));}
+  const dims=model.dimensions,body=model.bounds;if(dims?.widthMm>0&&dims?.heightMm>0){const a=map(body.x0,body.y0),d=map(body.x1,body.y1),dy=top+bh*scale+80,dx=left-90;c.strokeStyle=LINE;c.lineWidth=1.7;c.beginPath();c.moveTo(a[0],dy);c.lineTo(d[0],dy);c.moveTo(dx,a[1]);c.lineTo(dx,d[1]);c.stroke();c.strokeStyle='#c7cec3';for(const x of [a[0],d[0]]){c.beginPath();c.moveTo(x,d[1]+15);c.lineTo(x,dy+13);c.stroke();c.beginPath();c.moveTo(x-7,dy+7);c.lineTo(x+7,dy-7);c.stroke();}for(const y of [a[1],d[1]]){c.beginPath();c.moveTo(dx-13,y);c.lineTo(a[0]-15,y);c.stroke();c.beginPath();c.moveTo(dx-7,y+7);c.lineTo(dx+7,y-7);c.stroke();}const fmt=(n,k)=>(dims.derived?.includes(k)?'≈ ':'')+(n/1000).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' м';c.font='28px Arial, sans-serif';c.textAlign='center';c.textBaseline='middle';const text=fmt(dims.widthMm,'width'),tw=c.measureText(text).width;c.fillStyle=PAPER;c.fillRect((a[0]+d[0]-tw)/2-15,dy-22,tw+30,44);c.fillStyle=LINE;c.fillText(text,(a[0]+d[0])/2,dy);c.save();c.translate(dx,(a[1]+d[1])/2);c.rotate(-Math.PI/2);const h=fmt(dims.heightMm,'height'),hw=c.measureText(h).width;c.fillStyle=PAPER;c.fillRect(-hw/2-15,-22,hw+30,44);c.fillStyle=LINE;c.fillText(h,0,0);c.restore();}
+  let samples=0,lost=0;const out=c.getImageData(0,0,W,H).data;for(let i=0;i<sourceInk.length;i+=64){if(sourceInk[i+3]<245)continue;samples++;if(out[i]>130||out[i+1]>150||out[i+2]>160)lost++;}const image=canvas.toDataURL('image/png'),thumb=document.createElement('canvas');thumb.width=270;thumb.height=Math.round(H/W*270);thumb.getContext('2d').drawImage(canvas,0,0,thumb.width,thumb.height);const thumbnail=thumb.toDataURL('image/jpeg',.85);canvas.width=canvas.height=wallLayer.width=wallLayer.height=thumb.width=thumb.height=0;
+  return {image,thumbnail,sourceCrop:model.crop,details:{stairs:model.stairs.length,doors:model.doors.length,windows:model.windows.length},wallSamples:samples,wallLost:lost,wallRepair,model,labelCollisions};
+ }
+ root.CatalogPlanModel=Object.freeze({version:VERSION,build,render,wallContours,cleanStairStrokes});
+})(typeof window==='undefined'?globalThis:window);
 /* Deterministic catalogue drawings: source geometry, never invented walls. */
 (function(root){
  'use strict';
- const VERSION='arhittek-plan-10',INK='#283a46',BLUE='#2877c9';
+ const VERSION='arhittek-plan-11',INK='#283a46',BLUE='#2877c9';
  const norm=s=>String(s||'').toLowerCase().replace(/ё/g,'е').replace(/[^а-яa-z0-9]/g,'');
  const roomNorm=s=>norm(s).replace(/^сп(?=\d|$)/,'спальня').replace(/^су(?=\d|$)/,'санузел').replace(/^каридор$/,'коридор').replace(/^кательная$/,'котельная');
- const roomName=s=>({сп:'Спальня',мсп:'Мастер-спальня',су:'Санузел',котельная:'Котельная',кательная:'Котельная',каридор:'Коридор',призожая:'Прихожая',кл:'Кладовая'}[norm(s)]||String(s).replace(/^СП[-–\s]*(\d+)$/iu,'Спальня $1').replace(/^С[\/.]?У\s*[-–]?\s*\d*\s*этаж.*$/iu,'Санузел'));
+ const roomName=s=>({кух:'Кухня',тамбр:'Тамбур',тамбp:'Тамбур',сп:'Спальня',мсп:'Мастер-спальня',су:'Санузел',котельная:'Котельная',кательная:'Котельная',каридор:'Коридор',призожая:'Прихожая',кл:'Кладовая'}[norm(s)]||String(s).replace(/^СП[-–\s]*(\d+)$/iu,'Спальня $1').replace(/^С[\/.]?У\s*[-–]?\s*\d*\s*этаж.*$/iu,'Санузел'));
  const box=points=>({x0:Math.min(...points.map(p=>p[0])),y0:Math.min(...points.map(p=>p[1])),x1:Math.max(...points.map(p=>p[0])),y1:Math.max(...points.map(p=>p[1]))});
  const width=b=>b.x1-b.x0,height=b=>b.y1-b.y0;
  const union=bs=>({x0:Math.min(...bs.map(b=>b.x0)),y0:Math.min(...bs.map(b=>b.y0)),x1:Math.max(...bs.map(b=>b.x1)),y1:Math.max(...bs.map(b=>b.y1))});
@@ -154,9 +227,19 @@
   if(range&&/стен|wall|перегор/iu.test(layer)){const n=Number(key.replace('floor',''));return Number.isFinite(n)&&n>=Math.min(+range[1],+range[2])&&n<=Math.max(+range[1],+range[2]);}
   const floor=CatalogPdfCore.floorIn(layer);return !floor||floor===key;
  }
+ // Flattened circular room-number badges may be exported on the wall layer.
+ // A source digit inside a small closed ring distinguishes them from columns.
+ function technicalDisks(paths,info){
+  const rings=paths.filter(p=>{const b=p.bounds,w=width(b),h=height(b),extent=Math.max(w,h);if(!p.filled||!p.closed||p.commands.length<8||extent>Math.min(info.width,info.height)*.05||w/h<.75||w/h>1.33||/колонн|column/iu.test(p.layer||''))return false;const pts=p.points||[],cx=(b.x0+b.x1)/2,cy=(b.y0+b.y1)/2,rs=pts.map(q=>Math.hypot((q[0]-cx)/(w/2),(q[1]-cy)/(h/2)));return rs.length>=8&&rs.every(r=>r>.75&&r<1.2);});
+  const proven=rings.filter(p=>info.items.some(q=>/^(?:\d{1,3}|[хx]{1,3}|\?)$/iu.test(q.text.trim())&&inside(q.cx,q.cy,p.bounds))),result=new Set(proven);
+  // A missing glyph may share the exact marker kit with several readable
+  // badges. Match its layer, fill, tessellation and physical diameter.
+  for(const p of rings){if(result.has(p))continue;const siblings=proven.filter(q=>q.layer===p.layer&&q.commands.length===p.commands.length&&Math.abs((q.fill?.gray||0)-(p.fill?.gray||0))<.01&&Math.abs(width(q.bounds)/width(p.bounds)-1)<.025&&Math.abs(height(q.bounds)/height(p.bounds)-1)<.025);if(siblings.length>=3)result.add(p);}
+  return result;
+ }
  function chooseStructure(paths,info,key,table=(info.tables||[]).find(t=>t.floor===key&&t.verified)){
   const headings=CatalogPdfCore.planInfos(info,3),heading=headings.find(h=>h.floor===key);
-  let extraWalls=[];let walls=paths.filter(p=>drawingLayer(p,key)&&p.filled&&(p.fill&&p.fill.saturation<.08&&p.fill.gray<.85||p.pattern&&/стен|wall|перегор/iu.test(p.layer||''))&&!info.items.some(w=>p.commands.length<=12&&contains(p.bounds,w,w.h*.25)&&height(p.bounds)<w.h*2.8&&(!/стен|wall|перегор/iu.test(p.layer||'')||width(p.bounds)<w.x1-w.x0+w.h*4))&&!(width(p.bounds)>info.width*.6&&(p.bounds.y1<info.height*.07||p.bounds.y0>info.height*.9))&&!(p.commands.length<=4&&p.fill?.gray<.1&&!/стен|wall|перегор/iu.test(p.layer||'')&&Math.max(width(p.bounds),height(p.bounds))<Math.min(info.width,info.height)*.02)&&width(p.bounds)*height(p.bounds)>1&&!p.curved&&width(p.bounds)<info.width*.95&&height(p.bounds)<info.height*.9);
+  const annotationDisks=technicalDisks(paths,info);let extraWalls=[];let walls=paths.filter(p=>!annotationDisks.has(p)&&drawingLayer(p,key)&&p.filled&&(p.fill&&p.fill.saturation<.08&&p.fill.gray<.85||p.pattern&&/стен|wall|перегор/iu.test(p.layer||''))&&!info.items.some(w=>p.commands.length<=12&&contains(p.bounds,w,w.h*.25)&&height(p.bounds)<w.h*2.8&&(!/стен|wall|перегор/iu.test(p.layer||'')||width(p.bounds)<w.x1-w.x0+w.h*4))&&!(width(p.bounds)>info.width*.6&&(p.bounds.y1<info.height*.07||p.bounds.y0>info.height*.9))&&!(p.commands.length<=4&&p.fill?.gray<.1&&!/стен|wall|перегор/iu.test(p.layer||'')&&Math.max(width(p.bounds),height(p.bounds))<Math.min(info.width,info.height)*.02)&&width(p.bounds)*height(p.bounds)>1&&!p.curved&&width(p.bounds)<info.width*.95&&height(p.bounds)<info.height*.9);
   const namedWalls=walls.filter(p=>/стен|wall|перегор/iu.test(p.layer||''));
   if(namedWalls.length>=3){const gap=Math.max(1,median(namedWalls.map(p=>Math.min(width(p.bounds),height(p.bounds))).filter(v=>v>.5&&v<15))*2);walls=walls.filter(p=>p.layer||namedWalls.some(w=>intersects(w.bounds,p.bounds,gap)));}
   {
@@ -166,7 +249,7 @@
    for(const p of paths.filter(p=>p.stroked&&!p.curved&&!p.dash&&p.stroke&&p.stroke.gray<.85)){
     let previous;for(const c of p.commands){if(c[0]===0){previous=[c[1],c[2]];continue;}if(c[0]!==1||!previous)continue;const next=[c[1],c[2]],b=box([previous,next]),ratio=width(b)/height(b);if(width(b)>.3&&height(b)>.3&&ratio>.65&&ratio<1.5)hatches.push({bounds:b,sequence:p.sequence});previous=next;}
    }
-   const hatched=paths.filter(p=>drawingLayer(p,key)&&p.filled&&p.fill?.gray>.985&&!p.curved&&width(p.bounds)*height(p.bounds)>2&&(/стен|wall|перегор/iu.test(p.layer||'')||Math.min(width(p.bounds),height(p.bounds))<Math.max(info.width,info.height)*.045||p.commands.filter(c=>c[0]===0).length>1)&&(hatches.filter(h=>contains(p.bounds,h.bounds,.15)).length>=2||/фундамент|foundation/iu.test(p.layer||'')&&Math.min(width(p.bounds),height(p.bounds))/Math.max(width(p.bounds),height(p.bounds))<.15));
+   const hatched=paths.filter(p=>!annotationDisks.has(p)&&drawingLayer(p,key)&&p.filled&&p.fill?.gray>.985&&!p.curved&&width(p.bounds)*height(p.bounds)>2&&(/стен|wall|перегор/iu.test(p.layer||'')||Math.min(width(p.bounds),height(p.bounds))<Math.max(info.width,info.height)*.045||p.commands.filter(c=>c[0]===0).length>1)&&(hatches.filter(h=>contains(p.bounds,h.bounds,.15)).length>=2||/фундамент|foundation/iu.test(p.layer||'')&&Math.min(width(p.bounds),height(p.bounds))/Math.max(width(p.bounds),height(p.bounds))<.15));
    const extent=ps=>ps.reduce((v,p)=>v+Math.max(width(p.bounds),height(p.bounds)),0);if(hatched.length>=3&&extent(hatched)>extent(walls)*1.3)walls=hatched;else extraWalls=hatched;
   }
   let fallback=false;
@@ -209,7 +292,7 @@
   selected.paths=walls.filter(p=>contains(bounds,p.bounds,.7)&&!otherWalls.has(p));
   const local=paths.filter(p=>contains(bounds,p.bounds,.7));
   const thickness=median(selected.paths.map(p=>Math.min(width(p.bounds),height(p.bounds))).filter(n=>n>.2&&n<Math.max(width(bounds),height(bounds))*.06));
-  return {context:paths,bounds,walls:selected.paths,extraWalls:extraWalls.filter(p=>contains(bounds,p.bounds,2)),floors:attached,local,thickness:Math.max(.6,thickness),fallback};
+  return {annotationDisks,context:paths,bounds,walls:selected.paths,extraWalls:extraWalls.filter(p=>contains(bounds,p.bounds,2)),floors:attached,local,thickness:Math.max(.6,thickness),fallback};
  }
  function structuralColumns(s){
   const paths=s.context||s.local,t=s.thickness,columns=[];
@@ -395,9 +478,10 @@
  // unnumbered/winding stairs, thin wall outlines and clipped compound paths.
  function cropBounds(s,info){
   const b=s.bounds,pad=s.focused?0:Math.max(s.thickness*3,Math.min(width(b),height(b))*.025);
-  const visual=union([b,...outsideSteps(s,info)]);
+  const named=nearbyStairs(s),visual=union([b,...outsideSteps(s,info),...named.map(p=>p.bounds),...(info.confirmedLandings||[]).map(r=>box(r.polygon))]);
   return {x0:Math.max(0,visual.x0-pad),y0:Math.max(0,visual.y0-pad),x1:Math.min(info.width,visual.x1+pad),y1:Math.min(info.height,visual.y1+pad)};
  }
+ function nearbyStairs(s){const b=s.bounds,t=s.thickness,span=Math.max(width(b),height(b));return (s.context||s.local||[]).filter(p=>/лест|ступен|stair|step/iu.test(p.layer||'')&&Math.max(width(p.bounds),height(p.bounds))<span*.6&&intersects(b,p.bounds,Math.max(t*10,span*.15)));}
  function outsideSteps(s,info){
   if(s.focused)return [];
   const b=s.bounds,t=s.thickness,span=Math.max(width(b),height(b)),lines=[];
@@ -409,7 +493,7 @@
   const zones=[];
   for(const seed of lines){
    const run=lines.filter(l=>l.horizontal===seed.horizontal&&Math.abs(l.lo-seed.lo)<t*.2&&Math.abs(l.hi-seed.hi)<t*.2&&Math.abs(l.axis-seed.axis)<t*8).sort((a,b)=>a.axis-b.axis);
-   const unique=run.filter((l,i)=>!i||l.axis-run[i-1].axis>.2);if(unique.length<3)continue;
+   const unique=run.filter((l,i)=>!i||l.axis-run[i-1].axis>Math.max(.2,t*.12));if(unique.length<3)continue;
    const gaps=unique.slice(1).map((l,i)=>l.axis-unique[i].axis);
    if(gaps.some(g=>g<t*.12||g>t*3)||Math.max(...gaps)/Math.min(...gaps)>1.35||unique.at(-1).axis-unique[0].axis>t*8)continue;
    const r=union(unique.map(l=>l.p.bounds));
@@ -443,7 +527,7 @@
   const t=s.thickness,tolerance=Math.max(.035,t*.015),nodes=[],cells=new Map(),edges=[],leaves=[];
   const node=(x,y)=>{const ix=Math.round(x/tolerance),iy=Math.round(y/tolerance);for(let a=-1;a<=1;a++)for(let b=-1;b<=1;b++){const n=cells.get((ix+a)+','+(iy+b));if(n&&Math.hypot(n.x-x,n.y-y)<tolerance)return n;}const n={x,y,edges:[]};cells.set(ix+','+iy,n);nodes.push(n);return n;};
   for(const p of paths){if(!p.stroked||p.filled||p.curved||p.dash||p.commands.length!==2||p.commands[1][0]!==1)continue;const a=p.commands[0].slice(1),b=p.commands[1].slice(1),length=Math.hypot(a[0]-b[0],a[1]-b[1]);if(length>t*1.4&&length<t*13)leaves.push({p,a,b,length});if(length<.02||length>t*2)continue;const u=node(...a),v=node(...b),e={p,u,v};u.edges.push(e);v.edges.push(e);edges.push(e);}
-  const result=new Set(),seen=new Set(),wall=(x,y)=>[0,t*.35,-t*.35,t*.75,-t*.75].some(dx=>[0,t*.35,-t*.35,t*.75,-t*.75].some(dy=>inWall(x+dx,y+dy)));
+  const result=new Set();result.assemblies=[];const seen=new Set(),wall=(x,y)=>[0,t*.35,-t*.35,t*.75,-t*.75].some(dx=>[0,t*.35,-t*.35,t*.75,-t*.75].some(dy=>inWall(x+dx,y+dy)));
   for(const start of nodes){if(start.edges.length!==1||seen.has(start.edges[0]))continue;const chain=[],points=[start];let n=start,previous=null;
    while(chain.length<500){const e=n.edges.find(e=>e!==previous&&!seen.has(e));if(!e)break;seen.add(e);chain.push(e);n=e.u===n?e.v:e.u;points.push(n);previous=e;if(n.edges.length!==2)break;}
    if(chain.length<4||n.edges.length!==1)continue;const a=points[0],b=points[Math.floor(points.length/2)],c=points.at(-1),den=2*(a.x*(b.y-c.y)+b.x*(c.y-a.y)+c.x*(a.y-b.y));if(Math.abs(den)<.001)continue;
@@ -451,7 +535,7 @@
    if(r<t*1.4||r>t*12||!wall(hx,hy)||points.some(p=>Math.abs(Math.hypot(p.x-hx,p.y-hy)-r)>Math.max(.06,r*.012)))continue;
    let sweep=0,direction=0,valid=true;for(let i=1;i<points.length;i++){let d=Math.atan2(points[i].y-hy,points[i].x-hx)-Math.atan2(points[i-1].y-hy,points[i-1].x-hx);d=Math.atan2(Math.sin(d),Math.cos(d));if(direction&&Math.sign(d)!==direction){valid=false;break;}direction=Math.sign(d);sweep+=Math.abs(d);}if(!valid||sweep<.18||sweep>Math.PI*.56)continue;
    const leaf=leaves.find(l=>Math.abs(l.length-r)<t*.3&&[a,c].some(q=>(Math.hypot(l.a[0]-hx,l.a[1]-hy)<t*.25&&Math.hypot(l.b[0]-q.x,l.b[1]-q.y)<t*.25)||(Math.hypot(l.b[0]-hx,l.b[1]-hy)<t*.25&&Math.hypot(l.a[0]-q.x,l.a[1]-q.y)<t*.25)));if(!leaf)continue;
-   result.add(leaf.p);for(const e of chain)result.add(e.p);
+   const tip=Math.hypot(leaf.a[0]-hx,leaf.a[1]-hy)<t*.25?leaf.b:leaf.a,closed=Math.hypot(tip[0]-a.x,tip[1]-a.y)>Math.hypot(tip[0]-c.x,tip[1]-c.y)?[a.x,a.y]:[c.x,c.y];result.assemblies.push({hinge:[hx,hy],tip,closed,source:'segmented-circle'});result.add(leaf.p);for(const e of chain)result.add(e.p);
   }
   // Dashed swings are often exported as disconnected short chords, without
   // any PDF dash operator. The original leaf fixes the centre and radius;
@@ -459,7 +543,7 @@
   for(const leaf of leaves)for(const [h,q]of [[leaf.a,leaf.b],[leaf.b,leaf.a]]){
    if(!wall(...h)||wall(...q))continue;const r=leaf.length,base=Math.atan2(q[1]-h[1],q[0]-h[0]),near=[];
    for(const e of edges){const a=[e.u.x-h[0],e.u.y-h[1]],b=[e.v.x-h[0],e.v.y-h[1]],error=Math.max(.1,r*.018);if(Math.abs(Math.hypot(...a)-r)>error||Math.abs(Math.hypot(...b)-r)>error)continue;const angle=Math.atan2(Math.sin(Math.atan2(a[1]+b[1],a[0]+b[0])-base),Math.cos(Math.atan2(a[1]+b[1],a[0]+b[0])-base));if(Math.abs(angle)>Math.PI*.56)continue;near.push({e,angle,length:Math.hypot(e.u.x-e.v.x,e.u.y-e.v.y)});}
-   for(const sign of [-1,1]){const arc=near.filter(e=>e.angle*sign>=-.03).sort((a,b)=>a.angle*sign-b.angle*sign);if(arc.length<4||arc[0].angle*sign>.23||arc.at(-1).angle*sign<.3)continue;let end=1;for(;end<arc.length;end++)if((arc[end].angle-arc[end-1].angle)*sign>.4)break;const run=arc.slice(0,end),sweep=(run.at(-1).angle-run[0].angle)*sign;if(run.length<4||sweep<.3||run.reduce((n,e)=>n+e.length/r,0)<sweep*.35)continue;result.add(leaf.p);for(const e of run)result.add(e.e.p);}
+   for(const sign of [-1,1]){const arc=near.filter(e=>e.angle*sign>=-.03).sort((a,b)=>a.angle*sign-b.angle*sign);if(arc.length<4||arc[0].angle*sign>.23||arc.at(-1).angle*sign<.3)continue;let end=1;for(;end<arc.length;end++)if((arc[end].angle-arc[end-1].angle)*sign>.4)break;const run=arc.slice(0,end),sweep=(run.at(-1).angle-run[0].angle)*sign;if(run.length<4||sweep<.3||run.reduce((n,e)=>n+e.length/r,0)<sweep*.35)continue;const arcEnd=run.at(-1).e,u=[arcEnd.u.x,arcEnd.u.y],v=[arcEnd.v.x,arcEnd.v.y],closed=Math.hypot(u[0]-q[0],u[1]-q[1])>Math.hypot(v[0]-q[0],v[1]-q[1])?u:v;result.assemblies.push({hinge:h,tip:q,closed,source:'segmented-dashes'});result.add(leaf.p);for(const e of run)result.add(e.e.p);}
   }return result;
  }
  function architecturalDetails(paths,s,info,inWall,wallSet,annotation=()=>false){
@@ -509,12 +593,12 @@
   // A window is also exported as a white wall opening with several short
   // frame/glass segments. Validate the whole aperture before preserving its
   // segments; testing each mullion against distant wall ends loses the frame.
-  const apertures=paths.filter(p=>p.filled&&!wallSet.has(p)&&!p.curved&&p.fill?.gray>.94&&Math.max(width(p.bounds),height(p.bounds))<span*.4&&!info.items.some(w=>inside(w.cx,w.cy,p.bounds))&&Math.max(width(p.bounds),height(p.bounds))>t*2&&Math.min(width(p.bounds),height(p.bounds))>t*.6&&Math.min(width(p.bounds),height(p.bounds))<t*8&&Math.max(width(p.bounds),height(p.bounds))>Math.min(width(p.bounds),height(p.bounds))*1.3).map(p=>{
+  const apertures=paths.filter(p=>p.filled&&!wallSet.has(p)&&!p.curved&&(p.fill?.gray>.94||p.fill?.saturation>.1)&&Math.max(width(p.bounds),height(p.bounds))<span*.4&&!info.items.some(w=>inside(w.cx,w.cy,p.bounds))&&Math.max(width(p.bounds),height(p.bounds))>t*2&&(Math.min(width(p.bounds),height(p.bounds))>t*.6||p.fill?.saturation>.1&&Math.min(width(p.bounds),height(p.bounds))>t*.1)&&Math.min(width(p.bounds),height(p.bounds))<t*8&&Math.max(width(p.bounds),height(p.bounds))>Math.min(width(p.bounds),height(p.bounds))*1.3).map(p=>{
    const b=p.bounds,h=width(b)>height(b),lo=h?b.x0:b.y0,hi=h?b.x1:b.y1,axis=h?(b.y0+b.y1)/2:(b.x0+b.x1)/2,short=h?height(b):width(b),near=(v)=>[.1,.3,.6,1].some(d=>h?jambAt(v+d*t,axis):jambAt(axis,v+d*t));
    const cross=Math.max(short*.65,t*2.5),mid=(lo+hi)/2;
    if(!near(lo)||!near(hi)||(h?inWall(mid,axis-cross)||inWall(mid,axis+cross):inWall(axis-cross,mid)||inWall(axis+cross,mid)))return null;
    const glass=lines.filter(l=>!l.p.dash&&!dimensionLine(l)&&contains(b,box([l.a,l.b]),t*.05)&&(h?l.horizontal:l.vertical)&&l.length>(hi-lo)*.32&&Math.abs((h?l.a[1]:l.a[0])-axis)<=short*.51);
-   return glass.length>=2?b:null;
+   return glass.length>=2||p.fill?.saturation>.1&&Math.max(width(b),height(b))>Math.min(width(b),height(b))*4?b:null;
   }).filter(Boolean);
   const selected=new Set(),roles=new Map(),strokes=new Map(),counts={stairs:0,doors:0,windows:0};
   const acceptLines=(p,ls,role)=>{selected.add(p);roles.set(p,role);strokes.set(p,ls.flatMap(l=>[[0,...l.a],[1,...l.b]]));counts[role]++;};
@@ -531,7 +615,7 @@
    // do not terminate against two ends of the same wall band.
    if(!p.dash&&line.length>t*1.5&&!inWall(...mid)&&wallAt(line.a[0]-ux*t*2,line.a[1]-uy*t*2)&&wallAt(line.b[0]+ux*t*2,line.b[1]+uy*t*2)&&!wallAt(line.a[0]-ux*t*2-uy*t*2,line.a[1]-uy*t*2+ux*t*2)&&!wallAt(line.b[0]+ux*t*2-uy*t*2,line.b[1]+uy*t*2+ux*t*2)&&!wallAt(mid[0]-uy*t*.8,mid[1]+ux*t*.8)&&!wallAt(mid[0]+uy*t*.8,mid[1]-ux*t*.8)){selected.add(p);roles.set(p,'windows');counts.windows++;}
   }
-  return {selected,counts,zones,roles,strokes};
+  const doorAssemblies=doors.flatMap(d=>{for(const h of d.hinges)for(const tip of [d.a,d.b])if(leafAt(h,tip).length)return [{hinge:h,tip,closed:tip===d.a?d.b:d.a,source:'source-curve'}];return [];});return {selected,counts,zones,roles,strokes,apertures,doorAssemblies};
  }
  // Template 3.1 is drawn from source paths, never a generated replacement layout.
  async function draw(s,roomLabels,dims,key,info,page,optionalContent,check){
@@ -544,12 +628,12 @@
   const m=mask.getContext('2d');
   const columns=structuralColumns(s),wallSet=new Set([...s.walls,...(s.extraWalls||[]),...columns]),t=s.thickness;
   const tables=(info.tables||[]).map(v=>({x0:v.left-4,y0:v.top-10,x1:v.right+4,y1:v.bottom+8})).filter(r=>!s.walls.some(p=>intersects(p.bounds,r)));
-  const steps=outsideSteps(s,info),supports=[...s.walls,...columns,...s.floors,...steps.map(bounds=>({bounds}))];
-  const local=(s.context||s.local).filter(p=>drawingLayer(p,key)&&(wallSet.has(p)||contains(b,p.bounds,.7)||steps.some(r=>contains(r,p.bounds,t))||p.curved&&Math.max(width(p.bounds),height(p.bounds))>t&&Math.max(width(p.bounds),height(p.bounds))<Math.max(width(b),height(b))*.18)&&contains(crop,p.bounds,.7)&&!tables.some(r=>contains(r,p.bounds))&&supports.some(q=>intersects(q.bounds,p.bounds,t*.5)));
+  const namedStairs=nearbyStairs(s),steps=outsideSteps(s,info),supports=[...s.walls,...columns,...s.floors,...steps.map(bounds=>({bounds})),...namedStairs];
+  const local=(s.context||s.local).filter(p=>drawingLayer(p,key)&&(wallSet.has(p)||namedStairs.includes(p)||contains(b,p.bounds,.7)||steps.some(r=>contains(r,p.bounds,t))||p.curved&&Math.max(width(p.bounds),height(p.bounds))>t&&Math.max(width(p.bounds),height(p.bounds))<Math.max(width(b),height(b))*.18)&&contains(crop,p.bounds,.7)&&!tables.some(r=>contains(r,p.bounds))&&supports.some(q=>intersects(q.bounds,p.bounds,t*.5)));
   const materialMarks=materialHatches(local,s);
   const notes=info.items.filter(w=>inside(w.cx,w.cy,crop)&&(/[а-яё]/iu.test(w.text)||/^(?:UP|DOWN)$/i.test(w.text))).map(w=>({x0:w.x0-w.h*2,y0:w.y0-w.h*2,x1:w.x1+w.h*2,y1:w.y1+w.h*3}));
   const words=info.items.filter(w=>inside(w.cx,w.cy,crop));
-  const annotation=p=>!wallSet.has(p)&&(p.stroke?.saturation>.2&&columns.some(q=>contains(q.bounds,p.bounds,t*.4))||!p.curved&&notes.some(a=>contains(a,p.bounds))||p.curved&&(p.closed||p.points.length>2&&Math.hypot(p.points[0][0]-p.points.at(-1)[0],p.points[0][1]-p.points.at(-1)[1])<.2)&&Math.max(width(p.bounds),height(p.bounds))<t*5&&words.some(w=>/^\d{1,3}$/.test(w.text)&&contains(p.bounds,w,.3)));
+  const annotation=p=>s.annotationDisks?.has(p)||!wallSet.has(p)&&(p.stroke?.saturation>.2&&columns.some(q=>contains(q.bounds,p.bounds,t*.4))||!p.curved&&notes.some(a=>contains(a,p.bounds))||p.curved&&(p.closed||p.points.length>2&&Math.hypot(p.points[0][0]-p.points.at(-1)[0],p.points[0][1]-p.points.at(-1)[1])<.2)&&Math.max(width(p.bounds),height(p.bounds))<t*5&&words.some(w=>/^\d{1,3}$/.test(w.text)&&contains(p.bounds,w,.3)));
   const wallHatch=p=>!p.filled&&!p.curved&&p.lineWidth===0&&p.commands.length===2&&width(p.bounds)>.1&&height(p.bounds)>.1&&Math.max(width(p.bounds),height(p.bounds))<t*2&&width(p.bounds)/height(p.bounds)>.65&&width(p.bounds)/height(p.bounds)<1.5;
   const clipped=(ctx,p,fn)=>{ctx.save();for(const clip of p.clips||[]){ctx.beginPath();for(const q of clip.paths)path(ctx,q,map,false);ctx.clip(clip.rule);}fn();ctx.restore();};
   // Build only the visible wall silhouette in source paint order; opaque later
@@ -560,7 +644,7 @@
   }
   const pixels=m.getImageData(0,0,mask.width,mask.height).data;
   // Seal only hairline seams within a wall cut. A 35 mm radius cannot bridge
-  // a real door/window span; cap it at three preview pixels and 12% new ink.
+  // a real door/window span; cap it at three preview pixels and 25% new ink.
   const radius=Math.max(1,Math.min(3,Math.ceil(dims?.widthMm>0?35*width(b)*scale/dims.widthMm:t*scale*.12))),W=mask.width,H=mask.height;
   const original=new Uint8Array(W*H);let wallInk=0;for(let i=0;i<original.length;i++)wallInk+=original[i]=pixels[i*4+3]>240?1:0;
   const filter=(input,horizontal,grow)=>{const output=new Uint8Array(input.length);for(let y=0;y<H;y++)for(let x=0;x<W;x++){let value=grow?0:1;for(let d=-radius;d<=radius;d++){const xx=x+(horizontal?d:0),yy=y+(horizontal?0:d),v=xx>=0&&yy>=0&&xx<W&&yy<H?input[yy*W+xx]:0;if(grow?v:!v){value=grow?1:0;break;}}output[y*W+x]=value;}return output;};
@@ -571,7 +655,7 @@
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x;if(original[i])distances[i]=1+Math.min(x?distances[i-1]:0,y?distances[i-W]:0);}
   for(let y=H-1;y>=0;y--)for(let x=W-1;x>=0;x--){const i=y*W+x;if(!original[i])continue;distances[i]=Math.min(distances[i],1+Math.min(x+1<W?distances[i+1]:0,y+1<H?distances[i+W]:0));deepest=Math.max(deepest,distances[i]);}
   const widths=s.walls.map(p=>Math.min(width(p.bounds),height(p.bounds))).filter(v=>v>.2&&v<Math.max(width(b),height(b))*.06).sort((a,b)=>a-b),wallBand=Math.max(t,widths[Math.floor(widths.length*.9)]||t)*scale;
-  const wallRepair={radiusPixels:radius,addedPixels:added,applied:added<=wallInk*.12,largestSolidRadius:deepest,wallBandPixels:wallBand,suspiciousSolidFill:deepest>Math.max(6,wallBand*1.6)};
+  const wallRepair={radiusPixels:radius,addedPixels:added,applied:added<=wallInk*.25,largestSolidRadius:deepest,wallBandPixels:wallBand,suspiciousSolidFill:deepest>Math.max(6,wallBand*1.6)};
   if(wallRepair.applied&&added){for(let i=0;i<closed.length;i++)if(closed[i]&&!original[i]){pixels[i*4]=40;pixels[i*4+1]=58;pixels[i*4+2]=70;pixels[i*4+3]=255;}m.putImageData(new ImageData(pixels,W,H),0,0);}
   const inWall=(x,y)=>{const q=map(x,y),ix=Math.round(q[0]),iy=Math.round(q[1]);return ix>=0&&iy>=0&&ix<mask.width&&iy<mask.height&&pixels[(iy*mask.width+ix)*4+3]>240;};
   const rescuedDoors=segmentedDoors((s.context||s.local).filter(p=>contains(crop,p.bounds,.7)&&!tables.some(r=>contains(r,p.bounds))),s,inWall);
@@ -583,6 +667,7 @@
   const details=architecturalDetails(detailInput,s,info,inWall,wallSet,annotation);
   for(const p of furnitureDoors)if(!local.includes(p)&&details.selected.has(p)){if(details.roles.get(p)==='doors')local.push(p);else {details.counts[details.roles.get(p)]--;details.selected.delete(p);details.roles.delete(p);details.strokes.delete(p);}}
   for(const p of rescuedDoors){if(!details.selected.has(p))details.counts.doors++;details.selected.add(p);details.roles.set(p,'doors');}
+  if(root.CatalogPlanModel){const model=root.CatalogPlanModel.build({mask,map,crop,structure:s,roomLabels,dimensions:dims,details,rescuedDoors,landings:info.confirmedLandings||[]});return root.CatalogPlanModel.render(model,{wallRepair,check});}
   for(let i=0;i<local.length;i++){
    if(i%300===0)check();const p=local[i];if(!rescuedDoors.has(p)&&!details.selected.has(p)&&(annotation(p)||wallHatch(p)||materialMarks.has(p)))continue;
    clipped(c,p,()=>{
@@ -664,9 +749,9 @@
   check();const rendered=await draw(structure,roomLabels,dims,key,info,page,optionalContent,check);
   if(!structure.fallback&&rendered.wallRepair.suspiciousSolidFill)return {ok:false,code:'solid-wall-artifact',reason:'обнаружена неподтверждённая сплошная заливка вместо стен или лестницы',wallRepair:rendered.wallRepair};
   if(paths.filter(p=>/лест|ступен|stair|step/iu.test(p.layer||'')&&p.stroked).length>=3&&!rendered.details.stairs)return {ok:false,reason:'не удалось подтвердить сохранность лестницы на чистом плане'};
-  const quality=CatalogQuality.reviewPlan({...rendered,roomSchedule:table?.rows,labelsComplete:!table?.rows?.length||roomLabels.complete,wallCount:structure.walls.length,dimensions:dims});
+  const quality=CatalogQuality.reviewPlan({...rendered,roomSchedule:table?.rows,labelsComplete:(!table?.rows?.length||roomLabels.complete)&&!(rendered.labelCollisions||[]).length,wallCount:structure.walls.length,dimensions:dims});
   if(!quality.passed)return {ok:false,reason:'Контроль качества: '+quality.issues.join('. '),quality,foundRooms:roomLabels.items.length};
-  return {ok:true,...rendered,report:{style:VERSION,quality,template:'3.1',renderer:'source-vector-relief',detailPolicy:'walls-openings-stairs-room-names-overall-dimensions',windows:'neutral',shadows:'soft',sourceCrop:rendered.sourceCrop,details:rendered.details,wallRepair:rendered.wallRepair,recognition:structure.recognition||'level-drawing',focused:!!structure.focused,fullLevel:key==='basement',highlightedRooms:structure.activeRegions?.length||0,columns:structuralColumns(structure).length,roomNames:roomLabels.items.map(r=>r.name),drawingScale,bounds:structure.bounds,...dims,rooms:roomLabels.items.length,wallPaths:structure.walls.length,sourceGeometry:true}};
+  return {ok:true,...rendered,report:{style:VERSION,quality,template:'semantic-1',renderer:'semantic-model',layout:rendered.model?.output,detailPolicy:'walls-openings-stairs-room-names-overall-dimensions',windows:'neutral',shadows:'soft',sourceCrop:rendered.sourceCrop,details:rendered.details,wallRepair:rendered.wallRepair,semanticModel:rendered.model?{schema:rendered.model.schema,wallContours:rendered.model.walls.length,doors:rendered.model.doors.length,windows:rendered.model.windows.length,stairs:rendered.model.stairs.length}:null,recognition:structure.recognition||'level-drawing',focused:!!structure.focused,fullLevel:key==='basement',highlightedRooms:structure.activeRegions?.length||0,columns:structuralColumns(structure).length,roomNames:roomLabels.items.map(r=>r.name),drawingScale,bounds:structure.bounds,...dims,rooms:roomLabels.items.length,wallPaths:structure.walls.length,sourceGeometry:true}};
  }
  async function refreshExisting({id,incoming,client,allowed,actor}){
   const reports=incoming.pdf_import_meta?.sources?.plans;if(!reports||!id)return {updated:false};
