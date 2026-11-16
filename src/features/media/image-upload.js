@@ -127,20 +127,9 @@ function cePrevTab(panelId,tabEl){
   tabEl.style.color='#3D8FE0'; tabEl.style.borderBottomColor='#3D8FE0'; tabEl.style.fontWeight='600';
 }
 
-// Текущая ставка за м² для каталога готовых проектов (Ещё → Настройки)
-function getCatalogPricePerSqm(){
-  return Number(state.companyInfo?.price_per_sqm) || 150;
-}
-
-// Автоподстановка цены в редакторе карточки при вводе площади — площадь × ставка.
-// Поле цены остаётся редактируемым: если поправить его вручную и не менять
-// площадь дальше, ручное значение сохранится.
+// Price uses the whole-house area tariff. Explicit manual prices remain editable.
 function ceAutoPrice(){
-  const area = CatalogFloors.areaNumber(document.getElementById('ce-area').value);
-  if(area > 0){
-    const price = Math.round(area * getCatalogPricePerSqm());
-    document.getElementById('ce-price').value = price;
-  }
+  const price=CatalogFloors.autoPrice(document.getElementById('ce-area').value);
+  document.getElementById('ce-price').value=price===null?'':String(price);
   cePreview();
 }
-

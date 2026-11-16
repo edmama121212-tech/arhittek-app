@@ -38,23 +38,6 @@ function renderCatalogPriceSettings(){
   if(!canEditCards()){ section.style.display = 'none'; card.style.display = 'none'; return; }
   section.style.display = '';
   card.style.display = '';
-  const input = document.getElementById('catalog-price-per-sqm');
-  if(input) input.value = getCatalogPricePerSqm();
-}
-
-async function saveCatalogPricePerSqm(){
-  if(!session?.isAdmin){showToast("Требуются права администратора");return;}
-  const val = parseFloat(document.getElementById('catalog-price-per-sqm').value);
-  if(!val || val <= 0){ showToast('Укажите положительную ставку'); return; }
-  showToast('Сохранение…');
-  try{
-    if(state.companyInfo && state.companyInfo.id){
-      const {error} = await sb.from('company_info').update({price_per_sqm: val}).eq('id', state.companyInfo.id);
-      if(error) throw error;
-    }
-    state.companyInfo = {...(state.companyInfo||{}), price_per_sqm: val};
-    showToast('Ставка сохранена');
-  }catch(e){ console.error(e); showToast('Ошибка сохранения'); }
 }
 
 async function saveCompanyInfo(){
