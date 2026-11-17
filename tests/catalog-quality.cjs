@@ -9,4 +9,6 @@ for(const patch of [{total_area:'250'},{floor1_area:'20'},{beds:0},{baths:2},{pr
 assert(!q.reviewCard(card,{sources:{plans:{floor1:{quality:{...report,dimensionsConfirmed:false}}}}}).passed);checks++;
 assert(!q.reviewCard(card,{sources:{plans:{floor1:{style:'manual-screenshot'}}}}).passed);checks++;
 assert(!q.reviewCard(card,{sources:{plans:{floor1:{quality:{...report,passed:false}}}}}).passed);checks++;
+assert(q.reviewCard({project_number:'00157-A',title:'Жилой дом'},null).passed);checks++;
+for(const patch of [{project_number:''},{project_number:'   '},{project_number:'Проект №1122 файл'},{title:''},{title:'Проект №1122 — '}]){assert(!q.reviewCard({project_number:'00157-A',title:'Жилой дом',...patch},null).passed,'Manual upload still requires a valid project identity');checks++;}
 console.log(JSON.stringify({publicationQuality:'passed',checks}));
