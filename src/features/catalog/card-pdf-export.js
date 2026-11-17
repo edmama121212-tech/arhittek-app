@@ -54,12 +54,36 @@ async function createCatalogCardPdf(card){
  const total=doc.internal.getNumberOfPages();for(let i=1;i<=total;i++){doc.setPage(i);rule(16,281,388);text('ARHITTEK / КОНЦЕПТУАЛЬНЫЙ ПРОЕКТ',16,288,7,true,gray);text('+7 922 659-38-72 · arhittek.ru',258,288,8,false,gray);text(i+' / '+total,404,288,8,true,gray,{align:'right'});}
  return {doc,missing};
 }
+let catalogPreparedPdf=null;
+async function deliverCatalogPdf(file){
+  // Share the attachment itself. Sharing a browser PDF preview on iOS also
+  // shares its temporary blob: address as the WhatsApp message caption.
+  if(typeof navigator.share==='function'&&typeof navigator.canShare==='function'&&navigator.canShare({files:[file]})){
+    await navigator.share({files:[file]});return 'shared';
+  }
+  const url=URL.createObjectURL(file),a=document.createElement('a');
+  a.href=url;a.download=file.name;document.body.appendChild(a);
+  try{a.click();}finally{a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
+  return 'downloaded';
+}
 async function downloadCurrentCardPdf(button){
   if(button?.disabled)return;
   const selected=cardViewerList[cardViewerIndex];if(!selected)return;
-  const card=JSON.parse(JSON.stringify(selected)),old=button?.textContent;
+  const card=JSON.parse(JSON.stringify(selected)),key=JSON.stringify(card),old=button?.textContent;
+  let retry=false;
   if(button){button.disabled=true;button.textContent='Готовлю…';}
-  try{const {doc,missing}=await createCatalogCardPdf(card);doc.save('ARHITTEK-'+String(card.project_number||card.id).replace(/[^\p{L}\p{N}_-]/gu,'_')+'.pdf');if(missing.length)showToast('PDF сохранён. Не добавлено: '+missing.join(', '));}
-  catch(e){showToast(e.message||'Не удалось создать PDF');}
-  finally{if(button){button.disabled=false;button.textContent=old;}}
+  try{
+    if(catalogPreparedPdf?.key!==key){
+      const {doc,missing}=await createCatalogCardPdf(card),name='ARHITTEK-'+String(card.project_number||card.id).replace(/[^\p{L}\p{N}_-]/gu,'_')+'.pdf';
+      catalogPreparedPdf={key,file:new File([doc.output('blob')],name,{type:'application/pdf'}),missing};
+    }
+    const result=await deliverCatalogPdf(catalogPreparedPdf.file);
+    if(catalogPreparedPdf.missing.length)showToast((result==='shared'?'PDF передан.':'PDF сохранён.')+' Не добавлено: '+catalogPreparedPdf.missing.join(', '));
+    catalogPreparedPdf=null;
+  }catch(e){
+    if(e.name==='AbortError'){retry=true;return;}
+    if(e.name==='NotAllowedError'&&catalogPreparedPdf?.key===key){retry=true;showToast('PDF готов. Нажмите ещё раз, чтобы отправить файл.');return;}
+    showToast(e.message||'Не удалось создать PDF');
+  }
+  finally{if(button){button.disabled=false;button.textContent=retry?'Отправить PDF':old==='Отправить PDF'?'↓ Скачать PDF':old;}}
 }
