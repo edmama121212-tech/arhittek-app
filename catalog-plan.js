@@ -13,10 +13,12 @@
  const num=s=>Number(String(s??'').replace(/\s/g,'').replace(',','.'));
  function reviewCard(card,meta,{strict=!!meta}={}){
   const issues=[],plans=meta?.sources?.plans||{};
-  if(!strict)return {version:VERSION,passed:true,issues:[],scope:'manual-card'};
   if(!String(card.project_number||'').trim())issues.push('Укажите номер проекта');
   else if(!/^[\p{L}\d][\p{L}\d._\/-]{0,39}$/u.test(String(card.project_number).trim()))issues.push('В номере проекта есть лишний текст или недопустимые символы');
   if(!String(card.title||'').replace(/^Проект\s*№.*?—\s*/u,'').trim())issues.push('Укажите название проекта');
+  // Identity is required for manual uploads too. The manual geometry exemption
+  // must never create another published card with an empty project number.
+  if(!strict)return {version:VERSION,passed:!issues.length,issues,scope:'manual-card'};
   if(!Number.isInteger(+card.floors)||+card.floors<1||+card.floors>3)issues.push('Укажите от 1 до 3 надземных этажей');
   if(!(num(card.total_area)>0))issues.push('Не подтверждена общая площадь');
   if(card.price&&!Number.isFinite(num(card.price))||card.price&&num(card.price)<0)issues.push('Цена должна быть корректным неотрицательным числом');
