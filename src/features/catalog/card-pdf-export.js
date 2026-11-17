@@ -1,6 +1,9 @@
 // Selected saved card -> adaptive A3 concept album, approved dark option 2.
 // No database writes, fabricated rooms, or altered source geometry.
+function canExportCatalogPdf(){return typeof isOwner==='function'&&isOwner()===true;}
+function requireCatalogPdfOwner(){if(!canExportCatalogPdf())throw Error('Скачивание PDF доступно только владельцу');}
 async function createCatalogCardPdf(card){
+ requireCatalogPdfOwner();
  const {jsPDF}=window.jspdf||{};if(!jsPDF)throw Error('PDF-модуль не загрузился. Обновите страницу');
  const doc=new jsPDF({unit:'mm',format:'a3',orientation:'landscape',compress:true});registerPdfFonts(doc);
  const ink=[24,35,53],dark=[23,33,50],panel=[32,47,70],blue=[54,116,212],white=[255,255,255],gray=[164,177,196],missing=[],levels=CatalogFloors.active(card),overflow=[];
@@ -54,8 +57,9 @@ async function createCatalogCardPdf(card){
  const total=doc.internal.getNumberOfPages();for(let i=1;i<=total;i++){doc.setPage(i);rule(16,281,388);text('ARHITTEK / КОНЦЕПТУАЛЬНЫЙ ПРОЕКТ',16,288,7,true,gray);text('+7 922 659-38-72 · arhittek.ru',258,288,8,false,gray);text(i+' / '+total,404,288,8,true,gray,{align:'right'});}
  return {doc,missing};
 }
-let catalogPreparedPdf=null;
+var catalogPreparedPdf=null;
 async function deliverCatalogPdf(file){
+  requireCatalogPdfOwner();
   // Share the attachment itself. Sharing a browser PDF preview on iOS also
   // shares its temporary blob: address as the WhatsApp message caption.
   if(typeof navigator.share==='function'&&typeof navigator.canShare==='function'&&navigator.canShare({files:[file]})){
@@ -67,6 +71,7 @@ async function deliverCatalogPdf(file){
   return 'downloaded';
 }
 async function downloadCurrentCardPdf(button){
+  if(!canExportCatalogPdf()){catalogPreparedPdf=null;showToast('Скачивание PDF доступно только владельцу');return;}
   if(button?.disabled)return;
   const selected=cardViewerList[cardViewerIndex];if(!selected)return;
   const card=JSON.parse(JSON.stringify(selected)),key=JSON.stringify(card),old=button?.textContent;
@@ -77,12 +82,14 @@ async function downloadCurrentCardPdf(button){
       const {doc,missing}=await createCatalogCardPdf(card),name='ARHITTEK-'+String(card.project_number||card.id).replace(/[^\p{L}\p{N}_-]/gu,'_')+'.pdf';
       catalogPreparedPdf={key,file:new File([doc.output('blob')],name,{type:'application/pdf'}),missing};
     }
+    requireCatalogPdfOwner();
     const result=await deliverCatalogPdf(catalogPreparedPdf.file);
     if(catalogPreparedPdf.missing.length)showToast((result==='shared'?'PDF передан.':'PDF сохранён.')+' Не добавлено: '+catalogPreparedPdf.missing.join(', '));
     catalogPreparedPdf=null;
   }catch(e){
     if(e.name==='AbortError'){retry=true;return;}
     if(e.name==='NotAllowedError'&&catalogPreparedPdf?.key===key){retry=true;showToast('PDF готов. Нажмите ещё раз, чтобы отправить файл.');return;}
+    catalogPreparedPdf=null;
     showToast(e.message||'Не удалось создать PDF');
   }
   finally{if(button){button.disabled=false;button.textContent=retry?'Отправить PDF':old==='Отправить PDF'?'↓ Скачать PDF':old;}}
