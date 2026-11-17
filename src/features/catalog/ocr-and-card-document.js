@@ -415,6 +415,8 @@ function openCardViewerAt(index){
   // Кнопка редактировать — только редакторам
   const editBtn = document.getElementById('cardViewerEditBtn');
   if(editBtn) editBtn.style.display = canEditCards() ? '' : 'none';
+  const pdfBtn = document.getElementById('cardViewerPdfBtn');
+  if(pdfBtn) pdfBtn.style.display = canExportCatalogPdf() ? '' : 'none';
   const overlay = document.getElementById('cardViewerOverlay');
   if(overlay) overlay.style.display = 'flex';
 }
@@ -531,7 +533,9 @@ async function generateShareLink(){
   if(!canEditCards())return;
   const label = document.getElementById('sl-name').value.trim() || 'Ссылка';
   const filter = shareLinkProjectId ? 'all' : document.getElementById('sl-filter').value;
-  const expiresDays = parseInt(document.getElementById('sl-expires').value);
+  const expiresValue = document.getElementById('sl-expires').value;
+  const expiresDays = Number(expiresValue);
+  if(!['0','2','3','4','5','6','7','14','30','90'].includes(expiresValue)){showToast('Выберите срок действия ссылки');return;}
   const token = (window.crypto && crypto.randomUUID)
     ? crypto.randomUUID().replace(/-/g,'')
     : Math.random().toString(36).slice(2) + Date.now().toString(36) + Math.random().toString(36).slice(2);

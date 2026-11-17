@@ -20,6 +20,8 @@ function canAccessView(id){
   return false;
 }
 function clearPrivateState(){
+  if(typeof catalogPreparedPdf!=='undefined')catalogPreparedPdf=null;
+  const catalogPdfButton=document.getElementById('cardViewerPdfBtn');if(catalogPdfButton)catalogPdfButton.style.display='none';
   window.ARHITTEKBriefMedia?.clear();
   for(const key of ['projects','financialProjects','financialStatusHistory','ledger','photos','history','cashCounts','invoices','tzForms','tzReferences','kpForms','kpCatalog','timesheetPayments','companyExpenses','companyIncome','projectStages','projectMembers'])state[key]=[];
   state.employees=(state.employees||[]).map(e=>({id:e.id,name:e.name,active:e.active}));
@@ -74,7 +76,7 @@ function applyAccessVisibility(){
   document.documentElement.dataset.access=mode;
   for(const nav of document.querySelectorAll('.nav-btn[data-view]'))nav.style.display=canAccessView(nav.dataset.view)?'':'none';
   for(const id of ['openKpBtn','openContractsBtn']){const el=document.getElementById(id);if(el)el.style.display=canUseDocuments()?'':'none';}
-  for(const id of ['openCompanyBtn','openPriceListBtn','exportXlsxBtn','openTimesheetBtn','settingsBtn','more-admin-sections','openFamilyTreeBtn']){
+  for(const id of ['openCompanyBtn','openPriceListBtn','exportXlsxBtn','openTimesheetBtn','settingsBtn','more-admin-sections','openFamilyTreeBtn','cardViewerPdfBtn']){
     const el=document.getElementById(id);if(el)el.style.display=isOwner()?'':'none';
   }
   const active=document.querySelector('.view.active');
