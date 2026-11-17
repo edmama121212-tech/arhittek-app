@@ -57,7 +57,7 @@ async function createCatalogCardPdf(card){
  const total=doc.internal.getNumberOfPages();for(let i=1;i<=total;i++){doc.setPage(i);rule(16,281,388);text('ARHITTEK / КОНЦЕПТУАЛЬНЫЙ ПРОЕКТ',16,288,7,true,gray);text('+7 922 659-38-72 · arhittek.ru',258,288,8,false,gray);text(i+' / '+total,404,288,8,true,gray,{align:'right'});}
  return {doc,missing};
 }
-let catalogPreparedPdf=null;
+var catalogPreparedPdf=null;
 async function deliverCatalogPdf(file){
   requireCatalogPdfOwner();
   // Share the attachment itself. Sharing a browser PDF preview on iOS also
