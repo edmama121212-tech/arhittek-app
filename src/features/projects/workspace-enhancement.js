@@ -3,7 +3,7 @@
 'use strict';
 const $=id=>document.getElementById(id), sheet=$('projectSheetOverlay').querySelector('.sheet');
 const esc=s=>escapeHtml(String(s??'')), money=n=>fmtMoney(Number(n)||0);
-const originalChildren=[...sheet.children], start=originalChildren.indexOf($('pf-name').closest('.field')), finish=originalChildren.indexOf($('pf-save'));
+const originalChildren=[...sheet.children], start=originalChildren.indexOf($('pf-category').closest('.field-row')), finish=originalChildren.indexOf($('pf-save'));
 const nav=document.createElement('div');nav.className='project-tabs';nav.setAttribute('role','tablist');nav.setAttribute('aria-label','Разделы проекта');
 const panels={};
 for(const [id,label] of [['overview','Обзор'],['team','Команда'],['money','Деньги'],['files','Документы']]){
@@ -162,7 +162,7 @@ function defaults(){
  $('pf-feebase').value=$('pf-compensation-method').value==='m2'?'m2':$('pf-compensation-method').value==='percent_profit'?'profit':'price';
  renderCompensationMethodUI();
 }
-const oldOpen=openProjectSheet;openProjectSheet=function(id){if(!id&&!canCreateProjectCard()){showToast('Создание проекта доступно ведущему дизайнеру, ведущему архитектору и Мансуру');return;}basicProjectDraftVersion++;oldOpen(id);$('projectSheetTitle').textContent=id?'Карточка проекта':'Новый проект';coDetails.hidden=!$('pf-co-employee').value;addSecond.hidden=!coDetails.hidden;special.open=false;contactDetails.open=false;defaults();$('pf-rp-rate').value='400';$('pf-rp-area').value=$('pf-area').value;$('pf-employee-fee').value=$('pf-employee').value;$('pf-co-employee-fee').value=$('pf-co-employee').value;selectTab('overview');refresh();sheet.scrollTop=0;};
+const oldOpen=openProjectSheet;openProjectSheet=function(id){if(!id&&!canCreateProjectCard()){showToast('Создание проекта доступно ведущему дизайнеру, ведущему архитектору и Мансуру');return;}oldOpen(id);$('projectSheetTitle').textContent=id?'Карточка проекта':'Новый проект';coDetails.hidden=!$('pf-co-employee').value;addSecond.hidden=!coDetails.hidden;special.open=false;contactDetails.open=false;defaults();$('pf-rp-rate').value='400';$('pf-rp-area').value=$('pf-area').value;$('pf-employee-fee').value=$('pf-employee').value;$('pf-co-employee-fee').value=$('pf-co-employee').value;selectTab('overview');refresh();sheet.scrollTop=0;};
 const oldRole=applyRole;applyRole=function(){oldRole();refresh();};
 const oldRecalc=recalcLiveFeeSummary;recalcLiveFeeSummary=function(){oldRecalc();refresh();};
 const oldRenderRoles=renderProjectRolePayouts;renderProjectRolePayouts=function(id){oldRenderRoles(id);refresh();};
@@ -198,18 +198,12 @@ sheet.addEventListener('input',e=>{if(e.target.id!=='team-deduct-costs')refresh(
 // The lead designer may start a project without editing contract or payroll terms.
 // Keep this path separate from the administrator's financial form: those hidden
 // fields may contain defaults or values from a previously opened project.
-function canCreateProjectCard(){
- if(!hasVerifiedAccess())return false;
- if(isOwner())return true;
- const employee=findEmployee(session.employeeId);
- return !!(employee&&employee.active!==false&&!employee.deleted_at&&canSeeProjects()&&['ведущий дизайнер','ведущий архитектор'].includes(String(employee.role||'').trim().toLowerCase()));
-}
-window.canCreateProjectCard=canCreateProjectCard;
-let basicProjectSaveInFlight=false,basicProjectDraftVersion=0;
+let basicProjectSaveInFlight=false;
 async function saveBasicProjectCard(){
  if(basicProjectSaveInFlight||!$('projectSheetOverlay').classList.contains('active'))return;
  if(!canCreateProjectCard()||editingProjectId){showToast('Условия проекта изменяет администратор');return;}
- const name=$('pf-name').value.trim(),category=findCategory($('pf-category').value);
+ if(!await prepareProjectNumberSave()||basicProjectSaveInFlight)return;
+ const name=projectNameForSave(),category=findCategory($('pf-category').value);
  const rawArea=$('pf-area').value,area=rawArea===''?null:Number(rawArea);
  if(!name){showToast('Введите название проекта');return;}
  if(!category){showToast('Выберите категорию проекта');return;}
@@ -230,19 +224,17 @@ async function saveBasicProjectCard(){
    price:0,advance:0,balance:0,expenses:0,fee_paid:0,co_fee_paid:0,fee_percent:0,co_fee_percent:0,
    fee_base:isInterior(category.id)?'m2':isArchitecture(category.id)?'profit':(category.fee_base||'price'),
    payment_status:'Ждём оплату',updated_at:new Date().toISOString()};
- const draftVersion=basicProjectDraftVersion;let accepted=false;
+ const draftVersion=projectNumberDraftVersion;let accepted=false;
  basicProjectSaveInFlight=true;$('pf-save').disabled=true;
  try{
-   const {data,error}=await sb.from('projects').insert(payload).select().single();
-   if(error)throw error;
-   if(!data?.id)throw new Error('Не получено подтверждение создания проекта');
+   const data=await createProjectDraft(payload);
    accepted=true;
    // Record success before secondary work: a failed refresh must not allow a
    // second insert of a project the server has already accepted.
-   const sameDraft=()=>basicProjectDraftVersion===draftVersion&&!editingProjectId&&$('projectSheetOverlay').classList.contains('active');
+   const sameDraft=()=>projectNumberDraftVersion===draftVersion&&!editingProjectId&&$('projectSheetOverlay').classList.contains('active');
    state.projects=[...(state.projects||[]).filter(p=>p.id!==data.id),{...payload,...data}];
-   await logAudit('project',data.id,payload.name,'create',{});
-   if(sameDraft()){editingProjectId=data.id;editingProjectLoadedAt=payload.updated_at;closeProjectSheet();}
+   await logAudit('project',data.id,data.name,'create',{});
+   if(sameDraft()){editingProjectId=data.id;editingProjectLoadedAt=data.updated_at;closeProjectSheet();}
    const refreshed=await loadAll();
    showToast(state.projectMembersDataError?'Проект создан. Состав команды не обновлён — повторите обновление.':refreshed===false||state.financialDataReady===false?'Проект создан. Не удалось обновить список — повторите обновление.':'Проект добавлен');
  }catch(error){console.error(error);showToast(accepted?'Проект создан. Не удалось обновить список — повторите обновление.':'Ошибка сохранения проекта. Данные формы сохранены — повторите попытку.');}

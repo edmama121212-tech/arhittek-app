@@ -46,7 +46,7 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
  }
  async function check(name,fn,expected){try{const actual=await page.evaluate(fn);assert.deepEqual(actual,expected);results.push({name,pass:true});}catch(e){results.push({name,pass:false,error:e.message});}}
  for(const role of ['Ведущий дизайнер','Ведущий архитектор']){
-  await fresh({role});await page.locator('#addProjectFab').click();
+  await fresh({role});await page.locator('#addProjectFab').click();await page.locator('#pf-category').selectOption('design');
   await page.locator('#pf-name').fill('Created by button '+role);
   await page.locator('#pf-save').click();
   await page.waitForFunction(()=>__db.projects.length===1);
@@ -54,7 +54,7 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
  }
  await fresh();
  await check('Lead designer sees the new-project action without company finances',()=>[getComputedStyle(document.getElementById('addProjectFab')).display!=='none',getComputedStyle(document.getElementById('nav-finance')).display,canEditCards()], [true,'none',false]);
- await page.locator('#addProjectFab').click();
+ await page.locator('#addProjectFab').click();await page.locator('#pf-category').selectOption('design');
  await check('New card assigns the lead designer and keeps team and money tabs hidden',()=>[document.getElementById('projectSheetOverlay').classList.contains('active'),document.getElementById('pf-employee').value,document.getElementById('project-tab-team').hidden,document.getElementById('project-tab-money').hidden],[true,'lead-designer',true,true]);
  await check('Lead designer creates an interior card with area and contacts',async()=>{
   document.getElementById('pf-name').value='Новый интерьер';document.getElementById('pf-area').value='86.5';document.getElementById('pf-phone').value='test contact';document.getElementById('pf-address').value='Test address';await saveProject();
@@ -63,17 +63,17 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
  await check('Creating a basic card does not write money or team rows',()=>__writes.filter(w=>['ledger_entries','company_expenses','company_income','project_members'].includes(w.table)).length,0);
  await fresh();
  await check('Architecture creation is not blocked by a hidden default forty-percent salary fee',async()=>{
-  openProjectSheet(null);document.getElementById('pf-category').value='arch';document.getElementById('pf-category').dispatchEvent(new Event('change',{bubbles:true}));document.getElementById('pf-name').value='Новая архитектура';document.getElementById('pf-area').value='120';await saveProject();const p=__db.projects[0];
+  openProjectSheet(null);document.getElementById('pf-category').value='design';document.getElementById('pf-category').dispatchEvent(new Event('change',{bubbles:true}));document.getElementById('pf-category').value='arch';document.getElementById('pf-category').dispatchEvent(new Event('change',{bubbles:true}));document.getElementById('pf-name').value='Новая архитектура';document.getElementById('pf-area').value='120';await saveProject();const p=__db.projects[0];
   return [__db.projects.length,p?.category_id,p?.area,p?.fee_percent,p?.co_fee_percent,p?.fee_base];
  },[1,'arch',120,0,0,'profit']);
  await fresh();
  await check('A basic create ignores hidden financial fields and employee reassignment',async()=>{
-  openProjectSheet(null);document.getElementById('pf-name').value='Basic only';for(const [id,value]of Object.entries({'pf-price':'900000','pf-advance':'100000','pf-expenses':'8000','pf-feepaid':'6000','pf-co-feepaid':'4000','pf-feepercent':'80','pf-co-feepercent':'20','pf-employee':'architect','pf-employee-fee':'architect','pf-co-employee':'visual','pf-co-employee-fee':'visual'}))document.getElementById(id).value=value;currentProjectMembers=[{employee_id:'visual'}];await saveProject();
+  openProjectSheet(null);document.getElementById('pf-category').value='design';document.getElementById('pf-category').dispatchEvent(new Event('change',{bubbles:true}));document.getElementById('pf-name').value='Basic only';for(const [id,value]of Object.entries({'pf-price':'900000','pf-advance':'100000','pf-expenses':'8000','pf-feepaid':'6000','pf-co-feepaid':'4000','pf-feepercent':'80','pf-co-feepercent':'20','pf-employee':'architect','pf-employee-fee':'architect','pf-co-employee':'visual','pf-co-employee-fee':'visual'}))document.getElementById(id).value=value;currentProjectMembers=[{employee_id:'visual'}];await saveProject();
   const p=__db.projects[0];return [__db.projects.length,p?.price,p?.advance,p?.balance,p?.expenses,p?.fee_paid,p?.co_fee_paid,p?.fee_percent,p?.co_fee_percent,p?.employee_id,p?.co_employee_id,__writes.filter(w=>['ledger_entries','project_members'].includes(w.table)).length];
  },[1,0,0,0,0,0,0,0,0,'lead-designer',null,0]);
  await fresh();
  await check('Two rapid basic submits create exactly one project',async()=>{
-  openProjectSheet(null);document.getElementById('pf-name').value='Single card';await Promise.all([saveProject(),saveProject()]);return __db.projects.length;
+  openProjectSheet(null);document.getElementById('pf-category').value='design';document.getElementById('pf-category').dispatchEvent(new Event('change',{bubbles:true}));document.getElementById('pf-name').value='Single card';await Promise.all([saveProject(),saveProject()]);return __db.projects.length;
  },1);
  await fresh();
  await (async()=>{
@@ -81,7 +81,7 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
   try{
    await page.evaluate(async()=>{
     __db.projects=[{id:'other-open-card',name:'Other card',category_id:'arch',status_id:'active',employee_id:'lead-designer',price:100000,fee_percent:40,fee_base:'profit'}];await loadAll();
-    openProjectSheet(null);document.getElementById('pf-name').value='Slow created card';__holdProjectInsert=true;window.__creating=saveProject();
+    openProjectSheet(null);document.getElementById('pf-category').value='design';document.getElementById('pf-category').dispatchEvent(new Event('change',{bubbles:true}));document.getElementById('pf-name').value='Slow created card';__holdProjectInsert=true;window.__creating=saveProject();
    });
    await page.waitForFunction(()=>window.__projectInsertHeld===true);
    await page.evaluate(()=>{openProjectSheet('other-open-card');__holdProjectInsert=false;__releaseProjectInsert();});
@@ -91,47 +91,47 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
   }catch(e){results.push({name,pass:false,error:e.message});}
  })();
  await fresh();
- await check('An empty card name is rejected before a database write',async()=>{openProjectSheet(null);await saveProject();return [__db.projects.length,document.getElementById('toast').textContent.includes('название')];},[0,true]);
+ await check('An empty card name is rejected before a database write',async()=>{openProjectSheet(null);document.getElementById('pf-category').value='design';document.getElementById('pf-category').dispatchEvent(new Event('change',{bubbles:true}));await saveProject();return [__db.projects.length,document.getElementById('toast').textContent.includes('название')];},[0,true]);
  await check('A negative project area is rejected before a database write',async()=>{document.getElementById('pf-name').value='Invalid area';document.getElementById('pf-area').value='-5';await saveProject();return [__db.projects.length,document.getElementById('toast').textContent.toLowerCase().includes('площад')];},[0,true]);
- await check('An absent category is rejected instead of creating an unclassified card',async()=>{document.getElementById('pf-area').value='30';document.getElementById('pf-category').value='';await saveProject();return [__db.projects.length,document.getElementById('toast').textContent.toLowerCase().includes('категор')];},[0,true]);
+ await check('An absent category is rejected instead of creating an unclassified card',async()=>{document.getElementById('pf-area').value='30';document.getElementById('pf-category').value='';await saveProject();return [__db.projects.length,document.getElementById('toast').textContent.toLowerCase().includes('направлен')];},[0,true]);
  await fresh();
  await check('An insert failure preserves the draft and reports that saving failed',async()=>{
-  openProjectSheet(null);document.getElementById('pf-name').value='Retry after offline';document.getElementById('pf-area').value='82';__fail={table:'projects',op:'insert'};await saveProject();__fail=null;
+  openProjectSheet(null);document.getElementById('pf-category').value='design';document.getElementById('pf-category').dispatchEvent(new Event('change',{bubbles:true}));document.getElementById('pf-name').value='Retry after offline';document.getElementById('pf-area').value='82';__fail={table:'projects',op:'insert'};await saveProject();__fail=null;
   return [__db.projects.length,document.getElementById('pf-name').value,document.getElementById('pf-area').value,document.getElementById('projectSheetOverlay').classList.contains('active'),document.getElementById('toast').textContent.toLowerCase().includes('ошибка')];
  },[0,'Retry after offline','82',true,true]);
  await check('Retry after an insert failure creates one card',async()=>{await saveProject();return [__db.projects.length,__db.projects[0]?.name];},[1,'Retry after offline']);
  await fresh();
  await check('A failed refresh after creation cannot turn a retry into a duplicate',async()=>{
-  openProjectSheet(null);document.getElementById('pf-name').value='Saved before refresh';__fail={table:'projects',op:'select'};await saveProject();__fail=null;const saved=__db.projects.length,notice=document.getElementById('toast').textContent;await saveProject();return [saved,__db.projects.length,notice.includes('Проект создан'),notice.includes('обновить список')];
+  openProjectSheet(null);document.getElementById('pf-category').value='design';document.getElementById('pf-category').dispatchEvent(new Event('change',{bubbles:true}));document.getElementById('pf-name').value='Saved before refresh';__fail={table:'projects',op:'select'};await saveProject();__fail=null;const saved=__db.projects.length,notice=document.getElementById('toast').textContent;await saveProject();return [saved,__db.projects.length,notice.includes('Проект создан'),notice.includes('обновить список')];
  },[1,1,true,true]);
  await fresh();
  await check('A thrown refresh error still reports that the server accepted the card',async()=>{
-  openProjectSheet(null);document.getElementById('pf-name').value='Accepted card';const previous=loadAll;loadAll=async()=>{throw new Error('Refresh disconnected');};
+  openProjectSheet(null);document.getElementById('pf-category').value='design';document.getElementById('pf-category').dispatchEvent(new Event('change',{bubbles:true}));document.getElementById('pf-name').value='Accepted card';const previous=loadAll;loadAll=async()=>{throw new Error('Refresh disconnected');};
   await saveProject();loadAll=previous;const notice=document.getElementById('toast').textContent;await saveProject();
   return [__db.projects.length,notice.includes('Проект создан'),notice.includes('Ошибка сохранения')];
  },[1,true,false]);
  await fresh();
  await check('An unavailable construction department cannot be used for a basic card',async()=>{
   const employee=state.employees.find(e=>e.id==='lead-designer');employee.can_see_construction=false;
-  openProjectSheet(null);document.getElementById('pf-name').value='Restricted construction';document.getElementById('pf-category').value='build';await saveProject();return [__db.projects.length,document.getElementById('toast').textContent.includes('Нет доступа')];
+  openProjectSheet(null);document.getElementById('pf-category').value='design';document.getElementById('pf-category').dispatchEvent(new Event('change',{bubbles:true}));document.getElementById('pf-name').value='Restricted construction';document.getElementById('pf-category').value='build';await saveProject();return [__db.projects.length,document.getElementById('toast').textContent.includes('Нет доступа')];
  },[0,true]);
  await fresh();
  await check('Project completion still requires the administrator',async()=>{
-  openProjectSheet(null);document.getElementById('pf-name').value='Premature completion';document.getElementById('pf-status').value='done';await saveProject();return [__db.projects.length,document.getElementById('toast').textContent.includes('администратор')];
+  openProjectSheet(null);document.getElementById('pf-category').value='design';document.getElementById('pf-category').dispatchEvent(new Event('change',{bubbles:true}));document.getElementById('pf-name').value='Premature completion';document.getElementById('pf-status').value='done';await saveProject();return [__db.projects.length,document.getElementById('toast').textContent.includes('администратор')];
  },[0,true]);
  await fresh();
  await check('A reversed date range is rejected',async()=>{
-  openProjectSheet(null);document.getElementById('pf-name').value='Invalid dates';document.getElementById('pf-start').value='2026-10-20';document.getElementById('pf-end').value='2026-10-19';await saveProject();return [__db.projects.length,document.getElementById('toast').textContent.includes('раньше')];
+  openProjectSheet(null);document.getElementById('pf-category').value='design';document.getElementById('pf-category').dispatchEvent(new Event('change',{bubbles:true}));document.getElementById('pf-name').value='Invalid dates';document.getElementById('pf-start').value='2026-10-20';document.getElementById('pf-end').value='2026-10-19';await saveProject();return [__db.projects.length,document.getElementById('toast').textContent.includes('раньше')];
  },[0,true]);
  await fresh();
  await check('Declining a duplicate-address warning keeps one project and the unsaved card',async()=>{
   __db.projects=[{id:'same-address',name:'Existing address',category_id:'arch',status_id:'active',employee_id:'lead-designer',address:'Test address'}];await loadAll();
-  openProjectSheet(null);document.getElementById('pf-name').value='Duplicate address';document.getElementById('pf-address').value='  TEST  ADDRESS ';window.confirm=()=>false;await saveProject();window.confirm=()=>true;
+  openProjectSheet(null);document.getElementById('pf-category').value='design';document.getElementById('pf-category').dispatchEvent(new Event('change',{bubbles:true}));document.getElementById('pf-name').value='Duplicate address';document.getElementById('pf-address').value='  TEST  ADDRESS ';window.confirm=()=>false;await saveProject();window.confirm=()=>true;
   return [__db.projects.length,document.getElementById('projectSheetOverlay').classList.contains('active')];
  },[1,true]);
  await fresh();
  await check('An audit-history failure does not reinsert an accepted basic project',async()=>{
-  openProjectSheet(null);document.getElementById('pf-name').value='Saved without history';__fail={table:'audit_log',op:'insert'};await saveProject();__fail=null;await saveProject();return [__db.projects.length,__db.projects[0]?.name];
+  openProjectSheet(null);document.getElementById('pf-category').value='design';document.getElementById('pf-category').dispatchEvent(new Event('change',{bubbles:true}));document.getElementById('pf-name').value='Saved without history';__fail={table:'audit_log',op:'insert'};await saveProject();__fail=null;await saveProject();return [__db.projects.length,__db.projects[0]?.name];
  },[1,'Saved without history']);
  await fresh();
  await check("Lead designer cannot overwrite an assigned project's financial conditions",async()=>{
@@ -146,14 +146,14 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
  ]){
   await fresh(profile);
   await check(label+' has no new create or company-finance permission',async()=>{
-   openProjectSheet(null);document.getElementById('pf-name').value='Forbidden';await saveProject();return [__db.projects.length,getComputedStyle(document.getElementById('nav-finance')).display];
+   openProjectSheet(null);document.getElementById('pf-category').value='design';document.getElementById('pf-category').dispatchEvent(new Event('change',{bubbles:true}));document.getElementById('pf-name').value='Forbidden';await saveProject();return [__db.projects.length,getComputedStyle(document.getElementById('nav-finance')).display];
   },[0,'none']);
  }
  await fresh();
- await check('An unauthenticated client cannot save a project',async()=>{setSession(null);openProjectSheet(null);document.getElementById('pf-name').value='Client request';await saveProject();return __db.projects.length;},0);
+ await check('An unauthenticated client cannot save a project',async()=>{setSession(null);openProjectSheet(null);document.getElementById('pf-category').value='design';document.getElementById('pf-category').dispatchEvent(new Event('change',{bubbles:true}));document.getElementById('pf-name').value='Client request';await saveProject();return __db.projects.length;},0);
  await fresh();
  await check('Director keeps the existing financial project-save path',async()=>{
-  setSession({employeeId:'admin',name:'Director',isAdmin:true,token:'isolated-admin'});await loadAll();applyRole();openProjectSheet(null);document.getElementById('pf-name').value='Director card';document.getElementById('pf-price').value='200000';await saveProject();return [__db.projects.length,__db.projects[0]?.price,__db.projects[0]?.fee_base];
+  setSession({employeeId:'admin',name:'Director',isAdmin:true,token:'isolated-admin'});await loadAll();applyRole();openProjectSheet(null);document.getElementById('pf-category').value='design';document.getElementById('pf-category').dispatchEvent(new Event('change',{bubbles:true}));document.getElementById('pf-name').value='Director card';document.getElementById('pf-price').value='200000';await saveProject();return [__db.projects.length,__db.projects[0]?.price,__db.projects[0]?.fee_base];
  },[1,200000,'m2']);
  await fresh();
  await check('A membership read failure preserves the prior team and assigned employee visibility',async()=>{
@@ -190,7 +190,7 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
  await check('Lead designer can create a self-assigned basic card while an older team read fails',async()=>{
   __db.projects=[{id:'prior-team-project',name:'Prior team',category_id:'arch',status_id:'active',employee_id:'architect',fee_percent:40,fee_base:'profit'}];
   __db.project_members=[{id:'prior-team-member',project_id:'prior-team-project',employee_id:'visual'}];await loadAll();__fail={table:'project_members',op:'select'};await loadAll();
-  openProjectSheet(null);document.getElementById('pf-name').value='Basic with membership warning';const before=__writes.length;await saveProject();__fail=null;
+  openProjectSheet(null);document.getElementById('pf-category').value='design';document.getElementById('pf-category').dispatchEvent(new Event('change',{bubbles:true}));document.getElementById('pf-name').value='Basic with membership warning';const before=__writes.length;await saveProject();__fail=null;
   const p=__db.projects.find(p=>p.name==='Basic with membership warning');return [p?.employee_id,p?.price,!!state.projectMembersDataError,state.projectMembers.map(m=>m.id),__writes.slice(before).filter(w=>w.table==='project_members').length,isProjectMember(p?.id),document.getElementById('projectsCard').textContent.includes('Basic with membership warning')];
  },['lead-designer',0,true,['prior-team-member'],0,true,true]);
  await fresh();

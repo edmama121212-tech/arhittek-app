@@ -659,6 +659,8 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
   <!-- ===================== ПРОЕКТНЫЙ ОТДЕЛ ===================== -->
   <div class="view" id="view-projects">
 
+    <div id="nextProjectNumbers" class="project-next-numbers" hidden></div>
+
     <div class="search-box">
       <input type="text" id="projectSearch" placeholder="Поиск по названию, адресу, телефону...">
       <button class="search-clear" id="projectSearchClear" type="button">✕</button>
@@ -1615,25 +1617,27 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
       <button class="sheet-close" id="projectSheetClose">✕</button>
     </div>
 
-    <div class="field">
-      <label>Название</label>
-      <input type="text" id="pf-name" placeholder="например: Дом Алхазурова — пристройка">
-    </div>
-
-    <div class="field">
-      <label>ФИО клиента</label>
-      <input type="text" id="pf-client-name" placeholder="Иванов Иван Иванович">
-    </div>
-
     <div class="field-row">
       <div class="field">
-        <label>Категория</label>
+        <label for="pf-category">Направление проекта</label>
         <select id="pf-category"></select>
       </div>
       <div class="field">
         <label>Статус (этап работы)</label>
         <select id="pf-status"></select>
       </div>
+    </div>
+
+    <div class="field">
+      <label id="pf-name-label" for="pf-name">Название без номера</label>
+      <div id="pf-number-prefix" class="project-number-prefix" aria-live="polite" hidden></div>
+      <input type="text" id="pf-name" placeholder="например: Дом Алхазурова — пристройка">
+      <p id="pf-number-hint" class="project-note" hidden></p>
+    </div>
+
+    <div class="field">
+      <label>ФИО клиента</label>
+      <input type="text" id="pf-client-name" placeholder="Иванов Иван Иванович">
     </div>
 
     <div class="field" id="pf-department-field">
@@ -2520,6 +2524,8 @@ function canAccessView(id){
   return false;
 }
 function clearPrivateState(){
+  resetProjectNumberDraft();
+  clearProjectNumbers();
   if(typeof catalogPreparedPdf!=='undefined')catalogPreparedPdf=null;
   const catalogPdfButton=document.getElementById('cardViewerPdfBtn');if(catalogPdfButton)catalogPdfButton.style.display='none';
   window.ARHITTEKBriefMedia?.clear();
@@ -3618,6 +3624,7 @@ async function loadAllData(){
         if(lcData) state.categories.push(lcData);
       }catch(lcErr){ console.warn('Не удалось создать категорию «Ландшафтный дизайн» автоматически — возможно, нужно добавить вручную', lcErr); }
     }
+    void refreshProjectNumbers();
     state.ledger = led.data || [];
     state.photos = photos.data || [];
     state.invoices = invs.data || [];
@@ -4493,6 +4500,141 @@ function renderPL(){
   }
   
 
+// Project identity is allocated by PostgreSQL, never from a filtered client list.
+let nextProjectNumbers=null,projectNumbersActor=null,projectNumbersRequest=null,projectNumbersGeneration=0;
+let projectNumberDraftVersion=0,projectCreateDraftId=null;
+
+function resetProjectNumberDraft(){
+  projectNumberDraftVersion++;
+  projectCreateDraftId=null;
+}
+function projectNumberSeries(categoryId){
+  const name=String(findCategory(categoryId)?.name||'').toLowerCase();
+  return name.includes('ландшафт')?'landscape':name.includes('интерьер')?'interior':name.includes('архитект')?'architecture':null;
+}
+function projectNumberPrefix(p){
+  if(!p?.number_series||!Number.isInteger(p.number_sequence)||!Number.isInteger(p.number_year))return '';
+  return 'Проект '+(p.number_series==='interior'?'ДИ ':p.number_series==='landscape'?'ЛД ':'')+'№'+p.number_sequence+String(p.number_year).slice(-2);
+}
+function projectOrdinal(p){
+  if(p.number_series&&Number.isInteger(p.number_sequence)&&Number.isInteger(p.number_year))return {year:p.number_year,sequence:p.number_sequence};
+  const n=String(p.name||'').match(/^\s*(?:проект\s*(?:(?:АР|АПР|ДИ|ЛД|ПР)\s*)*№?\s*|№\s*)([0-9]{3,8})(?:[^0-9]|$)/i)?.[1];
+  return n?{year:2000+Number(n.slice(-2)),sequence:Number(n.slice(0,-2))}:null;
+}
+function compareProjectNumbers(a,b){
+  const x=projectOrdinal(a),y=projectOrdinal(b);
+  if(x&&y)return y.year-x.year||y.sequence-x.sequence||String(b.created_at||'').localeCompare(String(a.created_at||''))||String(a.id).localeCompare(String(b.id));
+  if(x||y)return x?-1:1;
+  return String(b.created_at||'').localeCompare(String(a.created_at||''))||String(a.name||'').localeCompare(String(b.name||''),'ru')||String(a.id).localeCompare(String(b.id));
+}
+function canCreateProjectCard(){
+ if(!hasVerifiedAccess())return false;
+ if(isOwner())return true;
+ const employee=findEmployee(session.employeeId);
+ return !!(employee&&employee.active!==false&&!employee.deleted_at&&canSeeProjects()&&['ведущий дизайнер','ведущий архитектор'].includes(String(employee.role||'').trim().toLowerCase()));
+}
+function clearProjectNumbers(){
+  nextProjectNumbers=null;projectNumbersActor=null;projectNumbersRequest=null;projectNumbersGeneration++;
+  const bar=document.getElementById('nextProjectNumbers');if(bar){bar.hidden=true;bar.replaceChildren();}
+  const prefix=document.getElementById('pf-number-prefix');if(prefix)prefix.textContent='';
+}
+function renderNextProjectNumbers(){
+  const bar=document.getElementById('nextProjectNumbers');if(!bar)return;
+  bar.hidden=!canCreateProjectCard();if(bar.hidden){bar.replaceChildren();return;}
+  bar.innerHTML='<div class="project-number-heading">Следующие номера проектов</div>'+(nextProjectNumbers?
+    '<div class="project-number-grid">'+['architecture','interior','landscape'].map(series=>{
+      const row=nextProjectNumbers.find(n=>n.series===series);if(!row)return '';
+      const label={architecture:'Архитектура',interior:'Дизайн интерьера',landscape:'Ландшафт'}[series];
+      return `<div><span>${label}</span><strong>${escapeHtml(row.prefix)}</strong></div>`;
+    }).join('')+'</div><p>Номер закрепляется при сохранении проекта.</p>':
+    '<p>Номера не загружены. <button type="button" class="project-number-retry" onclick="refreshProjectNumbers()">Обновить</button></p>');
+}
+async function refreshProjectNumbers(){
+  if(!canCreateProjectCard()){clearProjectNumbers();return false;}
+  const actor=session.token;
+  if(projectNumbersRequest&&projectNumbersActor===actor)return projectNumbersRequest;
+  if(projectNumbersActor!==actor)nextProjectNumbers=null;
+  projectNumbersActor=actor;
+  const generation=++projectNumbersGeneration;
+  const request=(async()=>{
+    try{
+      const result=await Promise.resolve().then(()=>sb.rpc('get_next_project_numbers'));
+      if(generation!==projectNumbersGeneration||session?.token!==actor||!canCreateProjectCard())return false;
+      const rows=result.data;
+      if(result.error||!Array.isArray(rows)||rows.some(n=>!n||!['architecture','interior','landscape'].includes(n.series)||!Number.isInteger(n.sequence)||n.sequence<1||!Number.isInteger(n.year)||n.year<2000||n.year>2099||typeof n.category_id!=='string'||n.prefix!==projectNumberPrefix({number_series:n.series,number_sequence:n.sequence,number_year:n.year})))throw new Error('Номера не подтверждены сервером');
+      nextProjectNumbers=rows;return true;
+    }catch(e){if(generation===projectNumbersGeneration)nextProjectNumbers=null;console.warn('Не удалось обновить номера проектов');return false;}
+    finally{if(generation===projectNumbersGeneration){projectNumbersRequest=null;renderNextProjectNumbers();renderProjectNumberField();}}
+  })();
+  projectNumbersRequest=request;
+  renderProjectNumberField();
+  return request;
+}
+function renderProjectNumberField(){
+  const input=document.getElementById('pf-name'),label=document.getElementById('pf-name-label'),prefix=document.getElementById('pf-number-prefix'),hint=document.getElementById('pf-number-hint'),category=document.getElementById('pf-category');
+  if(!input||!prefix)return;
+  const saved=state.projects.find(p=>p.id===editingProjectId),series=projectNumberSeries(category.value);
+  const fixed=saved?projectNumberPrefix(saved):nextProjectNumbers?.find(n=>n.category_id===category.value)?.prefix;
+  prefix.hidden=!!saved&&!saved.number_series||(!saved&&!series);
+  prefix.textContent=prefix.hidden?'':fixed||(projectNumbersRequest?'Загружаем номер…':'');
+  hint.hidden=!!saved||!series;
+  hint.textContent=fixed?'Номер закрепится при сохранении.':projectNumbersRequest?'':'Не удалось получить номер. Повторите сохранение после восстановления связи.';
+  input.disabled=!saved&&!category.value;
+  label.textContent=(saved?!saved.number_series:!series)?'Название проекта':'Название без номера';
+  category.disabled=!!saved?.number_series;
+}
+function projectNameForSave(){
+  const title=document.getElementById('pf-name').value.trim(),saved=state.projects.find(p=>p.id===editingProjectId);
+  return saved?.number_series?projectNumberPrefix(saved)+' '+title:title;
+}
+async function prepareProjectNumberSave(){
+  if(editingProjectId)return true;
+  const draftVersion=projectNumberDraftVersion,actor=session?.token;
+  const category=document.getElementById('pf-category').value;
+  if(!category){showToast('Сначала выберите направление проекта');return false;}
+  if(!projectNumberSeries(category))return true;
+  if(!nextProjectNumbers||projectNumbersActor!==session?.token){await refreshProjectNumbers();}
+  if(draftVersion!==projectNumberDraftVersion||actor!==session?.token||editingProjectId||category!==document.getElementById('pf-category').value)return false;
+  if(!nextProjectNumbers?.some(n=>n.category_id===category)){showToast('Не удалось получить номер проекта. Проверьте соединение и обновите номера.');return false;}
+  return true;
+}
+async function createProjectDraft(payload){
+  const token=session?.token;
+  const draftVersion=projectNumberDraftVersion;
+  const wasAttempted=!!projectCreateDraftId;
+  const id=projectCreateDraftId||crypto.randomUUID();
+  projectCreateDraftId=id;
+
+  const checkDraft=()=>{
+    if(token!==session?.token||draftVersion!==projectNumberDraftVersion){
+      throw new Error('Форма проекта уже закрыта');
+    }
+  };
+  const readExisting=async()=>{
+    const result=await sb.from('projects').select('*').eq('id',id).maybeSingle();
+    checkDraft();
+    if(result.error)throw result.error;
+    if(result.data?.deleted_at)throw new Error('Сохранённый проект находится в корзине');
+    return result.data;
+  };
+
+  if(wasAttempted){
+    const existing=await readExisting();
+    if(existing)return existing;
+  }
+  let result;
+  try{
+    result=await sb.from('projects').insert({...payload,id}).select().single();
+  }catch(error){
+    result={error};
+  }
+  checkDraft();
+  if(!result.error&&result.data?.id===id)return result.data;
+
+  const existing=await readExisting();
+  if(existing)return existing;
+  throw result.error||new Error('Не получено подтверждение создания проекта');
+}
 // ============================================================
 // PROJECTS VIEW
 // ============================================================
@@ -4613,24 +4755,8 @@ function renderProjects(){
     });
   }
 
-  // Сортировка: активные проекты — первыми (по ближайшей дате окончания),
-  // затем завершённые — по дате завершения (сначала недавно завершённые).
-  const doneStatusForSort = state.statuses.find(s=>s.name==='Завершён');
-  list = list.slice().sort((a,b)=>{
-    const aDone = doneStatusForSort && a.status_id === doneStatusForSort.id;
-    const bDone = doneStatusForSort && b.status_id === doneStatusForSort.id;
-    if(aDone !== bDone) return aDone ? 1 : -1; // активные выше завершённых
-    if(!aDone){
-      // среди активных — у кого раньше срок, тот выше; без срока — в конец
-      if(!a.end_date && !b.end_date) return 0;
-      if(!a.end_date) return 1;
-      if(!b.end_date) return -1;
-      return a.end_date.localeCompare(b.end_date);
-    }else{
-      // среди завершённых — недавно завершённые выше
-      return (b.end_date||'').localeCompare(a.end_date||'');
-    }
-  });
+  renderNextProjectNumbers();
+  list = list.slice().sort(compareProjectNumbers);
 
   const card = document.getElementById('projectsCard');
   if(!list.length){
@@ -4643,20 +4769,7 @@ function renderProjects(){
     return;
   }
 
-  // Group projects without an assigned executor into a separate section
-  // (only when not already filtering by a specific employee)
-  if(activeEmployeeFilter === 'all'){
-    const withEmp = list.filter(p=>hasAnyAssignedEmployee(p));
-    const withoutEmp = list.filter(p=>!hasAnyAssignedEmployee(p));
-    let html = withEmp.map(renderProjectRow).join('');
-    if(withoutEmp.length){
-      html += `<div class="section-label" style="margin:14px 0 10px;"><span class="lbl-text">Без исполнителя</span><span class="section-label-line"></span></div>`;
-      html += withoutEmp.map(renderProjectRow).join('');
-    }
-    card.innerHTML = html || '<div class="empty-state">Нет проектов по этому фильтру</div>';
-  }else{
-    card.innerHTML = list.map(renderProjectRow).join('');
-  }
+  card.innerHTML = list.map(renderProjectRow).join('');
 }
 
 function renderProjectRow(p){
@@ -4718,7 +4831,7 @@ function renderProjectRow(p){
 function populateProjectFormSelects(){
   const catSel = document.getElementById('pf-category');
   const prevCat = catSel.value;
-  catSel.innerHTML = state.categories.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+  catSel.innerHTML = '<option value="">Выберите направление</option>' + state.categories.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
   if(prevCat && state.categories.some(c=>c.id===prevCat)) catSel.value = prevCat;
 
   const stSel = document.getElementById('pf-status');
@@ -4758,6 +4871,7 @@ function populateProjectFormSelects(){
 // When category changes, auto-select its department (categories belong to one department)
 document.addEventListener('change', (e)=>{
   if(e.target && e.target.id === 'pf-category'){
+    renderProjectNumberField();
     const cat = findCategory(e.target.value);
     if(cat && cat.department_id){
       document.getElementById('pf-department').value = cat.department_id;
@@ -4845,6 +4959,7 @@ document.addEventListener('change', (e)=>{
 
 function openProjectSheet(id){
   if(id&&!isProjectMember(id)){showToast("Нет доступа к этому проекту");return;}
+  resetProjectNumberDraft();
   editingProjectId = id;
   projectMembersDraftUnverified=!!state.projectMembersDataError;
   const overlay = document.getElementById('projectSheetOverlay');
@@ -4857,7 +4972,8 @@ function openProjectSheet(id){
     editingProjectLoadedAt = p.updated_at || null;
     title.textContent = 'Редактировать проект';
     deleteBtn.style.display = '';
-    document.getElementById('pf-name').value = p.name || '';
+    document.getElementById('pf-name').value = p.number_series ? p.project_title || '' : p.name || '';
+    document.getElementById('pf-category').disabled = false;
     document.getElementById('pf-category').value = p.category_id || '';
     document.getElementById('pf-status').value = p.status_id || '';
     document.getElementById('pf-payment').value = p.payment_status || 'Ждём оплату';
@@ -4944,11 +5060,11 @@ function openProjectSheet(id){
     title.textContent = 'Новый проект';
     deleteBtn.style.display = 'none';
     document.getElementById('pf-name').value = '';
-    document.getElementById('pf-category').selectedIndex = 0;
+    document.getElementById('pf-category').disabled = false;
+    document.getElementById('pf-category').value = '';
     document.getElementById('pf-status').selectedIndex = 0;
     document.getElementById('pf-payment').value = 'Ждём оплату';
-    const firstCat = state.categories[0];
-    document.getElementById('pf-department').value = firstCat ? (firstCat.department_id || '') : '';
+    document.getElementById('pf-department').value = '';
     document.getElementById('pf-co-employee').value = '';
     currentProjectMembers = [];
     renderProjectMemberChips();
@@ -4987,6 +5103,8 @@ function openProjectSheet(id){
     if(histList0){ histList0.style.display = 'none'; histList0.innerHTML = '<div class="empty-state">Сохраните проект, чтобы вести историю</div>'; }
   }
 
+  renderProjectNumberField();
+  if(!id)void refreshProjectNumbers();
   overlay.classList.add('active');
   applyRole();
   bindCompensationUI();
@@ -4995,7 +5113,9 @@ function openProjectSheet(id){
 
 
 function closeProjectSheet(){
+  resetProjectNumberDraft();
   document.getElementById('projectSheetOverlay').classList.remove('active');
+  document.getElementById('pf-category').disabled=false;
   projectMembersDraftUnverified=false;
   editingProjectId = null;
   editingProjectLoadedAt = null;
@@ -5005,6 +5125,7 @@ let projectSaveInFlight=false;
 async function saveProject(){
   if(projectSaveInFlight) return;
   if(state.projectMembersDataError||projectMembersDraftUnverified){showToast('Состав команды не загружен. Обновите приложение перед сохранением проекта.');return;}
+  if(!await prepareProjectNumberSave()||projectSaveInFlight)return;
   const wantedMemberIds=[...new Set(currentProjectMembers.map(m=>m.employee_id).filter(Boolean))];
   const price = parseFloat(document.getElementById('pf-price').value) || 0;
   const advance = parseFloat(document.getElementById('pf-advance').value) || 0;
@@ -5035,7 +5156,7 @@ async function saveProject(){
   const directExpensesInput = parseFloat(document.getElementById('pf-expenses').value) || 0;
 
   const payload = {
-    name: document.getElementById('pf-name').value.trim(),
+    name: projectNameForSave(),
     category_id: categoryId,
     status_id: document.getElementById('pf-status').value || null,
     payment_status: document.getElementById('pf-payment').value || 'Ждём оплату',
@@ -5075,7 +5196,7 @@ async function saveProject(){
 
   if([payload.fee_percent,payload.co_fee_percent].some(v=>v!==null&&(!Number.isFinite(v)||v<0||v>100))||(Number(payload.fee_percent)||0)+(Number(payload.co_fee_percent)||0)>100){showToast('Сумма долей должна быть от 0 до 100%');return;}
   if(payload.area!==null&&(!Number.isFinite(payload.area)||payload.area<0)){showToast('Площадь не может быть отрицательной');return;}
-  if(!payload.name){
+  if(!document.getElementById('pf-name').value.trim()){
     showToast('Введите название проекта');
     return;
   }
@@ -5107,12 +5228,15 @@ async function saveProject(){
       }
       showToast('Проект обновлён');
     }else{
-      const {data, error} = await sb.from('projects').insert(payload).select().single();
-      if(error) throw error;
+      const data = await createProjectDraft(payload);
       savedProjectId = data.id;
-      editingProjectId=data.id;editingProjectLoadedAt=payload.updated_at;mainRecordSaved=true;
+      payload.name = data.name;
+      state.projects=[...(state.projects||[]).filter(p=>p.id!==data.id),{...payload,...data}];
+      editingProjectId=data.id;editingProjectLoadedAt=data.updated_at;mainRecordSaved=true;
+      renderProjectNumberField();
+      if(data.number_series)document.getElementById('pf-name').value=data.project_title;
       await logAudit('project', data.id, payload.name, 'create', {});
-      showToast('Проект добавлен');
+      showToast('Добавлен: '+data.name);
     }
     // Для строительного объекта баланс и расходы — производные значения.
     // Пересчитываем их только после успешного сохранения основной записи.
@@ -5164,7 +5288,7 @@ async function saveProject(){
     await loadAll();
   }catch(e){
     console.error(e);
-    showToast(mainRecordSaved?'Основные данные сохранены. Проверьте команду и повторите сохранение.':'Ошибка сохранения');
+    showToast(mainRecordSaved?'Основные данные сохранены. Проверьте команду и повторите сохранение.':'Ошибка сохранения проекта. Данные формы сохранены — повторите попытку.');
   }finally{projectSaveInFlight=false;}
 }
 

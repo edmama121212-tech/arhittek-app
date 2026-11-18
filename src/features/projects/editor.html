@@ -7,25 +7,27 @@
       <button class="sheet-close" id="projectSheetClose">✕</button>
     </div>
 
-    <div class="field">
-      <label>Название</label>
-      <input type="text" id="pf-name" placeholder="например: Дом Алхазурова — пристройка">
-    </div>
-
-    <div class="field">
-      <label>ФИО клиента</label>
-      <input type="text" id="pf-client-name" placeholder="Иванов Иван Иванович">
-    </div>
-
     <div class="field-row">
       <div class="field">
-        <label>Категория</label>
+        <label for="pf-category">Направление проекта</label>
         <select id="pf-category"></select>
       </div>
       <div class="field">
         <label>Статус (этап работы)</label>
         <select id="pf-status"></select>
       </div>
+    </div>
+
+    <div class="field">
+      <label id="pf-name-label" for="pf-name">Название без номера</label>
+      <div id="pf-number-prefix" class="project-number-prefix" aria-live="polite" hidden></div>
+      <input type="text" id="pf-name" placeholder="например: Дом Алхазурова — пристройка">
+      <p id="pf-number-hint" class="project-note" hidden></p>
+    </div>
+
+    <div class="field">
+      <label>ФИО клиента</label>
+      <input type="text" id="pf-client-name" placeholder="Иванов Иван Иванович">
     </div>
 
     <div class="field" id="pf-department-field">

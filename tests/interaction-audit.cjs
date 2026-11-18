@@ -197,7 +197,7 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
  await leadDesigner();
  await check('The lead designer sees an actionable create button and clear financial responsibility',async()=>{
   assert.equal(await page.locator('#addProjectFab').isVisible(),true);
-  await page.locator('#addProjectFab').click();
+  await page.locator('#addProjectFab').click();await page.locator('#pf-category').selectOption('design');
   const note=page.getByText('Карточка будет создана с вами в качестве исполнителя. Стоимость, оплату и условия команды заполняет администратор.',{exact:true});
   await note.scrollIntoViewIfNeeded();
   assert.equal(await note.isVisible(),true);
@@ -206,7 +206,7 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
  });
  await leadDesigner();
  await check('A lead designer gets one accepted-create notice and sees the card without a membership read',async()=>{
-  await page.locator('#addProjectFab').click();
+  await page.locator('#addProjectFab').click();await page.locator('#pf-category').selectOption('design');
   await page.evaluate(()=>{
    document.getElementById('pf-category').value='arch';document.getElementById('pf-category').dispatchEvent(new Event('change',{bubbles:true}));
    document.getElementById('pf-name').value='Accepted lead card';document.getElementById('pf-area').value='150';
