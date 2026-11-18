@@ -39,14 +39,15 @@ function clearProjectNumbers(){
 function renderNextProjectNumbers(){
   const bar=document.getElementById('nextProjectNumbers');if(!bar)return;
   bar.hidden=!canCreateProjectCard();if(bar.hidden){bar.replaceChildren();return;}
-  bar.innerHTML='<div class="project-number-heading">Следующие номера проектов</div>'+(nextProjectNumbers?
+  const expanded=bar.querySelector('details')?.open;
+  bar.innerHTML='<details'+(expanded?' open':'')+'><summary>Следующие номера проектов</summary>'+(nextProjectNumbers?
     '<div class="project-number-grid">'+['architecture','interior','landscape'].map(series=>{
       const row=nextProjectNumbers.find(n=>n.series===series);if(!row)return '';
       const label={architecture:'Архитектура',interior:'Дизайн интерьера',landscape:'Ландшафт'}[series];
       const number=row.prefix.slice(row.prefix.indexOf('№'));
       return `<div><span>${label}</span><strong>${escapeHtml(number)}</strong></div>`;
     }).join('')+'</div><p>Номер закрепляется при сохранении проекта.</p>':
-    '<p>Номера не загружены. <button type="button" class="project-number-retry" onclick="refreshProjectNumbers()">Обновить</button></p>');
+    '<p>Номера не загружены. <button type="button" class="project-number-retry" onclick="refreshProjectNumbers()">Обновить</button></p>')+'</details>';
 }
 async function refreshProjectNumbers(){
   if(!canCreateProjectCard()){clearProjectNumbers();return false;}

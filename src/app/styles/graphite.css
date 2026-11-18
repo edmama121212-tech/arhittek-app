@@ -1,0 +1,41 @@
+/* Shared screen palette for the studio, catalogue, client portal and briefs. */
+@media screen {
+  :root {
+    color-scheme:dark;
+    --bg:#131416; --bg-soft:#1d1f22; --card:#202225; --card-bg:#202225; --surface:#202225;
+    --card-solid:#202225; --text:#f4f5f6; --muted:#b8bdc6; --text-dim:#b8bdc6; --text-muted:#b8bdc6;
+    --line:#35383d; --line-strong:#50545b; --border:#383b40; --blue:#78baff; --blue-soft:#193854;
+    --green:#87d5b3; --green-soft:#18392f; --red:#ffa99d; --red-soft:#482c30; --gold:#ecc58e; --gold-soft:#43382b;
+  }
+  html,body {background:var(--bg)!important;color:var(--text);font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums}
+  body :is(header,.bottom-nav,.cat-header,.submit-bar){background:#191b1ef5;color:var(--text);border-color:var(--line)}
+  body :is(.card,.kpi,.fee-card,.sheet,.search-box,.field input,.field select,.field textarea,.btn-secondary,.premium-tool-grid .btn,.fw-card,.sf-card,.finance-equation,.finance-flow-node,.finance-visual-disclosure,.finance-visual-panel .finance-kpi,.team-methods button,.section,.intro,.metric,.tabs,.info-block,.include-cell,.cat-filters,.price-block,#settingsBtn,#loginOverlay>div){
+    background-color:var(--card);color:var(--text);border-color:var(--line)
+  }
+  body :is(.brand-title,.section-title,.project-title,.proj-name,.proj-sum,.metric-value,.fw-amount,.price,h1,h2,h3){color:var(--text)}
+  body :is(.section-label,.proj-meta,.workspace-description,.nav-btn,.brand-sub,.sync-pill,.workspace-date,.workspace-eyebrow){color:var(--text-dim)}
+  body :is(.btn-primary,.fab){background:#167bd6;color:white}
+  body :is(.nav-btn.active,.filter-chip.active,.tab.active,.fw-tabs .active){background:#193c5e;color:#bfe3ff}
+  body :is(input,select,textarea):not([type=checkbox]):not([type=radio]){color-scheme:dark}
+  #projectSheetOverlay .accent-block{background:var(--card)!important;border-color:var(--line)}
+  .studio-money-grid>*{color:#edf3fa;background:#292d32}
+  .studio-money-grid article:first-child{background:#163754}
+  .studio-money-grid article:nth-child(3){background:#223546}
+  .studio-money-grid button{background:#25282c;color:#cae3ff}
+  .brand-left .logo img{filter:brightness(0) invert(.92)}
+  #view-projects .workspace-head{background:radial-gradient(ellipse at 84% 72%,#302a22 0,transparent 44%);min-height:clamp(138px,40vw,206px);margin-bottom:6px}
+  #view-projects .workspace-head::after{inset:-10% -3% -10% 43%;background-size:contain;mask-image:radial-gradient(ellipse at 56% 49%,black 46%,transparent 78%);mix-blend-mode:lighten}
+  #view-projects .workspace-eyebrow{display:none}
+  #view-projects .workspace-head h1{font-size:clamp(32px,8vw,52px);letter-spacing:-.045em}
+  #view-projects .project-next-numbers{background:transparent;padding:0 0 8px;border:0;margin:0}
+  #view-projects .project-next-numbers summary{cursor:pointer;color:var(--text-muted);font-size:12px;padding:7px 0}
+  #view-projects .proj-row{border-radius:0;box-shadow:none}
+  #view-projects .proj-sum{white-space:nowrap}
+  #addProjectFab{border-radius:50%;background:#167bd6}
+  @media(max-width:640px){
+    body>header{height:auto;min-height:44px;padding:5px 14px}
+    header .brand-sub{display:none}
+    header .brand-left .logo{width:27px;height:27px}
+    .bottom-nav{border-radius:0;background:#191b1ef7}
+  }
+}
