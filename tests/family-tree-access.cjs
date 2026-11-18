@@ -1,14 +1,14 @@
 // Private family tree launch: exercise the real session verifier without real credentials.
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
 const {JSDOM}=require('jsdom');
-const source=fs.readFileSync('src/features/access/session.js','utf8');
+const sources=['src/features/access/session.js','src/features/projects/numbering.js'].map(file=>fs.readFileSync(file,'utf8'));
 const shell='<html data-access="locked"><body><div class="view active" id="view-more"><button id="openFamilyTreeBtn"></button></div><div class="view" id="view-overview"></div><div class="view" id="view-projects"></div></body></html>';
 function fixture({owner=true,verified=true,employee='owner',responseOwner=owner,error=false,policy='owner-only-v1',delayed=false}={}){
  const dom=new JSDOM(shell);const redirects=[],toasts=[],calls=[];let release;
  const context={document:dom.window.document,window:{location:{assign:url=>redirects.push(url)}},state:{trash:{}},Set,Date,console,
   canSeeProjects:()=>true,canSeeConstruction:()=>true,showToast:msg=>toasts.push(msg),
   sb:{rpc:async(name,args)=>{calls.push({name,args});if(delayed)await new Promise(r=>release=r);return error?{error:{message:'Unavailable'},data:null}:{error:null,data:[{employee_id:employee,name:'Мансур',role:'Генеральный директор',is_owner:responseOwner,can_documents:false,access_policy:policy}]}}}};
- vm.createContext(context);vm.runInContext(source,context);
+ vm.createContext(context);for(const source of sources)vm.runInContext(source,context);
  vm.runInContext(`session={employeeId:${JSON.stringify(employee)},name:'Мансур',isAdmin:true,token:'isolated-session'};verifiedAccess=${verified?`{employeeId:${JSON.stringify(employee)},token:'isolated-session',owner:${owner},documents:false}`:'null'};applyAccessVisibility();`,context);
  return {dom,context,redirects,toasts,calls,run:()=>vm.runInContext('openFamilyTree()',context),release:()=>release(),owner:()=>vm.runInContext('isOwner()',context),button:dom.window.document.getElementById('openFamilyTreeBtn')};
 }

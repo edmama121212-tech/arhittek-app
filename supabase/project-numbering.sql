@@ -80,8 +80,7 @@ begin
  return new;
 end $$;
 revoke all on function arhittek_security.assign_project_number() from public,anon,authenticated;
-drop trigger if exists arhittek_assign_project_number on public.projects;
-create trigger arhittek_assign_project_number before insert or update on public.projects for each row execute function arhittek_security.assign_project_number();
+create or replace trigger arhittek_assign_project_number before insert or update on public.projects for each row execute function arhittek_security.assign_project_number();
 
 create or replace function arhittek_security.get_next_project_numbers()
 returns jsonb language plpgsql stable security definer set search_path='' as $$
