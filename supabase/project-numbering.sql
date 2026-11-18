@@ -34,11 +34,11 @@ $$;
 create or replace function arhittek_security.project_number_highwater(p_series text,p_year integer)
 returns integer language sql stable security definer set search_path='' as $$
  select greatest(
- coalesce((select c.last_sequence from arhittek_security.project_number_counters c where c.series=p_series and c.year=p_year),0),
+ coalesce((select max(c.last_sequence) from arhittek_security.project_number_counters c where c.series=p_series),0),
  coalesce((select max(left(n,length(n)-2)::integer) from (
  select arhittek_security.legacy_project_number(p.name) n from public.projects p
  where arhittek_security.project_number_series(p.category_id)=p_series) q
- where right(n,2)=right(p_year::text,2) and length(n)>2),0));
+ where 2000+right(n,2)::integer<=p_year and length(n)>2),0));
 $$;
 create or replace function arhittek_security.assign_project_number()
 returns trigger language plpgsql security definer set search_path='' as $$
@@ -70,7 +70,8 @@ begin
  y:=extract(year from statement_timestamp() at time zone 'Europe/Moscow')::integer;
  title:=btrim(regexp_replace(new.name,'^\s*(?:проект\s*(?:(?:АР|АПР|ДИ|ЛД|ПР)\s*)*№?\s*|№\s*)[0-9]{3,8}(?![0-9])\s*','', 'i'));
  if coalesce(title,'')='' then raise exception 'Введите название проекта' using errcode='23514';end if;
- -- The upsert locks one direction/year counter; concurrent creators get distinct numbers.
+ -- Serialize allocations across the year boundary, then read the committed high-water mark.
+ perform pg_advisory_xact_lock(hashtextextended('arhittek.project-numbering',0));
  insert into arhittek_security.project_number_counters as c(series,year,last_sequence)
  values(s,y,arhittek_security.project_number_highwater(s,y)+1)
  on conflict(series,year) do update set last_sequence=greatest(c.last_sequence+1,excluded.last_sequence)

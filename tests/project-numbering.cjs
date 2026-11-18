@@ -39,6 +39,6 @@ const root=path.resolve(__dirname,'..'),U=n=>'00000000-0000-4000-8000-'+String(n
  await check('Removed projects never free their numbers',async()=>{await as('owner','delete from projects where id=$1',[first.id]);const p=await insert();assert.equal(p.number_sequence,177);});
  await check('Several queued inserts obtain distinct consecutive identities',async()=>{const rows=await Promise.all([insert(),insert(),insert()]);assert.deepEqual(rows.map(p=>p.number_sequence),[178,179,180]);});
  await check('Construction objects keep their existing naming workflow',async()=>{const p=await insert('owner',13,'Ремонт квартиры');assert.equal(p.name,'Ремонт квартиры');assert.equal(p.number_series,null);});
- await check('A new calendar year has its own counter',async()=>{assert.equal((await db.query('select arhittek_security.project_number_highwater($1,$2) n',['architecture',year+1])).rows[0].n,0);});
+ await check('A new calendar year continues the same direction sequence',async()=>{assert.equal((await db.query('select arhittek_security.project_number_highwater($1,$2) n',['architecture',year+1])).rows[0].n,180);});
  console.log(JSON.stringify(out,null,2));await db.close();if(out.some(x=>!x.pass))process.exitCode=1;
 })().catch(e=>{console.error(e);process.exitCode=1;});
