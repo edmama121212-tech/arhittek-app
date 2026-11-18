@@ -1,4 +1,5 @@
 begin;
+set local lock_timeout = '5s';
 -- Existing names stay intact. Only newly created cards acquire a fixed identity.
 alter table public.projects add column if not exists number_series text;
 alter table public.projects add column if not exists number_year integer;
@@ -82,7 +83,7 @@ revoke all on function arhittek_security.assign_project_number() from public,ano
 drop trigger if exists arhittek_assign_project_number on public.projects;
 create trigger arhittek_assign_project_number before insert or update on public.projects for each row execute function arhittek_security.assign_project_number();
 
-create or replace function public.get_next_project_numbers()
+create or replace function arhittek_security.get_next_project_numbers()
 returns jsonb language plpgsql stable security definer set search_path='' as $$
 declare a record; y integer:=extract(year from statement_timestamp() at time zone 'Europe/Moscow')::integer;
 begin
@@ -96,6 +97,13 @@ begin
  cross join lateral (select arhittek_security.project_number_highwater(s.series,y)+1 seq)n
  where c.deleted_at is null and s.series is not null);
 end $$;
+revoke all on function arhittek_security.get_next_project_numbers() from public;
+grant execute on function arhittek_security.get_next_project_numbers() to anon,authenticated;
+
+create or replace function public.get_next_project_numbers()
+returns jsonb language sql stable security invoker set search_path='' as $$
+ select arhittek_security.get_next_project_numbers();
+$$;
 revoke all on function public.get_next_project_numbers() from public;
 grant execute on function public.get_next_project_numbers() to anon,authenticated;
 revoke all on function arhittek_security.project_number_series(uuid),arhittek_security.project_number_prefix(text,integer,integer),arhittek_security.legacy_project_number(text),arhittek_security.project_number_highwater(text,integer) from public,anon,authenticated;

@@ -5079,9 +5079,9 @@ function openProjectSheet(id){
     document.getElementById('pf-m2-payouts-list').innerHTML = '<div class="empty-state" style="padding:10px;">Сохраните проект, чтобы начислять исполнителям</div>';
     updateCompanyRemainderField(null);
     document.getElementById('pf-feepaid').value = '';
-    document.getElementById('pf-feepercent').value = isConstructionCategory(firstCat?.id)?15:(firstCat?.fee_percent ?? '');
+    document.getElementById('pf-feepercent').value = '';
     document.getElementById('pf-feebase').value = '';
-    const compMethod0 = document.getElementById('pf-compensation-method'); if(compMethod0) compMethod0.value = firstCat?.fee_base === 'm2' ? 'm2' : (firstCat?.fee_base === 'profit' ? 'percent_profit' : 'percent_price');
+    const compMethod0 = document.getElementById('pf-compensation-method'); if(compMethod0) compMethod0.value = 'percent_price';
     document.getElementById('pf-co-feepercent').value = '';
     document.getElementById('pf-co-feepaid').value = '';
     document.getElementById('pf-start').value = '';
