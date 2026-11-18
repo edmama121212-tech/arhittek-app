@@ -106,8 +106,7 @@
       "src/app/data-access.js"
     ],
     "premium.css": [
-      "src/app/premium.css",
-      "src/app/styles/graphite.css"
+      "src/app/premium.css"
     ],
     "sw.js": [
       "src/app/sw.js"
@@ -179,8 +178,7 @@
       "src/features/client-portal/client-portal-gateway.js"
     ],
     "client-portal.css": [
-      "src/features/client-portal/client-portal.css",
-      "src/app/styles/graphite.css"
+      "src/features/client-portal/client-portal.css"
     ],
     "client-portal.html": [
       "src/features/client-portal/client-portal.html"
@@ -189,8 +187,7 @@
       "src/features/client-portal/client-portal.js"
     ],
     "client.css": [
-      "src/features/client-portal/client.css",
-      "src/app/styles/graphite.css"
+      "src/features/client-portal/client.css"
     ],
     "contract-customer.js": [
       "src/features/documents/contract-customer.js"

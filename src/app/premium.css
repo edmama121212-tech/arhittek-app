@@ -284,24 +284,7 @@ html{background:var(--bg)!important}body{max-width:none!important;margin:0!impor
 .studio-money-grid article:nth-child(3){background:#d5dfcb}
 .studio-money-grid button{background:#e9e7e3;cursor:pointer}
 .studio-money-grid strong{font-size:clamp(17px,4.5vw,32px);line-height:1.15;overflow-wrap:anywhere}
-
-/* Project studio */
-body:has(#view-projects.active){background:#141517}
-body:has(#view-projects.active) :is(header,.bottom-nav){background:#191b1e;color:#eff2f5;border-color:#37393e}
-body:has(#view-projects.active) .nav-btn{color:#bfc5cd}
-body:has(#view-projects.active) .nav-btn.active{background:#183d63;color:#bde2ff}
-body:has(#view-projects.active) #addProjectFab{background:#167bd6;color:white}
-#view-projects{--text:#f4f5f7;--text-dim:#b9c0ca;--line:#393b40;--blue:#70b7ff;--card:#1a1c1f;--card-bg:#1a1c1f;--text-muted:#b9c0ca;color:var(--text);font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums}
-#view-projects .workspace-head{position:relative;isolation:isolate;min-height:146px;margin-bottom:12px;overflow:hidden}
-#view-projects .workspace-head::after{content:"";position:absolute;z-index:-1;inset:0 0 0 46%;background:url("assets/studio-house.webp") right center/contain no-repeat;mix-blend-mode:lighten}
-#view-projects .workspace-head h1{font-size:clamp(30px,7vw,48px);font-weight:650;color:#fff}
-#view-projects .workspace-eyebrow{color:#dae1e9;letter-spacing:.24em}
-#view-projects .project-filter-grid{margin:10px 0}
-#view-projects .project-filter-grid label,#view-projects .search-box,#view-projects #projectSearch{background:#25272a;color:#edf1f5;border-color:#44474b;color-scheme:dark}
-#view-projects .project-filter-grid .chosen{background:#173754;border-color:#448fc8}
-#view-projects .project-filter-grid select{color:#fff}
-#view-projects #projectsCard{background:transparent;border:0;padding:0}
-#view-projects .proj-row{background:transparent!important;border-bottom:1px solid #3c3f44;padding:14px 4px}
-#view-projects .proj-name,#view-projects .proj-sum{font-family:inherit;color:#f4f5f7;font-weight:600}
-#view-projects .proj-meta{color:#b9c0ca}
-#view-projects .status-chip[data-status="В процессе"]{background:#163851;color:#9ed7ff}
+.project-filter-grid label.chosen{background:#edf4ff;border-color:#8ab5ec}
+.project-next-numbers summary{cursor:pointer;font-size:12px;color:var(--text-dim)}
+.project-next-numbers details[open] summary{margin-bottom:10px}
+#view-projects .workspace-eyebrow{display:none}
