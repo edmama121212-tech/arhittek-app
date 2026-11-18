@@ -43,7 +43,8 @@ function renderNextProjectNumbers(){
     '<div class="project-number-grid">'+['architecture','interior','landscape'].map(series=>{
       const row=nextProjectNumbers.find(n=>n.series===series);if(!row)return '';
       const label={architecture:'Архитектура',interior:'Дизайн интерьера',landscape:'Ландшафт'}[series];
-      return `<div><span>${label}</span><strong>${escapeHtml(row.prefix)}</strong></div>`;
+      const number=row.prefix.slice(row.prefix.indexOf('№'));
+      return `<div><span>${label}</span><strong>${escapeHtml(number)}</strong></div>`;
     }).join('')+'</div><p>Номер закрепляется при сохранении проекта.</p>':
     '<p>Номера не загружены. <button type="button" class="project-number-retry" onclick="refreshProjectNumbers()">Обновить</button></p>');
 }
