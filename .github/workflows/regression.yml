@@ -32,6 +32,9 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
+      - name: Check atomic project numbering and direction selection
+        run: node tests/project-numbering.cjs && node tests/project-numbering-ui.cjs
+
       - name: Check owner-only database permissions and employee ranks
         run: timeout 90s node tests/owner-access.cjs
 
@@ -99,5 +102,5 @@ jobs:
         env:
           CATALOG_BROWSER: webkit
           CATALOG_NO_STREAM_ITERATOR: '1'
-        run: node tests/brief-media-ui.cjs && timeout 180s npm run test:catalog:pdf && timeout 90s node tests/finance-workspace-ui.cjs && TEST_BROWSER=webkit timeout 90s node tests/employee-salary-history-ui.cjs
+        run: TEST_BROWSER=webkit node tests/project-numbering-ui.cjs && node tests/brief-media-ui.cjs && timeout 180s npm run test:catalog:pdf && timeout 90s node tests/finance-workspace-ui.cjs && TEST_BROWSER=webkit timeout 90s node tests/employee-salary-history-ui.cjs
 

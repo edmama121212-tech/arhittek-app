@@ -20,6 +20,8 @@ function canAccessView(id){
   return false;
 }
 function clearPrivateState(){
+  resetProjectNumberDraft();
+  clearProjectNumbers();
   if(typeof catalogPreparedPdf!=='undefined')catalogPreparedPdf=null;
   const catalogPdfButton=document.getElementById('cardViewerPdfBtn');if(catalogPdfButton)catalogPdfButton.style.display='none';
   window.ARHITTEKBriefMedia?.clear();

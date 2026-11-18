@@ -45,6 +45,7 @@
       "src/features/overview/departments.js",
       "src/features/finance/overview-periods.js",
       "src/features/finance/profit-loss.js",
+      "src/features/projects/numbering.js",
       "src/features/projects/list.js",
       "src/features/projects/editor.js",
       "src/features/finance/project-balance.js",
