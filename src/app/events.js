@@ -12,7 +12,11 @@ document.getElementById('addProjectFab').addEventListener('click', ()=>{
       const nm = (c.name||'').toLowerCase();
       return nm.includes('строительств') || nm.includes('ремонт') || nm.includes('монтаж');
     });
-    if(constrCat) document.getElementById('pf-category').value = constrCat.id;
+    if(constrCat){
+      const category=document.getElementById('pf-category');
+      category.value=constrCat.id;
+      category.dispatchEvent(new Event('change',{bubbles:true}));
+    }
   }
 });
 

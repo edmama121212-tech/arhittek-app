@@ -1,10 +1,11 @@
 // Project identity is allocated by PostgreSQL, never from a filtered client list.
 let nextProjectNumbers=null,projectNumbersActor=null,projectNumbersRequest=null,projectNumbersGeneration=0;
-let projectNumberDraftVersion=0,projectCreateDraftId=null;
+let projectNumberDraftVersion=0,projectCreateDraftId=null,displayedProjectNumber=null;
 
 function resetProjectNumberDraft(){
   projectNumberDraftVersion++;
   projectCreateDraftId=null;
+  displayedProjectNumber=null;
 }
 function projectNumberSeries(categoryId){
   const name=String(findCategory(categoryId)?.name||'').toLowerCase();
@@ -21,7 +22,7 @@ function projectOrdinal(p){
 }
 function compareProjectNumbers(a,b){
   const x=projectOrdinal(a),y=projectOrdinal(b);
-  if(x&&y)return y.year-x.year||y.sequence-x.sequence||String(b.created_at||'').localeCompare(String(a.created_at||''))||String(a.id).localeCompare(String(b.id));
+  if(x&&y)return y.sequence-x.sequence||y.year-x.year||String(b.created_at||'').localeCompare(String(a.created_at||''))||String(a.id).localeCompare(String(b.id));
   if(x||y)return x?-1:1;
   return String(b.created_at||'').localeCompare(String(a.created_at||''))||String(a.name||'').localeCompare(String(b.name||''),'ru')||String(a.id).localeCompare(String(b.id));
 }
@@ -32,6 +33,7 @@ function canCreateProjectCard(){
  return !!(employee&&employee.active!==false&&!employee.deleted_at&&canSeeProjects()&&['ведущий дизайнер','ведущий архитектор'].includes(String(employee.role||'').trim().toLowerCase()));
 }
 function clearProjectNumbers(){
+  displayedProjectNumber=null;
   nextProjectNumbers=null;projectNumbersActor=null;projectNumbersRequest=null;projectNumbersGeneration++;
   const bar=document.getElementById('nextProjectNumbers');if(bar){bar.hidden=true;bar.replaceChildren();}
   const prefix=document.getElementById('pf-number-prefix');if(prefix)prefix.textContent='';
@@ -39,14 +41,34 @@ function clearProjectNumbers(){
 function renderNextProjectNumbers(){
   const bar=document.getElementById('nextProjectNumbers');if(!bar)return;
   bar.hidden=!canCreateProjectCard();if(bar.hidden){bar.replaceChildren();return;}
-  bar.innerHTML='<div class="project-number-heading">Следующие номера проектов</div>'+(nextProjectNumbers?
-    '<div class="project-number-grid">'+['architecture','interior','landscape'].map(series=>{
-      const row=nextProjectNumbers.find(n=>n.series===series);if(!row)return '';
-      const label={architecture:'Архитектура',interior:'Дизайн интерьера',landscape:'Ландшафт'}[series];
-      return `<div><span>${label}</span><strong>${escapeHtml(row.prefix)}</strong></div>`;
-    }).join('')+'</div><p>Номер закрепляется при сохранении проекта.</p>':
-    '<p>Номера не загружены. <button type="button" class="project-number-retry" onclick="refreshProjectNumbers()">Обновить</button></p>');
+  const heading='<div class="project-number-heading">Следующие номера проектов</div>';
+  if(!nextProjectNumbers){
+    bar.innerHTML=heading+(projectNumbersRequest?'<p>Загружаем номера…</p>':'<p>Не удалось загрузить номера. <button type="button" class="project-number-retry" onclick="refreshProjectNumbers()">Обновить</button></p>');
+    return;
+  }
+  const labels={architecture:'Архитектура',interior:'Дизайн интерьера',landscape:'Ландшафт'};
+  const items=Object.entries(labels).map(([series,label])=>{
+    const row=nextProjectNumbers.find(number=>number.series===series);
+    if(!row)return '';
+    const prefix=escapeHtml(row.prefix);
+    return `<div><span>${label}</span><button type="button" class="project-number-copy" aria-label="Скопировать ${prefix}">${prefix}</button></div>`;
+  });
+  bar.innerHTML=heading+'<div class="project-number-grid">'+items.join('')+'</div><p>Нажмите на номер, чтобы скопировать. Номер закрепляется при сохранении проекта.</p>';
 }
+document.getElementById('nextProjectNumbers').addEventListener('click',async event=>{
+  const button=event.target.closest('.project-number-copy');
+  if(!button)return;
+  try{
+    await navigator.clipboard.writeText(button.textContent);
+    showToast('Скопировано: '+button.textContent);
+  }catch{
+    const range=document.createRange(),selection=window.getSelection();
+    range.selectNodeContents(button);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    showToast('Номер выделен. Выберите «Скопировать».');
+  }
+});
 async function refreshProjectNumbers(){
   if(!canCreateProjectCard()){clearProjectNumbers();return false;}
   const actor=session.token;
@@ -72,7 +94,10 @@ function renderProjectNumberField(){
   const input=document.getElementById('pf-name'),label=document.getElementById('pf-name-label'),prefix=document.getElementById('pf-number-prefix'),hint=document.getElementById('pf-number-hint'),category=document.getElementById('pf-category');
   if(!input||!prefix)return;
   const saved=state.projects.find(p=>p.id===editingProjectId),series=projectNumberSeries(category.value);
-  const fixed=saved?projectNumberPrefix(saved):nextProjectNumbers?.find(n=>n.category_id===category.value)?.prefix;
+  if(saved||!series||displayedProjectNumber?.category_id!==category.value){
+    displayedProjectNumber=saved||!series?null:nextProjectNumbers?.find(n=>n.category_id===category.value)||null;
+  }
+  const fixed=saved?projectNumberPrefix(saved):displayedProjectNumber?.prefix;
   prefix.hidden=!!saved&&!saved.number_series||(!saved&&!series);
   prefix.textContent=prefix.hidden?'':fixed||(projectNumbersRequest?'Загружаем номер…':'');
   hint.hidden=!!saved||!series;
@@ -120,14 +145,33 @@ async function createProjectDraft(payload){
     const existing=await readExisting();
     if(existing)return existing;
   }
+  const quote=displayedProjectNumber;
+  const insert={...payload,id};
+  if(quote&&quote.category_id===payload.category_id){
+    insert.project_title=payload.name;
+    insert.number_year=quote.year;
+    insert.number_sequence=quote.sequence;
+  }
   let result;
   try{
-    result=await sb.from('projects').insert({...payload,id}).select().single();
+    result=await sb.from('projects').insert(insert).select().single();
   }catch(error){
     result={error};
   }
   checkDraft();
   if(!result.error&&result.data?.id===id)return result.data;
+  if(result.error?.code==='PT409'&&result.error.message==='project_number_changed'){
+    // The transaction did not create a card. Keep the name and show the current number.
+    displayedProjectNumber=null;
+    nextProjectNumbers=null;
+    projectNumbersRequest=null;
+    await refreshProjectNumbers();
+    checkDraft();
+    const prefix=displayedProjectNumber?.prefix;
+    const error=new Error(prefix?'Номер изменился. Теперь '+prefix+'. Проверьте номер папки и сохраните ещё раз.':'Номер изменился. Обновите номера и повторите сохранение.');
+    error.code='PROJECT_NUMBER_CHANGED';
+    throw error;
+  }
 
   const existing=await readExisting();
   if(existing)return existing;

@@ -461,7 +461,8 @@ async function saveProject(){
     await loadAll();
   }catch(e){
     console.error(e);
-    showToast(mainRecordSaved?'Основные данные сохранены. Проверьте команду и повторите сохранение.':'Ошибка сохранения проекта. Данные формы сохранены — повторите попытку.');
+    if(e.code==='PROJECT_NUMBER_CHANGED')showToast(e.message);
+    else showToast(mainRecordSaved?'Основные данные сохранены. Проверьте команду и повторите сохранение.':'Ошибка сохранения проекта. Данные формы сохранены — повторите попытку.');
   }finally{projectSaveInFlight=false;}
 }
 

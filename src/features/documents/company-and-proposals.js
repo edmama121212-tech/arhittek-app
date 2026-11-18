@@ -773,6 +773,7 @@ document.querySelectorAll('.nav-btn').forEach(btn=>{
     }
     // В Готовые проекты — загружаем карточки
     if(btn.dataset.view === 'view-cards') loadCards();
+    if(btn.dataset.view === 'view-projects') void refreshProjectNumbers();
     // В Финансы — рендерим зарплаты и P&L (раньше это делал отдельный openFinanceBtn)
     if(btn.dataset.view === 'view-finance'){
       // Paint the selected page before synchronous financial calculations.

@@ -237,7 +237,11 @@ async function saveBasicProjectCard(){
    if(sameDraft()){editingProjectId=data.id;editingProjectLoadedAt=data.updated_at;closeProjectSheet();}
    const refreshed=await loadAll();
    showToast(state.projectMembersDataError?'Проект создан. Состав команды не обновлён — повторите обновление.':refreshed===false||state.financialDataReady===false?'Проект создан. Не удалось обновить список — повторите обновление.':'Проект добавлен');
- }catch(error){console.error(error);showToast(accepted?'Проект создан. Не удалось обновить список — повторите обновление.':'Ошибка сохранения проекта. Данные формы сохранены — повторите попытку.');}
+ }catch(error){
+   console.error(error);
+   if(error.code==='PROJECT_NUMBER_CHANGED')showToast(error.message);
+   else showToast(accepted?'Проект создан. Не удалось обновить список — повторите обновление.':'Ошибка сохранения проекта. Данные формы сохранены — повторите попытку.');
+ }
  finally{basicProjectSaveInFlight=false;$('pf-save').disabled=false;}
 }
 const oldSave=saveProject;saveProject=async function(){

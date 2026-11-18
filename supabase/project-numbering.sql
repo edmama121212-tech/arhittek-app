@@ -34,15 +34,23 @@ $$;
 create or replace function arhittek_security.project_number_highwater(p_series text,p_year integer)
 returns integer language sql stable security definer set search_path='' as $$
  select greatest(
- coalesce((select c.last_sequence from arhittek_security.project_number_counters c where c.series=p_series and c.year=p_year),0),
+ coalesce((select max(c.last_sequence) from arhittek_security.project_number_counters c where c.series=p_series),0),
  coalesce((select max(left(n,length(n)-2)::integer) from (
  select arhittek_security.legacy_project_number(p.name) n from public.projects p
  where arhittek_security.project_number_series(p.category_id)=p_series) q
- where right(n,2)=right(p_year::text,2) and length(n)>2),0));
+ where length(n)>2 and 2000+right(n,2)::integer<=p_year),0));
 $$;
 create or replace function arhittek_security.assign_project_number()
 returns trigger language plpgsql security definer set search_path='' as $$
-declare s text; y integer; n integer; title text; prefix text;
+declare
+ s text;
+ y integer;
+ n integer;
+ title text;
+ prefix text;
+ expected_sequence integer;
+ expected_year integer;
+ enforce_preview boolean;
 begin
  if tg_op='UPDATE' then
   if new.number_series is distinct from old.number_series or new.number_year is distinct from old.number_year or new.number_sequence is distinct from old.number_sequence then
@@ -64,17 +72,28 @@ begin
   return new;
  end if;
  s:=arhittek_security.project_number_series(new.category_id);
- -- Never trust caller-supplied identity, including requests from old application versions.
+ -- A modern form submits its displayed number as a precondition, plus the separate title.
+ -- Old clients may send the whole historical label in name.
+ title:=new.project_title;
+ enforce_preview:=title is not null;
+ expected_sequence:=new.number_sequence;
+ expected_year:=new.number_year;
+ -- Only the server allocates the identity.
  new.number_series:=null;new.number_year:=null;new.number_sequence:=null;new.project_title:=null;
  if s is null then return new;end if;
  y:=extract(year from statement_timestamp() at time zone 'Europe/Moscow')::integer;
- title:=btrim(regexp_replace(new.name,'^\s*(?:проект\s*(?:(?:АР|АПР|ДИ|ЛД|ПР)\s*)*№?\s*|№\s*)[0-9]{3,8}(?![0-9])\s*','', 'i'));
+ title:=btrim(coalesce(title,regexp_replace(new.name,'^\s*(?:проект\s*(?:(?:АР|АПР|ДИ|ЛД|ПР)\s*)*№?\s*|№\s*)[0-9]{3,8}(?![0-9])\s*','', 'i')));
  if coalesce(title,'')='' then raise exception 'Введите название проекта' using errcode='23514';end if;
- -- The upsert locks one direction/year counter; concurrent creators get distinct numbers.
+ -- One lock per direction also serializes saves on opposite sides of Moscow midnight.
+ -- Year is a label. The next ordinal follows this direction's history across years.
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('arhittek.project-number.'||s,0));
  insert into arhittek_security.project_number_counters as c(series,year,last_sequence)
  values(s,y,arhittek_security.project_number_highwater(s,y)+1)
  on conflict(series,year) do update set last_sequence=greatest(c.last_sequence+1,excluded.last_sequence)
  returning last_sequence into n;
+ if enforce_preview and (expected_sequence is distinct from n or expected_year is distinct from y) then
+  raise exception using errcode='PT409', message='project_number_changed';
+ end if;
  new.number_series:=s;new.number_year:=y;new.number_sequence:=n;new.project_title:=title;
  new.name:=arhittek_security.project_number_prefix(s,n,y)||' '||title;
  return new;
