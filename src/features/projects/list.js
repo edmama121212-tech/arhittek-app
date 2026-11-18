@@ -11,34 +11,29 @@ function renderCategoryFilters(){
     if(nm.includes('строительств') || nm.includes('ремонт') || nm.includes('монтаж')) return false;
     return true;
   });
-  let html = `<div class="filter-chip ${activeCategoryFilter==='all'?'active':''}" data-cat="all">Все категории</div>`;
-  cats.forEach(c=>{
-    html += `<div class="filter-chip ${activeCategoryFilter===c.id?'active':''}" data-cat="${c.id}">${escapeHtml(c.name)}</div>`;
-  });
-  el.innerHTML = html;
-  el.querySelectorAll('.filter-chip').forEach(chip=>{
-    chip.addEventListener('click', ()=>{
-      activeCategoryFilter = chip.dataset.cat;
-      renderCategoryFilters();
-      renderProjects();
-    });
-  });
+  projectFilter(el,'Направление',cats,activeCategoryFilter,value=>{activeCategoryFilter=value;});
+}
+
+function projectFilter(el,label,choices,current,apply){
+  const wrap=document.createElement('label');
+  const title=document.createElement('span');
+  title.textContent=label;
+  const select=document.createElement('select');
+  select.add(new Option('Все','all'));
+  choices.forEach(item=>select.add(new Option(item.name,item.id)));
+  select.value=current;
+  wrap.classList.toggle('chosen',current!=='all');
+  select.onchange=()=>{
+    apply(select.value);
+    wrap.classList.toggle('chosen',select.value!=='all');
+    renderProjects();
+  };
+  wrap.append(title,select);
+  el.replaceChildren(wrap);
 }
 
 function renderStatusFilters(){
-  const el = document.getElementById('statusFilters');
-  let html = `<div class="filter-chip ${activeStatusFilter==='all'?'active':''}" data-st="all">Любой статус</div>`;
-  state.statuses.forEach(s=>{
-    html += `<div class="filter-chip ${activeStatusFilter===s.id?'active':''}" data-st="${s.id}">${escapeHtml(s.name)}</div>`;
-  });
-  el.innerHTML = html;
-  el.querySelectorAll('.filter-chip').forEach(chip=>{
-    chip.addEventListener('click', ()=>{
-      activeStatusFilter = chip.dataset.st;
-      renderStatusFilters();
-      renderProjects();
-    });
-  });
+  projectFilter(document.getElementById('statusFilters'),'Статус',state.statuses,activeStatusFilter,value=>{activeStatusFilter=value;});
 }
 
 function renderPaymentFilters(){
@@ -55,19 +50,8 @@ function renderEmployeeFilters(){
     el.innerHTML = '';
     return;
   }
-  let html = `<div class="filter-chip ${activeEmployeeFilter==='all'?'active':''}" data-emp="all">Все исполнители</div>`;
-  html += `<div class="filter-chip ${activeEmployeeFilter==='none'?'active':''}" data-emp="none">Без исполнителя</div>`;
-  state.employees.filter(e=>e.active!==false).forEach(e=>{
-    html += `<div class="filter-chip ${activeEmployeeFilter===e.id?'active':''}" data-emp="${e.id}">${escapeHtml(e.name)}</div>`;
-  });
-  el.innerHTML = html;
-  el.querySelectorAll('.filter-chip').forEach(chip=>{
-    chip.addEventListener('click', ()=>{
-      activeEmployeeFilter = chip.dataset.emp;
-      renderEmployeeFilters();
-      renderProjects();
-    });
-  });
+  const choices=[{id:'none',name:'Без исполнителя'},...state.employees.filter(e=>e.active!==false)];
+  projectFilter(el,'Исполнитель',choices,activeEmployeeFilter,value=>{activeEmployeeFilter=value;});
 }
 
 function paymentBadgeColor(status){

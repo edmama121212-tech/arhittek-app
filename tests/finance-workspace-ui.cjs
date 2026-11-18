@@ -50,6 +50,8 @@ try{
  await page.locator('#financeWorkspace [data-fw-tab="overview"]').click();
  await cmd('activate',activatePayload,201,0);await page.evaluate(()=>loadAll());
  eq(await page.locator('#financeWorkspace h1').textContent(),'Финансы');eq(await page.evaluate(()=>ARHITTEKFinanceWorkspace.enabled()),true);
+ eq(await page.locator('.studio-money-grid article span').allTextContents(),['Всего денег','Расходы за месяц','Ожидаем до конца месяца']);
+ await page.locator('[data-fw-tab="more"]').click();
  eq(await page.locator('#financeWorkspace .fw-grid small').allTextContents(),['Выручка','Расход','Чистый доход','Прогноз']);
  const cashCases=await page.evaluate(()=>{
   const original={...state},day=financeToday();
@@ -96,6 +98,7 @@ try{
  await db.query("insert into public.ledger_entries(id,project_id,type,amount,entry_date,description) values($1,$2,'advance',50000,$3,'Forgotten customer payment')",[U(901),U(10),receiptDay]);
  await page.evaluate(async()=>{__db.ledger_entries=await __receiptRows();await loadAll();});
  const receiptCash=(await snapshot()).workspace.cash;
+ await page.locator('[data-fw-tab="more"]').click();
  await page.locator('#financeWorkspace [data-fw-tab="history"]').click();
  await page.locator('#financeWorkspace summary').filter({hasText:'Исправить дату или учёт оплаты клиента'}).click();
  await page.locator('[data-fw="correct-receipt"][data-id="'+U(901)+'"]').click();

@@ -82,10 +82,20 @@ function render(){
  if(!state.financialDataReady||state.financialDataError){root.innerHTML=html+'<article class="fw-card">Остатки требуют обновления. Денежные действия временно недоступны.</article>';bind(root);return;}
  if(!s.active&&zero&&['overview','forecast'].includes(tab)){root.innerHTML=html+'<article class="fw-card"><h2>Начальные остатки — 0 ₽</h2><p>Учёт включится автоматически с '+esc(fmtDate(s.start_date))+' по московскому времени. Поступления и расходы до этой даты останутся в прежнем периоде. Можно заранее внести будущие платежи и регулярные расходы.</p></article>';bind(root);return;}
  if(!s.active&&['overview','forecast'].includes(tab)){root.innerHTML=html+'<article class="fw-card">Точные остатки и прогноз появятся после начальной сверки. Графики будущих платежей уже можно подготовить во вкладках «Платежи и долги» и «Регулярные».</article>';bind(root);return;}
- if(tab==='overview'||tab==='forecast'){
+ if(tab==='overview'){
+  const month=s.as_of.slice(0,7);
+  const expected=s.items.filter(item=>item.direction==='income'&&item.due_date?.startsWith(month))
+    .reduce((sum,item)=>sum+Math.round(number(item.remaining)*100),0)/100;
+  const tile=(label,value)=>'<article><span>'+esc(label)+'</span><strong>'+money(value)+'</strong></article>';
+  root.innerHTML='<h1>Финансы</h1>'+(pending()?'<div class="fw-warning">Операция ожидает подтверждения '+btn('Проверить','retry')+'</div>':'')+
+    '<div class="studio-money-grid">'+tile('Всего денег',s.cash)+tile('Расходы за месяц',managementSummary(state,s).expense)+
+    tile('Ожидаем до конца месяца',expected)+'<button type="button" data-fw-tab="more"><b>···</b>Ещё</button></div>';
+  bind(root);return;
+ }
+ if(tab==='more'||tab==='forecast'){
   const m=managementSummary(state,s);
   const kpi=(label,value,note)=>'<article class="fw-card"><small>'+label+'</small><strong class="fw-amount">'+money(value)+'</strong><p>'+note+'</p></article>';
-  if(tab==='overview'){
+  if(tab==='more'){
    const period=esc(fmtDate(m.from))+' — '+esc(fmtDate(s.as_of));
    html+='<div class="fw-grid">'+kpi('Выручка',m.revenue,'Получено за '+period+', за вычетом возвратов.')+kpi('Расход',m.expense,'Фактические оплаты компании и проектного отдела за тот же период.')+kpi('Чистый доход',m.net,'Выручка минус расход за период.')+kpi('Прогноз',m.forecast,'Остатки оплат по договорам минус предстоящие расходы и гонорары по проектам.')+'</div>';
    html+='<div class="fw-actions">'+btn('Получил деньги','record-income','',locked)+btn('Оплатил расход','record-expense','',locked)+'</div>';
