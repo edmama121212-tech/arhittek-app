@@ -272,6 +272,7 @@ async function loadAllData(){
         if(lcData) state.categories.push(lcData);
       }catch(lcErr){ console.warn('Не удалось создать категорию «Ландшафтный дизайн» автоматически — возможно, нужно добавить вручную', lcErr); }
     }
+    void refreshProjectNumbers();
     state.ledger = led.data || [];
     state.photos = photos.data || [];
     state.invoices = invs.data || [];

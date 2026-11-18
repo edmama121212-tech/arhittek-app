@@ -41,7 +41,7 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
   __fail={table:'project_members',op:'insert'};await saveProject();__fail=null;return __db.project_members.map(m=>m.employee_id);
  },['visual']);
  await check('Retry after member failure does not duplicate a newly created project',async()=>{
-  closeProjectSheet();openProjectSheet(null);document.getElementById('pf-name').value='Retry project';currentProjectMembers=[{employee_id:'visual'}];
+  closeProjectSheet();openProjectSheet(null);document.getElementById('pf-category').value='design';document.getElementById('pf-category').dispatchEvent(new Event('change',{bubbles:true}));document.getElementById('pf-name').value='Retry project';currentProjectMembers=[{employee_id:'visual'}];
   __fail={table:'project_members',op:'insert'};await saveProject();__fail=null;await saveProject();return __db.projects.filter(p=>p.name==='Retry project').length;
  },1);
  await fresh();

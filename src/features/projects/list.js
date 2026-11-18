@@ -118,24 +118,8 @@ function renderProjects(){
     });
   }
 
-  // Сортировка: активные проекты — первыми (по ближайшей дате окончания),
-  // затем завершённые — по дате завершения (сначала недавно завершённые).
-  const doneStatusForSort = state.statuses.find(s=>s.name==='Завершён');
-  list = list.slice().sort((a,b)=>{
-    const aDone = doneStatusForSort && a.status_id === doneStatusForSort.id;
-    const bDone = doneStatusForSort && b.status_id === doneStatusForSort.id;
-    if(aDone !== bDone) return aDone ? 1 : -1; // активные выше завершённых
-    if(!aDone){
-      // среди активных — у кого раньше срок, тот выше; без срока — в конец
-      if(!a.end_date && !b.end_date) return 0;
-      if(!a.end_date) return 1;
-      if(!b.end_date) return -1;
-      return a.end_date.localeCompare(b.end_date);
-    }else{
-      // среди завершённых — недавно завершённые выше
-      return (b.end_date||'').localeCompare(a.end_date||'');
-    }
-  });
+  renderNextProjectNumbers();
+  list = list.slice().sort(compareProjectNumbers);
 
   const card = document.getElementById('projectsCard');
   if(!list.length){
@@ -148,20 +132,7 @@ function renderProjects(){
     return;
   }
 
-  // Group projects without an assigned executor into a separate section
-  // (only when not already filtering by a specific employee)
-  if(activeEmployeeFilter === 'all'){
-    const withEmp = list.filter(p=>hasAnyAssignedEmployee(p));
-    const withoutEmp = list.filter(p=>!hasAnyAssignedEmployee(p));
-    let html = withEmp.map(renderProjectRow).join('');
-    if(withoutEmp.length){
-      html += `<div class="section-label" style="margin:14px 0 10px;"><span class="lbl-text">Без исполнителя</span><span class="section-label-line"></span></div>`;
-      html += withoutEmp.map(renderProjectRow).join('');
-    }
-    card.innerHTML = html || '<div class="empty-state">Нет проектов по этому фильтру</div>';
-  }else{
-    card.innerHTML = list.map(renderProjectRow).join('');
-  }
+  card.innerHTML = list.map(renderProjectRow).join('');
 }
 
 function renderProjectRow(p){

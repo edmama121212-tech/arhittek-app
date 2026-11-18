@@ -259,3 +259,17 @@ html{background:var(--bg)!important}body{max-width:none!important;margin:0!impor
 
 /* Journal buttons share the cash panel spacing without overflowing phones. */
 .cash-panel [data-journal]{width:auto;max-width:calc(100% - 6px);white-space:normal;overflow-wrap:anywhere}
+
+/* Fixed project identity and independent direction counters. */
+.project-next-numbers{margin:0 0 16px;padding:14px 16px;border:1px solid var(--border);border-radius:16px;background:var(--card-bg,var(--bg-card,#fff));}
+.project-number-heading{font-size:12px;font-weight:600;margin-bottom:10px;color:var(--text-muted,#718096);}
+.project-number-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+.project-number-grid span{display:block;font-size:11px;color:var(--text-muted,#718096);margin-bottom:4px;}
+.project-number-copy{display:block;min-height:30px;padding:2px 0;background:none;border:0;color:var(--blue);font:inherit;font-size:14px;font-weight:650;text-align:left;cursor:pointer;overflow-wrap:anywhere;}
+.project-number-copy:focus-visible{outline:2px solid var(--blue);outline-offset:3px;border-radius:4px;}
+.project-number-copy:hover{text-decoration:underline;}
+.project-next-numbers p{font-size:11px;color:var(--text-muted,#718096);margin:10px 0 0;}
+.project-number-prefix{padding:12px 14px;margin:0 0 8px;border:1px solid var(--border);background:var(--blue-soft,rgba(0,113,235,.06));border-radius:12px;font-size:17px;font-weight:650;}
+.project-number-prefix[hidden],.project-next-numbers[hidden]{display:none;}
+.project-number-retry{border:0;background:none;color:var(--blue);font:inherit;text-decoration:underline;cursor:pointer;}
+@media(max-width:420px){.project-number-grid{grid-template-columns:1fr;gap:9px;}.project-number-grid>div{display:flex;align-items:baseline;justify-content:space-between;gap:12px;}.project-number-grid span{margin:0;}}

@@ -4,7 +4,7 @@
 function populateProjectFormSelects(){
   const catSel = document.getElementById('pf-category');
   const prevCat = catSel.value;
-  catSel.innerHTML = state.categories.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+  catSel.innerHTML = '<option value="">Выберите направление</option>' + state.categories.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
   if(prevCat && state.categories.some(c=>c.id===prevCat)) catSel.value = prevCat;
 
   const stSel = document.getElementById('pf-status');
@@ -44,6 +44,7 @@ function populateProjectFormSelects(){
 // When category changes, auto-select its department (categories belong to one department)
 document.addEventListener('change', (e)=>{
   if(e.target && e.target.id === 'pf-category'){
+    renderProjectNumberField();
     const cat = findCategory(e.target.value);
     if(cat && cat.department_id){
       document.getElementById('pf-department').value = cat.department_id;
@@ -131,6 +132,7 @@ document.addEventListener('change', (e)=>{
 
 function openProjectSheet(id){
   if(id&&!isProjectMember(id)){showToast("Нет доступа к этому проекту");return;}
+  resetProjectNumberDraft();
   editingProjectId = id;
   projectMembersDraftUnverified=!!state.projectMembersDataError;
   const overlay = document.getElementById('projectSheetOverlay');
@@ -143,7 +145,8 @@ function openProjectSheet(id){
     editingProjectLoadedAt = p.updated_at || null;
     title.textContent = 'Редактировать проект';
     deleteBtn.style.display = '';
-    document.getElementById('pf-name').value = p.name || '';
+    document.getElementById('pf-name').value = p.number_series ? p.project_title || '' : p.name || '';
+    document.getElementById('pf-category').disabled = false;
     document.getElementById('pf-category').value = p.category_id || '';
     document.getElementById('pf-status').value = p.status_id || '';
     document.getElementById('pf-payment').value = p.payment_status || 'Ждём оплату';
@@ -230,11 +233,11 @@ function openProjectSheet(id){
     title.textContent = 'Новый проект';
     deleteBtn.style.display = 'none';
     document.getElementById('pf-name').value = '';
-    document.getElementById('pf-category').selectedIndex = 0;
+    document.getElementById('pf-category').disabled = false;
+    document.getElementById('pf-category').value = '';
     document.getElementById('pf-status').selectedIndex = 0;
     document.getElementById('pf-payment').value = 'Ждём оплату';
-    const firstCat = state.categories[0];
-    document.getElementById('pf-department').value = firstCat ? (firstCat.department_id || '') : '';
+    document.getElementById('pf-department').value = '';
     document.getElementById('pf-co-employee').value = '';
     currentProjectMembers = [];
     renderProjectMemberChips();
@@ -249,9 +252,9 @@ function openProjectSheet(id){
     document.getElementById('pf-m2-payouts-list').innerHTML = '<div class="empty-state" style="padding:10px;">Сохраните проект, чтобы начислять исполнителям</div>';
     updateCompanyRemainderField(null);
     document.getElementById('pf-feepaid').value = '';
-    document.getElementById('pf-feepercent').value = isConstructionCategory(firstCat?.id)?15:(firstCat?.fee_percent ?? '');
+    document.getElementById('pf-feepercent').value = '';
     document.getElementById('pf-feebase').value = '';
-    const compMethod0 = document.getElementById('pf-compensation-method'); if(compMethod0) compMethod0.value = firstCat?.fee_base === 'm2' ? 'm2' : (firstCat?.fee_base === 'profit' ? 'percent_profit' : 'percent_price');
+    const compMethod0 = document.getElementById('pf-compensation-method'); if(compMethod0) compMethod0.value = 'percent_price';
     document.getElementById('pf-co-feepercent').value = '';
     document.getElementById('pf-co-feepaid').value = '';
     document.getElementById('pf-start').value = '';
@@ -273,6 +276,8 @@ function openProjectSheet(id){
     if(histList0){ histList0.style.display = 'none'; histList0.innerHTML = '<div class="empty-state">Сохраните проект, чтобы вести историю</div>'; }
   }
 
+  renderProjectNumberField();
+  if(!id)void refreshProjectNumbers();
   overlay.classList.add('active');
   applyRole();
   bindCompensationUI();
@@ -281,7 +286,9 @@ function openProjectSheet(id){
 
 
 function closeProjectSheet(){
+  resetProjectNumberDraft();
   document.getElementById('projectSheetOverlay').classList.remove('active');
+  document.getElementById('pf-category').disabled=false;
   projectMembersDraftUnverified=false;
   editingProjectId = null;
   editingProjectLoadedAt = null;
@@ -291,6 +298,7 @@ let projectSaveInFlight=false;
 async function saveProject(){
   if(projectSaveInFlight) return;
   if(state.projectMembersDataError||projectMembersDraftUnverified){showToast('Состав команды не загружен. Обновите приложение перед сохранением проекта.');return;}
+  if(!await prepareProjectNumberSave()||projectSaveInFlight)return;
   const wantedMemberIds=[...new Set(currentProjectMembers.map(m=>m.employee_id).filter(Boolean))];
   const price = parseFloat(document.getElementById('pf-price').value) || 0;
   const advance = parseFloat(document.getElementById('pf-advance').value) || 0;
@@ -321,7 +329,7 @@ async function saveProject(){
   const directExpensesInput = parseFloat(document.getElementById('pf-expenses').value) || 0;
 
   const payload = {
-    name: document.getElementById('pf-name').value.trim(),
+    name: projectNameForSave(),
     category_id: categoryId,
     status_id: document.getElementById('pf-status').value || null,
     payment_status: document.getElementById('pf-payment').value || 'Ждём оплату',
@@ -361,7 +369,7 @@ async function saveProject(){
 
   if([payload.fee_percent,payload.co_fee_percent].some(v=>v!==null&&(!Number.isFinite(v)||v<0||v>100))||(Number(payload.fee_percent)||0)+(Number(payload.co_fee_percent)||0)>100){showToast('Сумма долей должна быть от 0 до 100%');return;}
   if(payload.area!==null&&(!Number.isFinite(payload.area)||payload.area<0)){showToast('Площадь не может быть отрицательной');return;}
-  if(!payload.name){
+  if(!document.getElementById('pf-name').value.trim()){
     showToast('Введите название проекта');
     return;
   }
@@ -393,12 +401,15 @@ async function saveProject(){
       }
       showToast('Проект обновлён');
     }else{
-      const {data, error} = await sb.from('projects').insert(payload).select().single();
-      if(error) throw error;
+      const data = await createProjectDraft(payload);
       savedProjectId = data.id;
-      editingProjectId=data.id;editingProjectLoadedAt=payload.updated_at;mainRecordSaved=true;
+      payload.name = data.name;
+      state.projects=[...(state.projects||[]).filter(p=>p.id!==data.id),{...payload,...data}];
+      editingProjectId=data.id;editingProjectLoadedAt=data.updated_at;mainRecordSaved=true;
+      renderProjectNumberField();
+      if(data.number_series)document.getElementById('pf-name').value=data.project_title;
       await logAudit('project', data.id, payload.name, 'create', {});
-      showToast('Проект добавлен');
+      showToast('Добавлен: '+data.name);
     }
     // Для строительного объекта баланс и расходы — производные значения.
     // Пересчитываем их только после успешного сохранения основной записи.
@@ -450,7 +461,8 @@ async function saveProject(){
     await loadAll();
   }catch(e){
     console.error(e);
-    showToast(mainRecordSaved?'Основные данные сохранены. Проверьте команду и повторите сохранение.':'Ошибка сохранения');
+    if(e.code==='PROJECT_NUMBER_CHANGED')showToast(e.message);
+    else showToast(mainRecordSaved?'Основные данные сохранены. Проверьте команду и повторите сохранение.':'Ошибка сохранения проекта. Данные формы сохранены — повторите попытку.');
   }finally{projectSaveInFlight=false;}
 }
 
