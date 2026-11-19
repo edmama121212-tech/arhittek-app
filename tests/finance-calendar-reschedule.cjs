@@ -21,6 +21,7 @@ const quote = value => '"' + String(value).replaceAll('"', '""') + '"';
 const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 
 (async () => {
+  const createRule = process.argv.includes('--create-rule');
   const recurring = process.argv.includes('--recurring');
   const homeActions = process.argv.includes('--home-actions');
   const cashFloor = process.argv.includes('--cash-floor');
@@ -61,14 +62,14 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
     ];
     const plan = (label, direction, due_date, amount) => ({label, direction, due_date, amount, funding:'reserve', certainty:'confirmed',reason:'Изолированное обязательство'});
     const idFor = i => i === 7 ? 'rule:'+uuid(27)+':'+month.slice(0,7) : uuid(20+i);
-    for (const [i,[,label,direction,from]] of (recurring || homeActions || cashFloor ? [] : cases).entries()) {
+    for (const [i,[,label,direction,from]] of (createRule || recurring || homeActions || cashFloor ? [] : cases).entries()) {
       if(i===7) await command('rule',{label,direction,amount:1007,due_day:10,start_month:month,certainty:'confirmed',reason:'Тестовое регулярное обязательство'},uuid(27));
       else await command('plan',plan(label,direction,from,1000+i),uuid(20+i));
     }
-    if(!recurring && !homeActions && !cashFloor) await command('plan',plan(cases[6][1],'expense',day,2000),uuid(50));
-    if(!recurring && !homeActions && !cashFloor) await command('pay',{key:idFor(5),amount:407.75,wallet_id:wallet,date:day,reason:'Часть суммы уже оплачена'},uuid(51));
+    if(!createRule && !recurring && !homeActions && !cashFloor) await command('plan',plan(cases[6][1],'expense',day,2000),uuid(50));
+    if(!createRule && !recurring && !homeActions && !cashFloor) await command('pay',{key:idFor(5),amount:407.75,wallet_id:wallet,date:day,reason:'Часть суммы уже оплачена'},uuid(51));
 
-    const ctx = await browser.newContext({locale:'ru-RU',viewport:{width:390,height:844},serviceWorkers:'block',reducedMotion:'reduce'});
+    const ctx = await browser.newContext({hasTouch:createRule,locale:'ru-RU',viewport:{width:390,height:844},serviceWorkers:'block',reducedMotion:'reduce'});
     await ctx.addInitScript({path:path.join(__dirname,'mock.js')});
     const servedHashes = {};
     await ctx.route('**/*',route=>{
@@ -111,6 +112,10 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
     const csv = [['Элемент','Сборка SHA256 index/finance-workspace','Дата UTC','Браузер','Задача','Данные','Шаги','Результат и связи','Открытие до 2 кадров, мс','Завершение до 2 кадров, мс','Визуальная проверка','Удобство','Статус']];
     if(qa) fs.mkdirSync(qa,{recursive:true});
     await page.locator('.nav-btn[data-view="view-finance"]').click();
+    if(createRule){
+      await require('./helpers/create-rule-ui.cjs')({page,fw,snap,day,shift,build,browser,expectedTile,twoFrames,errors});
+      return;
+    }
     if(cashFloor){
       await require('./helpers/cash-floor-ui.cjs')({page,fw,db,command,snap,day,wallet,uuid,build,browser,expectedTile,twoFrames,errors});
       return;

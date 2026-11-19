@@ -389,7 +389,17 @@ async function act(action,id){
   if(action==='replace-rule' && (!old || old.end_month))throw new Error('Выберите действующую версию регулярного платежа.');
   const baseMonth=action==='replace-rule' && old.start_month>s.as_of?old.start_month:s.as_of;
   const d=new Date(baseMonth.slice(0,7)+'-01T12:00:00Z');if(action==='replace-rule'||employee)d.setUTCMonth(d.getUTCMonth()+1);const month=[d.toISOString().slice(0,7),s.opening_mode==='zero'?String(s.start_date||'').slice(0,7):''].sort().at(-1);
-  form(action==='replace-rule'?'Изменить регулярный платёж':'Регулярный платёж',input('Название','label',employee?'Оклад · '+employee.name:old?.label||'')+select('Направление','direction',[['expense','Расход'],['income','Поступление']],old?.direction||'expense')+input('Сумма в месяц','amount',employee?.fixed_salary||old?.amount||'','number')+input('Первый месяц оплаты','start_month',month,'month')+input('До какого числа (1–28)','due_day',old?.due_day||10,'number')+'<p>Укажите месяц срока выплаты. Например, оклад за октябрь со сроком в ноябре начинается с ноября. Уже оплаченные суммы первого месяца не вносите повторно: проверьте исходный остаток обязательств.</p>',f=>({command:'rule',payload:{...f,amount:number(f.amount),due_day:number(f.due_day),start_month:f.start_month+'-01',certainty:'confirmed',...(action==='replace-rule'?{replace_id:id}:{}),employee_id:employee?.id||old?.employee_id||null,terms:{salary:employee?{employee_id:employee.id,amount:employee.fixed_salary,role:employee.role}:old?.terms||null,as_of:s.as_of}}}));
+  const ruleHelp=employee||old?.employee_id?'<p>Укажите месяц срока выплаты. Например, оклад за октябрь со сроком в ноябре начинается с ноября. Уже оплаченные суммы первого месяца не вносите повторно: проверьте исходный остаток обязательств.</p>':'<p>Платёж появится в календаре. Остаток в сейфе изменится после фактической оплаты.</p>';
+  form(action==='replace-rule'?'Изменить регулярный платёж':'Регулярный платёж',input('Название','label',employee?'Оклад · '+employee.name:old?.label||'')+select('Направление','direction',[['expense','Расход'],['income','Поступление']],old?.direction||'expense')+input('Сумма в месяц','amount',employee?.fixed_salary||old?.amount||'','number')+input('Первый месяц оплаты','start_month',month,'month')+input('До какого числа (1–28)','due_day',old?.due_day||10,'number')+ruleHelp,f=>({command:'rule',payload:{...f,amount:number(f.amount),due_day:number(f.due_day),start_month:f.start_month+'-01',certainty:'confirmed',...(action==='replace-rule'?{replace_id:id}:{}),employee_id:employee?.id||old?.employee_id||null,terms:{salary:employee?{employee_id:employee.id,amount:employee.fixed_salary,role:employee.role}:old?.terms||null,as_of:s.as_of}}}));
+  const ruleFields=modal.querySelector('form').elements;
+  ruleFields.label.required=true;
+  ruleFields.label.minLength=2;
+  ruleFields.amount.required=true;
+  ruleFields.start_month.required=true;
+  ruleFields.due_day.required=true;
+  ruleFields.due_day.min='1';
+  ruleFields.due_day.max='28';
+  ruleFields.due_day.step='1';
  }else if(action==='stop-rule')form('Остановить регулярный платёж','<p>Этот месяц остаётся в календаре. Новые месяцы создаваться не будут.</p>',f=>({command:'stop_rule',payload:{...f,id}}));
  else if(action==='link'){
   const source=s.unmatched.find(x=>x.id===id);
