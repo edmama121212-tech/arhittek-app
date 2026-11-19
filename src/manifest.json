@@ -103,7 +103,8 @@
       "src/app/app-refresh.js"
     ],
     "data-access.js": [
-      "src/app/data-access.js"
+      "src/app/data-access.js",
+      "src/features/documents/pdf-delivery.js"
     ],
     "premium.css": [
       "src/app/premium.css"

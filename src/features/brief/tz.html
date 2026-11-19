@@ -532,7 +532,7 @@ function exportTzToPdf(formData){
 
   const clientName = formData.full_name || 'klient';
   const fileName = `TZ-${clientName.replace(/[^a-zA-Zа-яА-Я0-9]/g,'_')}-${new Date().toISOString().slice(0,10)}.pdf`;
-  doc.save(fileName);
+  deliverDocumentPdf(doc,fileName);
 }
 
 // ============================================================

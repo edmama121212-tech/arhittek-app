@@ -121,5 +121,5 @@ function exportTimesheetToPdf(employeeId, monthStr){
   y += 14;
   doc.text('Подпись сотрудника: _________________________', margin, y);
 
-  doc.save('Табель — ' + (emp.name||'сотрудник') + ' — ' + monthStr + '.pdf');
+  deliverDocumentPdf(doc,'Табель — ' + (emp.name||'сотрудник') + ' — ' + monthStr + '.pdf');
 }

@@ -5875,7 +5875,7 @@ function exportTimesheetToPdf(employeeId, monthStr){
   y += 14;
   doc.text('Подпись сотрудника: _________________________', margin, y);
 
-  doc.save('Табель — ' + (emp.name||'сотрудник') + ' — ' + monthStr + '.pdf');
+  deliverDocumentPdf(doc,'Табель — ' + (emp.name||'сотрудник') + ' — ' + monthStr + '.pdf');
 }
 // ============================================================
 // РАСХОДЫ КОМПАНИИ (аренда, коммунальные, уборка и т.п.)
@@ -8552,8 +8552,7 @@ async function exportConstrPdf(projectId){
   pdfCompanyAddress(doc, margin, y+4, 0);
 
   const fileName = `Otchet-${p.name.replace(/[^a-zA-Zа-яА-Я0-9]/g,'_')}-${financeToday()}.pdf`;
-  doc.save(fileName);
-  showToast('PDF-отчёт скачивается...');
+  deliverDocumentPdf(doc,fileName);
 }
 
 
@@ -9391,7 +9390,7 @@ async function exportTzAnswersToPdf(tzFormId){
 
   const clientName = f.client_name || 'klient';
   const fileName = `TZ-${clientName.replace(/[^a-zA-Zа-яА-Я0-9]/g,'_')}-${financeToday()}.pdf`;
-  doc.save(fileName);
+  deliverDocumentPdf(doc,fileName);
 }
 
 
@@ -10019,8 +10018,7 @@ function exportContractToPdf(){
   }
 
   const fileName = 'Dogovor-' + t.label.replace(/[^a-zA-Zа-яА-Я0-9]/g,'_') + '-' + (clientName||'klient').replace(/[^a-zA-Zа-яА-Я0-9]/g,'_').slice(0,30) + '-' + date + '.pdf';
-  doc.save(fileName);
-  showToast('Договор скачивается...');
+  deliverDocumentPdf(doc,fileName);
 }
 
 
@@ -10179,8 +10177,7 @@ function getCompanyExportSections(scope){
   });
         y += 4;
   });
-      doc.save(fileBase + '.pdf');
-      showToast('PDF скачивается...');
+      deliverDocumentPdf(doc,fileBase + '.pdf');
   } else if(format==='excel'){
       const wsData = [];
       sections.forEach(sec=>{
@@ -10517,8 +10514,7 @@ function exportKpToPdf(){
   pdfCompanyAddress(doc, margin, finalY+5, 0, data.officeAddr);
 
   const fileName = kpFileName(data, 'pdf');
-  doc.save(fileName);
-  showToast('PDF скачивается...');
+  deliverDocumentPdf(doc,fileName);
 }
 
 function exportKpToXlsx(){

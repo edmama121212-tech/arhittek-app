@@ -243,8 +243,7 @@ function exportPricePdf(){
   const contacts=[ci.phone,ci.email,ci.website].filter(Boolean).join(' · ');
   if(contacts)doc.text(contacts,margin,y);
 
-  doc.save(priceSafeName(groups,'pdf'));
-  showToast('Прайс PDF скачивается...');
+  deliverDocumentPdf(doc,priceSafeName(groups,'pdf'));
 }
 function exportPriceXlsx(){
   const groups=priceSelectionOrWarn(); if(!groups)return;

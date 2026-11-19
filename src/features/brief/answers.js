@@ -391,7 +391,7 @@ async function exportTzAnswersToPdf(tzFormId){
 
   const clientName = f.client_name || 'klient';
   const fileName = `TZ-${clientName.replace(/[^a-zA-Zа-яА-Я0-9]/g,'_')}-${financeToday()}.pdf`;
-  doc.save(fileName);
+  deliverDocumentPdf(doc,fileName);
 }
 
 
