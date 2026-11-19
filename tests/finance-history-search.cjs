@@ -111,7 +111,7 @@ function fixture({current,archive,balance}) {
           assert.deepEqual(await p.evaluate(()=>__historyReads),[2]);
         }
         elapsed=await p.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(Math.round(performance.now()-__historyStart))))));
-        actual=await fw.locator('[data-fw-operation]:visible > p').evaluateAll(nodes=>nodes.map(n=>Number(n.textContent.match(/№(\d+)/)[1])));
+        actual=await fw.locator('[data-fw-operation]:visible > p:first-of-type').evaluateAll(nodes=>nodes.map(n=>Number(n.textContent.match(/№(\d+)/)[1])));
         layout=await fw.evaluate(root=>{
           const field=root.querySelector('input[type=search]');
           const inside=el=>{const {left,right}=el.getBoundingClientRect();return left>=0&&right<=innerWidth+1};

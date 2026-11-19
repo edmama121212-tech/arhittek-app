@@ -31,7 +31,6 @@ const journalFixture = () => {
   const focus=()=>p.evaluate(()=>document.activeElement===document.body?'BODY':document.activeElement?.textContent.trim().slice(0,140));
   const shot=async(name)=>{if(out)await p.screenshot({path:path.join(out,name+'.png'),animations:'disabled'})};
   const cases=[
-    ['Расход сейчас','Записать расход','Записать расход','record-expense'],
     ['Поступление сейчас','Записать поступление','Записать поступление','record-income'],
     ['Поиск в журнале','История операций','История операций','history'],
     ['Поиск без результата','История операций','История операций','empty'],
@@ -51,11 +50,11 @@ const journalFixture = () => {
       try{
         await p.goto('https://app.test/',{waitUntil:'domcontentloaded',timeout:30000});await p.waitForFunction(()=>typeof hasVerifiedAccess==='function'&&hasVerifiedAccess()&&state.financialDataReady&&!loadAllInFlight);
         await p.locator('.bottom-nav').getByRole('button',{name:/^Финансы/}).click();
-        await fw.getByText('Сейф',{exact:true}).waitFor();if(type==='record-expense')await shot('00-safe');
+        await fw.getByText('Сейф',{exact:true}).waitFor();if(type==='record-income')await shot('00-safe');
         await fw.getByRole('button',{name:/Ещё/}).click();steps=1;
         await fw.getByRole('heading',{name:'Операции и планы',exact:true}).waitFor();
         await checkFocus('Операции и планы');
-        if(type==='record-expense')await shot('01-operations');
+        if(type==='record-income')await shot('01-operations');
         goalStarted=Date.now();
         if(type==='report'){
           await fw.getByText(entry,{exact:true}).click();steps++;
@@ -71,7 +70,7 @@ const journalFixture = () => {
             assert.ok(await dialog.getByLabel(record?'Дата оплаты':'Плановая дата (если известна)',{exact:true}).isVisible());
             assert.ok(await button(dialog,record?'Записать оплату':'Добавить в план').isVisible());
             if(record){
-              const walletLabel=type==='record-income'?'Куда поступили деньги':'Откуда оплатили';
+              const walletLabel='Куда поступили деньги';
               assert.ok((await dialog.innerText()).includes(walletLabel));
               assert.ok((await dialog.innerText()).includes('Сейф'));
               assert.equal(await dialog.locator('select[name="wallet_id"]:visible').count(),0);
@@ -80,7 +79,7 @@ const journalFixture = () => {
             }
             const label=dialog.getByRole('textbox').first();await label.fill(type.includes('expense')?'Печать альбома':'Учебная операция');
             await dialog.getByRole('spinbutton').fill('2400');
-            if(type==='record-expense'){await label.blur();await shot('02-expense');}
+            if(type==='record-income'){await label.blur();await shot('02-income');}
             await button(dialog,'Закрыть').focus();await p.keyboard.press('Tab');assert.ok(await label.evaluate(e=>e===document.activeElement));
             await p.keyboard.press('Shift+Tab');await checkFocus('Закрыть');
             await p.keyboard.press('Escape');assert.equal(await dialog.count(),0);
@@ -102,7 +101,7 @@ const journalFixture = () => {
                 };
               });
               await button(fw,entry).click();
-              await dialog.getByRole('textbox').first().fill('Печать альбома');
+              await dialog.getByRole('textbox').first().fill('Оплата заказа');
               await dialog.getByRole('spinbutton').fill('2400');
               await button(dialog,'Записать оплату').click();
               await dialog.waitFor({state:'hidden'});
@@ -110,7 +109,7 @@ const journalFixture = () => {
               assert.equal(submitted.length,1);assert.equal(submitted[0].p_command,'record');
               assert.equal(submitted[0].p_payload.wallet_id,'fixture-safe');
               assert.equal(submitted[0].p_payload.amount,2400);
-              assert.equal(submitted[0].p_payload.direction,type==='record-income'?'income':'expense');
+              assert.equal(submitted[0].p_payload.direction,'income');
             }
           }else if(type!=='refresh'){
             await fw.getByRole('heading',{name:title,exact:true}).waitFor();await checkFocus(title);

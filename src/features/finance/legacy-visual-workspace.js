@@ -126,13 +126,6 @@ if(incomeButton) income.appendChild(incomeButton);
 const expenseVisual=document.createElement('div');
 expenseVisual.id='financeExpenseVisual';
 expense.appendChild(expenseVisual);
-const expenseButton=document.createElement('button');
-expenseButton.type='button';
-expenseButton.className='btn btn-secondary finance-add-action';
-expenseButton.textContent='+ Добавить расход';
-expenseButton.onclick=()=>{try{openCompanyExpenseSheet(null);}catch(e){}};
-expense.appendChild(expenseButton);
-
 const teamVisual=document.createElement('div');
 teamVisual.id='financeTeamVisual';
 team.appendChild(teamVisual);
@@ -277,7 +270,7 @@ function renderVisuals(){
   if(reserveVisual){
     const reserveBalance=typeof getCompanyReserveBalance==='function'?getCompanyReserveBalance():190000;
     reserveVisual.innerHTML=`
-      <div class="finance-v-hero reserve-hero"><span>Резерв компании</span><strong>${cash(reserveBalance)}</strong><small>Указанный остаток средств · с учётом корректировок и выводов</small></div>`;
+      <div class="finance-v-hero reserve-hero"><span>Свободно для расходов</span><strong>${cash(Math.max(0,reserveBalance))}</strong>${reserveBalance<0?'<small>Не покрыто деньгами: '+cash(-reserveBalance)+'</small>':''}<small>Указанный остаток средств · с учётом корректировок и выводов</small></div>`;
     if(typeof window.renderFinanceControls==='function') window.renderFinanceControls();
   }
 }

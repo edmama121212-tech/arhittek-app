@@ -97,6 +97,7 @@ const cases = [
   for(const [id,task,target,kind] of cases){
     const before=await snapshot(),start=cents(before.workspace.cash),n=calls.length;
     assert.equal(cents(rubles(await tile(page).innerText())),start);
+    assert.equal(await fw.locator('.studio-money-grid article').first().locator('small').innerText(),'По учёту');
     await fw.getByRole('button',{name:/Ещё/}).click();await btn(fw,'Сейф').click();
     const opener=btn(fw,'Сверить сейф');
     await opener.evaluate(e=>e.addEventListener('click',()=>window.safeOpen=performance.now(),{once:true,capture:true}));
@@ -115,6 +116,19 @@ const cases = [
     });
     assert.ok(confirmationBox.mark<=24&&confirmationBox.row>=44&&confirmationBox.aligned);
     await number.fill(target);await reason.fill(kind==='reason'?'ДО':task);
+    const preview=dialog.locator('[data-fw-count-preview]');
+    if(target===''||Number(target)<0){
+      assert.equal(await preview.isVisible(),false);
+    }else{
+      const delta=cents(target)-start;
+      const description=await preview.innerText();
+      if(delta===0)assert.equal(description,'Пересчёт совпадает с учётом.');
+      else{
+        assert.ok(description.includes(delta<0?'меньше на':'больше на'));
+        assert.equal(cents(rubles(description)),Math.abs(delta));
+      }
+    }
+    assert.equal(calls.length,n,'Предпросмотр не должен проводить сверку');
     if(kind!=='unchecked')await confirmed.check();
     if(kind==='lost')await page.evaluate(()=>window.dropSafeReply=true);
     await shot(page,id+'-form');
@@ -172,7 +186,12 @@ const cases = [
       const card=fw.locator('[data-fw-operation]').filter({has:page.getByRole('heading',{name:task,exact:true})});
       assert.equal(await card.count(),1);
       assert.equal(cents(await card.getAttribute('data-fw-delta')),delta);
-      assert.equal(cents(rubles(await card.locator('.fw-row strong').nth(1).innerText())),cents(before.workspace.reserve)+delta);
+      const signedReserve=cents(before.workspace.reserve)+delta;
+      const free=card.locator('.fw-row').filter({hasText:'Свободно для расходов'}).locator('strong');
+      const deficit=card.locator('.fw-row').filter({hasText:'Не покрыто деньгами'}).locator('strong');
+      assert.equal(cents(rubles(await free.innerText())),Math.max(0,signedReserve));
+      assert.equal(await deficit.count(),signedReserve<0?1:0);
+      if(signedReserve<0)assert.equal(cents(rubles(await deficit.innerText())),-signedReserve);
     }
     await btn(fw,'Финансы').click();
     assert.equal(cents(rubles(await tile(page).innerText())),end);

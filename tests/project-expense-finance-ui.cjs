@@ -6,6 +6,8 @@ const root = path.resolve(__dirname, '..');
 const project = { id:'qa-project', name:'Проверка расхода', category_id:'arch', status_id:'active', price:10000, expenses:0 };
 const asOf = '2026-11-19';
 const scenarios = [
+  { name:'insufficient funds, correct amount and retry', action:'insufficient', sum:40.50, rows:1 },
+  { name:'private database error stays hidden', action:'unknown', sum:0, rows:0 },
   { name:'architecture', amount:'100', sum:100, rows:1 },
   { name:'interior, fractional amount', category:'design', amount:'125.75', sum:125.75, rows:1 },
   { name:'landscape, one kopeck', category:'land', amount:'0.01', sum:0.01, rows:1 },
@@ -62,7 +64,23 @@ async function run(browser, scenario) {
       else await button.click();
       await page.waitForFunction(()=>!projectExpenseSaveInFlight&&!loadAllInFlight);
     };
+    const refusal='Недостаточно свободных денег. Доступно 40.50 ₽, требуется 100.00 ₽.';
+    const rejected=['insufficient','unknown'].includes(scenario.action);
+    if(rejected)await page.evaluate(message=>{__fail={table:'ledger_entries',op:'insert',error:{code:'23514',message}}},scenario.action==='insufficient'?refusal:'Внутреннее ограничение constraint_private');
     await submit(scenario.amount??'100',scenario.description??'Печать альбома',scenario.action==='double');
+    if(rejected){
+      assert.equal(await page.locator('#toast').textContent(),scenario.action==='insufficient'?refusal:'Ошибка добавления расхода');
+      assert.equal(await page.locator('#pf-expense-desc').inputValue(),'Печать альбома');
+      assert.equal(await page.locator('#pf-expense-amount').inputValue(),'100');
+      assert.equal(await page.locator('#pf-expense-date').inputValue(),asOf);
+      assert.equal(await page.evaluate(()=>(__db.ledger_entries||[]).length),0);
+      await page.evaluate(()=>{__fail=null});
+      if(scenario.action==='insufficient'){
+        await page.locator('#pf-expense-amount').fill('40.50');
+        await page.locator('#pf-expense-add-btn').click();
+        await page.waitForFunction(()=>!projectExpenseSaveInFlight&&!loadAllInFlight);
+      }
+    }
     if(scenario.action==='edit'){
       await page.getByTitle('Редактировать расход').click();
       await submit('65.25','Уточнённая сумма');
