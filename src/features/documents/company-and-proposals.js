@@ -142,8 +142,7 @@ function getCompanyExportSections(scope){
   });
         y += 4;
   });
-      doc.save(fileBase + '.pdf');
-      showToast('PDF скачивается...');
+      deliverDocumentPdf(doc,fileBase + '.pdf');
   } else if(format==='excel'){
       const wsData = [];
       sections.forEach(sec=>{
@@ -480,8 +479,7 @@ function exportKpToPdf(){
   pdfCompanyAddress(doc, margin, finalY+5, 0, data.officeAddr);
 
   const fileName = kpFileName(data, 'pdf');
-  doc.save(fileName);
-  showToast('PDF скачивается...');
+  deliverDocumentPdf(doc,fileName);
 }
 
 function exportKpToXlsx(){

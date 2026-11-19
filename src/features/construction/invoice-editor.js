@@ -324,8 +324,7 @@ async function exportConstrPdf(projectId){
   pdfCompanyAddress(doc, margin, y+4, 0);
 
   const fileName = `Otchet-${p.name.replace(/[^a-zA-Zа-яА-Я0-9]/g,'_')}-${financeToday()}.pdf`;
-  doc.save(fileName);
-  showToast('PDF-отчёт скачивается...');
+  deliverDocumentPdf(doc,fileName);
 }
 
 

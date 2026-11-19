@@ -424,8 +424,7 @@ function exportContractToPdf(){
   }
 
   const fileName = 'Dogovor-' + t.label.replace(/[^a-zA-Zа-яА-Я0-9]/g,'_') + '-' + (clientName||'klient').replace(/[^a-zA-Zа-яА-Я0-9]/g,'_').slice(0,30) + '-' + date + '.pdf';
-  doc.save(fileName);
-  showToast('Договор скачивается...');
+  deliverDocumentPdf(doc,fileName);
 }
 
 
