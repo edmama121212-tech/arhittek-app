@@ -711,13 +711,6 @@ if(incomeButton) income.appendChild(incomeButton);
 const expenseVisual=document.createElement('div');
 expenseVisual.id='financeExpenseVisual';
 expense.appendChild(expenseVisual);
-const expenseButton=document.createElement('button');
-expenseButton.type='button';
-expenseButton.className='btn btn-secondary finance-add-action';
-expenseButton.textContent='+ Добавить расход';
-expenseButton.onclick=()=>{try{openCompanyExpenseSheet(null);}catch(e){}};
-expense.appendChild(expenseButton);
-
 const teamVisual=document.createElement('div');
 teamVisual.id='financeTeamVisual';
 team.appendChild(teamVisual);
@@ -862,7 +855,7 @@ function renderVisuals(){
   if(reserveVisual){
     const reserveBalance=typeof getCompanyReserveBalance==='function'?getCompanyReserveBalance():190000;
     reserveVisual.innerHTML=`
-      <div class="finance-v-hero reserve-hero"><span>Резерв компании</span><strong>${cash(reserveBalance)}</strong><small>Указанный остаток средств · с учётом корректировок и выводов</small></div>`;
+      <div class="finance-v-hero reserve-hero"><span>Свободно для расходов</span><strong>${cash(Math.max(0,reserveBalance))}</strong>${reserveBalance<0?'<small>Не покрыто деньгами: '+cash(-reserveBalance)+'</small>':''}<small>Указанный остаток средств · с учётом корректировок и выводов</small></div>`;
     if(typeof window.renderFinanceControls==='function') window.renderFinanceControls();
   }
 }
@@ -1041,7 +1034,6 @@ async function saveReserveCorrection(){
 
 window.openCompanyWithdrawal=function(){
   if(!isAdmin()){showToast('Требуются права администратора');return;}
-  try{openCompanyExpenseSheet(null,COMPANY_WITHDRAWAL_CATEGORY);}catch(e){console.error(e);}
 };
 
 function renderFinanceControls(){
@@ -1084,7 +1076,6 @@ function renderFinanceControls(){
   }
   const operational=(state.companyExpenses||[]).filter(x=>!x.deleted_at&&(typeof isOperationalCompanyExpense!=='function'||isOperationalCompanyExpense(x))).sort((a,b)=>String(b.expense_date||'').localeCompare(String(a.expense_date||'')));
   expenseManage.innerHTML=`
-    ${isAdmin()?'<div class="finance-quick-actions"><button type="button" onclick="openCompanyExpenseSheet(null,\'Кофе / вода / офис\')">+ Кофе / офис</button><button type="button" onclick="openCompanyExpenseSheet(null,\'Топливо / авто\')">+ Топливо / авто</button></div>':''}
     <details class="finance-visual-disclosure">
       <summary>Управление расходами · ${operational.length}</summary>
       <div class="finance-management-list">

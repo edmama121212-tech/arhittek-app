@@ -80,7 +80,7 @@ function auditData(s){
 }
 function expected(p){const received=typeof isConstructionProject==='function'&&isConstructionProject(p)&&typeof getConstructionFinancials==='function'?getConstructionFinancials(p).received:p.advance;return Math.max(0,n(p.price)-n(received));}
 function dueProjects(s,month){return (s.projects||[]).filter(p=>!p.deleted_at&&String(p.end_date||'').slice(0,7)===month).filter(p=>{const status=(s.statuses||[]).find(x=>x.id===p.status_id);return !/заморож|отмен/i.test(status?.name||'');});}
-window.ARHITTEKCash={day,shift,period,constructionProject,cashEvents,balance,bookBalance,cashCount,cashStatus,isCountedNote,displayNote,amortEvents,amortization,projectBudget,available,monthSummary,flowGroup,flowSummary,isAdjustment,isImportedExpense,invoicePaymentId,invoicePaymentState,auditData,forecastProject,expected,dueProjects,opening:OPENING,cutoff:CUTOFF};
+window.ARHITTEKCash={insufficientFundsNotice,day,shift,period,constructionProject,cashEvents,balance,bookBalance,cashCount,cashStatus,isCountedNote,displayNote,amortEvents,amortization,projectBudget,available,monthSummary,flowGroup,flowSummary,isAdjustment,isImportedExpense,invoicePaymentId,invoicePaymentState,auditData,forecastProject,expected,dueProjects,opening:OPENING,cutoff:CUTOFF};
 if(typeof document==='undefined')return;
 const $=id=>document.getElementById(id),esc=v=>escapeHtml(String(v??'')),money=v=>v===null?'—':fmtMoney(n(v));let selected=day().slice(0,7),following=true,busy=false,lastDay=day();
 function attachCountField(fieldId){
@@ -109,13 +109,16 @@ function eventsHTML(events){return events.length?events.map(x=>{
  return '<div class="list-item"><div><div class="li-name">'+esc(label)+'</div><div class="li-meta">'+fmtDate(x.date)+(payrollMonth?' · за '+esc(ruMonthLabel(payrollMonth)):'')+(employee?.role?' · '+esc(employee.role):'')+(note?' · '+esc(note):'')+(!x.afterSnapshot?' · '+esc(x.excludedReason):'')+(isCountedNote(r.description,cashCount(state))?' · уже входило в сверку':'')+'</div></div><div class="cash-actions"><b style="color:'+(x.amount>0?'var(--green)':'var(--red)')+'">'+(x.amount>0?'+':'−')+money(Math.abs(x.amount))+'</b>'+btn('Редактировать','edit',x.kind+':'+r.id)+'</div></div>';
  }).join(''):'<div class="empty-state">Подтверждённых операций нет</div>';}
 function rowHTML(label,amount){return '<div class="fee-row"><div class="fl">'+esc(label)+'</div><div class="fv">'+money(amount)+'</div></div>';}
+function cashBalanceRow(label,value,deficitLabel='Недостача по учёту денег'){
+ return rowHTML(label,Math.max(0,n(value)))+(value<0?rowHTML(deficitLabel,-value):'');
+}
 function cashPositionHTML(until=day()){
  const status=cashStatus(state,until),b=projectBudget(state,until);
- if(!status.count)return '<div class="card"><h3>Деньги по журналу</h3>'+rowHTML('Денежный остаток по журналу',status.bookBalance)+'<div class="note">Это расчёт от прежней стартовой суммы, а не подтверждённые деньги на руках. Для сверки сложите остатки сейфа, других касс и банковских счетов. Закрытие проекта не добавляет сюда старый аванс.</div>'+btn('Сверить все деньги компании','balance')+'</div>';
+ if(!status.count)return '<div class="card"><h3>Деньги по журналу</h3>'+cashBalanceRow('Денежный остаток по журналу',status.bookBalance)+'<div class="note">Это расчёт от прежней стартовой суммы, а не подтверждённые деньги на руках. Для сверки сложите остатки сейфа, других касс и банковских счетов. Закрытие проекта не добавляет сюда старый аванс.</div>'+btn('Сверить все деньги компании','balance')+'</div>';
  const difference=status.difference;
- return '<div class="card"><h3>Все деньги компании</h3><strong data-company-total>'+money(status.cashBalance)+'</strong><div class="note">Сверка '+fmtDate(status.count.day)+' и новые оплаты после неё. В этой сумме уже находятся деньги проектов, команды и амортизация.</div>'+rowHTML('Резерв вместе с амортизацией',b.companyReserve+b.amortization)+(difference?'<div data-cash-discrepancy="'+difference+'">'+rowHTML('По денежному журналу',status.bookBalance)+rowHTML('Расхождение, требующее проверки',difference)+'<div class="note" style="color:var(--red)">Журнал и фактические деньги не совпадают. Сверка сохраняет этот вопрос открытым; сумма расхождения не записывается расходом или доходом.</div></div>':'<div class="note">Денежный журнал совпадает со сверкой.</div>')+(status.count.note?'<div class="note">'+esc(status.count.note)+'</div>':'')+'</div>';
+ return '<div class="card"><h3>Все деньги компании</h3><strong data-company-total>'+money(Math.max(0,status.cashBalance))+'</strong>'+(status.cashBalance<0?rowHTML('Недостача по учёту денег',-status.cashBalance):'')+'<div class="note">Сверка '+fmtDate(status.count.day)+' и новые оплаты после неё. В этой сумме уже находятся деньги проектов, команды и амортизация.</div>'+cashBalanceRow('Резерв вместе с амортизацией',b.companyReserve+b.amortization,'Не покрыто в резерве с амортизацией')+(difference?'<div data-cash-discrepancy="'+difference+'">'+cashBalanceRow('По денежному журналу',status.bookBalance)+rowHTML('Расхождение, требующее проверки',difference)+'<div class="note" style="color:var(--red)">Журнал и фактические деньги не совпадают. Сверка сохраняет этот вопрос открытым; сумма расхождения не записывается расходом или доходом.</div></div>':'<div class="note">Денежный журнал совпадает со сверкой.</div>')+(status.count.note?'<div class="note">'+esc(status.count.note)+'</div>':'')+'</div>';
 }
-function budgetHTML(b){return '<div class="card"><h3>Распределение денег</h3>'+rowHTML(b.countedCash?'Все деньги по фактической сверке и новым оплатам':'Денежный остаток по журналу · до фактической сверки',b.cashBalance)+rowHTML('− Средства проектов и заказчиков стройки',b.projectsHeld)+rowHTML('− Команде по завершённым проектам',b.teamHeld)+rowHTML('− Неоплаченные расходы завершённых проектов',b.costsHeld)+rowHTML('− Амортизация',b.amortization)+rowHTML('= Расчётный свободный резерв',b.companyReserve)+(!b.countedCash&&b.releasedOpeningFunds?'<div class="note">В истории завершённых проектов есть старые авансы '+money(b.releasedOpeningFunds)+'. Они не являются новым приходом и не прибавлены к деньгам. Их остаток требует фактической сверки.</div>':'')+'<div class="note">Распределение рассчитано по обязательствам текущего журнала с 05.10.2026. Старые авансы и выплаты до этой даты требуют отдельной сверки; свободный резерв пока расчётный. Аванс остаётся в бюджете проекта. Доля команды и амортизация выделены внутри общих денег. При фактической сверке старый аванс уже входит в общий остаток. Выплата удержанного гонорара уменьшает деньги и долг одновременно. Общие расходы уменьшают резерв напрямую.</div></div>';}
+function budgetHTML(b){return '<div class="card"><h3>Распределение денег</h3>'+cashBalanceRow(b.countedCash?'Все деньги по фактической сверке и новым оплатам':'Денежный остаток по журналу · до фактической сверки',b.cashBalance)+rowHTML('− Средства проектов и заказчиков стройки',b.projectsHeld)+rowHTML('− Команде по завершённым проектам',b.teamHeld)+rowHTML('− Неоплаченные расходы завершённых проектов',b.costsHeld)+rowHTML('− Амортизация',b.amortization)+rowHTML('Свободно для расходов',Math.max(0,b.companyReserve))+(b.companyReserve<0?rowHTML('Не покрыто деньгами',-b.companyReserve):'')+(!b.countedCash&&b.releasedOpeningFunds?'<div class="note">В истории завершённых проектов есть старые авансы '+money(b.releasedOpeningFunds)+'. Они не являются новым приходом и не прибавлены к деньгам. Их остаток требует фактической сверки.</div>':'')+'<div class="note">Распределение рассчитано по обязательствам текущего журнала с 05.10.2026. Старые авансы и выплаты до этой даты требуют отдельной сверки; свободный резерв пока расчётный. Аванс остаётся в бюджете проекта. Доля команды и амортизация выделены внутри общих денег. При фактической сверке старый аванс уже входит в общий остаток. Выплата удержанного гонорара уменьшает деньги и долг одновременно. Общие расходы уменьшают резерв напрямую.</div></div>';}
 function projectBudgetsHTML(b){return '<details class="card"><summary>Распределение по проектам</summary>'+b.projects.map(d=>'<div class="card"><strong>'+esc(d.name)+'</strong>'+(d.archived?'<div class="note">Проект в корзине. Его денежные операции и обязательства сохранены.</div>':'')+'<div class="note">'+(d.construction?'Деньги заказчика удерживаются независимо от статуса объекта':d.completed?'Завершён · доля распределена компании':'Деньги остаются у проекта')+'</div>'+rowHTML('Аванс до 05.10.2026 · история',d.openingProjectFunds)+rowHTML('Поступило по журналу с 05.10.2026',d.receivedAfterSnapshot)+rowHTML('Прямые расходы по журналу с 05.10.2026',d.directPaidAfterSnapshot)+rowHTML('Команде по журналу с 05.10.2026',d.teamPaidAfterSnapshot)+rowHTML('Амортизация из этих поступлений',d.amortization)+rowHTML(d.construction?'Средства заказчика стройки · по журналу':'Осталось у незавершённого проекта',d.projectHeld)+d.team.map(t=>rowHTML((findEmployee(t.employeeId)?.name||'Сотрудник')+' · '+t.month+' · осталось выплатить',t.remaining)).join('')+(d.costsHeld?rowHTML('Зарезервировано на прямые расходы',d.costsHeld):'')+(d.completed&&!d.construction?rowHTML('Доля компании по новым операциям · без старых авансов',d.companyContribution):'')+(d.construction?'<div class="note">Накладные и наценка сами по себе не переводят деньги в резерв. Для перечисления вознаграждения компании нужна отдельная подтверждённая операция распределения.</div>':'')+'</div>').join('')+'<div class="note">Начальные 20 000 ₽ — резерв компании. Исторические авансы показаны для проверки. Они не прибавляются к общему остатку при завершении и не отменяют реальные списания. До фактической сверки суммы по прежней стартовой базе предварительные. На амортизацию выделяется 5% поступлений проектного отдела и прочих доходов компании. Авансы на строительство полностью остаются деньгами заказчика; с них амортизация не удерживается. Оклады, премии и будущие гонорары показаны в команде и прогнозе.</div></details>';}
 function flowHTML(events){const f=flowSummary(events);return '<div class="card"><h3>Куда движутся деньги</h3>'+rowHTML('+ От клиентов',f.clients)+rowHTML('+ Доходы компании',f.otherIncome)+rowHTML('− Команде: зарплата и гонорары',f.team)+rowHTML('− По проектам: закупки и прямые расходы',f.projects)+rowHTML('− Компания: офис, связь и прочее',f.company)+rowHTML('− Вывод денег',f.withdrawals)+rowHTML('Сверка остатка',f.adjustments)+'</div>';}
 function payrollHTML(events){
@@ -150,8 +153,8 @@ function render(){
  const kpi=(label,value)=>'<div class="finance-kpi"><span>'+label+'</span><strong>'+money(value)+'</strong></div>';
  panel('overview',warning+cashPositionHTML(summary.until)+'<div class="finance-kpi-grid">'+kpi('Доступно на расходы на '+fmtDate(summary.until),summary.available)+kpi(selected==='2026-10'?'Поступления после сверки':'Поступления за месяц',summary.incoming)+kpi(selected==='2026-10'?'Оплаты после сверки':'Оплаты за месяц',summary.outgoing)+'</div><div class="card" style="margin-top:16px"><h3>Проверка остатка</h3>'+rowHTML(selected==='2026-10'?'Остаток после сверки 05.10.2026':'Остаток на начало месяца',summary.opening)+rowHTML('+ Поступления',summary.incoming)+rowHTML('− Оплаты',summary.outgoing)+(summary.reconciliation?rowHTML('Разница фактической сверки с журналом',summary.reconciliation):'')+rowHTML('= Денежный остаток на '+fmtDate(summary.until),summary.closing)+rowHTML('В том числе амортизация · 5%',summary.amortization)+'<div class="note">Резерв начинается с 20 000 ₽ на 05.10.2026, 22:26 МСК. Денежное движение включает все новые приходы и оплаты, а распределение долей показано ниже. Старые операции доступны в истории. Прошедший месяц не является бухгалтерским закрытием.</div></div>'+budgetHTML(monthlyBudget)+flowHTML(selected<OPENING_DAY.slice(0,7)?events:summary.accounted));
  panel('income','<div class="card"><h3>Сдача помещения</h3><div class="fee-row"><div class="fl">Получено за выбранный месяц</div><div class="fv">'+money(sublease.paid)+'</div></div>'+(sublease.left?btn('Получил '+money(sublease.left),'confirm','sublease'): '<div class="note">Доход за месяц подтверждён</div>')+'</div><div class="note">Оплаты проектов автоматически поступают из карточки проекта → Деньги. Учитывается только принятая сумма.</div><div class="section-label">Фактические поступления за месяц</div><div class="card">'+eventsHTML(events.filter(x=>x.amount>0))+'</div>'+btn('Добавить другой доход','income'));
- panel('expense',[rent,internet].map((x,i)=>'<div class="card" style="margin-bottom:12px"><h3>'+esc(x.label)+'</h3><div class="fee-row"><div class="fl">Оплачено</div><div class="fv">'+money(x.paid)+'</div></div><div class="fee-row"><div class="fl">Осталось по плану</div><div class="fv">'+money(x.left)+'</div></div>'+(x.left?btn('Оплатил '+money(x.left),'confirm',i?'internet':'rent'):'<div class="note">Оплачено за месяц</div>')+btn('Частичная оплата','partial',i?'internet':'rent')+'</div>').join('')+invoicesHTML()+'<div class="card">'+eventsHTML(events.filter(x=>x.amount<0))+'</div>'+btn('Добавить расход','expense'));
- panel('reserve',cashPositionHTML()+'<div class="finance-v-hero reserve-hero"><span>Расчётный свободный резерв компании</span><strong data-company-reserve>'+money(budget.companyReserve)+'</strong><small>Доля компании после распределения проектов, команды и амортизации</small></div>'+budgetHTML(budget)+projectBudgetsHTML(budget)+btn('Сверить все деньги компании','balance')+btn('Вывести из свободного резерва','withdraw')+btn('Выгрузить операции для сверки','audit-export')+warning+'<div class="note">Прежняя стартовая база — 20 000 ₽ от 05.10.2026. Старые авансы показаны в истории проектов, но не создают новые деньги при завершении. Новая фактическая сверка включает все деньги компании и сохраняется отдельно от приходов и расходов.</div><details><summary>Расчёт денежного журнала с 05.10.2026</summary>'+rowHTML('Остаток после сверки 05.10.2026',OPENING)+rowHTML('+ Поступления после сверки',receipts)+rowHTML('− Выплаты после сверки',payments)+eventsHTML(accounted)+'<div class="note">Старые операции повторно не учитываются, даже если внесены позже.</div></details>');
+ panel('expense',[rent,internet].map((x,i)=>'<div class="card" style="margin-bottom:12px"><h3>'+esc(x.label)+'</h3><div class="fee-row"><div class="fl">Оплачено</div><div class="fv">'+money(x.paid)+'</div></div><div class="fee-row"><div class="fl">Осталось по плану</div><div class="fv">'+money(x.left)+'</div></div>'+(x.left?btn('Оплатил '+money(x.left),'confirm',i?'internet':'rent'):'<div class="note">Оплачено за месяц</div>')+btn('Частичная оплата','partial',i?'internet':'rent')+'</div>').join('')+invoicesHTML()+'<div class="card">'+eventsHTML(events.filter(x=>x.amount<0))+'</div>');
+ panel('reserve',cashPositionHTML()+'<div class="finance-v-hero reserve-hero"><span>Свободно для расходов</span><strong data-company-reserve>'+money(Math.max(0,budget.companyReserve))+'</strong><small>Доля компании после распределения проектов, команды и амортизации</small></div>'+budgetHTML(budget)+projectBudgetsHTML(budget)+btn('Сверить все деньги компании','balance')+btn('Вывести из свободного резерва','withdraw')+btn('Выгрузить операции для сверки','audit-export')+warning+'<div class="note">Прежняя стартовая база — 20 000 ₽ от 05.10.2026. Старые авансы показаны в истории проектов, но не создают новые деньги при завершении. Новая фактическая сверка включает все деньги компании и сохраняется отдельно от приходов и расходов.</div><details><summary>Расчёт денежного журнала с 05.10.2026</summary>'+rowHTML('Остаток после сверки 05.10.2026',OPENING)+rowHTML('+ Поступления после сверки',receipts)+rowHTML('− Выплаты после сверки',payments)+eventsHTML(accounted)+'<div class="note">Старые операции повторно не учитываются, даже если внесены позже.</div></details>');
  panel('amortization','<div class="finance-kpi-grid">'+kpi('Накоплено на амортизацию',amortization(state))+kpi('Отчислено за месяц',amortEvents(state).filter(x=>x.date.slice(0,7)===selected).reduce((sum,x)=>sum+x.allocation,0))+'</div><div class="note">5% фактических поступлений проектного отдела и прочих доходов компании с момента сверки. Клиентские авансы на стройку и корректировки остатка не создают амортизацию. Выделение наценки компании требует отдельного подтверждения.</div><div class="card">'+(amortEvents(state).filter(x=>x.date.slice(0,7)===selected).map(x=>'<div class="fee-row"><div class="fl">'+fmtDate(x.date)+' · приход '+money(x.amount)+'</div><div class="fv">'+money(x.allocation)+'</div></div>').join('')||'<div class="empty-state">Отчислений за месяц нет</div>')+'</div>');
  panel('team',payrollHTML(events));
  renderForecast();
@@ -220,30 +223,42 @@ function invoiceDraftMatches(row,draft){
  const p=draft.payload;
  return !!row&&!row.deleted_at&&row.id===draft.id&&row.project_id===p.project_id&&row.type===p.type&&rounded(row.amount)===rounded(p.amount)&&row.entry_date===p.entry_date&&String(row.description||'')===p.description;
 }
+// These are the user-visible check violations returned by the cash guard.
+function insufficientFundsNotice(error){
+ if(error?.code!=='23514')return '';
+ const message=String(error.message||'');
+ if(/^Недостаточно (?:свободных денег|средств в выбранном резервировании|денег в месте хранения)\. Доступно \d+(?:\.\d+)? ₽, требуется \d+(?:\.\d+)? ₽\.$/.test(message))return message;
+ if(message==='Недостаточно денег на выбранном счёте. Уточните счёт или сначала оформите перевод.')return 'Недостаточно денег в выбранном месте хранения.';
+ if(message==='Недостаточно свободного резерва')return 'Недостаточно свободных денег.';
+ if(message==='Недостаточно средств в выбранном резервировании. Сначала отмените зависимое распределение.')return message;
+ return '';
+}
+class InvoicePaymentNotice extends Error {}
 function invoicePaymentError(error){
+ if(error instanceof InvoicePaymentNotice)return error.message;
  const message=String(error?.message||'');
  if(error?.code==='42501')return 'Недостаточно прав для оплаты. Обновите вход в приложение.';
  if(error?.code==='23514'&&/exceed|unpaid/i.test(message))return 'Остаток накладной уже изменился. Обновите историю оплаты; повторное списание не создано.';
  if(error?.code==='23514')return 'Накладная или связанный расход изменены. Проверьте историю перед оплатой.';
  if(error?.code==='22023')return 'Проверьте сумму, фактическую дату и выбранную накладную.';
- return /[а-яё]/i.test(message)?message:'Оплата пока не подтверждена. Повторите сохранение после восстановления связи; номер операции останется прежним.';
+ return 'Оплата пока не подтверждена. Повторите сохранение после восстановления связи; номер операции останется прежним.';
 }
 async function readInvoicePaymentRow(id){
  const result=await sb.from('ledger_entries').select('id,project_id,type,amount,entry_date,description,payee_employee_id,deleted_at').eq('id',id).maybeSingle();
- if(result.error)throw new Error('Не удалось подтвердить предыдущую оплату. Повторите после восстановления связи; новая запись не создана.');
+ if(result.error)throw new InvoicePaymentNotice('Не удалось подтвердить предыдущую оплату. Повторите после восстановления связи; новая запись не создана.');
  return result.data;
 }
 function openInvoicePayment(invoiceId){
  const row=(state.invoices||[]).find(i=>i.id===invoiceId&&!i.deleted_at);if(!row||row.paid_by_client)return;
  const invoice={...row},generation=++invoicePaymentFormGeneration,key=invoiceDraftKey(row);
  let attempt=readInvoiceDraft(key,invoice);
- const draftId=attempt?.id||crypto.randomUUID();
+ let draftId=attempt?.id||crypto.randomUUID();
  const ownsForm=()=>generation===invoicePaymentFormGeneration;
  let overlay=$('cashInvoiceOverlay');if(!overlay){overlay=document.createElement('div');overlay.id='cashInvoiceOverlay';overlay.className='sheet-overlay';document.body.appendChild(overlay);}
  const payment=invoicePaymentState(state,invoice),existing=(state.ledger||[]).filter(r=>!r.deleted_at&&r.project_id===invoice.project_id&&['expense','project_expense','payment'].includes(r.type)&&!r.payee_employee_id&&!invoicePaymentId(r)&&!isImportedExpense(r)&&r.entry_date<=day());
  if(attempt?.mode==='link'&&!existing.some(r=>r.id===attempt.id))existing.push({id:attempt.id,...attempt.payload});
  overlay.innerHTML='<div class="sheet"><h3>Оплата накладной</h3><p>'+esc(invoice.description||invoice.number||invoice.item_type)+'</p>'+rowHTML('Связано оплат',payment.paid)+rowHTML('Осталось подтвердить',payment.remaining)+'<div class="field"><label>Запись оплаты</label><select id="cashInvoiceExisting"><option value="">Новая фактическая оплата</option>'+existing.map(r=>'<option value="'+esc(r.id)+'">Связать: '+esc(fmtDate(r.entry_date)+' · '+money(r.amount)+' · '+r.description)+'</option>').join('')+'</select></div><div class="field"><label>Сумма оплаты, ₽</label><input id="cashInvoiceAmount" type="number" min="0.01" step="0.01" value="'+payment.remaining+'"></div><div class="field"><label>Фактическая дата оплаты</label><input id="cashInvoiceDate" type="date" value="'+day()+'"></div><div class="field"><label>Комментарий</label><input id="cashInvoiceNote"></div><button id="cashInvoiceSave" type="button" class="btn btn-primary">Сохранить оплату</button><button id="cashInvoiceClose" type="button" class="btn btn-secondary">Закрыть</button><div class="card">'+payment.rows.map(r=>'<div class="list-item"><span>'+esc(fmtDate(r.entry_date))+' · '+money(r.amount)+'</span>'+btn('Отменить оплату','cancel-invoice',r.id)+'</div>').join('')+'</div></div>';
- if(attempt){$('cashInvoiceExisting').value=attempt.mode==='link'?attempt.id:'';$('cashInvoiceAmount').value=attempt.payload.amount;$('cashInvoiceDate').value=attempt.payload.entry_date;$('cashInvoiceNote').value=attempt.note||'';const notice=document.createElement('p');notice.className='note';notice.textContent='Предыдущая попытка пока не подтверждена. Сохранение сначала проверит её номер и не спишет деньги повторно.';$('cashInvoiceSave').before(notice);}
+ if(attempt){$('cashInvoiceExisting').value=attempt.mode==='link'?attempt.id:'';$('cashInvoiceAmount').value=attempt.payload.amount;$('cashInvoiceDate').value=attempt.payload.entry_date;$('cashInvoiceNote').value=attempt.note||'';const notice=document.createElement('p');notice.className='note';notice.id='cashInvoicePending';notice.textContent='Предыдущая попытка пока не подтверждена. Сохранение сначала проверит её номер и не спишет деньги повторно.';$('cashInvoiceSave').before(notice);}
  $('cashInvoiceExisting').onchange=()=>{const r=existing.find(r=>r.id===$('cashInvoiceExisting').value);$('cashInvoiceAmount').disabled=!!r;$('cashInvoiceDate').disabled=!!r;if(r){$('cashInvoiceAmount').value=r.amount;$('cashInvoiceDate').value=r.entry_date;}else{$('cashInvoiceAmount').value=payment.remaining;$('cashInvoiceDate').value=day();}};
  $('cashInvoiceClose').onclick=()=>{if(ownsForm()){invoicePaymentFormGeneration++;overlay.classList.remove('active');}};
  overlay.onclick=e=>{const b=e.target.closest('[data-cash-action="cancel-invoice"]');if(b)cancelInvoicePayment(b.dataset.id,invoiceId);};
@@ -256,19 +271,19 @@ function openInvoicePayment(invoiceId){
   let persisted=false;
   try{
    const invoiceCheck=await sb.from('invoices').select('*').eq('id',invoiceId).maybeSingle();if(invoiceCheck.error)throw invoiceCheck.error;
-   const currentInvoice=invoiceCheck.data;if(!currentInvoice||currentInvoice.deleted_at||currentInvoice.paid_by_client||currentInvoice.project_id!==invoice.project_id)throw new Error('Накладная изменена или удалена. Обновите историю оплаты.');
+   const currentInvoice=invoiceCheck.data;if(!currentInvoice||currentInvoice.deleted_at||currentInvoice.paid_by_client||currentInvoice.project_id!==invoice.project_id)throw new InvoicePaymentNotice('Накладная изменена или удалена. Обновите историю оплаты.');
    const check=await fetchAllRows(()=>sb.from('ledger_entries').select('*',{count:'exact'}).eq('project_id',currentInvoice.project_id).is('deleted_at',null));if(check.error)throw check.error;
    let confirmed=attempt?await readInvoicePaymentRow(attempt.id):null;
    if(confirmed&&!invoiceDraftMatches(confirmed,attempt)){
     const canRetryLink=attempt.mode==='link'&&!confirmed.deleted_at&&confirmed.project_id===attempt.payload.project_id&&confirmed.type===attempt.payload.type&&rounded(confirmed.amount)===rounded(attempt.payload.amount)&&confirmed.entry_date===attempt.payload.entry_date&&(confirmed.description??null)===attempt.originalDescription;
-    if(canRetryLink)confirmed=null;else throw new Error('Предыдущая запись изменена или отменена. Повторная оплата не создана; проверьте историю.');
+    if(canRetryLink)confirmed=null;else throw new InvoicePaymentNotice('Предыдущая запись изменена или отменена. Повторная оплата не создана; проверьте историю.');
    }
    if(!confirmed){
     const fresh=invoicePaymentState({ledger:check.data||[]},currentInvoice),effectiveAmount=attempt?.payload.amount??amount;
-    if(effectiveAmount>fresh.remaining+0.009)throw new Error('Оплата больше неподтверждённого остатка');
+    if(effectiveAmount>fresh.remaining+0.009)throw new InvoicePaymentNotice('Оплата больше неподтверждённого остатка');
     if(!attempt){
      const marker='[invoice-payment:'+invoiceId+']';
-     if(linked){const row=(check.data||[]).find(r=>r.id===linked.id);if(!row||row.project_id!==invoice.project_id||row.payee_employee_id||invoicePaymentId(row))throw new Error('Расход уже изменён');attempt={version:1,mode:'link',id:row.id,note,payload:{type:row.type,project_id:row.project_id,amount:n(row.amount),entry_date:row.entry_date,description:marker+' '+(row.description||'Оплата накладной')},originalDescription:row.description??null};}
+     if(linked){const row=(check.data||[]).find(r=>r.id===linked.id);if(!row||row.project_id!==invoice.project_id||row.payee_employee_id||invoicePaymentId(row))throw new InvoicePaymentNotice('Расход уже изменён');attempt={version:1,mode:'link',id:row.id,note,payload:{type:row.type,project_id:row.project_id,amount:n(row.amount),entry_date:row.entry_date,description:marker+' '+(row.description||'Оплата накладной')},originalDescription:row.description??null};}
      else attempt={version:1,mode:'insert',id:draftId,note,payload:{type:'expense',project_id:invoice.project_id,amount,entry_date:date,description:marker+' '+(invoice.description||invoice.number||'Накладная')+(note?' · '+note:''),received_by:receivedBy}};
      rememberInvoiceDraft(key,attempt);
     }
@@ -282,19 +297,28 @@ function openInvoicePayment(invoiceId){
       const result=await sb.rpc('save_invoice_payment',{p_invoice_id:invoiceId,p_operation_id:attempt.id,p_amount:attempt.payload.amount,p_entry_date:attempt.payload.entry_date,p_description:attempt.payload.description,p_existing_entry_id:attempt.mode==='link'?attempt.id:null});
       if(result.error?.code==='PGRST202')legacy=true;
       else if(result.error)throw result.error;
-      else if(!result.data)throw new Error('Сервер не подтвердил оплату. Повторите проверку сохранения.');
+      else if(!result.data)throw new InvoicePaymentNotice('Сервер не подтвердил оплату. Повторите проверку сохранения.');
      }
      if(legacy){
       if(attempt.mode==='link'){
        let query=sb.from('ledger_entries').update({description:attempt.payload.description}).eq('id',attempt.id).eq('project_id',invoice.project_id).eq('type',attempt.payload.type).eq('amount',attempt.payload.amount).eq('entry_date',attempt.payload.entry_date).is('deleted_at',null);
        query=attempt.originalDescription==null?query.is('description',null):query.eq('description',attempt.originalDescription);
-       const result=await query.select('id').maybeSingle();if(result.error)throw result.error;if(!result.data)throw new Error('Расход изменён на другом устройстве.');
+       const result=await query.select('id').maybeSingle();if(result.error)throw result.error;if(!result.data)throw new InvoicePaymentNotice('Расход изменён на другом устройстве.');
       }else{const result=await sb.from('ledger_entries').insert({id:attempt.id,...attempt.payload});if(result.error)throw result.error;}
      }
     }catch(error){saveError=error;}
     confirmed=await readInvoicePaymentRow(attempt.id);
-    if(!confirmed)throw new Error(invoicePaymentError(saveError));
-    if(!invoiceDraftMatches(confirmed,attempt))throw new Error('Запись изменена или отменена. Повторная оплата не создана; проверьте историю.');
+    const shortage=insufficientFundsNotice(saveError);
+    if(shortage&&(!confirmed||attempt.mode==='link'&&confirmed.description===attempt.originalDescription&&!confirmed.deleted_at)){
+     // A definite rejection can be corrected. An uncertain response must keep its payload and UUID.
+     forgetInvoiceDraft(key,attempt.id);
+     attempt=null;
+     draftId=crypto.randomUUID();
+     if(ownsForm())$('cashInvoicePending')?.remove();
+     throw new InvoicePaymentNotice(shortage);
+    }
+    if(!confirmed)throw new InvoicePaymentNotice(invoicePaymentError(saveError));
+    if(!invoiceDraftMatches(confirmed,attempt))throw new InvoicePaymentNotice('Запись изменена или отменена. Повторная оплата не создана; проверьте историю.');
    }
    persisted=true;
    await logAudit('project',invoice.project_id,(state.projects||[]).find(p=>p.id===invoice.project_id)?.name||'','update',{invoice_payment:{old:null,new:(attempt.mode==='link'?'Связан расход: ':'Оплачено: ')+money(attempt.payload.amount)}});
@@ -304,7 +328,7 @@ function openInvoicePayment(invoiceId){
    render();
    showToast(refreshed===false?'Оплата записана. Не удалось обновить данные — повторите обновление':ownsForm()?(linked?'Расход связан без повторного списания':'Оплата накладной сохранена'):'Оплата накладной «'+(invoice.description||invoice.number||'Накладная')+'» сохранена');
   }catch(error){
-   const message=persisted?'Оплата записана. Не удалось обновить данные — повторите обновление':error.message||'Не удалось сохранить оплату';
+   const message=persisted?'Оплата записана. Не удалось обновить данные — повторите обновление':error instanceof InvoicePaymentNotice?error.message:'Не удалось сохранить оплату. Проверьте соединение и повторите попытку.';
    showToast(ownsForm()?message:'Накладная «'+(invoice.description||invoice.number||'Накладная')+'»: '+message);
   }finally{busy=false;saveButton.disabled=false;}
  };
@@ -360,7 +384,7 @@ function act(action,id){if(!session?.isAdmin)return;
  if(action==='current'){selected=day().slice(0,7);following=true;render();}
  if(action==='confirm'){if(selected>day().slice(0,7)){showToast('Будущий месяц — только прогноз');return;}confirmRecurring(id);}
  if(action==='partial'){if(selected>day().slice(0,7)){showToast('Будущий месяц — только прогноз');return;}const x=recurringState(id,selected);openCompanyExpenseSheet(null,x.category);$('cex-date').value=day();$('cex-desc').value='[cash:'+id+':'+selected+'] период '+selected;}
- if(action==='income')openCompanyIncomeSheet(null);if(action==='expense')openCompanyExpenseSheet(null);
+ if(action==='income')openCompanyIncomeSheet(null);
  if(action==='balance')editBalance();if(action==='withdraw')openCompanyWithdrawal();if(action==='edit')editEvent(id);
  if(action==='salary')openSalaryPaymentSheet(id,selected);
  if(action==='invoice')openInvoicePayment(id);

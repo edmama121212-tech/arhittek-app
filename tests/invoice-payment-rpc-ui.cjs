@@ -25,6 +25,8 @@ function app(){
   calls.push({name,args:copy(args)});
   if(mode==='missing')return{data:null,error:{code:'PGRST202',message:'Function is not installed'}};
   if(mode==='denied')return{data:null,error:{code:'42501',message:'Administrator session required'}};
+  if(mode==='insufficient')return{data:null,error:{code:'23514',message:'Недостаточно свободных денег. Доступно 3000.50 ₽, требуется 10000.00 ₽.'}};
+  if(mode==='private-error')return{data:null,error:{code:'40001',message:'Внутренняя таблица service_private'}};
   if(mode==='offline')throw new Error('Connection lost before save');
   let row=db.ledger_entries.find(r=>r.id===args.p_operation_id);
   if(args.p_existing_entry_id){assert(row);row.description=args.p_description;}
@@ -47,6 +49,37 @@ function app(){
  });
  await check('An authorization error never falls back to a direct financial insert',async()=>{
   const a=app();a.setMode('denied');a.open();await a.save();assert.equal(a.calls.length,1);assert.equal(a.rawWrites.length,0);assert.equal(a.db.ledger_entries.filter(r=>r.type==='expense').length,0);assert(a.w.toasts.some(t=>t.includes('Недостаточно прав')));a.dom.window.close();
+ });
+ await check('Insufficient funds retains the invoice fields and a corrected payment is posted only once',async()=>{
+  const a=app(),doc=a.w.document;
+  a.open();a.setMode('insufficient');
+  doc.getElementById('cashInvoiceNote').value='За материалы';
+  await a.save();
+  assert.equal(a.w.toasts.at(-1),'Недостаточно свободных денег. Доступно 3000.50 ₽, требуется 10000.00 ₽.');
+  assert(doc.getElementById('cashInvoiceOverlay').classList.contains('active'));
+  assert.equal(doc.getElementById('cashInvoiceAmount').value,'10000');
+  assert.equal(doc.getElementById('cashInvoiceDate').value,'2026-10-19');
+  assert.equal(doc.getElementById('cashInvoiceNote').value,'За материалы');
+  assert.equal(a.db.ledger_entries.filter(r=>r.type==='expense').length,0);
+  doc.getElementById('cashInvoiceAmount').value='3000.50';a.setMode('success');
+  await a.save();
+  assert.equal(a.calls[1].args.p_amount,3000.50);
+  assert.equal(a.db.ledger_entries.filter(r=>r.type==='expense').length,1);
+  assert.equal(a.w.ARHITTEKCash.invoicePaymentState(a.w.state,a.invoice).remaining,36999.50);
+  a.dom.window.close();
+ });
+ await check('Only public cash guard messages are shown with their amounts',async()=>{
+  const a=app(),notice=a.w.ARHITTEKCash.insufficientFundsNotice;
+  for(const reason of ['свободных денег','средств в выбранном резервировании','денег в месте хранения']){
+   const message='Недостаточно '+reason+'. Доступно 5.99 ₽, требуется 6.00 ₽.';
+   assert.equal(notice({code:'23514',message}),message);
+   assert.equal(notice({code:'42501',message}),'');
+   assert.equal(notice({code:'23514',message:message+' internal detail'}),'');
+  }
+  a.setMode('private-error');a.open();await a.save();
+  assert(!a.w.toasts.at(-1).includes('service_private'));
+  assert.equal(a.rawWrites.length,0);
+  a.dom.window.close();
  });
  await check('A transient RPC failure keeps the original payload and UUID when fields are changed before retry',async()=>{
   const a=app();a.setMode('offline');a.open();await a.save();a.w.document.getElementById('cashInvoiceAmount').value='20000';a.setMode('success');await a.save();assert.equal(a.calls.length,2);assert.equal(a.calls[0].args.p_operation_id,a.calls[1].args.p_operation_id);assert.equal(a.calls[1].args.p_amount,10000);assert.equal(a.rawWrites.length,0);assert.equal(a.db.ledger_entries.filter(r=>r.type==='expense').length,1);a.dom.window.close();
