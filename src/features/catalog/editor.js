@@ -193,7 +193,19 @@ function renderCardsList(){
   const container = document.getElementById('cards-list');
   if(!container) return;
 
-  let filtered = cardsData;
+  const normalize = value => String(value || '').toLowerCase().replace(/ё/g,'е').replace(/№\s*/g,'').trim();
+  const number = card => String(card.project_number || '').match(/^\s*№?\s*(\d+)\s*$/)?.[1]
+    || String(card.title || '').match(/№\s*(\d+)/)?.[1] || '';
+  const terms = normalize(document.getElementById('cards-search')?.value).split(/\s+/).filter(Boolean);
+  let filtered = cardsData.filter(card => {
+    const label = normalize(number(card) + ' ' + (card.title || ''));
+    return terms.every(term => label.includes(term));
+  }).sort((a,b) => {
+    const left = number(a), right = number(b);
+    return (Number(right.slice(-2)) - Number(left.slice(-2)))
+      || (Number(right.slice(0,-2)) - Number(left.slice(0,-2)))
+      || String(a.id).localeCompare(String(b.id));
+  });
   if(currentCardFloorFilter !== 'all'){
     filtered = filtered.filter(c => String(c.floors) === String(currentCardFloorFilter));
   }
@@ -217,7 +229,7 @@ function renderCardsList(){
 
   if(!filtered.length){
     container.innerHTML = `<div class="note" style="text-align:center;padding:40px 0;opacity:0.5;">
-      ${cardsData.length ? 'Нет проектов для этого фильтра' : 'Проектов ещё нет'}
+      ${cardsData.length ? 'Проекты не найдены' : 'Проектов ещё нет'}
     </div>`;
     return;
   }
