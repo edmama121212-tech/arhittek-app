@@ -225,20 +225,6 @@ function openProjectSheet(id){
       }
     }
 
-    // История изменений по проекту
-    renderProjectHistory(id);
-    const histToggle = document.getElementById('pf-history-toggle');
-    const histList = document.getElementById('pf-history-list');
-    if(histToggle && histList){
-      histList.style.display = 'none';
-      histToggle.textContent = '📋 Показать историю изменений';
-      histToggle.onclick = function(){
-        const shown = histList.style.display !== 'none';
-        histList.style.display = shown ? 'none' : '';
-        histToggle.textContent = shown ? '📋 Показать историю изменений' : '📋 Скрыть историю изменений';
-        if(!shown) renderProjectHistory(id);
-      };
-    }
   }else{
     editingProjectLoadedAt = null;
     title.textContent = 'Новый проект';
@@ -283,9 +269,20 @@ function openProjectSheet(id){
     renderStagesList(null);
     renderTasksList(null);
     document.getElementById('pf-open-as-object').style.display = 'none';
-    const histList0 = document.getElementById('pf-history-list');
-    if(histList0){ histList0.style.display = 'none'; histList0.innerHTML = '<div class="empty-state">Сохраните проект, чтобы вести историю</div>'; }
   }
+  const historyToggle = document.getElementById('pf-history-toggle');
+  const historyList = document.getElementById('pf-history-list');
+  historyList.style.display = 'none';
+  historyList.replaceChildren();
+  historyToggle.setAttribute('aria-expanded','false');
+  historyToggle.textContent = 'Показать историю изменений';
+  historyToggle.onclick = ()=>{
+    const open = historyToggle.getAttribute('aria-expanded') !== 'true';
+    historyToggle.setAttribute('aria-expanded',String(open));
+    historyToggle.textContent = open ? 'Скрыть историю изменений' : 'Показать историю изменений';
+    historyList.style.display = open ? '' : 'none';
+    if(open) renderProjectHistory(editingProjectId);
+  };
 
   renderProjectNumberField();
   if(!id)void refreshProjectNumbers();

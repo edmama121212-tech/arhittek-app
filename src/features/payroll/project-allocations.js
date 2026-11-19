@@ -337,7 +337,7 @@ async function addLedgerEntry(){
     const {data, error} = await sb.from('ledger_entries').insert({type, project_id, description, amount, entry_date, received_by: session ? session.employeeId : null}).select().single();
     if(error) throw error;
     const proj = state.projects.find(p=>p.id===project_id);
-    await logAudit('ledger_entry', data.id, (proj?proj.name+' — ':'')+(description||ledgerTypeLabels[type]?.label||''), 'create', {});
+    await logAudit('ledger_entry', data.id, (proj?proj.name+' — ':'')+(description||ledgerTypeLabels[type]?.label||''), 'create', {_project_id:project_id});
     document.getElementById('ledgerDesc').value = '';
     document.getElementById('ledgerAmount').value = '';
     document.getElementById('ledgerDate').value = '';

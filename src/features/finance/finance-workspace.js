@@ -18,6 +18,18 @@ const pending=()=>{try{return JSON.parse(sessionStorage.getItem(pendingKey())||'
 const btn=(label,action,id='',disabled=false)=>'<button type="button" class="btn btn-secondary" data-fw="'+action+'" data-id="'+esc(id)+'" '+(disabled?'disabled':'')+'>'+esc(label)+'</button>';
 const journalBtn=(label,action,id='')=>'<button type="button" class="btn btn-secondary" data-journal="'+action+'" data-id="'+esc(id)+'" '+(!ready()?'disabled':'')+'>'+esc(label)+'</button>';
 const row=(label,value)=>'<div class="fw-row"><span>'+esc(label)+'</span><strong>'+money(value)+'</strong></div>';
+function linkDetails(link,journal){
+ const plan=snapshot().items.find(item=>item.key===link.plan_key);
+ const source=[...journal.operations,...(journal.history||[])].find(operation=>operation.id===link.source_operation);
+ const label=link.plan_label||plan?.label;
+ const due=link.due_date||plan?.due_date;
+ const revision=link.source_revision||source?.revision;
+ const payment=link.source_reason||source?.reason;
+ const period=link.plan_month?payrollMonthLabel.format(new Date(link.plan_month+'-01T00:00:00Z')):'';
+ const planText=label?label+(period?' · '+period:'')+' · '+(due?fmtDate(due):'Без срока'):'Платёж по плану';
+ return '<div class="fw-link-details"><strong>'+esc(planText)+'</strong><div>Оплата'+(revision?' №'+esc(revision):'')+
+  (payment?' · '+esc(historyTitle(payment)):'')+'</div><div>Связано: '+money(link.amount)+'</div><div>'+esc(link.reason)+'</div></div>';
+}
 function availableRows(value){
  return row('Свободно для расходов',Math.max(0,number(value)))+
   (value<0?row('Не покрыто деньгами',-value):'');
@@ -220,7 +232,7 @@ function render(){
     (canReverse?journalBtn('Отменить с причиной','reverse',o.id):'')+'</article>';
   }
   html+=btn('Более ранние операции','history','',locked)+receiptCorrections+btn('Корректировать резерв','reserve-adjust','',locked);
-  if(s.links?.length)html+='<details class="fw-card" data-fw-section="payment-links"><summary>Связи ранее внесённых оплат</summary>'+(s.links||[]).map(l=>'<div class="fw-row"><span>'+esc(l.reason)+' · '+money(l.amount)+'</span>'+btn('Отменить связь','unlink',l.id,locked)+'</div>').join('')+'</details>';
+  if(s.links?.length)html+='<details class="fw-card" data-fw-section="payment-links"><summary>Связи ранее внесённых оплат</summary>'+(s.links||[]).map(l=>'<div class="fw-row">'+linkDetails(l,j)+btn('Отменить связь','unlink',l.id,locked)+'</div>').join('')+'</details>';
   if(s.changes?.length)html+='<details class="fw-card" data-fw-section="plan-history"><summary>История планов и переводов</summary>'+(s.changes||[]).map(h=>'<div class="fw-card"><b>'+esc(h.after_value?.label||h.after_value?.reason||({plan:'План платежа',pay:'Фактическая оплата',rule:'Регулярное обязательство',wallet_transfer:'Перевод между счетами',reschedule:'Перенос срока',cancel:'Отмена остатка плана',wallet:'Новый счёт',stop_rule:'Остановка регулярного платежа'}[h.entity]||'Финансовое действие'))+'</b><p>'+esc(new Date(h.created_at).toLocaleString('ru-RU'))+'</p>'+(h.before_value?.amount?row('Сумма до',h.before_value.amount):'')+(h.after_value?.amount?row('Сумма после / операции',h.after_value.amount):'')+'<p>Прежний срок: '+esc(h.before_value?.due_date||'—')+' · Новый срок: '+esc(h.after_value?.due_date||'—')+'</p></div>').join('')+'</details>';
  }
  const activeAction=root.contains(document.activeElement)?document.activeElement.dataset.fw:null;
@@ -389,7 +401,13 @@ async function act(action,id){
   const currentDate=item.due_date?fmtDate(item.due_date):'Без срока';
   const details='<p><strong>'+esc(item.label)+'</strong> · '+money(item.remaining)+'</p><p>Текущий срок: '+esc(currentDate)+'</p>';
   form('Перенести срок',details+input('Новая дата','due_date',item.due_date||'','date'),f=>({command:'reschedule',payload:{...f,key:id}}));
- }else if(action==='cancel')form('Отменить неоплаченный остаток плана','<p>Фактические оплаты и история сохранятся.</p>',f=>({command:'cancel',payload:{...f,id}}));
+ }else if(action==='cancel'){
+  const item=s.items.find(x=>x.id===id&&x.origin==='plan');
+  if(!item)throw new Error('Этот план уже закрыт. Обновите календарь.');
+  form('Отменить неоплаченный остаток плана','<p><strong>'+esc(item.label)+'</strong> · '+
+   (item.due_date?esc(fmtDate(item.due_date)):'Без срока')+'</p>'+row('Остаток к отмене',item.remaining)+
+   '<p>Фактические оплаты и история сохранятся.</p>',f=>({command:'cancel',payload:{...f,id}}));
+ }
  else if(action==='wallet')form('Добавить место хранения',input('Название','name')+select('Тип','kind',[['cash','Наличные'],['bank','Банковский счёт']]),f=>({command:'wallet',payload:f}));
  else if(action==='wallet-transfer')form('Перевести деньги',select('Откуда','from',walletOptions)+select('Куда','to',walletOptions,walletOptions[1]?.[0])+input('Сумма','amount','','number')+'<p>Движение между своими счетами не создаёт доход и не уменьшает резерв.</p>',f=>({command:'wallet_transfer',payload:{...f,amount:number(f.amount)}}));
  else if(['rule','replace-rule','salary-rule'].includes(action)){
@@ -430,12 +448,45 @@ async function act(action,id){
   }else if(!['company_income','company_expenses'].includes(source.source_table)){
    throw new Error('Обновите журнал для проверки исходной оплаты.');
   }
-  const items=s.items.filter(x=>x.origin!=='funded'&&x.direction!=='release'&&
+  const used=new Map();
+  for(const link of s.links||[]){
+   if(link.source_operation===id)used.set(link.funding,(used.get(link.funding)||0)+Math.round(link.amount*100));
+  }
+  const maxFor=item=>{
+   const delta=number(source.changes?.[item.funding]);
+   const capacity=source.cash_delta>0?(delta>0?source.cash_delta:0):-delta;
+   const available=Math.round(capacity*100)-(used.get(item.funding)||0);
+   return Math.min(source.remaining,item.remaining,available/100);
+  };
+  const items=s.items.filter(x=>maxFor(x)>0&&x.origin!=='funded'&&x.direction!=='release'&&
    (source.cash_delta>0)===(x.direction==='income')&&
    (x.project_id||null)===projectId&&(x.employee_id||null)===employeeId);
-  if(!items.length)throw new Error('Нет неоплаченного плана для этого сотрудника и проекта. Создайте соответствующий план.');
-  form('Связать ранее внесённую оплату',select('Какой план погашает оплата','key',items.map(x=>[x.key,x.label+' · '+money(x.remaining)]))+input('Связываемая часть оплаты','amount',Math.min(source.remaining,items[0].remaining),'number')+'<p>Денежный остаток не изменится. При отмене исходной оплаты остаток плана восстановится автоматически.</p>',f=>({command:'link',payload:{...f,source:id,amount:number(f.amount)}}));
- }else if(action==='unlink')form('Отменить связь оплаты с планом','<p>Сама денежная операция сохранится. Неоплаченная часть плана восстановится.</p>',f=>({command:'unlink',payload:{...f,id}}));
+  if(!items.length)throw new Error('Нет неоплаченного плана с подходящим назначением денег, сотрудником и проектом.');
+  const options=items.map(item=>{
+   const month=item.origin==='rule'?item.key.split(':')[2]:null;
+   const period=month?' · '+payrollMonthLabel.format(new Date(month+'-01T00:00:00Z')):'';
+   return [item.key,item.label+period+' · '+(item.due_date?fmtDate(item.due_date):'Без срока')+' · '+money(item.remaining)];
+  });
+  const limitFor=key=>maxFor(items.find(item=>item.key===key));
+  form('Связать ранее внесённую оплату','<p>Внесено: '+esc(historyTitle(source.reason))+' · доступно для привязки '+money(source.remaining)+'</p>'+
+   select('Какой план погашает оплата','key',options)+input('Связываемая часть оплаты','amount',limitFor(items[0].key),'number')+
+   '<p>Оплата уже учтена. Изменится только неоплаченная часть плана.</p>',
+   f=>({command:'link',payload:{...f,source:id,amount:number(f.amount)}}));
+  const {key,amount}=modal.querySelector('form').elements;
+  amount.required=true;
+  amount.max=String(limitFor(key.value));
+  key.addEventListener('change',()=>{
+   const max=limitFor(key.value);
+   if(!amount.value||Number(amount.value)===Number(amount.max)||Number(amount.value)>max)amount.value=String(max);
+   amount.max=String(max);
+  });
+ }else if(action==='unlink'){
+  const link=s.links.find(item=>item.id===id);
+  if(!link)throw new Error('Эта связь уже отменена. Обновите историю.');
+  form('Отменить связь оплаты с планом',linkDetails(link,state.financialJournal)+
+   '<p>Сама денежная операция сохранится. Неоплаченная часть плана восстановится.</p>',
+   f=>({command:'unlink',payload:{...f,id}}));
+ }
  else if(action==='history'){
   const j=state.financialJournal,ops=[...j.operations,...(j.history||[])],actor=session.token;const r=await sb.rpc('get_financial_journal_history',{p_before:ops.length?Math.min(...ops.map(o=>o.revision)):null});if(r.error)throw r.error;if(actor!==session?.token||!owner())return;const seen=new Set(ops.map(o=>o.id));j.history=[...(j.history||[]),...(r.data||[]).filter(o=>!seen.has(o.id))];render();
  }
@@ -463,7 +514,7 @@ function selectedWallet(){if(!enabled()||!snapshot().active)return null;return [
 for(const id of moneyForms){if($(id))observeMoneyForm($(id));}
 new MutationObserver(records=>{for(const r of records)for(const node of r.addedNodes)if(node.nodeType===1)observeMoneyForm(node);}).observe(document.body,{childList:true});
 function clear(){document.querySelectorAll('.fw-wallet-picker').forEach(el=>el.remove());for(const id of moneyForms)if($(id))delete $(id).dataset.financeWallet;modal?.remove();modal=null;$('financeWorkspace')?.remove();document.getElementById('view-finance')?.classList.remove('finance-unified');}
-const style=document.createElement('style');style.textContent=`#view-finance.finance-unified>:not(#financeWorkspace){display:none!important}#financeWorkspace{max-width:1100px;margin:auto;color:var(--text)}.fw-head,.fw-row,.fw-actions{display:flex;justify-content:space-between;align-items:center;gap:12px}.fw-head h1{margin:0;font-size:28px}.fw-head p,.fw-card p,.fw-status{font-size:13px;line-height:1.6;color:var(--text-dim)}.fw-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:20px 0}.fw-tabs button{border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:10px;padding:12px;min-height:44px;cursor:pointer}.fw-tabs .active{background:var(--blue);color:white}.fw-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.fw-card{background:var(--card);border:1px solid var(--line);padding:20px;border-radius:14px;margin-bottom:14px;min-width:0}.fw-card h2{font-size:19px;margin-top:0}.fw-card h3{font-size:16px;margin:0}.fw-amount{display:block;font-size:26px;margin-top:12px}.fw-row{padding:10px 0;border-bottom:1px solid var(--line);align-items:flex-start}.fw-row>span{min-width:0;overflow-wrap:anywhere}.fw-row>strong{flex-shrink:0}.fw-actions{justify-content:flex-start;flex-wrap:wrap;margin:12px 0}.fw-card .btn,.fw-actions .btn,.fw-head .btn,.fw-warning .btn,#financeWorkspace>.btn{width:auto;min-height:44px;padding:11px 14px}.fw-warning{padding:14px;border:1px solid var(--line);border-radius:10px;line-height:1.5;margin:10px 0;color:var(--text)}.fw-form label{display:grid;gap:7px;margin:14px 0;font-size:13px}.fw-form input,.fw-form select{font:inherit;width:100%;box-sizing:border-box;min-height:44px;border:1px solid var(--line);border-radius:8px;padding:11px;background:var(--card);color:var(--text)}.fw-form{max-width:700px}.fw-wallet-fixed{display:grid;gap:5px;margin:14px 0;font-size:13px}.fw-wallet-fixed strong{font-weight:600}.fw-form-error{color:var(--red)}.fw-table{overflow:auto}.fw-table table{border-collapse:collapse;width:100%;font-size:13px}.fw-table td,.fw-table th{padding:10px;border-bottom:1px solid var(--line);white-space:nowrap}@media(max-width:600px){.fw-grid{grid-template-columns:1fr}.fw-row{flex-wrap:wrap}.fw-head{align-items:flex-start}.fw-tabs button{flex:1 0 27%}.fw-card{padding:16px}.fw-amount{font-size:24px}}`;document.head.appendChild(style);
+const style=document.createElement('style');style.textContent=`#view-finance.finance-unified>:not(#financeWorkspace){display:none!important}#financeWorkspace{max-width:1100px;margin:auto;color:var(--text)}.fw-head,.fw-row,.fw-actions{display:flex;justify-content:space-between;align-items:center;gap:12px}.fw-head h1{margin:0;font-size:28px}.fw-head p,.fw-card p,.fw-status{font-size:13px;line-height:1.6;color:var(--text-dim)}.fw-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:20px 0}.fw-tabs button{border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:10px;padding:12px;min-height:44px;cursor:pointer}.fw-tabs .active{background:var(--blue);color:white}.fw-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.fw-card{background:var(--card);border:1px solid var(--line);padding:20px;border-radius:14px;margin-bottom:14px;min-width:0}.fw-card h2{font-size:19px;margin-top:0}.fw-card h3{font-size:16px;margin:0}.fw-amount{display:block;font-size:26px;margin-top:12px}.fw-row{padding:10px 0;border-bottom:1px solid var(--line);align-items:flex-start}.fw-row>span,.fw-link-details{min-width:0;overflow-wrap:anywhere}.fw-row>strong{flex-shrink:0}.fw-actions{justify-content:flex-start;flex-wrap:wrap;margin:12px 0}.fw-card .btn,.fw-actions .btn,.fw-head .btn,.fw-warning .btn,#financeWorkspace>.btn{width:auto;min-height:44px;padding:11px 14px}.fw-warning{padding:14px;border:1px solid var(--line);border-radius:10px;line-height:1.5;margin:10px 0;color:var(--text)}.fw-form label{display:grid;gap:7px;margin:14px 0;font-size:13px}.fw-form input,.fw-form select{font:inherit;width:100%;box-sizing:border-box;min-height:44px;border:1px solid var(--line);border-radius:8px;padding:11px;background:var(--card);color:var(--text)}.fw-form{max-width:700px}.fw-wallet-fixed{display:grid;gap:5px;margin:14px 0;font-size:13px}.fw-wallet-fixed strong{font-weight:600}.fw-form-error{color:var(--red)}.fw-table{overflow:auto}.fw-table table{border-collapse:collapse;width:100%;font-size:13px}.fw-table td,.fw-table th{padding:10px;border-bottom:1px solid var(--line);white-space:nowrap}@media(max-width:600px){.fw-grid{grid-template-columns:1fr}.fw-row{flex-wrap:wrap}.fw-head{align-items:flex-start}.fw-tabs button{flex:1 0 27%}.fw-card{padding:16px}.fw-amount{font-size:24px}}`;document.head.appendChild(style);
 style.textContent += `
 .fw-form .fw-count-confirmation{display:flex;align-items:center;gap:10px;min-height:44px;cursor:pointer}
 .fw-form .fw-count-confirmation input{width:20px;height:20px;min-height:0;padding:0;margin:0;flex:none}

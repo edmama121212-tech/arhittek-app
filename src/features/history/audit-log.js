@@ -27,7 +27,7 @@ function fmtAuditValue(field, val){
   if(val === null || val === undefined) return '—';
   if(field === 'category_id'){ const c = findCategory(val); return c?c.name:'—'; }
   if(field === 'status_id'){ const s = findStatus(val); return s?s.name:'—'; }
-  if(field === 'employee_id'){ const e = findEmployee(val); return e?e.name:'—'; }
+  if(field === 'employee_id' || field === 'co_employee_id'){ const e = findEmployee(val); return e?e.name:'—'; }
   if(field === 'department_id'){ const d = findDepartment(val); return d?d.name:'—'; }
   if(['price','advance','balance','expenses','fee_paid'].includes(field)) return fmtMoney(val);
   if(typeof val === 'boolean') return val ? 'да' : 'нет';
@@ -39,15 +39,12 @@ function renderProjectHistory(projectId){
   const el = document.getElementById('pf-history-list');
   if(!el) return;
   if(!projectId){ el.innerHTML = '<div class="empty-state">Сохраните проект, чтобы вести историю</div>'; return; }
-  // Берём записи, относящиеся к этому проекту (по entity_id),
-  // а также ledger/накладные, где в имени фигурирует проект.
-  const proj = state.projects.find(p=>p.id===projectId);
-  const projName = proj ? proj.name : '';
-  let list = (state.history||[]).filter(h=>{
-    if(h.entity_type === 'project' && h.entity_id === projectId) return true;
-    // финансовые записи логируются под своей сущностью, но имя начинается с названия проекта
-    if((h.entity_type === 'ledger_entry') && projName && (h.entity_name||'').indexOf(projName) === 0) return true;
-    return false;
+  const ledgerProjects = new Map([...(state.ledger || []),...(state.trash?.ledger || [])]
+    .map(entry=>[entry.id,entry.project_id]));
+  const list = (state.history || []).filter(entry=>{
+    if(entry.entity_type === 'project') return entry.entity_id === projectId;
+    if(entry.entity_type !== 'ledger_entry') return false;
+    return (entry.changes?._project_id ?? ledgerProjects.get(entry.entity_id)) === projectId;
   });
   if(!list.length){ el.innerHTML = '<div class="empty-state">Изменений пока нет</div>'; return; }
   el.innerHTML = list.slice(0,80).map(h=>{
@@ -55,7 +52,7 @@ function renderProjectHistory(projectId){
     let actor = '';
     let changesHtml = '';
     if(h.changes && Object.keys(h.changes).length){
-      changesHtml = Object.entries(h.changes).filter(([field])=>field!=='_actor').map(([field, vals])=>{
+      changesHtml = Object.entries(h.changes).filter(([field])=>field!=='_actor' && field!=='_project_id').map(([field, vals])=>{
         const lbl = fieldLabels[field] || field;
         if(vals && typeof vals === 'object' && ('old' in vals || 'new' in vals)){
           return `${lbl}: ${escapeHtml(fmtAuditValue(field, vals.old))} → ${escapeHtml(fmtAuditValue(field, vals.new))}`;
@@ -69,6 +66,7 @@ function renderProjectHistory(projectId){
         <span class="h-action ${h.action}">${action}</span>
         <span class="h-time">${fmtDateTime(h.created_at)}</span>
       </div>
+      ${h.entity_type === 'ledger_entry' ? `<div class="h-entity">Запись финансов: ${escapeHtml(h.entity_name || 'Без названия')}</div>` : ''}
       ${changesHtml ? `<div class="h-changes">${changesHtml}</div>` : ''}
       <div class="h-actor" style="font-size:11px;color:var(--text-dim);margin-top:4px;">✎ ${escapeHtml(actor || '—')}</div>
     </div>`;
@@ -92,7 +90,7 @@ function renderHistory(){
     let actor = '';
     let changesHtml = '';
     if(h.changes && Object.keys(h.changes).length){
-      changesHtml = Object.entries(h.changes).filter(([field])=>field!=='_actor').map(([field, vals])=>{
+      changesHtml = Object.entries(h.changes).filter(([field])=>field!=='_actor' && field!=='_project_id').map(([field, vals])=>{
         const lbl = fieldLabels[field] || field;
         return `${lbl}: ${escapeHtml(fmtAuditValue(field, vals.old))} → ${escapeHtml(fmtAuditValue(field, vals.new))}`;
       }).join('<br>');

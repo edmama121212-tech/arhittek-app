@@ -390,7 +390,8 @@
     background:var(--text); color:var(--bg); font-size:13px; font-weight:600;
     padding:10px 18px; border-radius:20px; z-index:300;
     opacity:0; pointer-events:none; transition:opacity .25s, transform .25s;
-    font-family:'Space Grotesk',sans-serif; white-space:nowrap;
+    font-family:'Space Grotesk',sans-serif; width:max-content; max-width:calc(100% - 32px);
+    box-sizing:border-box; overflow-wrap:anywhere; line-height:1.4;
   }
   .toast.show{opacity:1; transform:translateX(-50%) translateY(-6px);}
 
@@ -759,7 +760,7 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
       <button type="button" class="filter-chip" aria-pressed="false" data-floors="3" onclick="filterCards('3',this)">3+ этажей</button>
     </div>
     <div class="filters" id="feature-filters" style="flex-wrap:wrap;gap:6px;margin-top:6px;">
-      <button type="button" class="filter-chip active" aria-pressed="true" data-feature="all" onclick="filterFeature('all',this)">Без доп.</button>
+      <button type="button" class="filter-chip active" aria-pressed="true" data-feature="all" onclick="filterFeature('all',this)">Все особенности</button>
       <button type="button" class="filter-chip" aria-pressed="false" data-feature="basement" onclick="filterFeature('basement',this)">Цокольный этаж</button>
       <button type="button" class="filter-chip" aria-pressed="false" data-feature="mansard" onclick="filterFeature('mansard',this)">Мансарда</button>
       <button type="button" class="filter-chip" aria-pressed="false" data-feature="flat" onclick="filterFeature('flat',this)">Плоская кровля</button>
@@ -845,8 +846,8 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
 
       <div class='section-label'><span class='lbl-text'>Сотрудники</span><span class='section-label-line'></span></div>
       <div class='search-box'>
-        <input type='text' id='employeeSearch' placeholder='Поиск сотрудника...'>
-        <button class='search-clear' id='employeeSearchClear' type='button'>✕</button>
+        <input type='text' id='employeeSearch' aria-label='Поиск сотрудника по имени или должности' placeholder='Имя или должность'>
+        <button class='search-clear' id='employeeSearchClear' type='button' aria-label='Очистить поиск сотрудников'>✕</button>
       </div>
       <div class='card' id='employeesCard'>
         <div class='loading-state'>Загрузка…</div>
@@ -1861,7 +1862,7 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
     <button class="btn btn-secondary" id="pf-create-kp" style="display:none;">Создать КП для этого проекта</button>
 
     <div class="section-label" style="margin:18px 0 10px;"><span class="lbl-text">История изменений</span><span class="section-label-line"></span></div>
-    <button class="btn btn-secondary" id="pf-history-toggle" type="button" style="margin-bottom:8px;">📋 Показать историю изменений</button>
+    <button class="btn btn-secondary" id="pf-history-toggle" type="button" aria-expanded="false" aria-controls="pf-history-list" style="margin-bottom:8px;">Показать историю изменений</button>
     <div id="pf-history-list" class="card" style="margin-bottom:8px; display:none;"></div>
 
     <button class="btn btn-primary" id="pf-save">Сохранить</button>
@@ -5044,20 +5045,6 @@ function openProjectSheet(id){
       }
     }
 
-    // История изменений по проекту
-    renderProjectHistory(id);
-    const histToggle = document.getElementById('pf-history-toggle');
-    const histList = document.getElementById('pf-history-list');
-    if(histToggle && histList){
-      histList.style.display = 'none';
-      histToggle.textContent = '📋 Показать историю изменений';
-      histToggle.onclick = function(){
-        const shown = histList.style.display !== 'none';
-        histList.style.display = shown ? 'none' : '';
-        histToggle.textContent = shown ? '📋 Показать историю изменений' : '📋 Скрыть историю изменений';
-        if(!shown) renderProjectHistory(id);
-      };
-    }
   }else{
     editingProjectLoadedAt = null;
     title.textContent = 'Новый проект';
@@ -5102,9 +5089,20 @@ function openProjectSheet(id){
     renderStagesList(null);
     renderTasksList(null);
     document.getElementById('pf-open-as-object').style.display = 'none';
-    const histList0 = document.getElementById('pf-history-list');
-    if(histList0){ histList0.style.display = 'none'; histList0.innerHTML = '<div class="empty-state">Сохраните проект, чтобы вести историю</div>'; }
   }
+  const historyToggle = document.getElementById('pf-history-toggle');
+  const historyList = document.getElementById('pf-history-list');
+  historyList.style.display = 'none';
+  historyList.replaceChildren();
+  historyToggle.setAttribute('aria-expanded','false');
+  historyToggle.textContent = 'Показать историю изменений';
+  historyToggle.onclick = ()=>{
+    const open = historyToggle.getAttribute('aria-expanded') !== 'true';
+    historyToggle.setAttribute('aria-expanded',String(open));
+    historyToggle.textContent = open ? 'Скрыть историю изменений' : 'Показать историю изменений';
+    historyList.style.display = open ? '' : 'none';
+    if(open) renderProjectHistory(editingProjectId);
+  };
 
   renderProjectNumberField();
   if(!id)void refreshProjectNumbers();
@@ -6857,7 +6855,7 @@ async function addLedgerEntry(){
     const {data, error} = await sb.from('ledger_entries').insert({type, project_id, description, amount, entry_date, received_by: session ? session.employeeId : null}).select().single();
     if(error) throw error;
     const proj = state.projects.find(p=>p.id===project_id);
-    await logAudit('ledger_entry', data.id, (proj?proj.name+' — ':'')+(description||ledgerTypeLabels[type]?.label||''), 'create', {});
+    await logAudit('ledger_entry', data.id, (proj?proj.name+' — ':'')+(description||ledgerTypeLabels[type]?.label||''), 'create', {_project_id:project_id});
     document.getElementById('ledgerDesc').value = '';
     document.getElementById('ledgerAmount').value = '';
     document.getElementById('ledgerDate').value = '';
@@ -7036,7 +7034,7 @@ async function deleteLedgerEntry(id){
     const {error} = await sb.from('ledger_entries').update({deleted_at: new Date().toISOString()}).eq('id', id);
     if(error) throw error;
     const proj = e ? state.projects.find(p=>p.id===e.project_id) : null;
-    await logAudit('ledger_entry', id, (proj?proj.name+' — ':'')+(e?.description||''), 'delete', {});
+    await logAudit('ledger_entry', id, (proj?proj.name+' — ':'')+(e?.description||''), 'delete', {_project_id:e?.project_id});
     showToast('Запись перемещена в корзину');
     await loadAll();
   }catch(e){
@@ -7131,8 +7129,12 @@ function renderEmployees(){
   const card = document.getElementById('employeesCard');
   let list = state.employees.slice();
   if(employeeSearchQuery.trim()){
-    const q = employeeSearchQuery.trim().toLowerCase();
-    list = list.filter(e=>(e.name||'').toLowerCase().includes(q) || (e.role||'').toLowerCase().includes(q));
+    const normalize = text => text.toLocaleLowerCase('ru').replaceAll('ё','е');
+    const words = normalize(employeeSearchQuery.trim()).split(/\s+/);
+    list = list.filter(employee => {
+      const details = normalize([employee.name, employee.role].join(' '));
+      return words.every(word => details.includes(word));
+    });
   }
   if(!list.length){
     card.innerHTML = '<div class="empty-state">Сотрудники не найдены</div>';
@@ -8671,7 +8673,7 @@ function fmtAuditValue(field, val){
   if(val === null || val === undefined) return '—';
   if(field === 'category_id'){ const c = findCategory(val); return c?c.name:'—'; }
   if(field === 'status_id'){ const s = findStatus(val); return s?s.name:'—'; }
-  if(field === 'employee_id'){ const e = findEmployee(val); return e?e.name:'—'; }
+  if(field === 'employee_id' || field === 'co_employee_id'){ const e = findEmployee(val); return e?e.name:'—'; }
   if(field === 'department_id'){ const d = findDepartment(val); return d?d.name:'—'; }
   if(['price','advance','balance','expenses','fee_paid'].includes(field)) return fmtMoney(val);
   if(typeof val === 'boolean') return val ? 'да' : 'нет';
@@ -8683,15 +8685,12 @@ function renderProjectHistory(projectId){
   const el = document.getElementById('pf-history-list');
   if(!el) return;
   if(!projectId){ el.innerHTML = '<div class="empty-state">Сохраните проект, чтобы вести историю</div>'; return; }
-  // Берём записи, относящиеся к этому проекту (по entity_id),
-  // а также ledger/накладные, где в имени фигурирует проект.
-  const proj = state.projects.find(p=>p.id===projectId);
-  const projName = proj ? proj.name : '';
-  let list = (state.history||[]).filter(h=>{
-    if(h.entity_type === 'project' && h.entity_id === projectId) return true;
-    // финансовые записи логируются под своей сущностью, но имя начинается с названия проекта
-    if((h.entity_type === 'ledger_entry') && projName && (h.entity_name||'').indexOf(projName) === 0) return true;
-    return false;
+  const ledgerProjects = new Map([...(state.ledger || []),...(state.trash?.ledger || [])]
+    .map(entry=>[entry.id,entry.project_id]));
+  const list = (state.history || []).filter(entry=>{
+    if(entry.entity_type === 'project') return entry.entity_id === projectId;
+    if(entry.entity_type !== 'ledger_entry') return false;
+    return (entry.changes?._project_id ?? ledgerProjects.get(entry.entity_id)) === projectId;
   });
   if(!list.length){ el.innerHTML = '<div class="empty-state">Изменений пока нет</div>'; return; }
   el.innerHTML = list.slice(0,80).map(h=>{
@@ -8699,7 +8698,7 @@ function renderProjectHistory(projectId){
     let actor = '';
     let changesHtml = '';
     if(h.changes && Object.keys(h.changes).length){
-      changesHtml = Object.entries(h.changes).filter(([field])=>field!=='_actor').map(([field, vals])=>{
+      changesHtml = Object.entries(h.changes).filter(([field])=>field!=='_actor' && field!=='_project_id').map(([field, vals])=>{
         const lbl = fieldLabels[field] || field;
         if(vals && typeof vals === 'object' && ('old' in vals || 'new' in vals)){
           return `${lbl}: ${escapeHtml(fmtAuditValue(field, vals.old))} → ${escapeHtml(fmtAuditValue(field, vals.new))}`;
@@ -8713,6 +8712,7 @@ function renderProjectHistory(projectId){
         <span class="h-action ${h.action}">${action}</span>
         <span class="h-time">${fmtDateTime(h.created_at)}</span>
       </div>
+      ${h.entity_type === 'ledger_entry' ? `<div class="h-entity">Запись финансов: ${escapeHtml(h.entity_name || 'Без названия')}</div>` : ''}
       ${changesHtml ? `<div class="h-changes">${changesHtml}</div>` : ''}
       <div class="h-actor" style="font-size:11px;color:var(--text-dim);margin-top:4px;">✎ ${escapeHtml(actor || '—')}</div>
     </div>`;
@@ -8736,7 +8736,7 @@ function renderHistory(){
     let actor = '';
     let changesHtml = '';
     if(h.changes && Object.keys(h.changes).length){
-      changesHtml = Object.entries(h.changes).filter(([field])=>field!=='_actor').map(([field, vals])=>{
+      changesHtml = Object.entries(h.changes).filter(([field])=>field!=='_actor' && field!=='_project_id').map(([field, vals])=>{
         const lbl = fieldLabels[field] || field;
         return `${lbl}: ${escapeHtml(fmtAuditValue(field, vals.old))} → ${escapeHtml(fmtAuditValue(field, vals.new))}`;
       }).join('<br>');
@@ -8907,7 +8907,7 @@ async function restoreItem(table, id, name){
       }
     }
     dependentSynced=true;
-    await logAudit(entityTypeMap[table],id,name,'restore',{});
+    await logAudit(entityTypeMap[table],id,name,'restore',restoredLedger?{_project_id:restoredLedger.project_id}:{});
     await loadAll();
     showToast('Восстановлено');
   }catch(e){
@@ -11304,9 +11304,10 @@ function renderCardsList(){
   }
 
   const stats = document.getElementById('cards-stats');
-  if (stats) stats.hidden = terms.length > 0;
+  const hasFilters = terms.length > 0 || currentCardFloorFilter !== 'all' || currentFeatureFilter !== 'all' || currentCardStyleFilter !== 'all';
+  if (stats) stats.hidden = hasFilters;
   const count = document.getElementById('cards-search-count');
-  if (count) count.textContent = terms.length ? 'Найдено проектов: ' + filtered.length : '';
+  if (count) count.textContent = hasFilters ? 'Найдено проектов: ' + filtered.length : '';
 
   if(!filtered.length){
     container.innerHTML = `<div class="note" style="text-align:center;padding:40px 0;opacity:0.5;">

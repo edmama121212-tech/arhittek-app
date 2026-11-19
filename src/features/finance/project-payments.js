@@ -165,7 +165,7 @@ async function deleteLedgerEntry(id){
     const {error} = await sb.from('ledger_entries').update({deleted_at: new Date().toISOString()}).eq('id', id);
     if(error) throw error;
     const proj = e ? state.projects.find(p=>p.id===e.project_id) : null;
-    await logAudit('ledger_entry', id, (proj?proj.name+' — ':'')+(e?.description||''), 'delete', {});
+    await logAudit('ledger_entry', id, (proj?proj.name+' — ':'')+(e?.description||''), 'delete', {_project_id:e?.project_id});
     showToast('Запись перемещена в корзину');
     await loadAll();
   }catch(e){

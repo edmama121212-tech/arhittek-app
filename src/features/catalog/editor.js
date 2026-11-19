@@ -243,9 +243,10 @@ function renderCardsList(){
   }
 
   const stats = document.getElementById('cards-stats');
-  if (stats) stats.hidden = terms.length > 0;
+  const hasFilters = terms.length > 0 || currentCardFloorFilter !== 'all' || currentFeatureFilter !== 'all' || currentCardStyleFilter !== 'all';
+  if (stats) stats.hidden = hasFilters;
   const count = document.getElementById('cards-search-count');
-  if (count) count.textContent = terms.length ? 'Найдено проектов: ' + filtered.length : '';
+  if (count) count.textContent = hasFilters ? 'Найдено проектов: ' + filtered.length : '';
 
   if(!filtered.length){
     container.innerHTML = `<div class="note" style="text-align:center;padding:40px 0;opacity:0.5;">

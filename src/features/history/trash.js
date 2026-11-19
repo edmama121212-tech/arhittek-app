@@ -151,7 +151,7 @@ async function restoreItem(table, id, name){
       }
     }
     dependentSynced=true;
-    await logAudit(entityTypeMap[table],id,name,'restore',{});
+    await logAudit(entityTypeMap[table],id,name,'restore',restoredLedger?{_project_id:restoredLedger.project_id}:{});
     await loadAll();
     showToast('Восстановлено');
   }catch(e){

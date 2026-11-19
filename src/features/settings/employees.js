@@ -5,8 +5,12 @@ function renderEmployees(){
   const card = document.getElementById('employeesCard');
   let list = state.employees.slice();
   if(employeeSearchQuery.trim()){
-    const q = employeeSearchQuery.trim().toLowerCase();
-    list = list.filter(e=>(e.name||'').toLowerCase().includes(q) || (e.role||'').toLowerCase().includes(q));
+    const normalize = text => text.toLocaleLowerCase('ru').replaceAll('ё','е');
+    const words = normalize(employeeSearchQuery.trim()).split(/\s+/);
+    list = list.filter(employee => {
+      const details = normalize([employee.name, employee.role].join(' '));
+      return words.every(word => details.includes(word));
+    });
   }
   if(!list.length){
     card.innerHTML = '<div class="empty-state">Сотрудники не найдены</div>';
