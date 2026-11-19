@@ -21,6 +21,7 @@ const quote = value => '"' + String(value).replaceAll('"', '""') + '"';
 const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 
 (async () => {
+  const stopRule = process.argv.includes('--stop-rule');
   const createRule = process.argv.includes('--create-rule');
   const recurring = process.argv.includes('--recurring');
   const homeActions = process.argv.includes('--home-actions');
@@ -33,7 +34,7 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
     await db.query("insert into public.employees(id,name,role,is_admin) values($1,'Мансур','Генеральный директор',true)", [uuid(1)]);
     await db.query("insert into public.employee_sessions(employee_id,token,expires_at) values($1,$2,now()+interval '1 day')", [uuid(1), token]);
     for (const file of ['supabase/install-owner-access.sql', 'supabase/financial-journal.sql',
-      ...fs.readdirSync(path.join(root, 'supabase/migrations')).filter(name => /^20261030|^20261031|^20261101|employee_salary_history\.sql$|finance_payment_integrity\.sql$|recurring_replacement\.sql$|finance_spending_limits\.sql$/.test(name)).sort().map(name => 'supabase/migrations/' + name)]) {
+      ...fs.readdirSync(path.join(root, 'supabase/migrations')).filter(name => /^20261030|^20261031|^20261101|employee_salary_history\.sql$|finance_payment_integrity\.sql$|recurring_(?:replacement|stop)\.sql$|finance_spending_limits\.sql$/.test(name)).sort().map(name => 'supabase/migrations/' + name)]) {
       await db.exec(read(file));
     }
     if(homeActions){
@@ -62,14 +63,14 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
     ];
     const plan = (label, direction, due_date, amount) => ({label, direction, due_date, amount, funding:'reserve', certainty:'confirmed',reason:'Изолированное обязательство'});
     const idFor = i => i === 7 ? 'rule:'+uuid(27)+':'+month.slice(0,7) : uuid(20+i);
-    for (const [i,[,label,direction,from]] of (createRule || recurring || homeActions || cashFloor ? [] : cases).entries()) {
+    for (const [i,[,label,direction,from]] of (stopRule || createRule || recurring || homeActions || cashFloor ? [] : cases).entries()) {
       if(i===7) await command('rule',{label,direction,amount:1007,due_day:10,start_month:month,certainty:'confirmed',reason:'Тестовое регулярное обязательство'},uuid(27));
       else await command('plan',plan(label,direction,from,1000+i),uuid(20+i));
     }
-    if(!createRule && !recurring && !homeActions && !cashFloor) await command('plan',plan(cases[6][1],'expense',day,2000),uuid(50));
-    if(!createRule && !recurring && !homeActions && !cashFloor) await command('pay',{key:idFor(5),amount:407.75,wallet_id:wallet,date:day,reason:'Часть суммы уже оплачена'},uuid(51));
+    if(!stopRule && !createRule && !recurring && !homeActions && !cashFloor) await command('plan',plan(cases[6][1],'expense',day,2000),uuid(50));
+    if(!stopRule && !createRule && !recurring && !homeActions && !cashFloor) await command('pay',{key:idFor(5),amount:407.75,wallet_id:wallet,date:day,reason:'Часть суммы уже оплачена'},uuid(51));
 
-    const ctx = await browser.newContext({hasTouch:createRule,locale:'ru-RU',viewport:{width:390,height:844},serviceWorkers:'block',reducedMotion:'reduce'});
+    const ctx = await browser.newContext({hasTouch:createRule||stopRule,locale:'ru-RU',viewport:{width:390,height:844},serviceWorkers:'block',reducedMotion:'reduce'});
     await ctx.addInitScript({path:path.join(__dirname,'mock.js')});
     const servedHashes = {};
     await ctx.route('**/*',route=>{
@@ -112,6 +113,11 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
     const csv = [['Элемент','Сборка SHA256 index/finance-workspace','Дата UTC','Браузер','Задача','Данные','Шаги','Результат и связи','Открытие до 2 кадров, мс','Завершение до 2 кадров, мс','Визуальная проверка','Удобство','Статус']];
     if(qa) fs.mkdirSync(qa,{recursive:true});
     await page.locator('.nav-btn[data-view="view-finance"]').click();
+    if(stopRule){
+      await require('./helpers/stop-rule-ui.cjs')({page,fw,db,command,snap,day,wallet,uuid,shift,build,browser,expectedTile,twoFrames});
+      assert.deepEqual(errors,[]);
+      return;
+    }
     if(createRule){
       await require('./helpers/create-rule-ui.cjs')({page,fw,snap,day,shift,build,browser,expectedTile,twoFrames,errors});
       return;

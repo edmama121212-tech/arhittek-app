@@ -191,7 +191,16 @@ function render(){
   html+=journalBtn('Распределить деньги','transfer');
   html+='<details class="fw-card" data-fw-section="project-closing"><summary>Подтвердить финансовое закрытие проектов</summary>'+(state.projects||[]).filter(p=>/заверш/i.test(findStatus(p.status_id)?.name||'')&&!ARHITTEKCash.constructionProject(state,p)).map(p=>'<div class="fw-row"><span>'+esc(p.name)+'</span>'+journalBtn('Проверить закрытие','close',p.id)+'</div>').join('')+'</details>';
  }else if(tab==='settings'){
-  html+='<article class="fw-card"><h2>Регулярные поступления и расходы</h2><p>Новую сумму можно установить с выбранного месяца.</p>'+btn('+ Регулярный платёж','rule','',locked)+'</article>'+(s.rules||[]).map(r=>'<article class="fw-card"><h3>'+esc(r.label)+'</h3>'+row(r.direction==='income'?'Поступление в месяц':'Расход в месяц',r.amount)+'<p>До '+r.due_day+' числа · с '+esc(String(r.start_month).slice(0,7))+(r.end_month?' по '+esc(String(r.end_month).slice(0,7)):'')+'</p>'+(r.end_month?'':btn('Новая сумма с нового месяца','replace-rule',r.id,locked))+btn('Остановить после этого месяца','stop-rule',r.id,locked)+'</article>').join('');
+  html+='<article class="fw-card"><h2>Регулярные поступления и расходы</h2><p>Новую сумму можно установить с выбранного месяца.</p>'+btn('+ Регулярный платёж','rule','',locked)+'</article>';
+  const currentMonth=s.as_of.slice(0,7);
+  for(const r of s.rules||[]){
+   const first=r.start_month.slice(0,7),last=r.end_month?.slice(0,7);
+   const period=last&&last<first?'Отменён до начала':'с '+esc(first)+(last?' по '+esc(last):'');
+   const stopLabel=first>currentMonth?'Отменить до начала':'Остановить после этого месяца';
+   html+='<article class="fw-card"><h3>'+esc(r.label)+'</h3>'+row(r.direction==='income'?'Поступление в месяц':'Расход в месяц',r.amount)+'<p>До '+r.due_day+' числа · '+period+'</p>'+
+    (last?'':btn('Новая сумма с нового месяца','replace-rule',r.id,locked))+
+    (!last||last>currentMonth?btn(stopLabel,'stop-rule',r.id,locked):'')+'</article>';
+  }
   html+='<article class="fw-card"><h2>Оклады из карточек сотрудников</h2><p>Проверьте оклад и добавьте его в календарь выплат. Изменения в карточке сотрудника обновляйте здесь отдельно.</p>'+(state.employees||[]).filter(e=>e.is_salaried&&e.active!==false&&!e.deleted_at).map(e=>'<div class="fw-row"><span>'+esc(e.name)+' · '+money(e.fixed_salary)+'</span>'+btn('Внести оклад в календарь','salary-rule',e.id,locked)+'</div>').join('')+'</article>';
  }else if(tab==='archive'){
   const events=ARHITTEKCash.cashEvents(state).filter(x=>x.date<s.start_date);
@@ -400,7 +409,15 @@ async function act(action,id){
   ruleFields.due_day.min='1';
   ruleFields.due_day.max='28';
   ruleFields.due_day.step='1';
- }else if(action==='stop-rule')form('Остановить регулярный платёж','<p>Этот месяц остаётся в календаре. Новые месяцы создаваться не будут.</p>',f=>({command:'stop_rule',payload:{...f,id}}));
+ }else if(action==='stop-rule'){
+  const rule=s.rules.find(r=>r.id===id);
+  if(!rule||rule.end_month?.slice(0,7)<=s.as_of.slice(0,7))throw new Error('Этот тариф уже завершён.');
+  const future=rule.start_month.slice(0,7)>s.as_of.slice(0,7);
+  form(future?'Отменить будущий платёж':'Остановить регулярный платёж',
+   '<p><strong>'+esc(rule.label)+'</strong> · '+money(rule.amount)+'</p><p>'+
+   (future?'Начисления по этому тарифу будут отменены до начала договора.':'Этот месяц остаётся в календаре. Со следующего месяца начисления по этому тарифу прекратятся.')+'</p>',
+   f=>({command:'stop_rule',payload:{...f,id}}));
+ }
  else if(action==='link'){
   const source=s.unmatched.find(x=>x.id===id);
   if(!source)throw new Error('Оплата изменилась. Обновите журнал.');
