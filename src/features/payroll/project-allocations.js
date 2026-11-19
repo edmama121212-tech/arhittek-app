@@ -217,7 +217,7 @@ async function addProjectExpense(){
     updateCompanyRemainderField(projectId);
     const up=state.projects.find(x=>x.id===projectId); if(up) renderFeeSummaryForProject(up);
     showToast(wasEditing ? 'Расход изменён' : 'Расход добавлен');
-  }catch(e){ console.error(e); showToast(wasEditing ? 'Ошибка изменения расхода' : 'Ошибка добавления расхода');
+  }catch(e){ console.error(e); showToast(window.ARHITTEKCash?.insufficientFundsNotice(e)||(wasEditing ? 'Ошибка изменения расхода' : 'Ошибка добавления расхода'));
   }finally{ projectExpenseSaveInFlight=false; document.getElementById('pf-expense-add-btn').disabled=false; }
 }
 

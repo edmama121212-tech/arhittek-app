@@ -187,7 +187,6 @@ function renderAnalytics(){
 
       <div class="section-label finance-inner-label"><span class="lbl-text">Записи общих расходов</span><span class="section-label-line"></span></div>
       <div class="card" id="companyExpensesList" style="margin-bottom:8px;"></div>
-      <button class="btn btn-secondary" onclick="openCompanyExpenseSheet(null)">+ Добавить расход</button>
     ` : ''}
   `;
 

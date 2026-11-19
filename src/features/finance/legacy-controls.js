@@ -139,7 +139,6 @@ async function saveReserveCorrection(){
 
 window.openCompanyWithdrawal=function(){
   if(!isAdmin()){showToast('Требуются права администратора');return;}
-  try{openCompanyExpenseSheet(null,COMPANY_WITHDRAWAL_CATEGORY);}catch(e){console.error(e);}
 };
 
 function renderFinanceControls(){
@@ -182,7 +181,6 @@ function renderFinanceControls(){
   }
   const operational=(state.companyExpenses||[]).filter(x=>!x.deleted_at&&(typeof isOperationalCompanyExpense!=='function'||isOperationalCompanyExpense(x))).sort((a,b)=>String(b.expense_date||'').localeCompare(String(a.expense_date||'')));
   expenseManage.innerHTML=`
-    ${isAdmin()?'<div class="finance-quick-actions"><button type="button" onclick="openCompanyExpenseSheet(null,\'Кофе / вода / офис\')">+ Кофе / офис</button><button type="button" onclick="openCompanyExpenseSheet(null,\'Топливо / авто\')">+ Топливо / авто</button></div>':''}
     <details class="finance-visual-disclosure">
       <summary>Управление расходами · ${operational.length}</summary>
       <div class="finance-management-list">

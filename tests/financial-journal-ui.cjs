@@ -20,6 +20,20 @@ await page.evaluate(()=>document.querySelector('[data-journal="adjust-reserve"]'
 await page.locator('#journalReserve').fill('40000.25');await page.locator('#journalReason').fill('Сверка фиксированного резерва');await page.locator('#journalChecked').check();await page.locator('#journalConfirm').click();
 assert.equal(await page.evaluate(()=>__reserveRequest.p_command),'adjust_reserve');assert.equal(await page.evaluate(()=>__reserveRequest.p_payload.target),40000.25);await page.locator('#journalCancel').click();
 await page.evaluate(()=>{state.projects[0].name='Renamed';state.projects[0].end_date='2030-01-01';state.projects[0].status_id='active';renderCashFinance();});assert.match(await page.locator('#cash-panel-reserve [data-company-reserve]').innerText(),/42\s*300/);
+await page.evaluate(()=>{
+ state.financialJournal.balances.reserve=-3500;
+ state.financialJournal.operations=[{id:'negative',reason:'Расход по проекту',cash_delta:-100,kind:'record',changes:{reserve:-100},balances_after:{reserve:-3500},created_at:'2026-11-19T12:00:00Z'}];
+ renderCashFinance();
+});
+const legacyReserve=page.locator('#cash-panel-reserve'),legacyHistory=legacyReserve.locator('details').filter({has:page.getByText('Журнал · 1 записей',{exact:true})});
+const amount=async(scope,label)=>Number((await scope.locator('.fee-row').filter({has:page.getByText(label,{exact:true})}).locator('.fv').first().textContent()).replace(/[\s₽]/g,'').replace(',','.'));
+assert.equal(await amount(legacyReserve,'Свободно для расходов'),0);
+assert.equal(await amount(legacyReserve,'Не покрыто деньгами'),3500);
+assert.equal(await amount(legacyHistory,'Изменение всех денег'),-100);
+assert.equal(await amount(legacyHistory,'Не покрыто до операции'),3400);
+assert.equal(await amount(legacyHistory,'Не покрыто деньгами'),3500);
+assert.equal(await page.locator('#view-finance [data-journal="expense"],#view-finance [data-sf-action="expense"],#view-finance [data-cash-action="expense"]').count(),0);
+assert.equal(await page.evaluate(()=>state.financialJournal.balances.reserve),-3500);
 await page.evaluate(()=>openSalaryPaymentSheet('architect','2026-10'));assert.equal(await page.locator('#journalSalaryFunded').inputValue(),'');await page.evaluate(()=>document.querySelector('#salaryPaymentSheetOverlay')?.classList.remove('active'));
 await page.evaluate(async()=>{__fail={rpc:'get_financial_journal'};await loadAll();});assert.equal(await page.locator('#cash-panel-reserve [data-company-reserve]').count(),0);assert.match(await page.locator('#cash-panel-reserve').innerText(),/Не удалось/);
 console.log('Journal mobile opening review, explicit payroll allocation, stable balance and failed-read checks passed');

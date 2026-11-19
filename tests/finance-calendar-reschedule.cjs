@@ -21,6 +21,9 @@ const quote = value => '"' + String(value).replaceAll('"', '""') + '"';
 const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 
 (async () => {
+  const recurring = process.argv.includes('--recurring');
+  const homeActions = process.argv.includes('--home-actions');
+  const cashFloor = process.argv.includes('--cash-floor');
   const db = new PGlite();
   await db.waitReady;
   const browser = await chromium.launch({executablePath:process.env.BROWSER_EXECUTABLE || undefined, args:['--no-sandbox']});
@@ -29,8 +32,11 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
     await db.query("insert into public.employees(id,name,role,is_admin) values($1,'Мансур','Генеральный директор',true)", [uuid(1)]);
     await db.query("insert into public.employee_sessions(employee_id,token,expires_at) values($1,$2,now()+interval '1 day')", [uuid(1), token]);
     for (const file of ['supabase/install-owner-access.sql', 'supabase/financial-journal.sql',
-      ...fs.readdirSync(path.join(root, 'supabase/migrations')).filter(name => /^20261030|^20261031|^20261101|employee_salary_history\.sql$|finance_payment_integrity\.sql$/.test(name)).sort().map(name => 'supabase/migrations/' + name)]) {
+      ...fs.readdirSync(path.join(root, 'supabase/migrations')).filter(name => /^20261030|^20261031|^20261101|employee_salary_history\.sql$|finance_payment_integrity\.sql$|recurring_replacement\.sql$|finance_spending_limits\.sql$/.test(name)).sort().map(name => 'supabase/migrations/' + name)]) {
       await db.exec(read(file));
+    }
+    if(homeActions){
+      await db.query("insert into public.projects(id,name,price,balance) values($1,'Тестовый павильон',10000,10000)",[uuid(701)]);
     }
     await db.exec('set role anon');
     await db.query("select set_config('request.headers',$1,false)", [JSON.stringify({'x-session-token':token,'x-finance-client':'1'})]);
@@ -55,12 +61,12 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
     ];
     const plan = (label, direction, due_date, amount) => ({label, direction, due_date, amount, funding:'reserve', certainty:'confirmed',reason:'Изолированное обязательство'});
     const idFor = i => i === 7 ? 'rule:'+uuid(27)+':'+month.slice(0,7) : uuid(20+i);
-    for (const [i,[,label,direction,from]] of cases.entries()) {
+    for (const [i,[,label,direction,from]] of (recurring || homeActions || cashFloor ? [] : cases).entries()) {
       if(i===7) await command('rule',{label,direction,amount:1007,due_day:10,start_month:month,certainty:'confirmed',reason:'Тестовое регулярное обязательство'},uuid(27));
       else await command('plan',plan(label,direction,from,1000+i),uuid(20+i));
     }
-    await command('plan',plan(cases[6][1],'expense',day,2000),uuid(50));
-    await command('pay',{key:idFor(5),amount:407.75,wallet_id:wallet,date:day,reason:'Часть суммы уже оплачена'},uuid(51));
+    if(!recurring && !homeActions && !cashFloor) await command('plan',plan(cases[6][1],'expense',day,2000),uuid(50));
+    if(!recurring && !homeActions && !cashFloor) await command('pay',{key:idFor(5),amount:407.75,wallet_id:wallet,date:day,reason:'Часть суммы уже оплачена'},uuid(51));
 
     const ctx = await browser.newContext({locale:'ru-RU',viewport:{width:390,height:844},serviceWorkers:'block',reducedMotion:'reduce'});
     await ctx.addInitScript({path:path.join(__dirname,'mock.js')});
@@ -105,6 +111,18 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
     const csv = [['Элемент','Сборка SHA256 index/finance-workspace','Дата UTC','Браузер','Задача','Данные','Шаги','Результат и связи','Открытие до 2 кадров, мс','Завершение до 2 кадров, мс','Визуальная проверка','Удобство','Статус']];
     if(qa) fs.mkdirSync(qa,{recursive:true});
     await page.locator('.nav-btn[data-view="view-finance"]').click();
+    if(cashFloor){
+      await require('./helpers/cash-floor-ui.cjs')({page,fw,db,command,snap,day,wallet,uuid,build,browser,expectedTile,twoFrames,errors});
+      return;
+    }
+    if(homeActions){
+      await require('./helpers/home-money-actions.cjs')({page,fw,db,command,snap,day,wallet,uuid,shift,build,browser,expectedTile,twoFrames,errors});
+      return;
+    }
+    if(recurring){
+      await require('./helpers/recurring-replacement.cjs')({page,fw,command,snap,day,wallet,uuid,shift,build,browser,expectedTile,twoFrames,errors});
+      return;
+    }
     for (const [i,[task,label,direction,from,to]] of cases.entries()){
       const before = await snap(), id = idFor(i), original = before.workspace.items.find(x=>x.key===id);
       assert.equal(original.due_date,from);
