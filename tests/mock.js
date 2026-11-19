@@ -3,6 +3,29 @@
 if (typeof navigator !== 'undefined') {
   Object.defineProperty(navigator, 'canShare', { configurable: true, value: () => false });
 }
+// Model Storage as immutable byte objects so media verification really downloads what was uploaded.
+const storageFiles=new Map();
+const storageBase='https://example.invalid/test-storage/';
+if(typeof window.fetch==='function'){
+  const fetchNetwork=window.fetch.bind(window);
+  window.fetch=(input,options)=>{
+    const url=typeof input==='string'?input:input?.url;
+    if(!url?.startsWith(storageBase))return fetchNetwork(input,options);
+    const blob=storageFiles.get(url);
+    return Promise.resolve(blob?new Response(blob):new Response(null,{status:404}));
+  };
+}
+function mockStorageBucket(bucket){
+  const url=key=>storageBase+encodeURIComponent(bucket)+'/'+key.split('/').map(encodeURIComponent).join('/');
+  return {
+    async upload(key,blob,options={}){
+      if(storageFiles.has(url(key))&&!options.upsert)return {error:{statusCode:'409',code:'Duplicate'}};
+      storageFiles.set(url(key),blob);return {data:{path:key},error:null};
+    },
+    getPublicUrl(key){return {data:{publicUrl:url(key)}}},
+    async remove(keys){keys.forEach(key=>storageFiles.delete(url(key)));return {error:null}}
+  };
+}
 window.__writes=[];window.__reads=[];window.__subscriptions=[];window.__fail=null;window.__rowLimit=Infinity;
 window.__db={projects:[],employees:[{id:'admin',name:'Мансур',role:'Директор',is_admin:true,active:true,is_salaried:true,fixed_salary:50000,created_at:'2026-01-01T00:00:00Z'},{id:'designer',name:'Амина',role:'Ведущий дизайнер',active:true,is_salaried:true,fixed_salary:50000,created_at:'2026-01-01T00:00:00Z'},{id:'visual',name:'Ислам',role:'Визуализатор',active:true},{id:'architect',name:'Адам',role:'Архитектор',active:true}],categories:[{id:'design',name:'Дизайн интерьера',department_id:'d',fee_percent:0,fee_base:'m2'},{id:'arch',name:'Архитектурное решение',department_id:'d',fee_percent:40,fee_base:'profit'},{id:'land',name:'Ландшафтный дизайн',department_id:'d',fee_percent:40,fee_base:'profit'},{id:'build',name:'Строительство',department_id:'b',fee_percent:10}],statuses:[{id:'active',name:'В процессе'},{id:'done',name:'Завершён'},{id:'frozen',name:'Заморожен'},{id:'new',name:'Запись'}],departments:[{id:'d',name:'Проектный отдел'},{id:'b',name:'Строительный отдел'}],company_info:[{id:'company',name:'ARHITTEK',company_name:'ARHITTEK'}]};
 // Real reference lists have an explicit order; id is only the pagination tie breaker.
@@ -69,7 +92,7 @@ const client={from:query,rpc:async(n,a={})=>{
   })),error:null};
  }
  __writes.push({rpc:n,args:clone(a)});if(n==='get_tz_form_by_token')return {data:window.__tz||null,error:null};return {data:null,error:null}
-},channel(){const c={state:'joined',on(kind,filter){if(filter?.table)__subscriptions.push(filter.table);return c},subscribe(){return c}};return c},removeChannel(){},storage:{from(){return {upload:async()=>({data:{path:'test'},error:null}),getPublicUrl:()=>({data:{publicUrl:'https://example.invalid/test.jpg'}}),remove:async()=>({error:null})}}}};
+},channel(){const c={state:'joined',on(kind,filter){if(filter?.table)__subscriptions.push(filter.table);return c},subscribe(){return c}};return c},removeChannel(){},storage:{from:mockStorageBucket}};
 window.supabase={createClient:()=>client};window.confirm=()=>true;window.alert=()=>{};
 localStorage.setItem('arhittek_session',JSON.stringify({employeeId:'admin',name:'Мансур',isAdmin:true,token:'test',createdAt:Date.now()}));sessionStorage.setItem('arhittek_frozen_tried','1');sessionStorage.setItem('arhittek_landscape_tried','1');
 })();
