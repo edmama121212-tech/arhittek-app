@@ -11145,46 +11145,91 @@ function makeThumbFromUrl(url){
   });
 }
 
-// Разовая фоновая починка старых карточек каталога:
-//  1) картинки, всё ещё хранящиеся как base64 прямо в строке БД (раздувают project_cards),
-//     выгружаются в Storage и заменяются на URL;
-//  2) для всех фото генерируется маленькое превью (thumbnails) — чтобы список каталога
-//     не грузил полноразмерные фото ради иконки 56×56.
-// Идемпотентно — карточки, у которых всё уже в порядке, пропускаются.
+async function catalogMediaHash(blob){
+  const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer());
+  return Array.from(new Uint8Array(digest), byte=>byte.toString(16).padStart(2,'0')).join('');
+}
+
+async function verifyCatalogMedia(url, expected){
+  const response = await fetch(url, {cache:'no-store'});
+  if(!response.ok || await catalogMediaHash(await response.blob()) !== expected){
+    throw Error('Содержимое файла каталога отличается от проверенного');
+  }
+}
+
+// Use immutable object names, so a retry cannot replace a file in a live card.
+async function storeCatalogMedia(source, cardId, expected){
+  if(!source.startsWith('data:')){
+    if(expected) await verifyCatalogMedia(source, expected);
+    return source;
+  }
+  const blob = dataURLtoBlob(source);
+  const extension = {'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif','image/avif':'avif'}[blob.type];
+  if(!extension) throw Error('Неизвестный формат изображения каталога');
+  const hash = await catalogMediaHash(blob);
+  if(expected && hash !== expected) throw Error('Исходный файл отличается от проверенного');
+  const name = 'cards/'+cardId+'/'+hash+'.'+extension;
+  const bucket = sb.storage.from('expense-photos');
+  const {error} = await bucket.upload(name, blob, {contentType:blob.type, upsert:false});
+  // Existing immutable objects (including retries) must pass the same byte check.
+  if(error && error.statusCode !== '409' && error.status !== 409 &&
+      !['Duplicate','ResourceAlreadyExists'].includes(error.error) &&
+      !['Duplicate','ResourceAlreadyExists'].includes(error.code)) throw error;
+  const url = bucket.getPublicUrl(name).data.publicUrl;
+  await verifyCatalogMedia(url, hash);
+  return url;
+}
+
 async function backfillCardThumbnails(){
   if(!canEditCards()) return;
-  const needsWork = cardsData.filter(c =>
-    Array.isArray(c.images) && c.images.some(Boolean) &&
-    (!Array.isArray(c.thumbnails) || c.thumbnails.length < c.images.filter(Boolean).length || c.images.some(im=>im && im.startsWith('data:')))
-  );
-  if(!needsWork.length) return;
-  for(const card of needsWork){
+  const actor = session?.token;
+  for(const card of cardsData){
+    if(!Array.isArray(card.images) || !card.images.some((src,i)=>src &&
+        (src.startsWith('data:') || !card.thumbnails?.[i] || card.thumbnails[i].startsWith('data:')))) continue;
+    const priorImages = card.images.slice(), priorThumbs = card.thumbnails?.slice() ?? null;
+    const version = card.updated_at, meta = card.pdf_import_meta;
+    const images = priorImages.slice(), thumbnails = priorThumbs?.slice() || [];
+    const approved = [];
     try{
-      const newImages = [];
-      const newThumbs = [];
-      for(let i=0;i<card.images.length;i++){
-        const src = card.images[i];
-        if(!src){ newImages.push(null); newThumbs.push(null); continue; }
-        let fullUrl = src;
-        if(src.startsWith('data:')){
-          const blob = dataURLtoBlob(src);
-          const fileName = `cards/backfill_${card.id}_${Date.now()}_${i}_${Math.random().toString(36).slice(2,7)}.jpg`;
-          const {error: upErr} = await sb.storage.from('expense-photos').upload(fileName, blob, {contentType:'image/jpeg', upsert:true});
-          if(upErr) throw upErr;
-          fullUrl = sb.storage.from('expense-photos').getPublicUrl(fileName).data.publicUrl;
+      for(let i=0;i<images.length;i++){
+        if(!images[i]) continue;
+        const floor = CatalogFloors.definitions.find(f=>f.image===i);
+        const review = floor && meta?.['render_review_'+floor.key];
+        const verified = review?.revision === 'generated-render-v2-gray';
+        if(verified && (!review.album_hash || review.album_hash!==meta.sha256 ||
+            !/^[0-9a-f]{64}$/.test(review.file_sha256) || review.file_sha256!==review.review_sha256 ||
+            !/^[0-9a-f]{64}$/.test(review.thumbnail_file_sha256))){
+          throw Error('Не подтверждена версия плана или миниатюры');
         }
-        newImages.push(fullUrl);
-        const thumbDataUrl = await makeThumbFromUrl(fullUrl);
-        const thumbBlob = dataURLtoBlob(thumbDataUrl);
-        const thumbName = `cards/thumb_${card.id}_${Date.now()}_${i}_${Math.random().toString(36).slice(2,7)}.jpg`;
-        const {error: thErr} = await sb.storage.from('expense-photos').upload(thumbName, thumbBlob, {contentType:'image/jpeg', upsert:true});
-        if(thErr) throw thErr;
-        newThumbs.push(sb.storage.from('expense-photos').getPublicUrl(thumbName).data.publicUrl);
+        images[i] = await storeCatalogMedia(images[i], card.id, verified && review.file_sha256);
+        let thumb = thumbnails[i] || review?.approved_thumbnail;
+        if(!thumb && verified) throw Error('Отсутствует проверенная миниатюра');
+        if(!thumb) thumb = await makeThumbFromUrl(images[i]);
+        thumbnails[i] = await storeCatalogMedia(thumb, card.id, verified && review.thumbnail_file_sha256);
+        if(verified) approved.push([i,review]);
       }
-      const {error: updErr} = await sb.from('project_cards').update({images:newImages, thumbnails:newThumbs}).eq('id', card.id);
-      if(updErr) throw updErr;
-      card.images = newImages;
-      card.thumbnails = newThumbs;
+      if(actor!==session?.token || !canEditCards()) return;
+      const {data,error} = await sb.rpc('migrate_catalog_media', {
+        p_id:card.id,p_version:version,p_album:meta?.sha256 ?? null,
+        p_old_images:priorImages,p_old_thumbs:priorThumbs,p_images:images,p_thumbs:thumbnails
+      });
+      if(error) throw error;
+      if(!data) continue; // Another editor or album revision won the compare-and-swap.
+      const persisted = await sb.from('project_cards').select('updated_at,images,thumbnails')
+        .eq('id',card.id).eq('updated_at',data).maybeSingle();
+      if(persisted.error) throw persisted.error;
+      if(!persisted.data) continue;
+      if(JSON.stringify(persisted.data.images)!==JSON.stringify(images) ||
+          JSON.stringify(persisted.data.thumbnails)!==JSON.stringify(thumbnails)){
+        throw Error('Записанный слот отличается от отправленного');
+      }
+      for(const [i,review] of approved){
+        await verifyCatalogMedia(persisted.data.images[i],review.file_sha256);
+        await verifyCatalogMedia(persisted.data.thumbnails[i],review.thumbnail_file_sha256);
+      }
+      if(card.updated_at===version && actor===session?.token){
+        Object.assign(card,persisted.data);
+      }
     }catch(e){ console.warn('Не удалось обновить превью карточки каталога', card.id, e); }
   }
   renderCardsList();
@@ -11876,12 +11921,7 @@ async function uploadCardImages(images,targetId=ceCurrentId){
     if(typeof img === 'string' && (img.startsWith('http://') || img.startsWith('https://'))){ out.push(img); continue; }
     if(typeof img === 'string' && img.startsWith('data:')){
       try{
-        const blob = dataURLtoBlob(img),contentType=blob.type==='image/png'?'image/png':'image/jpeg',extension=contentType==='image/png'?'png':'jpg';
-        const fileName = `cards/${targetId||'new'}_${Date.now()}_${i}_${Math.random().toString(36).slice(2,7)}.${extension}`;
-        const {error: upErr} = await sb.storage.from('expense-photos').upload(fileName, blob, {contentType, upsert:true});
-        if(upErr) throw upErr;
-        const {data: urlData} = sb.storage.from('expense-photos').getPublicUrl(fileName);
-        out.push(urlData.publicUrl || img);
+        out.push(await storeCatalogMedia(img,targetId || 'new'));
       }catch(e){
         console.warn('Не удалось выгрузить фото карточки в Storage, оставляю base64', e);
         out.push(img); // безопасный фоллбэк — карточка не теряет фото
