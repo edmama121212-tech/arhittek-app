@@ -42,6 +42,23 @@ function pages(rows,{cap=Infinity,countAt,failAt,mutate}={}){
  await check('Cache refresh preserves the original request headers',async()=>{
   let received;scope.fetch=async request=>{received=request;return new Response('ok')};let pending;listeners.fetch({request:new Request(own+'index.html',{headers:{'X-Example':'keep'}}),respondWith:p=>pending=p});await pending;assert.equal(received.headers.get('X-Example'),'keep');assert.equal(received.cache,'no-store');
  });
+ await check('Shared catalog navigation is never stored with its access URL',async()=>{
+  let intercepted=false;
+  listeners.fetch({request:new Request(own+'catalog.html?t=example'),respondWith(){intercepted=true}});
+  assert.equal(intercepted,false);
+ });
+ await check('An offline first visit to the application directory opens the installed shell',async()=>{
+  const previousFetch=scope.fetch,previousMatch=cache.match;
+  scope.fetch=async()=>{throw new Error('Offline')};
+  cache.match=async key=>key===own+'index.html'?new Response('installed shell'):undefined;
+  try{
+   let pending;
+   listeners.fetch({request:new Request(own),respondWith:p=>pending=p});
+   assert.equal(await (await pending).text(),'installed shell');
+   listeners.fetch({request:new Request(own+'?unrelated=1'),respondWith:p=>pending=p});
+   assert.equal((await pending).status,503);
+  }finally{scope.fetch=previousFetch;cache.match=previousMatch}
+ });
  await check('Plain text push notifications still display',async()=>{await run('push',{data:{json(){throw new Error('Not JSON')},text:()=> 'Project updated'}});assert.equal(notifications[0].o.body,'Project updated')});
  await check('Clicking a notification navigates the existing app window',async()=>{
   sw.clients.matchAll=async()=>[{url:own+'index.html',navigate:async u=>navigated.push(u),focus:async()=>focused.push(true)}];await run('notificationclick',{notification:{close(){},data:{url:'./index.html?project=1'}}});assert.deepEqual(navigated,[own+'index.html?project=1']);assert.equal(focused.length,1);

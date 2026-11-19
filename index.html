@@ -30,6 +30,7 @@
 <script src="catalog-ocr.js"></script>
 <script src="catalog-pdf.js"></script>
 <link rel="stylesheet" href="catalog-pdf.css">
+<script src="project-budget.js"></script>
 <script src="financial-journal.js"></script>
 <script src="landscape-brief.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -662,8 +663,8 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
     <div id="nextProjectNumbers" class="project-next-numbers" hidden></div>
 
     <div class="search-box">
-      <input type="text" id="projectSearch" placeholder="Поиск по названию, адресу, телефону...">
-      <button class="search-clear" id="projectSearchClear" type="button">✕</button>
+      <input type="text" id="projectSearch" aria-label="Поиск проектов" placeholder="Номер, название, адрес или телефон">
+      <button class="search-clear" id="projectSearchClear" type="button" aria-label="Очистить поиск проектов">✕</button>
     </div>
 
     <div class="project-filter-grid">
@@ -672,7 +673,7 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
       <div id="employeeFilters"></div>
     </div>
     <div hidden id="paymentFilters"></div>
-    <div id="filter-active-badge" style="display:none;margin:4px 16px 0;background:var(--blue-soft);color:var(--blue);border:1px solid rgba(0,113,235,0.3);border-radius:20px;padding:3px 12px;font-size:12px;font-weight:600;cursor:pointer;" onclick="resetAllFilters()">✕ Сбросить фильтры: <span id="filter-badge-text"></span></div>
+    <button hidden type="button" id="filter-active-badge" onclick="resetAllFilters()"></button>
 
     <div class="card" id="projectsCard">
       <div class="loading-state">Загрузка…</div>
@@ -746,25 +747,27 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
       <span class="section-label-line"></span>
     </div>
 
-    <input id="cards-search" type="search" aria-label="Поиск по номеру или названию" placeholder="Поиск по номеру или названию" oninput="renderCardsList()" style="width:100%;margin:4px 0 10px;">
+    <input id="cards-search" type="search" aria-controls="cards-list" aria-label="Поиск по номеру или названию" placeholder="Поиск по номеру или названию" oninput="renderCardsList()">
+
+    <div id="cards-search-count" role="status" class="note"></div>
 
     <!-- Фильтр по этажности -->
     <div class="filters" id="cards-filters" style="flex-wrap:wrap;gap:6px;">
-      <div class="filter-chip active" data-floors="all" onclick="filterCards('all',this)">Все</div>
-      <div class="filter-chip" data-floors="1" onclick="filterCards('1',this)">1 этаж</div>
-      <div class="filter-chip" data-floors="2" onclick="filterCards('2',this)">2 этажа</div>
-      <div class="filter-chip" data-floors="3" onclick="filterCards('3',this)">3+ этажей</div>
+      <button type="button" class="filter-chip active" aria-pressed="true" data-floors="all" onclick="filterCards('all',this)">Все</button>
+      <button type="button" class="filter-chip" aria-pressed="false" data-floors="1" onclick="filterCards('1',this)">1 этаж</button>
+      <button type="button" class="filter-chip" aria-pressed="false" data-floors="2" onclick="filterCards('2',this)">2 этажа</button>
+      <button type="button" class="filter-chip" aria-pressed="false" data-floors="3" onclick="filterCards('3',this)">3+ этажей</button>
     </div>
     <div class="filters" id="feature-filters" style="flex-wrap:wrap;gap:6px;margin-top:6px;">
-      <div class="filter-chip active" data-feature="all" onclick="filterFeature('all',this)">Без доп.</div>
-      <div class="filter-chip" data-feature="basement" onclick="filterFeature('basement',this)">Цокольный этаж</div>
-      <div class="filter-chip" data-feature="mansard" onclick="filterFeature('mansard',this)">Мансарда</div>
-      <div class="filter-chip" data-feature="flat" onclick="filterFeature('flat',this)">Плоская кровля</div>
+      <button type="button" class="filter-chip active" aria-pressed="true" data-feature="all" onclick="filterFeature('all',this)">Без доп.</button>
+      <button type="button" class="filter-chip" aria-pressed="false" data-feature="basement" onclick="filterFeature('basement',this)">Цокольный этаж</button>
+      <button type="button" class="filter-chip" aria-pressed="false" data-feature="mansard" onclick="filterFeature('mansard',this)">Мансарда</button>
+      <button type="button" class="filter-chip" aria-pressed="false" data-feature="flat" onclick="filterFeature('flat',this)">Плоская кровля</button>
     </div>
     <div class="filters" id="style-filters" style="flex-wrap:wrap;gap:6px;margin-top:6px;">
-      <div class="filter-chip active" data-style="all" onclick="filterStyle('all',this)">Все стили</div>
-      <div class="filter-chip" data-style="classic" onclick="filterStyle('classic',this)">Классический</div>
-      <div class="filter-chip" data-style="modern" onclick="filterStyle('modern',this)">Современный</div>
+      <button type="button" class="filter-chip active" aria-pressed="true" data-style="all" onclick="filterStyle('all',this)">Все стили</button>
+      <button type="button" class="filter-chip" aria-pressed="false" data-style="classic" onclick="filterStyle('classic',this)">Классический</button>
+      <button type="button" class="filter-chip" aria-pressed="false" data-style="modern" onclick="filterStyle('modern',this)">Современный</button>
     </div>
 
     <!-- Счётчик: всего проектов + разбивка по этажам/стилю -->
@@ -808,7 +811,7 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
       <div class="loading-state">Загрузка…</div>
     </div>
 
-    <div class='section-label' id='historyToggle' onclick='toggleHistorySection()' style='cursor:pointer;'>
+    <div data-key-activate tabindex="0" role="button" class='section-label' id='historyToggle' onclick='toggleHistorySection()' style='cursor:pointer;'>
             <span class='lbl-text'>История изменений</span><span class='section-label-line'></span>
             <span id='historyChevron' style='margin-left:6px;display:inline-block;transition:transform .2s;'>▸</span>
           </div>
@@ -1617,13 +1620,13 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
       <button class="sheet-close" id="projectSheetClose">✕</button>
     </div>
 
-    <div class="field-row">
+    <div class="field-row project-category-status">
       <div class="field">
         <label for="pf-category">Направление проекта</label>
         <select id="pf-category"></select>
       </div>
       <div class="field">
-        <label>Статус (этап работы)</label>
+        <label for="pf-status">Статус (этап работы)</label>
         <select id="pf-status"></select>
       </div>
     </div>
@@ -2018,7 +2021,7 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
       <button class="sheet-close" id="empSheetClose">✕</button>
     </div>
     <div class="field">
-      <label>Имя</label>
+      <label for="ef-name">Имя</label>
       <input type="text" id="ef-name" placeholder="например: Магомед (Гудермес)">
     </div>
     <div class="field">
@@ -2034,7 +2037,7 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
       </select>
     </div>
     <div class="field" id="ef-pin-field" style="display:none;">
-      <label>Новый PIN-код (до 6 цифр). Оставьте пустым, чтобы не менять текущий</label>
+      <label for="ef-pin">Новый PIN-код (до 6 цифр). Оставьте пустым, чтобы не менять текущий</label>
       <div style="display:flex; gap:8px; align-items:center;">
         <input type="text" id="ef-pin" inputmode="numeric" maxlength="6" placeholder="оставить как есть" style="flex:1 1 auto; width:auto; min-width:0;">
         <button class="btn btn-secondary" type="button" style="padding:10px 12px; font-size:12px; white-space:nowrap; flex:0 0 auto; width:auto;"
@@ -2313,12 +2316,10 @@ function updateFilterBadge(){
   const badge = document.getElementById('filter-active-badge');
   if(!badge) return;
   const active = [activeCategoryFilter, activeStatusFilter, activeEmployeeFilter, activePaymentFilter].filter(v=>v!=='all').length;
-  if(active > 0){
-    const textEl = document.getElementById('filter-badge-text');
-    if(textEl) textEl.textContent = active + (active===1?' активен':' активно');
-    badge.style.display = 'block';
-  } else {
-    badge.style.display = 'none';
+  badge.hidden = active === 0;
+  if(active){
+    const label = projectSearchQuery.trim() ? 'Сбросить поиск и фильтры' : 'Сбросить фильтры';
+    badge.textContent = label + ' (' + active + ')';
   }
 }
 function resetAllFilters(){
@@ -2336,7 +2337,7 @@ function resetAllFilters(){
   renderPaymentFilters();
   renderEmployeeFilters();
   renderProjects();
-  updateFilterBadge();
+  search?.focus();
 }
 let loadAllInFlight = false;
 let loadAllPromise = null;
@@ -2818,6 +2819,8 @@ function applyRole(){
   if(!session){ userPill.style.display = 'none'; applyAccessVisibility(); return; }
 
   userPill.style.display = 'flex';
+  userPill.title = session.name + ' · Выйти из аккаунта';
+  userPill.setAttribute('aria-label', userPill.title);
   const roleLabel = getEmployeeRole() ? ` · ${getEmployeeRole()}` : (session.isAdmin ? '' : ' · исполнитель');
   userPill.innerHTML = `<span style="font-weight:600;">${escapeHtml(session.name)}</span><span style="opacity:0.6;">${escapeHtml(roleLabel)}</span>`;
 
@@ -2875,7 +2878,7 @@ function applyRole(){
   const empField = document.getElementById('pf-employee-field');
   const deptField = document.getElementById('pf-department-field');
   if(finSection) finSection.style.display = isAdmin ? '' : 'none';
-  if(deleteBtn) deleteBtn.style.display = isAdmin ? '' : 'none';
+  if(deleteBtn) deleteBtn.style.display = isAdmin && editingProjectId ? '' : 'none';
   if(empField) empField.style.display = isAdmin ? '' : 'none';
   if(deptField) deptField.style.display = isAdmin ? '' : 'none';
   applyAccessVisibility();
@@ -2925,8 +2928,8 @@ function renderStagesList(projectId){
   if(!container) return;
 
   const isAdmin = session && session.isAdmin;
-  if(addRow) addRow.style.display = isAdmin ? 'flex' : 'none';
-  if(addBtn) addBtn.style.display = isAdmin ? 'inline-block' : 'none';
+  if(addRow) addRow.style.display = isAdmin && projectId ? 'flex' : 'none';
+  if(addBtn) addBtn.style.display = isAdmin && projectId ? 'inline-block' : 'none';
 
   if(!projectId){
     container.innerHTML = '<div class="empty-state">Сохраните проект, чтобы работать с этапами</div>';
@@ -3769,7 +3772,7 @@ function renderConstrSummary(){
   const totFeePaid = rows.reduce((s,r)=>s+r.f.paid,0);
 
   const rowsHtml = rows.map(({p, received, cashOutgoing, directPaid, balance, isOverspent, f, st}) => `
-    <tr onclick="openObjectView('${p.id}')" style="cursor:pointer;" class="constr-sum-row">
+    <tr data-key-activate tabindex="0" onclick="openObjectView('${p.id}')" style="cursor:pointer;" class="constr-sum-row">
       <td>
         <div class="entity-name" title="${escapeHtml(p.name)}" style="font-weight:600; font-size:13px; color:var(--text);">${escapeHtml(p.name)}</div>
         ${st ? `<div style="font-size:10px; color:var(--text-dim); margin-top:2px;">${escapeHtml(st.name)}</div>` : ''}
@@ -3832,11 +3835,11 @@ function renderOverview(){
 
   const kpiGrid = document.getElementById('kpiGrid');
   kpiGrid.innerHTML = `
-    <div class="kpi accent-red" style="cursor:pointer;" onclick="document.getElementById('debtCard').scrollIntoView({behavior:'smooth'})">
+    <div data-key-activate tabindex="0" role="button" class="kpi accent-red" style="cursor:pointer;" onclick="document.getElementById('debtCard').scrollIntoView({behavior:'smooth'})">
       <div class="big" data-countup="${overdue.length}">0</div>
       <div class="lbl">Просрочки</div>
     </div>
-    <div class="kpi accent-gold" style="cursor:pointer;" onclick="document.getElementById('debtCard').scrollIntoView({behavior:'smooth'})">
+    <div data-key-activate tabindex="0" role="button" class="kpi accent-gold" style="cursor:pointer;" onclick="document.getElementById('debtCard').scrollIntoView({behavior:'smooth'})">
       <div class="big">${fmt(totalDebt)} ₽</div>
       <div class="lbl">Должны клиенты${mismatchCount > 0 ? ` <span style="color:var(--red);">⚠${mismatchCount}</span>` : ''}</div>
     </div>
@@ -3883,7 +3886,7 @@ function renderOverview(){
 
     const rowsHtml = rows.map(({p, balance, expenses, net, feeTotal, isMismatch})=>{
       const netColor = net < 0 ? 'var(--red)' : 'var(--green)';
-      return `<tr onclick="openProjectSheet('${p.id}')" style="cursor:pointer;" class="constr-sum-row">
+      return `<tr data-key-activate tabindex="0" onclick="openProjectSheet('${p.id}')" style="cursor:pointer;" class="constr-sum-row">
         <td>
           <div class="entity-name" title="${escapeHtml(p.name)}" style="font-weight:600; font-size:12px; color:var(--text);">${escapeHtml(p.name)}</div>
           ${isMismatch ? `<div style="font-size:9px; color:var(--gold); margin-top:1px;">⚠ статус «Оплачен»</div>` : ''}
@@ -3937,7 +3940,7 @@ function renderOverview(){
       if(d < 0){ dateTxt = `просрочен на ${Math.abs(d)} дн.`; dateColor = 'var(--red)'; }
       else if(d <= 7){ dateTxt = `${d} дн. до сдачи`; dateColor = 'var(--gold)'; }
       else { dateTxt = `${d} дн. до сдачи`; dateColor = 'var(--text-dim)'; }
-      html += `<div class="list-item" onclick="openProjectSheet('${p.id}')" style="cursor:pointer;">
+      html += `<div data-key-activate tabindex="0" role="button" class="list-item" onclick="openProjectSheet('${p.id}')" style="cursor:pointer;">
         <div>
           <div class="li-name">${escapeHtml(p.name)}</div>
           <div class="li-meta">${st ? escapeHtml(st.name) : ''} · сдача ${fmtDate(p.end_date)}</div>
@@ -3949,7 +3952,7 @@ function renderOverview(){
     });
     withoutDeadline.forEach(p=>{
       const st = findStatus(p.status_id);
-      html += `<div class="list-item" onclick="openProjectSheet('${p.id}')" style="cursor:pointer;">
+      html += `<div data-key-activate tabindex="0" role="button" class="list-item" onclick="openProjectSheet('${p.id}')" style="cursor:pointer;">
         <div>
           <div class="li-name">${escapeHtml(p.name)}</div>
           <div class="li-meta">${st ? escapeHtml(st.name) : ''}</div>
@@ -3977,7 +3980,7 @@ function renderOverview(){
         <div class="card">
           ${overdueStages.map(s=>{
             const p = state.projects.find(x=>x.id===s.project_id);
-            return `<div class="list-item" onclick="openProjectSheet('${s.project_id}')" style="cursor:pointer;">
+            return `<div data-key-activate tabindex="0" role="button" class="list-item" onclick="openProjectSheet('${s.project_id}')" style="cursor:pointer;">
               <div>
                 <div class="li-name">${escapeHtml(s.name)}</div>
                 <div class="li-meta" style="color:var(--red);">${p ? escapeHtml(p.name) : ''} · срок был ${fmtDate(s.due_date)} · ${Math.abs(daysUntil(s.due_date))} дн. назад</div>
@@ -4056,7 +4059,7 @@ function renderActiveDeptSplit(){
       else if(d < 0){ dateTxt = 'просрочен на ' + Math.abs(d) + ' дн.'; dateColor = 'var(--red)'; }
       else if(d <= 7){ dateTxt = d + ' дн. до сдачи'; dateColor = 'var(--gold)'; }
       else { dateTxt = d + ' дн. до сдачи'; dateColor = 'var(--text-dim)'; }
-      return '<div class="list-item" onclick="openProjectSheet(\'' + p.id + '\')" style="cursor:pointer;">' +
+      return '<div data-key-activate tabindex="0" role="button" class="list-item" onclick="openProjectSheet(\'' + p.id + '\')" style="cursor:pointer;">' +
         '<div style="min-width:0;">' +
           '<div class="li-name">' + escapeHtml(p.name) + '</div>' +
           '<div class="li-meta">оплачено ' + fmtMoney(paid) + ' · осталось ' + fmtMoney(balance) + '</div>' +
@@ -4578,7 +4581,7 @@ function renderProjectNumberField(){
   const saved=state.projects.find(p=>p.id===editingProjectId),series=projectNumberSeries(category.value);
   const fixed=saved?projectNumberPrefix(saved):nextProjectNumbers?.find(n=>n.category_id===category.value)?.prefix;
   prefix.hidden=!!saved&&!saved.number_series||(!saved&&!series);
-  prefix.textContent=prefix.hidden?'':fixed||(projectNumbersRequest?'Загружаем номер…':'');
+  prefix.textContent=prefix.hidden?'':fixed?fixed.slice(fixed.indexOf('№')):(projectNumbersRequest?'Загружаем номер…':'');
   hint.hidden=!!saved||!series;
   hint.textContent=fixed?'Номер закрепится при сохранении.':projectNumbersRequest?'':'Не удалось получить номер. Повторите сохранение после восстановления связи.';
   input.disabled=!saved&&!category.value;
@@ -4700,6 +4703,7 @@ function paymentBadgeColor(status){
 }
 
 function renderProjects(){
+  updateFilterBadge();
   const constrDept = state.departments.find(d=>d.name==='Строительный отдел');
 
   // A project is a CONSTRUCTION OBJECT if its category belongs to Строительный отдел
@@ -4732,12 +4736,17 @@ function renderProjects(){
 
   if(projectSearchQuery.trim()){
     const q = projectSearchQuery.trim().toLowerCase();
+    const requestedNumber = q.match(/^№\s*(\d+)$/)?.[1];
+    const phoneDigits = /^[+\d()\s-]+$/.test(q) ? q.replace(/\D/g, '') : '';
+    const normalizePhone = digits => digits.replace(/^[78](?=\d{10}$)/, '');
+    const phoneQuery = normalizePhone(phoneDigits);
     list = list.filter(p=>{
-      return (p.name||'').toLowerCase().includes(q) ||
-             (p.address||'').toLowerCase().includes(q) ||
-             (p.phone||'').toLowerCase().includes(q) ||
-             (p.client_name||'').toLowerCase().includes(q) ||
-             (p.notes||'').toLowerCase().includes(q);
+      if ([p.name, p.address, p.phone, p.client_name, p.notes].some(value=>String(value||'').toLowerCase().includes(q))) return true;
+      if (requestedNumber) {
+        const ordinal = projectOrdinal(p);
+        if (ordinal && String(ordinal.sequence) + String(ordinal.year).slice(-2) === requestedNumber) return true;
+      }
+      return !!phoneQuery && normalizePhone(String(p.phone||'').replace(/\D/g, '')).includes(phoneQuery);
     });
   }
 
@@ -4794,11 +4803,9 @@ function renderProjectRow(p){
     const balance = Number(p.balance) || 0;
     const showFinance = !session || session.isAdmin;
 
-    // Завершённые и замороженные — приглушённый вид
-    const rowStyle = (isDone || frozen) ? 'opacity:0.55;' : '';
     const donePrefix = isDone ? '✓ ' : (frozen ? '❄ ' : '');
 
-    return `<div class="proj-row" onclick="openProjectSheet('${p.id}')" style="${rowStyle}">
+    return `<div data-key-activate tabindex="0" role="button" class="proj-row" onclick="openProjectSheet('${p.id}')">
       <div>
         <div class="proj-name" title="${escapeHtml(p.name)}">${donePrefix}${escapeHtml(p.name)}</div>
         <div class="proj-meta">${metaParts.join(' · ')}</div>
@@ -4909,6 +4916,7 @@ document.getElementById('pf-price').addEventListener('input', ()=>{
 // Хранилище участников текущего редактируемого проекта
 let currentProjectMembers = []; // [{employee_id}]
 let projectMembersDraftUnverified = false;
+let projectSheetOpener = null;
 
 function renderProjectMemberChips(){
   const list = document.getElementById('pf-members-list');
@@ -4920,14 +4928,21 @@ function renderProjectMemberChips(){
     const emp = findEmployee(m.employee_id);
     return `<div style="display:inline-flex;align-items:center;gap:4px;background:rgba(0,113,235,0.15);border:1px solid rgba(0,113,235,0.3);border-radius:20px;padding:3px 10px 3px 8px;font-size:12px;">
       ${escapeHtml(emp?emp.name:m.employee_id)}
-      <span onclick="removeProjectMember('${m.employee_id}')" style="cursor:pointer;opacity:0.6;font-size:14px;line-height:1;">×</span>
+      <button type="button" data-remove-member="${escapeHtml(m.employee_id)}" aria-label="Убрать из команды: ${escapeHtml(emp?emp.name:m.employee_id)}" style="color:inherit;background:transparent;border:0;min-width:32px;min-height:32px;cursor:pointer;">×</button>
     </div>`;
   }).join('');
 }
 
+document.getElementById('pf-members-list').addEventListener('click', event=>{
+  const button=event.target.closest('[data-remove-member]');
+  if(button) removeProjectMember(button.dataset.removeMember);
+});
+
 function removeProjectMember(empId){
   if(state.projectMembersDataError||projectMembersDraftUnverified){showToast('Состав команды не загружен. Обновите приложение перед изменением команды.');return;}
+  if(!currentProjectMembers.some(member=>member.employee_id===empId))return;
   currentProjectMembers = currentProjectMembers.filter(m=>m.employee_id!==empId);
+  document.getElementById('projectSheetOverlay').dataset.dirty='1';
   renderProjectMemberChips();
 }
 
@@ -4949,6 +4964,9 @@ function openProjectSheet(id){
   editingProjectId = id;
   projectMembersDraftUnverified=!!state.projectMembersDataError;
   const overlay = document.getElementById('projectSheetOverlay');
+  if(!overlay.classList.contains('active')) projectSheetOpener=document.activeElement;
+  document.getElementById('pf-stage-name').value='';
+  document.getElementById('pf-stage-date').value='';
   const title = document.getElementById('projectSheetTitle');
   const deleteBtn = document.getElementById('pf-delete');
 
@@ -5098,13 +5116,15 @@ function openProjectSheet(id){
 }
 
 
-function closeProjectSheet(){
+function closeProjectSheet(event){
   resetProjectNumberDraft();
   document.getElementById('projectSheetOverlay').classList.remove('active');
   document.getElementById('pf-category').disabled=false;
   projectMembersDraftUnverified=false;
   editingProjectId = null;
   editingProjectLoadedAt = null;
+  if(event?.currentTarget && projectSheetOpener?.isConnected) projectSheetOpener.focus({preventScroll:true});
+  projectSheetOpener=null;
 }
 
 let projectSaveInFlight=false;
@@ -7148,6 +7168,15 @@ function openEmployeeSheet(id){
   const cardEditField = document.getElementById('ef-card-edit-field');
   const isAdmin = session && session.isAdmin;
 
+  const roleSelect = document.getElementById('ef-role');
+  roleSelect.querySelectorAll('[data-legacy-role]').forEach(option => option.remove());
+  const pin = document.getElementById('ef-pin');
+  pin.placeholder = id ? 'оставить как есть' : 'от 1 до 6 цифр';
+  pin.required = !id;
+  pinField.querySelector('label').textContent = id
+    ? 'Новый PIN-код (до 6 цифр). Оставьте пустым, чтобы сохранить текущий'
+    : 'PIN-код для входа (обязательно, от 1 до 6 цифр)';
+
   if(id){
     const e = state.employees.find(x=>x.id===id);
     if(!e) return;
@@ -7157,8 +7186,6 @@ function openEmployeeSheet(id){
     deleteBtn.textContent = linkedCount ? 'В архив' : 'Удалить';
     deleteBtn.title = linkedCount ? 'Сохранит сотрудника в истории проектов, но уберёт из активной команды' : 'Переместить сотрудника в корзину';
     document.getElementById('ef-name').value = e.name || '';
-    const roleSelect=document.getElementById('ef-role');
-    roleSelect.querySelectorAll('[data-legacy-role]').forEach(el=>el.remove());
     if(e.role&&![...roleSelect.options].some(o=>o.value===e.role)){
       const option=new Option(e.role,e.role);option.dataset.legacyRole='true';roleSelect.add(option);
     }
@@ -7740,7 +7767,7 @@ function renderConstruction(){
     const {received, directPaid, matTotal, workTotal, otherTotal, manualTotal, expenses, cashOutgoing, unpaidInvoices, balance, pct, isOverspent} = fin;
 
     if(!showFinance){
-      return `<div class="obj-card" onclick="openObjectView('${p.id}')">
+      return `<div data-key-activate tabindex="0" role="button" class="obj-card" onclick="openObjectView('${p.id}')">
         <div class="obj-head"><div><div class="obj-title">${escapeHtml(p.name)}</div><div class="obj-sub">${escapeHtml(p.address||'Нажмите для просмотра')}</div></div><div class="obj-chevron">›</div></div>
         ${st ? `<div class="status-chip" data-status="${escapeHtml(st.name)}" style="margin-top:8px; display:inline-block;">${escapeHtml(st.name)}</div>` : ''}
         <div class="obj-bar" style="margin-top:10px;"><i style="width:${pct}%"></i></div>
@@ -7748,7 +7775,7 @@ function renderConstruction(){
       </div>`;
     }
 
-    return `<div class="obj-card" onclick="openObjectView('${p.id}')">
+    return `<div data-key-activate tabindex="0" role="button" class="obj-card" onclick="openObjectView('${p.id}')">
       <div class="obj-head"><div><div class="obj-title">${escapeHtml(p.name)}</div><div class="obj-sub">${escapeHtml(p.address||'')}</div></div><div style="display:flex; align-items:center; gap:6px;">${st ? `<span class="status-chip" data-status="${escapeHtml(st.name)}">${escapeHtml(st.name)}</span>` : ''}<div class="obj-chevron">›</div></div></div>
       <div class="obj-bar" style="margin-bottom:4px;"><i style="width:${pct}%; background:${pct>90?'var(--red)':pct>70?'var(--gold)':'var(--blue)'};"></i></div>
       <div class="obj-bar-lbl"><span>Выплачено ${pct}% от полученного</span><span style="color:${isOverspent?'var(--red)':''}">${isOverspent ? '⚠ Недостаток: '+fmtMoney(Math.abs(balance)) : 'Деньги: '+fmtMoney(balance)}</span></div>
@@ -7907,7 +7934,7 @@ function renderObjectIncomeHistory(projectId){
 // Строка накладной (с категорией) для плоского списка материалов/работ
 function makeInvoiceRow(inv){
   const typeCls = inv.item_type==='Работа'?'work':inv.item_type==='Доставка'?'del':'mat';
-  return `<div class="inv-row" onclick="openInvoiceSheet('${inv.id}')" style="cursor:pointer;" title="Открыть накладную">
+  return `<div data-key-activate tabindex="0" role="button" class="inv-row" onclick="openInvoiceSheet('${inv.id}')" style="cursor:pointer;" title="Открыть накладную">
       <div style="min-width:0;">
         <div class="inv-num">${escapeHtml(inv.number||inv.description||'—')}</div>
         ${inv.description && inv.number && inv.description!==inv.number ? `<div class="inv-desc">${escapeHtml(inv.description)}</div>` : ''}
@@ -7977,7 +8004,7 @@ function renderObjTabs(){
     {id:'photos', label:'📷 Фото'},
     {id:'audit', label:'🔍 Сверка'},
   ];
-  el.innerHTML = tabs.map(t=>`<div class="filter-chip ${activeObjTab===t.id?'active':''}" onclick="switchObjTab('${t.id}')">${t.label}</div>`).join('');
+  el.innerHTML = tabs.map(t=>`<button type="button" aria-pressed="${activeObjTab===t.id}" class="filter-chip ${activeObjTab===t.id?'active':''}" onclick="switchObjTab('${t.id}')">${t.label}</button>`).join('');
 }
 
 function switchObjTab(tab){
@@ -7999,7 +8026,7 @@ function buildInvoiceGroupsHtml(invoices){
     .map(([catName, items])=>{
       const catTotal = items.reduce((s,i)=>s+Number(i.amount),0);
       const sorted = [...items].sort((a,b)=>(b.invoice_date||'').localeCompare(a.invoice_date||''));
-      const makeRow = inv => `<div class="inv-row" onclick="openInvoiceSheet('${inv.id}')" style="cursor:pointer;" title="Открыть накладную">
+      const makeRow = inv => `<div data-key-activate tabindex="0" role="button" class="inv-row" onclick="openInvoiceSheet('${inv.id}')" style="cursor:pointer;" title="Открыть накладную">
           <div>
             <div class="inv-num">${escapeHtml(inv.number||inv.description||'—')}</div>
             ${inv.description && inv.number && inv.description!==inv.number ? `<div class="inv-desc">${escapeHtml(inv.description)}</div>` : ''}
@@ -8072,20 +8099,20 @@ function renderObjTabContent(){
     const categories = [...new Set(projInvoices.map(i=>i.category).filter(Boolean))];
     el.innerHTML = `<div class="card" style="margin-top:4px;">
       <div class="add-invoice-form">
-        <label>Номер накладной</label>
+        <label for="inv-num-obj">Номер накладной</label>
         <input type="text" id="inv-num-obj" placeholder="например: БИ 14.04.26">
-        <label>Дата</label>
+        <label for="inv-date-obj">Дата</label>
         <input type="date" id="inv-date-obj" value="${financeToday()}">
-        <label>Категория</label>
+        <label for="inv-cat-obj">Категория</label>
         <select id="inv-cat-obj" onchange="(function(s){var c=document.getElementById('inv-cat-obj-custom');c.style.display=s.value==='__other__'?'block':'none';})(this)">
           <option value="">— выберите —</option>
           ${categories.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')}
           <option value="__other__">Другое…</option>
         </select>
         <input type="text" id="inv-cat-obj-custom" placeholder="Введите категорию вручную" style="display:none;margin-top:6px">
-        <label>Описание</label>
+        <label for="inv-desc-obj">Описание</label>
         <input type="text" id="inv-desc-obj" placeholder="что куплено / какая работа">
-        <label>Тип записи</label>
+        <label for="inv-type-obj">Тип записи</label>
         <select id="inv-type-obj">
           <option value="Материал">Материал</option>
           <option value="Работа">Работа</option>
@@ -8093,7 +8120,7 @@ function renderObjTabContent(){
           <option value="Инструмент">Инструмент</option>
           <option value="Расходник">Расходник</option>
         </select>
-        <label>Сумма, ₽</label>
+        <label for="inv-amount-obj">Сумма, ₽</label>
         <input type="number" id="inv-amount-obj" placeholder="0">
         <div style="display:flex;align-items:center;gap:8px;margin:6px 0;">
           <input type="checkbox" id="inv-paid-client-obj" style="width:auto;">
@@ -8101,8 +8128,8 @@ function renderObjTabContent(){
         </div>
         <label>Фото накладной (необязательно)</label>
         <div style="display:flex; gap:8px; margin-bottom:6px;">
-          <label class="photo-upload-label" style="flex:1; margin:0;" for="inv-photo-obj">🖼 Из галереи</label>
-          <label class="photo-upload-label" style="flex:1; margin:0;" for="inv-camera-obj">📷 Сделать фото</label>
+          <label class="photo-upload-label" tabindex="0" role="button" data-key-activate style="flex:1; margin:0;" for="inv-photo-obj">🖼 Из галереи</label>
+          <label class="photo-upload-label" tabindex="0" role="button" data-key-activate style="flex:1; margin:0;" for="inv-camera-obj">📷 Сделать фото</label>
         </div>
         <input type="file" id="inv-photo-obj" accept="image/*" style="display:none;" onchange="onInvoicePhotoPicked(this,'inv-photo-status-obj')">
         <input type="file" id="inv-camera-obj" accept="image/*" capture="environment" style="display:none;" onchange="handleInvoicePhotoCapture(this,'inv-photo-obj','inv-photo-status-obj')">
@@ -9497,8 +9524,8 @@ function renderKpServices(){
       ${item.desc ? `<div class="note" style="background:var(--bg-soft); border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:10px;">${escapeHtml(item.desc)}</div>` : ''}
       <div class="field-row">
         <div class="field">
-          <label>${item.unit === 'м²' ? 'Площадь, м²' : 'Количество, шт'}</label>
-          <input type="number" value="${s.qty}" min="0" step="0.01" oninput="updateKpServiceNumber('${s.id}','qty', this.value)">
+          <label for="kp-qty-${escapeHtml(s.id)}">${item.unit === 'м²' ? 'Площадь, м²' : 'Количество, шт'}</label>
+          <input id="kp-qty-${escapeHtml(s.id)}" type="number" value="${s.qty}" min="0" step="0.01" oninput="updateKpServiceNumber('${s.id}','qty', this.value)">
         </div>
         <div class="field">
           <label>Цена для клиента, ₽/${escapeHtml(item.unit)}</label>
@@ -10819,6 +10846,15 @@ document.querySelectorAll('.nav-btn').forEach(btn=>{
   });
 });
 
+// Keep keyboard activation on the same action and permission checks as a pointer click.
+document.addEventListener('keydown', event=>{
+  if(event.defaultPrevented || event.repeat || !['Enter',' '].includes(event.key))return;
+  const control=event.target;
+  if(!control.matches?.('[data-key-activate]'))return;
+  event.preventDefault();
+  control.click();
+});
+
 // ============================================================
 // EVENT BINDINGS
 // ============================================================
@@ -11155,24 +11191,27 @@ async function backfillCardThumbnails(){
 }
 
 // ── Рендер списка карточек ──
+function setCatalogFilterButton(selector,selected){
+  document.querySelectorAll(selector).forEach(button=>{
+    button.classList.toggle('active',button===selected);
+    button.setAttribute('aria-pressed',String(button===selected));
+  });
+}
 function filterCards(val, el){
   currentCardFloorFilter = val;
-  document.querySelectorAll('#cards-filters .filter-chip').forEach(c=>c.classList.remove('active'));
-  if(el) el.classList.add('active');
+  setCatalogFilterButton('#cards-filters .filter-chip',el);
   renderCardsList();
 }
 
 function filterStyle(val, el){
   currentCardStyleFilter = val;
-  document.querySelectorAll('#style-filters .filter-chip').forEach(c=>c.classList.remove('active'));
-  if(el) el.classList.add('active');
+  setCatalogFilterButton('#style-filters .filter-chip',el);
   renderCardsList();
 }
 
 function filterFeature(val, el){
   currentFeatureFilter = val;
-  document.querySelectorAll('#feature-filters .filter-chip').forEach(c=>c.classList.remove('active'));
-  if(el) el.classList.add('active');
+  setCatalogFilterButton('#feature-filters .filter-chip',el);
   renderCardsList();
 }
 
@@ -11215,25 +11254,37 @@ function renderCardsStats(){
   `;
 }
 
+function catalogProjectNumber(card){
+  return String(card.project_number || '').trim().replace(/^№\s*/, '')
+    || String(card.title || '').match(/№\s*(\d+(?:-[\p{L}\d]+)*)/u)?.[1] || '';
+}
+
+function catalogListTitle(card){
+  const title = card.title || '';
+  const number = catalogProjectNumber(card);
+  if (!number || title.match(/№\s*(\d+(?:-[\p{L}\d]+)*)/u)?.[1] === number) return title || 'Без названия';
+  return title ? `№${number} — ${title}` : `№${number}`;
+}
+
 function renderCardsList(){
   const container = document.getElementById('cards-list');
   if(!container) return;
 
   const normalize = value => String(value || '').toLowerCase().replace(/ё/g,'е').replace(/№\s*/g,'').trim();
-  const number = card => String(card.project_number || '').match(/^\s*№?\s*(\d+)\s*$/)?.[1]
-    || String(card.title || '').match(/№\s*(\d+)/)?.[1] || '';
   const terms = normalize(document.getElementById('cards-search')?.value).split(/\s+/).filter(Boolean);
   let filtered = cardsData.filter(card => {
-    const label = normalize(number(card) + ' ' + (card.title || ''));
+    const label = normalize(catalogListTitle(card));
     return terms.every(term => label.includes(term));
   }).sort((a,b) => {
-    const left = number(a), right = number(b);
+    const left = catalogProjectNumber(a).match(/^\d+$/)?.[0] || '';
+    const right = catalogProjectNumber(b).match(/^\d+$/)?.[0] || '';
     return (Number(right.slice(-2)) - Number(left.slice(-2)))
       || (Number(right.slice(0,-2)) - Number(left.slice(0,-2)))
       || String(a.id).localeCompare(String(b.id));
   });
   if(currentCardFloorFilter !== 'all'){
-    filtered = filtered.filter(c => String(c.floors) === String(currentCardFloorFilter));
+    const floorCount = Number(currentCardFloorFilter);
+    filtered = filtered.filter(card => floorCount === 3 ? Number(card.floors) >= 3 : Number(card.floors) === floorCount);
   }
   if(currentFeatureFilter !== 'all'){
     const featureTagMap = {basement:'Цокольный этаж',mansard:'Мансарда',flat:'Плоская кровля'};
@@ -11253,6 +11304,11 @@ function renderCardsList(){
     });
   }
 
+  const stats = document.getElementById('cards-stats');
+  if (stats) stats.hidden = terms.length > 0;
+  const count = document.getElementById('cards-search-count');
+  if (count) count.textContent = terms.length ? 'Найдено проектов: ' + filtered.length : '';
+
   if(!filtered.length){
     container.innerHTML = `<div class="note" style="text-align:center;padding:40px 0;opacity:0.5;">
       ${cardsData.length ? 'Проекты не найдены' : 'Проектов ещё нет'}
@@ -11269,7 +11325,7 @@ function renderCardsList(){
       ${canEditCards() ? `<button class="icon-btn" title="Получить ссылку на этот проект" onclick="event.stopPropagation(); createShareLinkForProject('${card.id}',${htmlJsArg(card.title||'Проект')})" style="position:absolute;top:8px;right:8px;font-size:15px;background:var(--card-solid);border:1px solid var(--line-strong);border-radius:8px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;z-index:2;">🔗</button>` : ''}
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
         <div style="flex:1;min-width:0;">
-          <div style="font-size:13px;font-weight:700;line-height:1.35;margin-bottom:3px;">${escapeHtml(card.title||'Без названия')}</div>
+          <div style="font-size:13px;font-weight:700;line-height:1.35;margin-bottom:3px;">${escapeHtml(catalogListTitle(card))}</div>
           <div style="font-size:11px;color:var(--text-dim);">
             ${card.floors} эт. · ${card.total_area||'—'} м² · ${card.footprint||''}
           </div>
@@ -11341,8 +11397,8 @@ function openCardEditor(id){
       setVal('ce-title', titleForEdit);
       setVal('ce-area', card.total_area||'');
       setVal('ce-footprint', card.footprint||'');
-      setVal('ce-beds', card.beds||'');
-      setVal('ce-baths', card.baths||'');
+      setVal('ce-beds', card.beds??'');
+      setVal('ce-baths', card.baths??'');
       setVal('ce-price', card.price||'');
       setVal('ce-tags', (card.tags||[]).join(', '));
       CatalogFloors.definitions.forEach(f=>{
@@ -11861,8 +11917,8 @@ async function saveCard(){
       floors: ceFloorsSelected,
       total_area: document.getElementById('ce-area').value.trim(),
       footprint: document.getElementById('ce-footprint').value.trim(),
-      beds: parseInt(document.getElementById('ce-beds').value)||null,
-      baths: parseInt(document.getElementById('ce-baths').value)||null,
+      beds: document.getElementById('ce-beds').value === '' ? null : parseInt(document.getElementById('ce-beds').value,10),
+      baths: document.getElementById('ce-baths').value === '' ? null : parseInt(document.getElementById('ce-baths').value,10),
       price: document.getElementById('ce-price').value.trim(),
       tags: (()=>{
         const systemTags = ['Классический','Современный','Цокольный этаж','Мансарда','Плоская кровля'];
@@ -12176,10 +12232,11 @@ function buildCardHTML(card){
   const images = card.images || [];
   const facade1 = images[0] || '';
   const facade2 = images[1] || '';
-  const tags = (card.tags||[]).map(t=>`<div class="tag">${escapeHtml(t)}</div>`).join('');
+  const number = catalogProjectNumber(card);
+  const tags = CatalogFloors.tags(card).filter(Boolean).map(t=>`<div class="tag">${escapeHtml(t)}</div>`).join('');
   return `<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Проект №${escapeHtml(card.project_number||'')} — ARHITTEK</title>
+<title>Проект${number ? ' №'+escapeHtml(number) : ''} — ARHITTEK</title>
 <style>
 :root{--blue:#3D8FE0;--blue-dark:#2A72C0;--blue-light:#E8F3FC;--black:#0A0A0A;--border:#D0D0D0;--border-soft:#DCDCDC;--text-primary:#1A1A1A;--text-sub:#888;--text-label:#BBB;}
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -12258,7 +12315,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       ${facade2?`<div class="swiper-slide"><img src="${escapeHtml(facade2)}" loading="lazy"/><div class="swiper-overlay"></div></div>`:''}
     </div>
     <div class="swiper-caption">${escapeHtml(card.title||'')}</div>
-    <div class="swiper-num">№ ${escapeHtml(card.project_number||'')}</div>
+    ${number ? `<div class="swiper-num">№ ${escapeHtml(number)}</div>` : ''}
     ${facade2?`<button class="swiper-arrow left" onclick="swGo(si-1)">‹</button><button class="swiper-arrow right" onclick="swGo(si+1)">›</button><div class="swiper-dots"><div class="swiper-dot active" id="dot-0"></div><div class="swiper-dot" id="dot-1"></div></div>`:''}
   </div>
 </div>
@@ -12991,7 +13048,6 @@ showNotifPrompt();
 <script src="contract-pricing.js"></script>
 <script src="contract-customer.js"></script>
 <script src="premium.js"></script>
-<script src="project-budget.js"></script>
 <script src="cash-finance.js"></script>
 <script src="app-refresh.js"></script>
 <script src="construction-finance.js"></script>

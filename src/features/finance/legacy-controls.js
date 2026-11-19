@@ -111,7 +111,7 @@ window.openReserveCorrection=function(){
   $('financeControlBody').innerHTML=`
     <div class="finance-current-balance"><span>Сейчас в резерве</span><strong>${money(current)}</strong></div>
     <div class="field"><label>Фактический остаток резерва, ₽</label><input id="finance-reserve-target" type="number" min="0" step="1000" value="${Math.round(current)}"></div>
-    <div class="field"><label>Комментарий</label><input id="finance-reserve-comment" type="text" placeholder="например: сверка кассы и счетов"></div>
+    <div class="field"><label>Комментарий</label><input id="finance-reserve-comment" type="text" placeholder="например: сверка сейфа и банковских счетов"></div>
     <button type="button" class="btn btn-primary" id="finance-reserve-save">Сохранить фактический резерв</button>
   `;
   $('finance-reserve-save').onclick=saveReserveCorrection;

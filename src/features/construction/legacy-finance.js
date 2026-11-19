@@ -162,7 +162,7 @@ function renderConstruction(){
     const {received, directPaid, matTotal, workTotal, otherTotal, manualTotal, expenses, cashOutgoing, unpaidInvoices, balance, pct, isOverspent} = fin;
 
     if(!showFinance){
-      return `<div class="obj-card" onclick="openObjectView('${p.id}')">
+      return `<div data-key-activate tabindex="0" role="button" class="obj-card" onclick="openObjectView('${p.id}')">
         <div class="obj-head"><div><div class="obj-title">${escapeHtml(p.name)}</div><div class="obj-sub">${escapeHtml(p.address||'Нажмите для просмотра')}</div></div><div class="obj-chevron">›</div></div>
         ${st ? `<div class="status-chip" data-status="${escapeHtml(st.name)}" style="margin-top:8px; display:inline-block;">${escapeHtml(st.name)}</div>` : ''}
         <div class="obj-bar" style="margin-top:10px;"><i style="width:${pct}%"></i></div>
@@ -170,7 +170,7 @@ function renderConstruction(){
       </div>`;
     }
 
-    return `<div class="obj-card" onclick="openObjectView('${p.id}')">
+    return `<div data-key-activate tabindex="0" role="button" class="obj-card" onclick="openObjectView('${p.id}')">
       <div class="obj-head"><div><div class="obj-title">${escapeHtml(p.name)}</div><div class="obj-sub">${escapeHtml(p.address||'')}</div></div><div style="display:flex; align-items:center; gap:6px;">${st ? `<span class="status-chip" data-status="${escapeHtml(st.name)}">${escapeHtml(st.name)}</span>` : ''}<div class="obj-chevron">›</div></div></div>
       <div class="obj-bar" style="margin-bottom:4px;"><i style="width:${pct}%; background:${pct>90?'var(--red)':pct>70?'var(--gold)':'var(--blue)'};"></i></div>
       <div class="obj-bar-lbl"><span>Выплачено ${pct}% от полученного</span><span style="color:${isOverspent?'var(--red)':''}">${isOverspent ? '⚠ Недостаток: '+fmtMoney(Math.abs(balance)) : 'Деньги: '+fmtMoney(balance)}</span></div>

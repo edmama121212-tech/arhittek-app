@@ -76,7 +76,7 @@ function renderProjectNumberField(){
   const saved=state.projects.find(p=>p.id===editingProjectId),series=projectNumberSeries(category.value);
   const fixed=saved?projectNumberPrefix(saved):nextProjectNumbers?.find(n=>n.category_id===category.value)?.prefix;
   prefix.hidden=!!saved&&!saved.number_series||(!saved&&!series);
-  prefix.textContent=prefix.hidden?'':fixed||(projectNumbersRequest?'Загружаем номер…':'');
+  prefix.textContent=prefix.hidden?'':fixed?fixed.slice(fixed.indexOf('№')):(projectNumbersRequest?'Загружаем номер…':'');
   hint.hidden=!!saved||!series;
   hint.textContent=fixed?'Номер закрепится при сохранении.':projectNumbersRequest?'':'Не удалось получить номер. Повторите сохранение после восстановления связи.';
   input.disabled=!saved&&!category.value;

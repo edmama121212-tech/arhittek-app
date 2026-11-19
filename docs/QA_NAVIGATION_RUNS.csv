@@ -1,0 +1,61 @@
+﻿Раздел,Сценарий,Активный раздел,Ширина элемента,Высота элемента,Горизонтально помещается,"Отклик двух кадров, мс",Активных экранов,aria-current
+overview,mouse,Рабочий стол,195,47,True,29,1,page
+projects,mouse,Проекты,195,47,True,29,1,page
+construction,mouse,Строительство,195,47,True,29,1,page
+cards,mouse,Коллекция проектов,195,47,True,23,1,page
+finance,mouse,Финансы,195,47,True,33,1,page
+more,mouse,Инструменты студии,195,47,True,40,1,page
+overview,enter,Рабочий стол,56,53,True,24,1,page
+projects,enter,Проекты,56,53,True,20,1,page
+construction,enter,Строительство,56,53,True,26,1,page
+cards,enter,Коллекция проектов,56,53,True,29,1,page
+finance,enter,Финансы,56,53,True,30,1,page
+more,enter,Инструменты студии,56,53,True,27,1,page
+overview,space,Рабочий стол,56,53,True,21,1,page
+projects,space,Проекты,56,53,True,26,1,page
+construction,space,Строительство,56,53,True,21,1,page
+cards,space,Коллекция проектов,56,53,True,28,1,page
+finance,space,Финансы,56,53,True,41,1,page
+more,space,Инструменты студии,56,53,True,23,1,page
+overview,touch,Рабочий стол,56,53,True,22,1,page
+projects,touch,Проекты,56,53,True,30,1,page
+construction,touch,Строительство,56,53,True,28,1,page
+cards,touch,Коллекция проектов,56,53,True,31,1,page
+finance,touch,Финансы,56,53,True,43,1,page
+more,touch,Инструменты студии,56,53,True,9,1,page
+overview,landscape,Рабочий стол,88,56,True,25,1,page
+projects,landscape,Проекты,88,56,True,31,1,page
+construction,landscape,Строительство,88,56,True,24,1,page
+cards,landscape,Коллекция проектов,88,56,True,24,1,page
+finance,landscape,Финансы,88,56,True,36,1,page
+more,landscape,Инструменты студии,88,56,True,25,1,page
+overview,double-click,Рабочий стол,56,53,True,26,1,page
+projects,double-click,Проекты,56,53,True,25,1,page
+construction,double-click,Строительство,56,53,True,27,1,page
+cards,double-click,Коллекция проектов,56,53,True,20,1,page
+finance,double-click,Финансы,56,53,True,44,1,page
+more,double-click,Инструменты студии,56,53,True,28,1,page
+overview,return,Рабочий стол,56,53,True,29,1,page
+projects,return,Проекты,56,53,True,19,1,page
+construction,return,Строительство,56,53,True,29,1,page
+cards,return,Коллекция проектов,56,53,True,29,1,page
+finance,return,Финансы,56,53,True,36,1,page
+more,return,Инструменты студии,56,53,True,22,1,page
+overview,scroll,Рабочий стол,56,53,True,29,1,page
+projects,scroll,Проекты,56,53,True,32,1,page
+construction,scroll,Строительство,56,53,True,14,1,page
+cards,scroll,Коллекция проектов,56,53,True,10,1,page
+finance,scroll,Финансы,56,53,True,43,1,page
+more,scroll,Инструменты студии,56,53,True,21,1,page
+overview,rotation,Рабочий стол,56,53,True,24,1,page
+projects,rotation,Проекты,56,53,True,22,1,page
+construction,rotation,Строительство,56,53,True,22,1,page
+cards,rotation,Коллекция проектов,56,53,True,23,1,page
+finance,rotation,Финансы,56,53,True,69,1,page
+more,rotation,Инструменты студии,56,53,True,20,1,page
+overview,reload,Рабочий стол,56,53,True,27,1,page
+projects,reload,Проекты,56,53,True,23,1,page
+construction,reload,Строительство,56,53,True,26,1,page
+cards,reload,Коллекция проектов,56,53,True,30,1,page
+finance,reload,Финансы,56,53,True,67,1,page
+more,reload,Инструменты студии,56,53,True,29,1,page

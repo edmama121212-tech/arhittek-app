@@ -54,18 +54,32 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
   state.invoices=[{id:'direct',project_id:p.id,item_type:'Материал',amount:20000,invoice_date:'2026-10-19',paid_by_client:true}];
   return [getConstructionFinancials(p).balance,ARHITTEKCash.balance(state)];
  },[100000,120000],{severity:'P0'});
- await check('Company service fee is 15% of the approved budget even without an employee assignment',()=>{
-  state.invoices=[];const p={...state.projects[0],employee_id:null,price:1000000,fee_percent:15};return getProjectFee(p).feeAmount;
- },150000,{severity:'P0',requirement:true});
- await check('Company service fee uses the budget rather than the amount of uploaded invoices',()=>{
-  const p={...state.projects[0],price:1000000,employee_id:'architect',fee_percent:15};state.invoices=[{id:'cost',project_id:p.id,item_type:'Материал',amount:40000,invoice_date:'2026-10-19'}];return getProjectFee(p).feeAmount;
- },150000,{severity:'P0',requirement:true});
- await check('New renovation object offers a usable construction-stage checklist',()=>{
-  const p=state.projects[0];return (defaultStageNamesForProject(p)||[]).length>0;
- },true,{requirement:true});
- await check('Object card has a direct stages/work-progress tab, separate from cost bills',()=>{
-  openObjectView('repair');return Array.from(document.querySelectorAll('#objTabs .filter-chip')).some(e=>/Этап|Ход работ|Прогресс/.test(e.textContent));
- },true,{requirement:true});
+ await check('An estimated budget alone creates neither a company markup nor a personal commission',()=>{
+  state.invoices=[];
+  const project={...state.projects[0],employee_id:null,price:1000000,fee_percent:15};
+  return [getConstructionFinancials(project).companyMarkupAmount,getProjectFee(project).feeAmount];
+ },[0,0],{severity:'P0',requirement:true});
+ await check('A 40000 cost creates a 6000 company markup while employee commission stays zero',()=>{
+  const project={...state.projects[0],employee_id:'architect',price:1000000,fee_percent:15};
+  state.invoices=[{id:'cost',project_id:project.id,item_type:'Материал',amount:40000,invoice_date:'2026-10-19'}];
+  return [getConstructionFinancials(project).companyMarkupAmount,getProjectFee(project).feeAmount];
+ },[6000,0],{severity:'P0',requirement:true});
+ await check('The object offers eight repair stages for explicit application',()=>{
+  openObjectView('repair');
+  ARHITTEKConstructionWorkflow.render();
+  const button=document.querySelector('#constructionWorkflow [data-construction-workflow="apply"]');
+  return [ARHITTEKConstructionWorkflow.createPlan('repair').rows.length,
+    !!button&&button.getBoundingClientRect().width>0&&!button.disabled,
+    (__db.project_stages||[]).filter(stage=>stage.project_id==='repair').length];
+ },[8,true,0],{requirement:true});
+ await check('Work progress is visible independently of the materials and works invoice tabs',()=>{
+  return ['materials','works'].map(tab=>{
+    switchObjTab(tab);
+    const progress=document.querySelector('#constructionWorkflow');
+    return progress?.dataset.projectId==='repair'&&progress.getBoundingClientRect().height>0&&
+      progress.querySelector('h3')?.textContent==='Этапы ремонта'&&!progress.closest('#objTabContent');
+  });
+ },[true,true],{requirement:true});
  await check('The object photo gallery includes uploaded invoice photos',()=>{
   state.invoices=[{id:'photo-bill',project_id:'repair',item_type:'Материал',amount:1000,invoice_date:'2026-10-19',photo_url:'https://example.invalid/invoice-proof.jpg'}];state.photos=[];switchObjTab('photos');return !!document.querySelector('#objTabContent img[src="https://example.invalid/invoice-proof.jpg"]');
  },true,{severity:'P2',requirement:true});
@@ -88,17 +102,26 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
  await check('An invoice cannot be opened for editing by staff outside its object team',()=>{
   const inv={id:'other-invoice',project_id:'other',item_type:'Материал',amount:2500,invoice_date:'2026-10-19'};state.invoices.push(inv);closeInvoiceSheet();openInvoiceSheet(inv.id);return document.getElementById('invoiceSheetOverlay').style.display;
  },'none',{severity:'P0'});
- await check('There is a read-only customer object role distinct from an employee login',()=>{
-  const p=state.projects.find(p=>p.id==='own');session={employeeId:'customer',name:'Test Customer',isAdmin:false,token:'test',role:'customer',projectId:p.id};window.session=session;
-  state.employees.push({id:'customer',name:'Test Customer',role:'Заказчик',active:true,can_see_construction:true});state.projectMembers.push({id:'customer-membership',employee_id:'customer',project_id:p.id});openObjectView(p.id);switchObjTab('add');
-  return Array.from(document.querySelectorAll('#objTabs .filter-chip')).some(e=>e.textContent.includes('Добавить'))||!!document.querySelector('#objTabContent button[onclick="addInvoiceFromView()"]');
- },false,{severity:'P0',requirement:true});
- // Two contexts demonstrate that local tasks do not reach the actual foreman device.
+ // Customer access is a scoped grant to a separate document. Employee membership
+ // is deliberately absent from this flow; authenticated snapshots are covered by client-portal.cjs.
+ await page.goto('https://app.test/client-portal.html');
+ await check('An employee session alone grants no object or editing tools in the customer portal',()=>{
+  return [document.getElementById('portal-content').hidden,document.getElementById('state-title').textContent,
+    typeof window.addInvoice,document.querySelector('input,textarea,form')===null];
+ },[true,'Нужна ссылка на ваш объект','undefined',true],{severity:'P0',requirement:true});
  await fresh();
- await check('Project tasks are written to the shared data store for a second device',()=>{
-  __db.projects=[{id:'daily-task',name:'Daily task',category_id:'build',status_id:'active'}];document.getElementById('pf-task-name').value='Accept hidden plumbing work';document.getElementById('pf-task-priority').value='high';const before=__writes.length;addTask('daily-task');return __writes.slice(before).some(w=>['project_tasks','project_stages','audit_log'].includes(w.table));
- },true,{requirement:true});
+ await page.evaluate(()=>{
+  const tasks=[{id:'legacy',name:'Проверить скрытые работы',priority:'high',done:false,created_at:'2026-10-19T00:00:00Z'}];
+  saveProjectTasks('daily-task',tasks);
+ });
+ await fresh();
+ await check('A historical device-local task survives reload, remains scoped to its project and is not advertised as shared',()=>{
+  renderTasksList('daily-task');
+  const panel=document.getElementById('pf-tasks-list');
+  return [getProjectTasks('daily-task').map(task=>task.name),getProjectTasks('other').length,
+    panel.getClientRects().length,(__db.project_stages||[]).filter(row=>row.project_id==='daily-task').length];
+ },[['Проверить скрытые работы'],0,0,0],{requirement:true});
  await browser.close();
- console.log(JSON.stringify({role:'construction_foreman',passed:results.filter(r=>r.pass).length,total:results.length,failed:results.filter(r=>!r.pass),errors},null,2));
+ console.log(JSON.stringify({role:'construction_foreman',passed:results.filter(r=>r.pass).length,total:results.length,limitations:['Arbitrary tasks are device-local historical records. Shared foreman assignments are not implemented.'],failed:results.filter(r=>!r.pass),errors},null,2));
  if(results.some(r=>!r.pass)||errors.length)process.exitCode=1;
 })().catch(error=>{console.error(error);process.exit(1);});

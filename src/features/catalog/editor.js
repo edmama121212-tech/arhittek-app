@@ -129,24 +129,27 @@ async function backfillCardThumbnails(){
 }
 
 // ── Рендер списка карточек ──
+function setCatalogFilterButton(selector,selected){
+  document.querySelectorAll(selector).forEach(button=>{
+    button.classList.toggle('active',button===selected);
+    button.setAttribute('aria-pressed',String(button===selected));
+  });
+}
 function filterCards(val, el){
   currentCardFloorFilter = val;
-  document.querySelectorAll('#cards-filters .filter-chip').forEach(c=>c.classList.remove('active'));
-  if(el) el.classList.add('active');
+  setCatalogFilterButton('#cards-filters .filter-chip',el);
   renderCardsList();
 }
 
 function filterStyle(val, el){
   currentCardStyleFilter = val;
-  document.querySelectorAll('#style-filters .filter-chip').forEach(c=>c.classList.remove('active'));
-  if(el) el.classList.add('active');
+  setCatalogFilterButton('#style-filters .filter-chip',el);
   renderCardsList();
 }
 
 function filterFeature(val, el){
   currentFeatureFilter = val;
-  document.querySelectorAll('#feature-filters .filter-chip').forEach(c=>c.classList.remove('active'));
-  if(el) el.classList.add('active');
+  setCatalogFilterButton('#feature-filters .filter-chip',el);
   renderCardsList();
 }
 
@@ -189,25 +192,37 @@ function renderCardsStats(){
   `;
 }
 
+function catalogProjectNumber(card){
+  return String(card.project_number || '').trim().replace(/^№\s*/, '')
+    || String(card.title || '').match(/№\s*(\d+(?:-[\p{L}\d]+)*)/u)?.[1] || '';
+}
+
+function catalogListTitle(card){
+  const title = card.title || '';
+  const number = catalogProjectNumber(card);
+  if (!number || title.match(/№\s*(\d+(?:-[\p{L}\d]+)*)/u)?.[1] === number) return title || 'Без названия';
+  return title ? `№${number} — ${title}` : `№${number}`;
+}
+
 function renderCardsList(){
   const container = document.getElementById('cards-list');
   if(!container) return;
 
   const normalize = value => String(value || '').toLowerCase().replace(/ё/g,'е').replace(/№\s*/g,'').trim();
-  const number = card => String(card.project_number || '').match(/^\s*№?\s*(\d+)\s*$/)?.[1]
-    || String(card.title || '').match(/№\s*(\d+)/)?.[1] || '';
   const terms = normalize(document.getElementById('cards-search')?.value).split(/\s+/).filter(Boolean);
   let filtered = cardsData.filter(card => {
-    const label = normalize(number(card) + ' ' + (card.title || ''));
+    const label = normalize(catalogListTitle(card));
     return terms.every(term => label.includes(term));
   }).sort((a,b) => {
-    const left = number(a), right = number(b);
+    const left = catalogProjectNumber(a).match(/^\d+$/)?.[0] || '';
+    const right = catalogProjectNumber(b).match(/^\d+$/)?.[0] || '';
     return (Number(right.slice(-2)) - Number(left.slice(-2)))
       || (Number(right.slice(0,-2)) - Number(left.slice(0,-2)))
       || String(a.id).localeCompare(String(b.id));
   });
   if(currentCardFloorFilter !== 'all'){
-    filtered = filtered.filter(c => String(c.floors) === String(currentCardFloorFilter));
+    const floorCount = Number(currentCardFloorFilter);
+    filtered = filtered.filter(card => floorCount === 3 ? Number(card.floors) >= 3 : Number(card.floors) === floorCount);
   }
   if(currentFeatureFilter !== 'all'){
     const featureTagMap = {basement:'Цокольный этаж',mansard:'Мансарда',flat:'Плоская кровля'};
@@ -227,6 +242,11 @@ function renderCardsList(){
     });
   }
 
+  const stats = document.getElementById('cards-stats');
+  if (stats) stats.hidden = terms.length > 0;
+  const count = document.getElementById('cards-search-count');
+  if (count) count.textContent = terms.length ? 'Найдено проектов: ' + filtered.length : '';
+
   if(!filtered.length){
     container.innerHTML = `<div class="note" style="text-align:center;padding:40px 0;opacity:0.5;">
       ${cardsData.length ? 'Проекты не найдены' : 'Проектов ещё нет'}
@@ -243,7 +263,7 @@ function renderCardsList(){
       ${canEditCards() ? `<button class="icon-btn" title="Получить ссылку на этот проект" onclick="event.stopPropagation(); createShareLinkForProject('${card.id}',${htmlJsArg(card.title||'Проект')})" style="position:absolute;top:8px;right:8px;font-size:15px;background:var(--card-solid);border:1px solid var(--line-strong);border-radius:8px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;z-index:2;">🔗</button>` : ''}
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
         <div style="flex:1;min-width:0;">
-          <div style="font-size:13px;font-weight:700;line-height:1.35;margin-bottom:3px;">${escapeHtml(card.title||'Без названия')}</div>
+          <div style="font-size:13px;font-weight:700;line-height:1.35;margin-bottom:3px;">${escapeHtml(catalogListTitle(card))}</div>
           <div style="font-size:11px;color:var(--text-dim);">
             ${card.floors} эт. · ${card.total_area||'—'} м² · ${card.footprint||''}
           </div>
@@ -315,8 +335,8 @@ function openCardEditor(id){
       setVal('ce-title', titleForEdit);
       setVal('ce-area', card.total_area||'');
       setVal('ce-footprint', card.footprint||'');
-      setVal('ce-beds', card.beds||'');
-      setVal('ce-baths', card.baths||'');
+      setVal('ce-beds', card.beds??'');
+      setVal('ce-baths', card.baths??'');
       setVal('ce-price', card.price||'');
       setVal('ce-tags', (card.tags||[]).join(', '));
       CatalogFloors.definitions.forEach(f=>{

@@ -16,25 +16,27 @@
       <span class="section-label-line"></span>
     </div>
 
-    <input id="cards-search" type="search" aria-label="Поиск по номеру или названию" placeholder="Поиск по номеру или названию" oninput="renderCardsList()" style="width:100%;margin:4px 0 10px;">
+    <input id="cards-search" type="search" aria-controls="cards-list" aria-label="Поиск по номеру или названию" placeholder="Поиск по номеру или названию" oninput="renderCardsList()">
+
+    <div id="cards-search-count" role="status" class="note"></div>
 
     <!-- Фильтр по этажности -->
     <div class="filters" id="cards-filters" style="flex-wrap:wrap;gap:6px;">
-      <div class="filter-chip active" data-floors="all" onclick="filterCards('all',this)">Все</div>
-      <div class="filter-chip" data-floors="1" onclick="filterCards('1',this)">1 этаж</div>
-      <div class="filter-chip" data-floors="2" onclick="filterCards('2',this)">2 этажа</div>
-      <div class="filter-chip" data-floors="3" onclick="filterCards('3',this)">3+ этажей</div>
+      <button type="button" class="filter-chip active" aria-pressed="true" data-floors="all" onclick="filterCards('all',this)">Все</button>
+      <button type="button" class="filter-chip" aria-pressed="false" data-floors="1" onclick="filterCards('1',this)">1 этаж</button>
+      <button type="button" class="filter-chip" aria-pressed="false" data-floors="2" onclick="filterCards('2',this)">2 этажа</button>
+      <button type="button" class="filter-chip" aria-pressed="false" data-floors="3" onclick="filterCards('3',this)">3+ этажей</button>
     </div>
     <div class="filters" id="feature-filters" style="flex-wrap:wrap;gap:6px;margin-top:6px;">
-      <div class="filter-chip active" data-feature="all" onclick="filterFeature('all',this)">Без доп.</div>
-      <div class="filter-chip" data-feature="basement" onclick="filterFeature('basement',this)">Цокольный этаж</div>
-      <div class="filter-chip" data-feature="mansard" onclick="filterFeature('mansard',this)">Мансарда</div>
-      <div class="filter-chip" data-feature="flat" onclick="filterFeature('flat',this)">Плоская кровля</div>
+      <button type="button" class="filter-chip active" aria-pressed="true" data-feature="all" onclick="filterFeature('all',this)">Без доп.</button>
+      <button type="button" class="filter-chip" aria-pressed="false" data-feature="basement" onclick="filterFeature('basement',this)">Цокольный этаж</button>
+      <button type="button" class="filter-chip" aria-pressed="false" data-feature="mansard" onclick="filterFeature('mansard',this)">Мансарда</button>
+      <button type="button" class="filter-chip" aria-pressed="false" data-feature="flat" onclick="filterFeature('flat',this)">Плоская кровля</button>
     </div>
     <div class="filters" id="style-filters" style="flex-wrap:wrap;gap:6px;margin-top:6px;">
-      <div class="filter-chip active" data-style="all" onclick="filterStyle('all',this)">Все стили</div>
-      <div class="filter-chip" data-style="classic" onclick="filterStyle('classic',this)">Классический</div>
-      <div class="filter-chip" data-style="modern" onclick="filterStyle('modern',this)">Современный</div>
+      <button type="button" class="filter-chip active" aria-pressed="true" data-style="all" onclick="filterStyle('all',this)">Все стили</button>
+      <button type="button" class="filter-chip" aria-pressed="false" data-style="classic" onclick="filterStyle('classic',this)">Классический</button>
+      <button type="button" class="filter-chip" aria-pressed="false" data-style="modern" onclick="filterStyle('modern',this)">Современный</button>
     </div>
 
     <!-- Счётчик: всего проектов + разбивка по этажам/стилю -->

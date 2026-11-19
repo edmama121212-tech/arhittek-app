@@ -76,9 +76,17 @@ unit('Stages from another object and deleted rows do not suppress this object pl
  await check('Applying a completed template again is read-only and creates no duplicates',async()=>{
   const before=__repairAttempts.length,result=await ARHITTEKConstructionWorkflow.applyTemplate('object-a');return[result,__db.project_stages.length,__repairAttempts.length-before];
  },[true,8,0]);
- await check('Mobile stage rows keep a compact checkbox and show complete stage names',()=>{
-  const box=document.querySelector('#constructionWorkflow .stage-check'),names=Array.from(document.querySelectorAll('#constructionWorkflow .li-name'));return[box.getBoundingClientRect().width<=26,names.length===8,names.every(node=>getComputedStyle(node).whiteSpace!=='nowrap'&&node.scrollWidth<=node.clientWidth+1)];
- },[true,true,true]);
+ await check('Mobile stages retain a compact indicator, a 44px hit target and readable names',()=>{
+  const section=document.getElementById('constructionWorkflow');
+  const button=section.querySelector('.stage-check');
+  button.scrollIntoView({block:'center',behavior:'instant'});
+  const rect=button.getBoundingClientRect(),cx=rect.left+rect.width/2,cy=rect.top+rect.height/2;
+  const compact=rect.width>=22&&rect.width<=26&&rect.height>=22&&rect.height<=26;
+  const hitArea=[-21.5,0,21.5].every(dx=>[-21.5,0,21.5].every(dy=>
+    document.elementFromPoint(cx+dx,cy+dy)?.closest('.stage-check')===button));
+  const names=[...section.querySelectorAll('.li-name')];
+  return [compact,hitArea,names.length===8,names.every(node=>getComputedStyle(node).whiteSpace!=='nowrap'&&node.scrollWidth<=node.clientWidth+1)];
+ },[true,true,true,true]);
  await check('The template creates no ledger entries, cash movements or budget changes',()=>{
   return __writes.filter(w=>w.table&& !['project_stages','audit_log'].includes(w.table));
  },[]);

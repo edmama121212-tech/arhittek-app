@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="referrer" content="no-referrer">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ARHITTEK · Техническое задание</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
@@ -90,7 +90,7 @@
   .progress-fill{height:100%; background:var(--blue); border-radius:4px; transition: width .4s ease;}
 
   .q{margin-bottom:18px;}
-  .q-label{font-size:13.5px; font-weight:600; margin-bottom:8px; line-height:1.4;}
+  .q-label{display:block; font-size:13.5px; font-weight:600; margin-bottom:8px; line-height:1.4;}
   .q-hint{font-size:11px; color:var(--text-dim); margin-top:-4px; margin-bottom:8px; line-height:1.5;}
 
   input[type="text"], input[type="number"], input[type="tel"], textarea, select{
@@ -110,7 +110,9 @@
     cursor:pointer; transition: all .15s; color:var(--text-dim); user-select:none;
   }
   .chip-option.checked{background:var(--blue-soft); color:var(--blue); border-color:rgba(74,144,226,0.4);}
-  .chip-option input{display:none;}
+  .chip-option{position:relative;}
+  .chip-option input{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);}
+  .chip-option:has(input:focus-visible){outline:2px solid var(--blue);outline-offset:2px;}
 
   /* Toggle / radio rows */
   .toggle-row{
@@ -664,17 +666,17 @@ function renderField(field){
 
   if(field.type === 'text' || field.type === 'tel' || field.type === 'number'){
     return `<div class="q">
-      <div class="q-label">${escapeHtml(field.label)}</div>
+      <label class="q-label" for="brief-${field.id}">${escapeHtml(field.label)}</label>
       ${field.hint?`<div class="q-hint">${escapeHtml(field.hint)}</div>`:''}
-      <input type="${field.type}" data-field="${field.id}" placeholder="${escapeHtml(field.placeholder||'')}" value="${escapeHtml(val||'')}">
+      <input id="brief-${field.id}" type="${field.type}" data-field="${field.id}" placeholder="${escapeHtml(field.placeholder||'')}" value="${escapeHtml(val||'')}">
     </div>`;
   }
 
   if(field.type === 'textarea'){
     return `<div class="q">
-      <div class="q-label">${escapeHtml(field.label)}</div>
+      <label class="q-label" for="brief-${field.id}">${escapeHtml(field.label)}</label>
       ${field.hint?`<div class="q-hint">${escapeHtml(field.hint)}</div>`:''}
-      <textarea data-field="${field.id}" placeholder="${escapeHtml(field.placeholder||'')}">${escapeHtml(val||'')}</textarea>
+      <textarea id="brief-${field.id}" data-field="${field.id}" placeholder="${escapeHtml(field.placeholder||'')}">${escapeHtml(val||'')}</textarea>
     </div>`;
   }
 
@@ -683,7 +685,7 @@ function renderField(field){
     const optionsHtml = field.options.map(opt=>{
       const checked = selected.includes(opt);
       return `<label class="chip-option ${checked?'checked':''}" data-field="${field.id}" data-value="${escapeHtml(opt)}" data-multi="${!!field.multi}">
-        <input type="${field.multi?'checkbox':'radio'}" ${checked?'checked':''}>
+        <input name="brief-${field.id}" type="${field.multi?'checkbox':'radio'}" ${checked?'checked':''}>
         ${escapeHtml(opt)}
       </label>`;
     }).join('');
@@ -783,35 +785,29 @@ function bindFieldEvents(){
 
   // Chips
   document.querySelectorAll('.chip-option').forEach(chip=>{
-    chip.addEventListener('click', (e)=>{
-      e.preventDefault();
-      const fieldId = chip.dataset.field;
-      const value = chip.dataset.value;
-      const multi = chip.dataset.multi === 'true';
-
-      if(multi){
-        let arr = Array.isArray(answers[fieldId]) ? answers[fieldId].slice() : [];
-        if(arr.includes(value)) arr = arr.filter(v=>v!==value);
-        else arr.push(value);
-        answers[fieldId] = arr;
+    const input = chip.querySelector('input');
+    input.addEventListener('change', ()=>{
+      const {field:fieldId, value} = chip.dataset;
+      if(input.type === 'checkbox'){
+        const values = Array.isArray(answers[fieldId]) ? answers[fieldId] : [];
+        answers[fieldId] = input.checked ? [...new Set([...values, value])] : values.filter(item=>item!==value);
       }else{
         answers[fieldId] = value;
-        // Uncheck siblings
-        document.querySelectorAll(`.chip-option[data-field="${fieldId}"]`).forEach(c=>{
-          c.classList.remove('checked');
-          c.querySelector('input').checked = false;
-        });
       }
-
-      chip.classList.toggle('checked');
-      chip.querySelector('input').checked = chip.classList.contains('checked');
-
+      document.querySelectorAll(`.chip-option[data-field="${fieldId}"]`).forEach(option=>{
+        option.classList.toggle('checked', option.querySelector('input').checked);
+      });
       scheduleAutoSave();
 
       // If the service type selection changed, re-render to show/hide AR/DI sections
       if(fieldId === 'ld_tariff') LandscapeBrief.setTariff(answers,value);
       if(fieldId === 'service_type' || fieldId === 'ld_tariff'){
+        const restoreFocus = document.activeElement === input;
         renderForm();
+        if(restoreFocus){
+          const selector = `.chip-option[data-field="${fieldId}"][data-value="${CSS.escape(value)}"] input`;
+          document.querySelector(selector)?.focus({preventScroll:true});
+        }
       }
     });
   });

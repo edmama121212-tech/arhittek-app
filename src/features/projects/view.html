@@ -3,8 +3,8 @@
     <div id="nextProjectNumbers" class="project-next-numbers" hidden></div>
 
     <div class="search-box">
-      <input type="text" id="projectSearch" placeholder="Поиск по названию, адресу, телефону...">
-      <button class="search-clear" id="projectSearchClear" type="button">✕</button>
+      <input type="text" id="projectSearch" aria-label="Поиск проектов" placeholder="Номер, название, адрес или телефон">
+      <button class="search-clear" id="projectSearchClear" type="button" aria-label="Очистить поиск проектов">✕</button>
     </div>
 
     <div class="project-filter-grid">
@@ -13,7 +13,7 @@
       <div id="employeeFilters"></div>
     </div>
     <div hidden id="paymentFilters"></div>
-    <div id="filter-active-badge" style="display:none;margin:4px 16px 0;background:var(--blue-soft);color:var(--blue);border:1px solid rgba(0,113,235,0.3);border-radius:20px;padding:3px 12px;font-size:12px;font-weight:600;cursor:pointer;" onclick="resetAllFilters()">✕ Сбросить фильтры: <span id="filter-badge-text"></span></div>
+    <button hidden type="button" id="filter-active-badge" onclick="resetAllFilters()"></button>
 
     <div class="card" id="projectsCard">
       <div class="loading-state">Загрузка…</div>

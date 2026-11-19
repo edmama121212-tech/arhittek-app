@@ -100,8 +100,8 @@ function ensureSalarySheet(){
       '<div class="sheet-title"><span id="salaryPaymentSheetTitle">Выплата зарплаты</span><button class="sheet-close" id="salaryPaymentClose" type="button">✕</button></div>'+
       '<div id="salaryPaymentSummary" class="fee-card" style="margin-bottom:12px"></div>'+
       '<div class="field-row">'+
-        '<div class="field"><label>Сумма выплаты, ₽</label><input type="number" id="salaryPaymentAmount" min="0" step="100"></div>'+
-        '<div class="field"><label>Дата выплаты</label><input type="date" id="salaryPaymentDate"></div>'+
+        '<div class="field"><label for="salaryPaymentAmount">Сумма выплаты, ₽</label><input type="number" id="salaryPaymentAmount" min="0" step="100"></div>'+
+        '<div class="field"><label for="salaryPaymentDate">Дата выплаты</label><input type="date" id="salaryPaymentDate"></div>'+
       '</div>'+
       '<div class="field"><label>Комментарий</label><input type="text" id="salaryPaymentNote" placeholder="например: первая часть / перевод на карту"></div>'+
       '<button class="btn btn-primary" id="salaryPaymentSave" type="button">Сохранить выплату</button>'+

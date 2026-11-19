@@ -3,6 +3,7 @@
 const fs = require('node:fs'), path = require('node:path');
 const root = path.resolve(process.env.TEST_APP_ROOT || path.join(__dirname, '..'));
 const out = path.resolve(process.env.AUDIT_SCREENSHOT_DIR || 'visual-evidence');
+const controlAudit = process.env.AUDIT_CONTROLS === '1' ? require('./control-presentation.cjs') : null;
 const {chromium} = require(path.join(root, 'node_modules/playwright'));
 const fixture = () => {
   const actor = new URL(location.href).searchParams.get('actor') || 'admin';
@@ -30,7 +31,7 @@ const fixture = () => {
     workspace:{version:2,active:true,revision:2,as_of:day,generated_at:timestamp,opening_mode:'reconciled',
       cash,reserve:215000,balances,available_30:185000,minimum:185000,forecast,rules:[],warnings:[],unscheduled_projects:[],unmatched:[],
       items:[{key:'rent',label:'Аренда студии',direction:'expense',remaining:30000,amount:30000,due_date:'2026-11-12',status:'planned',origin:'manual',funding:'reserve'}],
-      wallets:[{id:'studio-bank',name:'Расчётный счёт',kind:'bank',balance:cash,active:true}]}};
+      wallets:[{id:'studio-safe',name:'Сейф',kind:'unallocated',is_default:true,balance:cash,active:true}]}};
   const e=employees.find(e=>e.id===actor);
   if(e)localStorage.setItem('arhittek_session',JSON.stringify({employeeId:e.id,name:e.name,isAdmin:e.id==='admin',token:'isolated-'+e.id,createdAt:Date.now()}));
   else localStorage.removeItem('arhittek_session');
@@ -57,29 +58,38 @@ function geometry(){
   const browser=await chromium.launch({executablePath:process.env.BROWSER_EXECUTABLE||undefined,headless:true,args:['--no-sandbox','--disable-dev-shm-usage','--disable-gpu']});
   const report={browser:browser.version(),shots:{},failures:[],pageErrors:[]};
   const widths=(process.env.AUDIT_WIDTHS||'320,390,1440').split(',').map(Number);
-  try{for(const width of widths){const height=width===320?680:width===390?844:900;
+  const scenarios=controlAudit?.profiles || widths.map(width=>({width,height:width===320?680:width===390?844:900,touch:width<600,motion:'reduce'}));
+  const controls=[], actions=[];
+  try{for(const scenario of scenarios){const {width,height}=scenario;
     for(const actor of ['admin','architect','designer','foreman']){
-      const context=await browser.newContext({viewport:{width,height},deviceScaleFactor:1,isMobile:width<600,hasTouch:width<600,locale:'ru-RU',timezoneId:'Europe/Moscow',serviceWorkers:'block',reducedMotion:'reduce'});
+      const context=await browser.newContext({viewport:{width,height},deviceScaleFactor:scenario.dpr||1,isMobile:!!scenario.touch,hasTouch:!!scenario.touch,forcedColors:scenario.contrast?'active':'none',locale:'ru-RU',timezoneId:'Europe/Moscow',serviceWorkers:'block',reducedMotion:scenario.motion||'no-preference'});
       try{
       await context.addInitScript({content:'if(window===window.top){\n'+fs.readFileSync(path.join(root,'tests/mock.js'),'utf8')+'\n;('+fixture.toString()+')();\n}'});
       await context.route('**/*',r=>{const u=new URL(r.request().url());let f=u.hostname==='app.test'?path.join(root,u.pathname==='/'?'index.html':u.pathname.slice(1)):null;
         for(const [key,file] of [['xlsx@','xlsx/dist/xlsx.full.min.js'],['jspdf@','jspdf/dist/jspdf.umd.min.js'],['jspdf-autotable@','jspdf-autotable/dist/jspdf.plugin.autotable.min.js']])if(u.href.includes(key))f=path.join(root,'node_modules',file);
         if(f&&fs.existsSync(f)&&fs.statSync(f).isFile())return r.fulfill({path:f,contentType:f.endsWith('.html')?'text/html':f.endsWith('.js')?'text/javascript':f.endsWith('.css')?'text/css':undefined});
         return r.fulfill({body:'',contentType:u.pathname.includes('css')?'text/css':'text/javascript'});});
-      const page=await context.newPage();page.setDefaultTimeout(3500);
+      const page=await context.newPage();if(controlAudit)await page.addInitScript(controlAudit.recordActions);page.setDefaultTimeout(3500);
       await page.clock.setFixedTime(new Date('2026-11-07T10:00:00Z'));
       page.on('pageerror',e=>report.pageErrors.push({width,actor,message:e.message}));
-      const start=async()=>{await page.goto('https://app.test/?actor='+actor);await page.waitForFunction(()=>typeof hasVerifiedAccess==='function'&&hasVerifiedAccess()&&!loadAllInFlight);await page.waitForTimeout(130)};
+      const start=async()=>{await page.goto('https://app.test/?actor='+actor);await page.waitForFunction(()=>typeof hasVerifiedAccess==='function'&&hasVerifiedAccess()&&!loadAllInFlight);await page.waitForTimeout(130);if(scenario.text)await page.addStyleTag({content:'body :where(button,input,select,textarea,a,summary,[role=button],[onclick]){font-size:1.35em!important}'});};
       const nav=id=>page.locator('.nav-btn[data-view="view-'+id+'"]').click();
       const top=()=>page.evaluate(()=>window.scrollTo({top:0,behavior:'instant'}));
-      const grab=async(key,scrollTop=true)=>{if(scrollTop)await top();await page.waitForTimeout(220);const tag=[actor,key,width].join('-');const d=await page.evaluate(geometry);report.shots[tag]=d;await page.screenshot({path:path.join(out,tag+'.png'),animations:'disabled'});};
+      const grab=async(key,scrollTop=true)=>{if(scrollTop)await top();await page.waitForTimeout(220);
+        if(controlAudit){
+          const clicks=await page.evaluate(()=>window.__controlAuditActions.splice(0));
+          for(const click of clicks)actions.push({scenario:scenario.id,actor,destination:key,...click});
+          const rows=await page.evaluate(controlAudit.inspectControls);
+          controls.push({scenario:scenario.id,actor,screen:key,rows});return;
+        }
+        const tag=[actor,key,width].join('-');const d=await page.evaluate(geometry);report.shots[tag]=d;await page.screenshot({path:path.join(out,tag+'.png'),animations:'disabled'});};
       const use=async(key,fn)=>{try{await fn();}catch(e){report.failures.push({width,actor,key,error:String(e.message).slice(0,400)});}};
       await start();
       if(actor==='admin'){
         await use('overview',async()=>{await grab('overview')});
         await use('projects',async()=>{await nav('projects');await grab('projects');await page.locator('.proj-row').filter({hasText:'Дом у озера'}).first().click();await grab('project');await page.locator('#projectSheetClose').click()});
         await use('payroll',async()=>{await nav('more');await grab('more');await page.locator('#openTimesheetBtn').click();await grab('payroll');const pay=page.locator('.payroll-pay').first();if(await pay.isVisible()){await pay.click();await grab('payroll-payment',false);await start()}});
-        await use('finance',async()=>{await nav('finance');await page.locator('#financeWorkspace').waitFor();await grab('finance');await page.locator('[data-fw-tab="calendar"]').click();await grab('calendar');await page.locator('[data-fw-tab="overview"]').click();await page.locator('[data-fw="record-expense"]').click();await grab('expense-form',false);await start()});
+        await use('finance',async()=>{await nav('finance');await page.locator('#financeWorkspace').waitFor();await grab('finance');await page.locator('[data-fw-tab="more"]').click();await grab('finance-details');await page.locator('[data-fw-tab="calendar"]').click();await grab('calendar');await page.locator('[data-fw-tab="overview"]').click();await page.locator('[data-fw-tab="more"]').click();await page.locator('[data-fw="record-expense"]').click();await grab('expense-form',false);await start()});
         await use('construction',async()=>{await nav('construction');await grab('construction');await page.locator('.obj-card').first().click();await grab('object');const tabs=page.locator('#objTabs');await tabs.scrollIntoViewIfNeeded();await grab('object-tabs',false);await page.locator('#objTabs .filter-chip[onclick*="add"]').click();const amount=page.locator('#inv-amount-obj');if(await amount.isVisible())await amount.scrollIntoViewIfNeeded();await grab('add-purchase',false)});
         await use('catalog',async()=>{await start();await nav('cards');await grab('catalog')});
       }else if(actor==='foreman'){
@@ -91,6 +101,8 @@ function geometry(){
       }catch(e){report.failures.push({width,actor,key:'startup',error:String(e.message).slice(0,500)});}finally{await context.close();fs.writeFileSync(path.join(out,'metrics.json'),JSON.stringify(report,null,2));}
     }}
   }finally{await browser.close();}
-  console.log(JSON.stringify({screens:Object.keys(report.shots).length,failures:report.failures,pageErrors:report.pageErrors}));
-  if(!Object.keys(report.shots).length || report.failures.length || report.pageErrors.length)process.exitCode=1;
+  if(controlAudit)fs.writeFileSync(path.join(out,'controls.json'),JSON.stringify({browser:report.browser,profiles:scenarios,controls,actions,failures:report.failures,pageErrors:report.pageErrors}));
+  const screenCount=controlAudit?controls.length:Object.keys(report.shots).length;
+  console.log(JSON.stringify({screens:screenCount,failures:report.failures,pageErrors:report.pageErrors}));
+  if(!screenCount || report.failures.length || report.pageErrors.length)process.exitCode=1;
 })().catch(e=>{console.error(e);process.exitCode=1});

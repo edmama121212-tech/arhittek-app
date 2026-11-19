@@ -1,4 +1,8 @@
 (()=>{
+// Model the download-only browser unless a test explicitly enables native file sharing.
+if (typeof navigator !== 'undefined') {
+  Object.defineProperty(navigator, 'canShare', { configurable: true, value: () => false });
+}
 window.__writes=[];window.__reads=[];window.__subscriptions=[];window.__fail=null;window.__rowLimit=Infinity;
 window.__db={projects:[],employees:[{id:'admin',name:'Мансур',role:'Директор',is_admin:true,active:true,is_salaried:true,fixed_salary:50000,created_at:'2026-01-01T00:00:00Z'},{id:'designer',name:'Амина',role:'Ведущий дизайнер',active:true,is_salaried:true,fixed_salary:50000,created_at:'2026-01-01T00:00:00Z'},{id:'visual',name:'Ислам',role:'Визуализатор',active:true},{id:'architect',name:'Адам',role:'Архитектор',active:true}],categories:[{id:'design',name:'Дизайн интерьера',department_id:'d',fee_percent:0,fee_base:'m2'},{id:'arch',name:'Архитектурное решение',department_id:'d',fee_percent:40,fee_base:'profit'},{id:'land',name:'Ландшафтный дизайн',department_id:'d',fee_percent:40,fee_base:'profit'},{id:'build',name:'Строительство',department_id:'b',fee_percent:10}],statuses:[{id:'active',name:'В процессе'},{id:'done',name:'Завершён'},{id:'frozen',name:'Заморожен'},{id:'new',name:'Запись'}],departments:[{id:'d',name:'Проектный отдел'},{id:'b',name:'Строительный отдел'}],company_info:[{id:'company',name:'ARHITTEK',company_name:'ARHITTEK'}]};
 // Real reference lists have an explicit order; id is only the pagination tie breaker.

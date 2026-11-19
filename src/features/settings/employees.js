@@ -41,6 +41,15 @@ function openEmployeeSheet(id){
   const cardEditField = document.getElementById('ef-card-edit-field');
   const isAdmin = session && session.isAdmin;
 
+  const roleSelect = document.getElementById('ef-role');
+  roleSelect.querySelectorAll('[data-legacy-role]').forEach(option => option.remove());
+  const pin = document.getElementById('ef-pin');
+  pin.placeholder = id ? 'оставить как есть' : 'от 1 до 6 цифр';
+  pin.required = !id;
+  pinField.querySelector('label').textContent = id
+    ? 'Новый PIN-код (до 6 цифр). Оставьте пустым, чтобы сохранить текущий'
+    : 'PIN-код для входа (обязательно, от 1 до 6 цифр)';
+
   if(id){
     const e = state.employees.find(x=>x.id===id);
     if(!e) return;
@@ -50,8 +59,6 @@ function openEmployeeSheet(id){
     deleteBtn.textContent = linkedCount ? 'В архив' : 'Удалить';
     deleteBtn.title = linkedCount ? 'Сохранит сотрудника в истории проектов, но уберёт из активной команды' : 'Переместить сотрудника в корзину';
     document.getElementById('ef-name').value = e.name || '';
-    const roleSelect=document.getElementById('ef-role');
-    roleSelect.querySelectorAll('[data-legacy-role]').forEach(el=>el.remove());
     if(e.role&&![...roleSelect.options].some(o=>o.value===e.role)){
       const option=new Option(e.role,e.role);option.dataset.legacyRole='true';roleSelect.add(option);
     }

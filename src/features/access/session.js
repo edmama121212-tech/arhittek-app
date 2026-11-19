@@ -314,6 +314,8 @@ function applyRole(){
   if(!session){ userPill.style.display = 'none'; applyAccessVisibility(); return; }
 
   userPill.style.display = 'flex';
+  userPill.title = session.name + ' · Выйти из аккаунта';
+  userPill.setAttribute('aria-label', userPill.title);
   const roleLabel = getEmployeeRole() ? ` · ${getEmployeeRole()}` : (session.isAdmin ? '' : ' · исполнитель');
   userPill.innerHTML = `<span style="font-weight:600;">${escapeHtml(session.name)}</span><span style="opacity:0.6;">${escapeHtml(roleLabel)}</span>`;
 
@@ -371,7 +373,7 @@ function applyRole(){
   const empField = document.getElementById('pf-employee-field');
   const deptField = document.getElementById('pf-department-field');
   if(finSection) finSection.style.display = isAdmin ? '' : 'none';
-  if(deleteBtn) deleteBtn.style.display = isAdmin ? '' : 'none';
+  if(deleteBtn) deleteBtn.style.display = isAdmin && editingProjectId ? '' : 'none';
   if(empField) empField.style.display = isAdmin ? '' : 'none';
   if(deptField) deptField.style.display = isAdmin ? '' : 'none';
   applyAccessVisibility();

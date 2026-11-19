@@ -56,6 +56,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: node tests/brief-reference-privacy.cjs && node tests/brief-media.cjs && node tests/brief-media-ui.cjs && node tests/receipt-timing.cjs && node tests/proposal-terms.cjs && node tests/contract-pricing.cjs && node tests/contract-pricing-ui.cjs && node tests/contract-customer.cjs && node tests/contract-customer-ui.cjs
 
+      - name: Check project expense amounts in Finance before and after reload
+        if: ${{ !cancelled() }}
+        run: timeout 180s node tests/project-expense-finance-ui.cjs
+
       - name: Check cash accounting and payroll
         if: ${{ !cancelled() }}
         run: timeout 240s npm run test:finance

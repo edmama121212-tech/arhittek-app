@@ -22,6 +22,38 @@ function fixture() {
 async function check(name,fn) { try { await fn(); results.push({name,pass:true}); } catch (error) { results.push({name,pass:false,error:error.message}); } }
 function rejected(mutate) { const s = fixture(); mutate(s); assert.throws(()=>validateSnapshot(s)); }
 async function units() {
+ await check('Payment badge and overpayment warning agree for mixed direct and company payments', async () => {
+  const { JSDOM } = require('jsdom');
+  const html = fs.readFileSync(path.join(root, 'client-portal.html'), 'utf8')
+    .replace(/name="arhittek-client-portal-enabled" content="(?:true|false)"/, 'name="arhittek-client-portal-enabled" content="true"');
+  const dom = new JSDOM(html, { url: 'https://portal.test/client-portal.html#access=' + TOKEN, runScripts: 'outside-only', pretendToBeVisual: true });
+  try {
+   const s = fixture();
+   const invoice = s.invoices[0];
+   invoice.direct_paid_kopeks = invoice.net_amount_kopeks - invoice.company_paid_kopeks + 100;
+   invoice.overpaid_kopeks = 100;
+   s.cash.direct_paid_kopeks = invoice.direct_paid_kopeks;
+   validateSnapshot(s);
+   const w = dom.window;
+   w.fetch = async () => Response.json(s);
+   w.TextDecoder = TextDecoder;
+   const rendered = new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error(w.document.getElementById('state-title').textContent)), 2000);
+    const observer = new w.MutationObserver(() => {
+     if (w.document.querySelector('#documents-content .badge')) {
+      observer.disconnect(); clearTimeout(timeout); resolve();
+     }
+    });
+    observer.observe(w.document.getElementById('documents-content'), { childList: true, subtree: true });
+   });
+   w.eval(fs.readFileSync(path.join(root, 'client-portal.js'), 'utf8'));
+   await rendered;
+   const badge = w.document.querySelector('#documents-content .badge');
+   assert.equal(badge.textContent, 'Оплачена');
+   assert(badge.classList.contains('completed'));
+   assert.match(w.document.querySelector('#documents-content .warning').textContent, /Переплата по документу: 1/);
+  } finally { dom.window.close(); }
+ });
  await check('A complete read-only snapshot conserves client funds and validates',()=>assert.equal(validateSnapshot(fixture()).cash.held_kopeks,22000000));
  await check('Actual-cost markup and cash agree with the pure construction finance module v2',()=>{
   const calc=require(path.join(root,'construction-finance.js')),projectId='internal-object-a',confirmed_at='2026-10-19T10:00:00Z';

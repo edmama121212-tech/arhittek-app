@@ -28,7 +28,7 @@ function renderConstrSummary(){
   const totFeePaid = rows.reduce((s,r)=>s+r.f.paid,0);
 
   const rowsHtml = rows.map(({p, received, cashOutgoing, directPaid, balance, isOverspent, f, st}) => `
-    <tr onclick="openObjectView('${p.id}')" style="cursor:pointer;" class="constr-sum-row">
+    <tr data-key-activate tabindex="0" onclick="openObjectView('${p.id}')" style="cursor:pointer;" class="constr-sum-row">
       <td>
         <div class="entity-name" title="${escapeHtml(p.name)}" style="font-weight:600; font-size:13px; color:var(--text);">${escapeHtml(p.name)}</div>
         ${st ? `<div style="font-size:10px; color:var(--text-dim); margin-top:2px;">${escapeHtml(st.name)}</div>` : ''}
@@ -91,11 +91,11 @@ function renderOverview(){
 
   const kpiGrid = document.getElementById('kpiGrid');
   kpiGrid.innerHTML = `
-    <div class="kpi accent-red" style="cursor:pointer;" onclick="document.getElementById('debtCard').scrollIntoView({behavior:'smooth'})">
+    <div data-key-activate tabindex="0" role="button" class="kpi accent-red" style="cursor:pointer;" onclick="document.getElementById('debtCard').scrollIntoView({behavior:'smooth'})">
       <div class="big" data-countup="${overdue.length}">0</div>
       <div class="lbl">Просрочки</div>
     </div>
-    <div class="kpi accent-gold" style="cursor:pointer;" onclick="document.getElementById('debtCard').scrollIntoView({behavior:'smooth'})">
+    <div data-key-activate tabindex="0" role="button" class="kpi accent-gold" style="cursor:pointer;" onclick="document.getElementById('debtCard').scrollIntoView({behavior:'smooth'})">
       <div class="big">${fmt(totalDebt)} ₽</div>
       <div class="lbl">Должны клиенты${mismatchCount > 0 ? ` <span style="color:var(--red);">⚠${mismatchCount}</span>` : ''}</div>
     </div>
@@ -142,7 +142,7 @@ function renderOverview(){
 
     const rowsHtml = rows.map(({p, balance, expenses, net, feeTotal, isMismatch})=>{
       const netColor = net < 0 ? 'var(--red)' : 'var(--green)';
-      return `<tr onclick="openProjectSheet('${p.id}')" style="cursor:pointer;" class="constr-sum-row">
+      return `<tr data-key-activate tabindex="0" onclick="openProjectSheet('${p.id}')" style="cursor:pointer;" class="constr-sum-row">
         <td>
           <div class="entity-name" title="${escapeHtml(p.name)}" style="font-weight:600; font-size:12px; color:var(--text);">${escapeHtml(p.name)}</div>
           ${isMismatch ? `<div style="font-size:9px; color:var(--gold); margin-top:1px;">⚠ статус «Оплачен»</div>` : ''}
@@ -196,7 +196,7 @@ function renderOverview(){
       if(d < 0){ dateTxt = `просрочен на ${Math.abs(d)} дн.`; dateColor = 'var(--red)'; }
       else if(d <= 7){ dateTxt = `${d} дн. до сдачи`; dateColor = 'var(--gold)'; }
       else { dateTxt = `${d} дн. до сдачи`; dateColor = 'var(--text-dim)'; }
-      html += `<div class="list-item" onclick="openProjectSheet('${p.id}')" style="cursor:pointer;">
+      html += `<div data-key-activate tabindex="0" role="button" class="list-item" onclick="openProjectSheet('${p.id}')" style="cursor:pointer;">
         <div>
           <div class="li-name">${escapeHtml(p.name)}</div>
           <div class="li-meta">${st ? escapeHtml(st.name) : ''} · сдача ${fmtDate(p.end_date)}</div>
@@ -208,7 +208,7 @@ function renderOverview(){
     });
     withoutDeadline.forEach(p=>{
       const st = findStatus(p.status_id);
-      html += `<div class="list-item" onclick="openProjectSheet('${p.id}')" style="cursor:pointer;">
+      html += `<div data-key-activate tabindex="0" role="button" class="list-item" onclick="openProjectSheet('${p.id}')" style="cursor:pointer;">
         <div>
           <div class="li-name">${escapeHtml(p.name)}</div>
           <div class="li-meta">${st ? escapeHtml(st.name) : ''}</div>
@@ -236,7 +236,7 @@ function renderOverview(){
         <div class="card">
           ${overdueStages.map(s=>{
             const p = state.projects.find(x=>x.id===s.project_id);
-            return `<div class="list-item" onclick="openProjectSheet('${s.project_id}')" style="cursor:pointer;">
+            return `<div data-key-activate tabindex="0" role="button" class="list-item" onclick="openProjectSheet('${s.project_id}')" style="cursor:pointer;">
               <div>
                 <div class="li-name">${escapeHtml(s.name)}</div>
                 <div class="li-meta" style="color:var(--red);">${p ? escapeHtml(p.name) : ''} · срок был ${fmtDate(s.due_date)} · ${Math.abs(daysUntil(s.due_date))} дн. назад</div>

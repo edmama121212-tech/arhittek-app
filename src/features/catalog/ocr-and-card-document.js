@@ -269,8 +269,8 @@ async function saveCard(){
       floors: ceFloorsSelected,
       total_area: document.getElementById('ce-area').value.trim(),
       footprint: document.getElementById('ce-footprint').value.trim(),
-      beds: parseInt(document.getElementById('ce-beds').value)||null,
-      baths: parseInt(document.getElementById('ce-baths').value)||null,
+      beds: document.getElementById('ce-beds').value === '' ? null : parseInt(document.getElementById('ce-beds').value,10),
+      baths: document.getElementById('ce-baths').value === '' ? null : parseInt(document.getElementById('ce-baths').value,10),
       price: document.getElementById('ce-price').value.trim(),
       tags: (()=>{
         const systemTags = ['Классический','Современный','Цокольный этаж','Мансарда','Плоская кровля'];
@@ -584,10 +584,11 @@ function buildCardHTML(card){
   const images = card.images || [];
   const facade1 = images[0] || '';
   const facade2 = images[1] || '';
-  const tags = (card.tags||[]).map(t=>`<div class="tag">${escapeHtml(t)}</div>`).join('');
+  const number = catalogProjectNumber(card);
+  const tags = CatalogFloors.tags(card).filter(Boolean).map(t=>`<div class="tag">${escapeHtml(t)}</div>`).join('');
   return `<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Проект №${escapeHtml(card.project_number||'')} — ARHITTEK</title>
+<title>Проект${number ? ' №'+escapeHtml(number) : ''} — ARHITTEK</title>
 <style>
 :root{--blue:#3D8FE0;--blue-dark:#2A72C0;--blue-light:#E8F3FC;--black:#0A0A0A;--border:#D0D0D0;--border-soft:#DCDCDC;--text-primary:#1A1A1A;--text-sub:#888;--text-label:#BBB;}
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -666,7 +667,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       ${facade2?`<div class="swiper-slide"><img src="${escapeHtml(facade2)}" loading="lazy"/><div class="swiper-overlay"></div></div>`:''}
     </div>
     <div class="swiper-caption">${escapeHtml(card.title||'')}</div>
-    <div class="swiper-num">№ ${escapeHtml(card.project_number||'')}</div>
+    ${number ? `<div class="swiper-num">№ ${escapeHtml(number)}</div>` : ''}
     ${facade2?`<button class="swiper-arrow left" onclick="swGo(si-1)">‹</button><button class="swiper-arrow right" onclick="swGo(si+1)">›</button><div class="swiper-dots"><div class="swiper-dot active" id="dot-0"></div><div class="swiper-dot" id="dot-1"></div></div>`:''}
   </div>
 </div>

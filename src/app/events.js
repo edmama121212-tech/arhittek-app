@@ -1,3 +1,12 @@
+// Keep keyboard activation on the same action and permission checks as a pointer click.
+document.addEventListener('keydown', event=>{
+  if(event.defaultPrevented || event.repeat || !['Enter',' '].includes(event.key))return;
+  const control=event.target;
+  if(!control.matches?.('[data-key-activate]'))return;
+  event.preventDefault();
+  control.click();
+});
+
 // ============================================================
 // EVENT BINDINGS
 // ============================================================

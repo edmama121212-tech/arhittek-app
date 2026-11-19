@@ -30,6 +30,7 @@
     background:#D4D4D4;
     -ms-overflow-style:none; scrollbar-width:none;
   }
+  .cat-filters[hidden]{display:none;}
   .cat-filters::-webkit-scrollbar{display:none;}
   .filter-chip{
     flex-shrink:0; font-size:12px; padding:7px 16px; border-radius:20px;
@@ -129,11 +130,11 @@
   </div>
 </div>
 
-<div class="cat-filters" id="catFilters">
-  <div class="filter-chip active" onclick="setFilter('all',this)">Все</div>
-  <div class="filter-chip" onclick="setFilter('1',this)">1-этажные</div>
-  <div class="filter-chip" onclick="setFilter('2',this)">2-этажные</div>
-  <div class="filter-chip" onclick="setFilter('3',this)">3+ этажа</div>
+<div class="cat-filters" id="catFilters" hidden>
+  <button type="button" class="filter-chip active" aria-pressed="true" onclick="setFilter('all',this)">Все</button>
+  <button type="button" class="filter-chip" aria-pressed="false" onclick="setFilter('1',this)">1-этажные</button>
+  <button type="button" class="filter-chip" aria-pressed="false" onclick="setFilter('2',this)">2-этажные</button>
+  <button type="button" class="filter-chip" aria-pressed="false" onclick="setFilter('3',this)">3+ этажа</button>
 </div>
 
 <div class="cat-feed" id="catFeed">
@@ -203,6 +204,7 @@ async function init(){
       allCards = data || [];
     }
     renderFeed();
+    document.getElementById('catFilters').hidden = !!linkMeta.project_id || floorFilter !== 'all';
   } catch(e){
     feed.innerHTML = '<div class="state-msg"><div class="big">⚠️</div>Ошибка загрузки карточек.</div>';
   }
@@ -210,9 +212,15 @@ async function init(){
 
 function setFilter(val, el){
   floorFilter = val;
-  document.querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active'));
-  if(el) el.classList.add('active');
+  document.querySelectorAll('.filter-chip').forEach(chip=>{
+    chip.classList.toggle('active', chip === el);
+    chip.setAttribute('aria-pressed', String(chip === el));
+  });
   renderFeed();
+}
+
+function matchesFloorFilter(card, filter){
+  return String(filter) === '3' ? Number(card.floors) >= 3 : String(card.floors) === String(filter);
 }
 
 function renderFeed(){
@@ -222,11 +230,11 @@ function renderFeed(){
   // Применить фильтр ссылки
   const linkFloor = linkMeta?.floors_filter || 'all';
   if(linkFloor !== 'all'){
-    cards = cards.filter(c=>String(c.floors)===String(linkFloor));
+    cards = cards.filter(c=>matchesFloorFilter(c,linkFloor));
   }
   // Применить пользовательский фильтр
   if(floorFilter !== 'all'){
-    cards = cards.filter(c=>String(c.floors)===String(floorFilter));
+    cards = cards.filter(c=>matchesFloorFilter(c,floorFilter));
   }
 
   if(!cards.length){

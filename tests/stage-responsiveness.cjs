@@ -71,13 +71,13 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
   const target=await page.evaluate(()=>{
    const button=__stageButton('Замеры'),panel=button.closest('.project-panel');
    document.querySelector('[aria-controls="'+panel.id+'"]').click();button.scrollIntoView({block:'center'});
-   const rect=button.getBoundingClientRect();return {x:rect.left-8,y:rect.top+rect.height/2,width:rect.width,labelsFit:[...document.querySelectorAll('#pf-stages-list .li-name')].every(el=>el.scrollWidth<=el.clientWidth+1)};
+   const rect=button.getBoundingClientRect();return {x:rect.left-8,y:rect.top+rect.height/2,width:rect.width,height:rect.height,labelsFit:[...document.querySelectorAll('#pf-stages-list .li-name')].every(el=>el.scrollWidth<=el.clientWidth+1)};
   });
-  assert.equal(Math.round(target.width),22);assert.equal(target.labelsFit,true);
+  assert.deepEqual([Math.round(target.width),Math.round(target.height)],[24,24]);assert.equal(target.labelsFit,true);
   await page.mouse.click(target.x,target.y);
   const actual=await page.evaluate(async()=>{const immediate=__stageButton('Замеры').classList.contains('done');await __tick();await __flush();return immediate});
-  assert.equal(actual,true);results.push({name:'The mobile checkbox accepts a tap outside its 22px visual square',pass:true});
- }catch(e){results.push({name:'The mobile checkbox accepts a tap outside its 22px visual square',pass:false,error:e.message})}
+  assert.equal(actual,true);results.push({name:'The mobile checkbox accepts a tap outside its 24px visual square',pass:true});
+ }catch(e){results.push({name:'The mobile checkbox accepts a tap outside its 24px visual square',pass:false,error:e.message})}
  await check('Rapid repeat clicks on the same stage serialize and persist the last intent',async()=>{
   __stageButton('Замеры').click();__stageButton('Замеры').click();__stageButton('Замеры').click();await __tick();
   const before=[__net.holds.length,__stageButton('Замеры').classList.contains('done')];
