@@ -54,11 +54,23 @@
   }
   const priceText=card=>{const value=price(card);return value===null?'Цена по запросу':value.toLocaleString('ru-RU')+' ₽';};
   const defaultTitle=card=>(Number(card.floors)===1?'Одноэтажный':Number(card.floors)===3?'Трёхэтажный':'Двухэтажный')+' дом';
+  function roofPlan(card){
+    const plan=card?.catalog_roof_plan;
+    if(!plan || plan.revision!=='generated-render-v2-gray' || plan.album_hash!==card.pdf_import_meta?.sha256) return null;
+    const validHash=hash=>typeof hash==='string' && /^[a-f0-9]{64}$/.test(hash);
+    if(![plan.album_hash,plan.file_sha256,plan.thumbnail_file_sha256].every(validHash) || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(card.id)) return null;
+    const prefix=SUPABASE_URL+'/storage/v1/object/public/expense-photos/cards/'+card.id+'/';
+    return {image:prefix+plan.file_sha256+'.webp',thumbnail:prefix+plan.thumbnail_file_sha256+'.webp'};
+  }
   function tabs(card,suffix='',handler='showTab'){
-    return active(card).map(f=>`<div class="tab" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" onclick="${handler}('${f.key}${suffix}',this)">${f.label}</div>`).join('');
+    const items=active(card);
+    if(roofPlan(card)) items.push({key:'roof',label:'Кровля'});
+    return items.map(f=>`<div class="tab" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" onclick="${handler}('${f.key}${suffix}',this)">${f.label}</div>`).join('');
   }
   function panels(card,suffix=''){
-    return active(card).map(f=>`<div class="panel" id="${f.key}${suffix}"><div class="plan-wrap"><div class="plan-label">${f.title} <span>${esc(card[f.area]||'—')} м²</span></div><div class="plan-img-container">${card.images?.[f.image]?`<img class="plan-img" src="${esc(card.images[f.image])}" alt="${f.title}: план" loading="lazy"/>`:'<div class="catalog-plan-empty">План не добавлен</div>'}</div></div><div class="explication"><div class="expl-header"><span class="expl-header-title">Экспликация</span><span class="expl-header-total">${esc(card[f.area]||'—')} м²</span></div>${rows(card[f.rooms])}</div><div style="height:12px"></div></div>`).join('');
+    const roof=roofPlan(card);
+    const extra=roof ? `<div class="panel" id="roof${suffix}"><div class="plan-wrap"><div class="plan-label">Эксплуатируемая кровля</div><div class="plan-img-container"><a href="${esc(roof.image)}" target="_blank" rel="noopener"><img class="plan-img" src="${esc(roof.image)}" alt="Полный план эксплуатируемой кровли" loading="lazy"/></a></div></div></div>` : '';
+    return active(card).map(f=>`<div class="panel" id="${f.key}${suffix}"><div class="plan-wrap"><div class="plan-label">${f.title} <span>${esc(card[f.area]||'—')} м²</span></div><div class="plan-img-container">${card.images?.[f.image]?`<img class="plan-img" src="${esc(card.images[f.image])}" alt="${f.title}: план" loading="lazy"/>`:'<div class="catalog-plan-empty">План не добавлен</div>'}</div></div><div class="explication"><div class="expl-header"><span class="expl-header-title">Экспликация</span><span class="expl-header-total">${esc(card[f.area]||'—')} м²</span></div>${rows(card[f.rooms])}</div><div style="height:12px"></div></div>`).join('')+extra;
   }
   function editor(){
     return definitions.map(f=>`<section class="ce-floor-section" id="ce-section-${f.key}">
@@ -82,5 +94,5 @@
   function previewPanels(){
     return definitions.map(f=>`<div id="prev-${f.key}" class="catalog-floor-preview" style="display:none"><div class="plan-wrap"><div class="plan-label">${f.title}<span id="prev-a${f.suffix}-badge">— м²</span></div><div class="plan-img-container"><img id="prev-plan${f.suffix}-img" class="plan-img" alt="${f.title}: план" style="display:none"/><span id="prev-plan${f.suffix}-ph" class="catalog-plan-empty">Загрузите план</span></div></div><div class="explication"><div class="expl-header"><span class="expl-header-title">Экспликация</span><span id="prev-total${f.suffix}" class="expl-header-total">— м²</span></div><div id="prev-expl${f.suffix}-rows"></div></div><div style="height:12px"></div></div>`).join('');
   }
-  root.CatalogFloors = Object.freeze({definitions,tags,enabled,active,slots,label,rate,autoPrice,price,priceText,rows,normalizeRooms,calculateAreas,defaultTitle,areaNumber,tabs,panels,editor,previewTabs,previewPanels});
+  root.CatalogFloors = Object.freeze({definitions,roofPlan,tags,enabled,active,slots,label,rate,autoPrice,price,priceText,rows,normalizeRooms,calculateAreas,defaultTitle,areaNumber,tabs,panels,editor,previewTabs,previewPanels});
 })(typeof window!=='undefined'?window:globalThis);
