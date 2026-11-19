@@ -373,7 +373,7 @@ function applyRole(){
   const empField = document.getElementById('pf-employee-field');
   const deptField = document.getElementById('pf-department-field');
   if(finSection) finSection.style.display = isAdmin ? '' : 'none';
-  if(deleteBtn) deleteBtn.style.display = isAdmin ? '' : 'none';
+  if(deleteBtn) deleteBtn.style.display = isAdmin && editingProjectId ? '' : 'none';
   if(empField) empField.style.display = isAdmin ? '' : 'none';
   if(deptField) deptField.style.display = isAdmin ? '' : 'none';
   applyAccessVisibility();

@@ -16,7 +16,9 @@
       <span class="section-label-line"></span>
     </div>
 
-    <input id="cards-search" type="search" aria-label="Поиск по номеру или названию" placeholder="Поиск по номеру или названию" oninput="renderCardsList()">
+    <input id="cards-search" type="search" aria-controls="cards-list" aria-label="Поиск по номеру или названию" placeholder="Поиск по номеру или названию" oninput="renderCardsList()">
+
+    <div id="cards-search-count" role="status" class="note"></div>
 
     <!-- Фильтр по этажности -->
     <div class="filters" id="cards-filters" style="flex-wrap:wrap;gap:6px;">

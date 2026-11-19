@@ -82,5 +82,5 @@
   function previewPanels(){
     return definitions.map(f=>`<div id="prev-${f.key}" class="catalog-floor-preview" style="display:none"><div class="plan-wrap"><div class="plan-label">${f.title}<span id="prev-a${f.suffix}-badge">— м²</span></div><div class="plan-img-container"><img id="prev-plan${f.suffix}-img" class="plan-img" alt="${f.title}: план" style="display:none"/><span id="prev-plan${f.suffix}-ph" class="catalog-plan-empty">Загрузите план</span></div></div><div class="explication"><div class="expl-header"><span class="expl-header-title">Экспликация</span><span id="prev-total${f.suffix}" class="expl-header-total">— м²</span></div><div id="prev-expl${f.suffix}-rows"></div></div><div style="height:12px"></div></div>`).join('');
   }
-  root.CatalogFloors = Object.freeze({definitions,enabled,active,slots,label,rate,autoPrice,price,priceText,rows,normalizeRooms,calculateAreas,defaultTitle,areaNumber,tabs,panels,editor,previewTabs,previewPanels});
+  root.CatalogFloors = Object.freeze({definitions,tags,enabled,active,slots,label,rate,autoPrice,price,priceText,rows,normalizeRooms,calculateAreas,defaultTitle,areaNumber,tabs,panels,editor,previewTabs,previewPanels});
 })(typeof window!=='undefined'?window:globalThis);

@@ -41,12 +41,10 @@ function updateFilterBadge(){
   const badge = document.getElementById('filter-active-badge');
   if(!badge) return;
   const active = [activeCategoryFilter, activeStatusFilter, activeEmployeeFilter, activePaymentFilter].filter(v=>v!=='all').length;
-  if(active > 0){
-    const textEl = document.getElementById('filter-badge-text');
-    if(textEl) textEl.textContent = active + (active===1?' активен':' активно');
-    badge.style.display = 'block';
-  } else {
-    badge.style.display = 'none';
+  badge.hidden = active === 0;
+  if(active){
+    const label = projectSearchQuery.trim() ? 'Сбросить поиск и фильтры' : 'Сбросить фильтры';
+    badge.textContent = label + ' (' + active + ')';
   }
 }
 function resetAllFilters(){
@@ -64,7 +62,7 @@ function resetAllFilters(){
   renderPaymentFilters();
   renderEmployeeFilters();
   renderProjects();
-  updateFilterBadge();
+  search?.focus();
 }
 let loadAllInFlight = false;
 let loadAllPromise = null;

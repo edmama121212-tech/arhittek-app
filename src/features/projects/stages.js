@@ -8,8 +8,8 @@ function renderStagesList(projectId){
   if(!container) return;
 
   const isAdmin = session && session.isAdmin;
-  if(addRow) addRow.style.display = isAdmin ? 'flex' : 'none';
-  if(addBtn) addBtn.style.display = isAdmin ? 'inline-block' : 'none';
+  if(addRow) addRow.style.display = isAdmin && projectId ? 'flex' : 'none';
+  if(addBtn) addBtn.style.display = isAdmin && projectId ? 'inline-block' : 'none';
 
   if(!projectId){
     container.innerHTML = '<div class="empty-state">Сохраните проект, чтобы работать с этапами</div>';

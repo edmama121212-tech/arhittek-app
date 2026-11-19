@@ -87,6 +87,10 @@ function walletField(label,options){
  }
  return select(label,'wallet_id',options);
 }
+function normalizeHistoryText(value){
+ return value.trim().toLocaleLowerCase('ru').replace(/\s+/g,' ')
+  .replace(/(\d) (?=\d)/g,'$1').replace(/№ /g,'№').replace(/−/g,'-');
+}
 function render(){
  const view=$('view-finance');if(!view)return;
  if(!enabled()){view.classList.remove('finance-unified');$('financeWorkspace')?.remove();if(!owner())clear();return;}
@@ -174,6 +178,8 @@ function render(){
   if(s.links?.length)html+='<details class="fw-card" data-fw-section="payment-links"><summary>Связи ранее внесённых оплат</summary>'+(s.links||[]).map(l=>'<div class="fw-row"><span>'+esc(l.reason)+' · '+money(l.amount)+'</span>'+btn('Отменить связь','unlink',l.id,locked)+'</div>').join('')+'</details>';
   if(s.changes?.length)html+='<details class="fw-card" data-fw-section="plan-history"><summary>История планов и переводов</summary>'+(s.changes||[]).map(h=>'<div class="fw-card"><b>'+esc(h.after_value?.label||h.after_value?.reason||({plan:'План платежа',pay:'Фактическая оплата',rule:'Регулярное обязательство',wallet_transfer:'Перевод между счетами',reschedule:'Перенос срока',cancel:'Отмена остатка плана',wallet:'Новый счёт',stop_rule:'Остановка регулярного платежа'}[h.entity]||'Финансовое действие'))+'</b><p>'+esc(new Date(h.created_at).toLocaleString('ru-RU'))+'</p>'+(h.before_value?.amount?row('Сумма до',h.before_value.amount):'')+(h.after_value?.amount?row('Сумма после / операции',h.after_value.amount):'')+'<p>Прежний срок: '+esc(h.before_value?.due_date||'—')+' · Новый срок: '+esc(h.after_value?.due_date||'—')+'</p></div>').join('')+'</details>';
  }
+ const activeAction=root.contains(document.activeElement)?document.activeElement.dataset.fw:null;
+ const activeId=document.activeElement?.dataset.id;
  const openSections = new Set(Array.from(root.querySelectorAll("details[data-fw-section][open]"), element => element.dataset.fwSection));
  const search=root.querySelector('[data-fw-search]');
  const query=search?.value||'';
@@ -182,20 +188,29 @@ function render(){
  const searchField=root.querySelector('[data-fw-search]');
  if(searchField){
   searchField.value=query;
+  const entries=Array.from(root.querySelectorAll('[data-fw-operation]'),card=>{
+   // Index the operation itself. Balance after posting and action buttons are separate information.
+   const movement=card.querySelector('.fw-row');
+   const fields=[card.querySelector('h3').textContent,card.querySelector('p').textContent,
+    movement.querySelector('span').textContent,movement.querySelector('strong').textContent,card.dataset.fwDelta];
+   return {card,fields:fields.map(normalizeHistoryText)};
+  });
   searchField.oninput=()=>{
-   const normalize=value=>value.trim().toLocaleLowerCase('ru').replace(/(\d)\s+(?=\d)/g,'$1');
-   const needle=normalize(searchField.value);
-   const entries=Array.from(root.querySelectorAll('[data-fw-operation]'));
-   for(const entry of entries)entry.hidden=!normalize(entry.textContent+' '+entry.dataset.fwDelta).includes(needle);
+   const needle=normalizeHistoryText(searchField.value);
+   for(const {card,fields} of entries)card.hidden=!fields.some(field=>field.includes(needle));
    const empty=root.querySelector('[data-fw-empty]');
    if(empty)empty.hidden=!!needle;
-   root.querySelector('[data-fw-no-match]').hidden=!needle||entries.some(entry=>!entry.hidden);
+   root.querySelector('[data-fw-no-match]').hidden=!needle||entries.some(({card})=>!card.hidden);
   };
   searchField.oninput();
   if(searchFocused)searchField.focus({preventScroll:true});
  }
  for (const section of root.querySelectorAll("details[data-fw-section]")) section.open = openSections.has(section.dataset.fwSection);
  bind(root,retainHeadingFocus);
+ if(activeAction){
+  const restored=[...root.querySelectorAll('[data-fw]')].find(button=>button.dataset.fw===activeAction&&button.dataset.id===activeId);
+  restored?.focus({preventScroll:true});
+ }
 }
 function focusPageTitle(root){
  const heading=root.querySelector('h1');
@@ -222,6 +237,7 @@ function form(title,html,build,options={}){
  const reasonField=options.reasonFromLabel?'':input('Основание операции','reason');
  const opener=document.activeElement;
  modal.innerHTML='<form class="sheet fw-form" role="dialog" aria-modal="true" aria-labelledby="fw-form-title"><h2 id="fw-form-title" tabindex="-1">'+esc(title)+'</h2>'+html+reasonField+'<p class="fw-form-error" role="alert"></p><button class="btn btn-primary" type="submit">'+esc(options.submit||'Подтвердить')+'</button><button class="btn btn-secondary" data-close type="button">Закрыть</button></form>';
+ $('toast')?.classList.remove('show');
  document.body.appendChild(modal);
  modal.querySelector('h2').focus();
  const close=()=>{
@@ -238,8 +254,16 @@ function form(title,html,build,options={}){
   else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}
  });
  modal.querySelector('[name="funding"]')?.addEventListener('change',e=>{const parts=e.target.value.split(':');if(parts[0]==='team'||parts[0]==='costs'){const project=modal.querySelector('[name="project_id"]'),employee=modal.querySelector('[name="employee_id"]');if(project)project.value=parts[1];if(employee)employee.value=parts[0]==='team'?parts[2]:'';}});
+ const reasonError=options.reasonFromLabel?'Уточните назначение платежа (минимум 3 символа)':'Укажите основание';
+ modal.querySelector('form').addEventListener('input',event=>{
+  if(!['reason','label'].includes(event.target.name))return;
+  const fields=event.currentTarget.elements;
+  const value=fields.reason?.value.trim()||(options.reasonFromLabel?fields.label?.value.trim():'');
+  const alert=event.currentTarget.querySelector('[role="alert"]');
+  if(value?.length>=3&&alert.textContent===reasonError)alert.textContent='';
+ });
  const actor=session.token;modal.querySelector('[data-close]').onclick=()=>{if(!busy)close();};
- modal.querySelector('form').onsubmit=async e=>{e.preventDefault();if(busy||actor!==session?.token||!owner())return;const f=Object.fromEntries(new FormData(e.target));try{if(options.reasonFromLabel&&!f.reason?.trim())f.reason=f.label.trim();if(f.reason.trim().length<3)throw new Error(options.reasonFromLabel?'Уточните назначение платежа (минимум 3 символа)':'Укажите основание');const command=build(f);await send(command.command,command.payload);if(actor===session?.token)close();}catch(error){if(actor===session?.token&&modal)modal.querySelector('[role="alert"]').textContent=error.message;}};
+ modal.querySelector('form').onsubmit=async e=>{e.preventDefault();if(busy||actor!==session?.token||!owner())return;const f=Object.fromEntries(new FormData(e.target));try{if(options.reasonFromLabel&&!f.reason?.trim())f.reason=f.label.trim();if(f.reason.trim().length<3)throw new Error(reasonError);const command=build(f);await send(command.command,command.payload);if(actor===session?.token)close();}catch(error){if(actor===session?.token&&modal)modal.querySelector('[role="alert"]').textContent=error.message;}};
 }
 async function send(command,payload,restore=null){
  if(busy||!ready())throw new Error('Дождитесь обновления финансов');const old=pending();if(old&&!restore)throw new Error('Сначала повторите подтверждение предыдущей отправки');
@@ -291,12 +315,17 @@ async function act(action,id){
   if(record){fields.date.required=true;fields.date.max=s.as_of;fields.wallet_id.required=true;}
 
  }else if(action==='wallet-reconcile'||action==='reserve-adjust'){
-  form(action==='reserve-adjust'?'Корректировать свободный резерв':'Сверка остатка',walletField('Где пересчитали деньги',walletOptions)+input(action==='reserve-adjust'?'Новый свободный резерв':'Сколько денег при пересчёте','target',action==='reserve-adjust'?s.reserve:'','number').replace('min="0.01"',action==='reserve-adjust'?'':'min="0"')+'<p>Разница будет отдельной записью с причиной. Деньги проектов и обязательства сохраняются. Перед подтверждением сверьте введённую сумму с фактическим остатком.</p><label><input name="confirmed" type="checkbox" required> Фактическую сумму проверил</label>',f=>{if(f.target==='')throw new Error('Введите фактическую сумму');return {command:action==='reserve-adjust'?'reserve_adjust':'wallet_reconcile',payload:{...f,target:number(f.target),confirmed:f.confirmed==='on'}};});
+  const title=action==='reserve-adjust'?'Корректировать свободный резерв':walletOptions.length===1&&s.wallets.some(w=>w.active&&w.is_default)?'Сверка сейфа':'Сверка остатка';
+  form(title,walletField('Где пересчитали деньги',walletOptions)+input(action==='reserve-adjust'?'Новый свободный резерв':'Сколько денег при пересчёте','target',action==='reserve-adjust'?s.reserve:'','number').replace('min="0.01"',action==='reserve-adjust'?'':'min="0"')+'<p>Разница будет отдельной записью с причиной. Деньги проектов и обязательства сохраняются. Перед подтверждением сверьте введённую сумму с фактическим остатком.</p><label class="fw-count-confirmation"><input name="confirmed" type="checkbox" required> Фактическую сумму проверил</label>',f=>{if(f.target==='')throw new Error('Введите фактическую сумму');return {command:action==='reserve-adjust'?'reserve_adjust':'wallet_reconcile',payload:{...f,target:number(f.target),confirmed:f.confirmed==='on'}};});
  }else if(action==='pay'){
   const item=s.items.find(x=>x.key===id);if(!item)throw new Error('Обязательство уже изменено');
   form(item.direction==='income'?'Подтвердить поступление':item.direction==='release'?'Подтвердить распределение':'Подтвердить фактическую выплату','<p>'+esc(item.label)+' · '+esc(accountName(item.funding))+'</p>'+input('Сумма фактической оплаты','amount',item.remaining,'number')+input('Дата','date',s.as_of,'date')+walletField('Место оплаты',walletOptions),f=>({command:'pay',payload:{...f,key:id,amount:number(f.amount)}}));
  }else if(action==='reschedule'){
-  const item=s.items.find(x=>x.key===id);form('Перенести срок',input('Новая дата','due_date',item?.due_date||'','date'),f=>({command:'reschedule',payload:{...f,key:id}}));
+  const item=s.items.find(x=>x.key===id);
+  if(!item)throw new Error('Обязательство уже изменено');
+  const currentDate=item.due_date?fmtDate(item.due_date):'Без срока';
+  const details='<p><strong>'+esc(item.label)+'</strong> · '+money(item.remaining)+'</p><p>Текущий срок: '+esc(currentDate)+'</p>';
+  form('Перенести срок',details+input('Новая дата','due_date',item.due_date||'','date'),f=>({command:'reschedule',payload:{...f,key:id}}));
  }else if(action==='cancel')form('Отменить неоплаченный остаток плана','<p>Фактические оплаты и история сохранятся.</p>',f=>({command:'cancel',payload:{...f,id}}));
  else if(action==='wallet')form('Добавить место хранения',input('Название','name')+select('Тип','kind',[['cash','Наличные'],['bank','Банковский счёт']]),f=>({command:'wallet',payload:f}));
  else if(action==='wallet-transfer')form('Перевести деньги',select('Откуда','from',walletOptions)+select('Куда','to',walletOptions,walletOptions[1]?.[0])+input('Сумма','amount','','number')+'<p>Движение между своими счетами не создаёт доход и не уменьшает резерв.</p>',f=>({command:'wallet_transfer',payload:{...f,amount:number(f.amount)}}));
@@ -353,6 +382,8 @@ new MutationObserver(records=>{for(const r of records)for(const node of r.addedN
 function clear(){document.querySelectorAll('.fw-wallet-picker').forEach(el=>el.remove());for(const id of moneyForms)if($(id))delete $(id).dataset.financeWallet;modal?.remove();modal=null;$('financeWorkspace')?.remove();document.getElementById('view-finance')?.classList.remove('finance-unified');}
 const style=document.createElement('style');style.textContent=`#view-finance.finance-unified>:not(#financeWorkspace){display:none!important}#financeWorkspace{max-width:1100px;margin:auto;color:var(--text)}.fw-head,.fw-row,.fw-actions{display:flex;justify-content:space-between;align-items:center;gap:12px}.fw-head h1{margin:0;font-size:28px}.fw-head p,.fw-card p,.fw-status{font-size:13px;line-height:1.6;color:var(--text-dim)}.fw-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:20px 0}.fw-tabs button{border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:10px;padding:12px;min-height:44px;cursor:pointer}.fw-tabs .active{background:var(--blue);color:white}.fw-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.fw-card{background:var(--card);border:1px solid var(--line);padding:20px;border-radius:14px;margin-bottom:14px;min-width:0}.fw-card h2{font-size:19px;margin-top:0}.fw-card h3{font-size:16px;margin:0}.fw-amount{display:block;font-size:26px;margin-top:12px}.fw-row{padding:10px 0;border-bottom:1px solid var(--line);align-items:flex-start}.fw-row>span{min-width:0;overflow-wrap:anywhere}.fw-row>strong{flex-shrink:0}.fw-actions{justify-content:flex-start;flex-wrap:wrap;margin:12px 0}.fw-card .btn,.fw-actions .btn,.fw-head .btn,.fw-warning .btn,#financeWorkspace>.btn{width:auto;min-height:44px;padding:11px 14px}.fw-warning{padding:14px;border:1px solid var(--line);border-radius:10px;line-height:1.5;margin:10px 0;color:var(--text)}.fw-form label{display:grid;gap:7px;margin:14px 0;font-size:13px}.fw-form input,.fw-form select{font:inherit;width:100%;box-sizing:border-box;min-height:44px;border:1px solid var(--line);border-radius:8px;padding:11px;background:var(--card);color:var(--text)}.fw-form{max-width:700px}.fw-wallet-fixed{display:grid;gap:5px;margin:14px 0;font-size:13px}.fw-wallet-fixed strong{font-weight:600}.fw-form-error{color:var(--red)}.fw-table{overflow:auto}.fw-table table{border-collapse:collapse;width:100%;font-size:13px}.fw-table td,.fw-table th{padding:10px;border-bottom:1px solid var(--line);white-space:nowrap}@media(max-width:600px){.fw-grid{grid-template-columns:1fr}.fw-row{flex-wrap:wrap}.fw-head{align-items:flex-start}.fw-tabs button{flex:1 0 27%}.fw-card{padding:16px}.fw-amount{font-size:24px}}`;document.head.appendChild(style);
 style.textContent += `
+.fw-form .fw-count-confirmation{display:flex;align-items:center;gap:10px;min-height:44px;cursor:pointer}
+.fw-form .fw-count-confirmation input{width:20px;height:20px;min-height:0;padding:0;margin:0;flex:none}
 #financeWorkspace .fw-page-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 20px}
 #financeWorkspace .fw-page-head h1{margin:4px 0;font-size:clamp(23px,3vw,32px);line-height:1.18}
 #financeWorkspace .fw-page-head .btn{width:auto;flex:none}

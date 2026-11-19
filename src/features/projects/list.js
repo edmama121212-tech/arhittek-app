@@ -61,6 +61,7 @@ function paymentBadgeColor(status){
 }
 
 function renderProjects(){
+  updateFilterBadge();
   const constrDept = state.departments.find(d=>d.name==='Строительный отдел');
 
   // A project is a CONSTRUCTION OBJECT if its category belongs to Строительный отдел
@@ -93,12 +94,17 @@ function renderProjects(){
 
   if(projectSearchQuery.trim()){
     const q = projectSearchQuery.trim().toLowerCase();
+    const requestedNumber = q.match(/^№\s*(\d+)$/)?.[1];
+    const phoneDigits = /^[+\d()\s-]+$/.test(q) ? q.replace(/\D/g, '') : '';
+    const normalizePhone = digits => digits.replace(/^[78](?=\d{10}$)/, '');
+    const phoneQuery = normalizePhone(phoneDigits);
     list = list.filter(p=>{
-      return (p.name||'').toLowerCase().includes(q) ||
-             (p.address||'').toLowerCase().includes(q) ||
-             (p.phone||'').toLowerCase().includes(q) ||
-             (p.client_name||'').toLowerCase().includes(q) ||
-             (p.notes||'').toLowerCase().includes(q);
+      if ([p.name, p.address, p.phone, p.client_name, p.notes].some(value=>String(value||'').toLowerCase().includes(q))) return true;
+      if (requestedNumber) {
+        const ordinal = projectOrdinal(p);
+        if (ordinal && String(ordinal.sequence) + String(ordinal.year).slice(-2) === requestedNumber) return true;
+      }
+      return !!phoneQuery && normalizePhone(String(p.phone||'').replace(/\D/g, '')).includes(phoneQuery);
     });
   }
 
@@ -155,11 +161,9 @@ function renderProjectRow(p){
     const balance = Number(p.balance) || 0;
     const showFinance = !session || session.isAdmin;
 
-    // Завершённые и замороженные — приглушённый вид
-    const rowStyle = (isDone || frozen) ? 'opacity:0.55;' : '';
     const donePrefix = isDone ? '✓ ' : (frozen ? '❄ ' : '');
 
-    return `<div data-key-activate tabindex="0" role="button" class="proj-row" onclick="openProjectSheet('${p.id}')" style="${rowStyle}">
+    return `<div data-key-activate tabindex="0" role="button" class="proj-row" onclick="openProjectSheet('${p.id}')">
       <div>
         <div class="proj-name" title="${escapeHtml(p.name)}">${donePrefix}${escapeHtml(p.name)}</div>
         <div class="proj-meta">${metaParts.join(' · ')}</div>

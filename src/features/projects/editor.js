@@ -96,6 +96,7 @@ document.getElementById('pf-price').addEventListener('input', ()=>{
 // Хранилище участников текущего редактируемого проекта
 let currentProjectMembers = []; // [{employee_id}]
 let projectMembersDraftUnverified = false;
+let projectSheetOpener = null;
 
 function renderProjectMemberChips(){
   const list = document.getElementById('pf-members-list');
@@ -107,14 +108,21 @@ function renderProjectMemberChips(){
     const emp = findEmployee(m.employee_id);
     return `<div style="display:inline-flex;align-items:center;gap:4px;background:rgba(0,113,235,0.15);border:1px solid rgba(0,113,235,0.3);border-radius:20px;padding:3px 10px 3px 8px;font-size:12px;">
       ${escapeHtml(emp?emp.name:m.employee_id)}
-      <span onclick="removeProjectMember('${m.employee_id}')" style="cursor:pointer;opacity:0.6;font-size:14px;line-height:1;">×</span>
+      <button type="button" data-remove-member="${escapeHtml(m.employee_id)}" aria-label="Убрать из команды: ${escapeHtml(emp?emp.name:m.employee_id)}" style="color:inherit;background:transparent;border:0;min-width:32px;min-height:32px;cursor:pointer;">×</button>
     </div>`;
   }).join('');
 }
 
+document.getElementById('pf-members-list').addEventListener('click', event=>{
+  const button=event.target.closest('[data-remove-member]');
+  if(button) removeProjectMember(button.dataset.removeMember);
+});
+
 function removeProjectMember(empId){
   if(state.projectMembersDataError||projectMembersDraftUnverified){showToast('Состав команды не загружен. Обновите приложение перед изменением команды.');return;}
+  if(!currentProjectMembers.some(member=>member.employee_id===empId))return;
   currentProjectMembers = currentProjectMembers.filter(m=>m.employee_id!==empId);
+  document.getElementById('projectSheetOverlay').dataset.dirty='1';
   renderProjectMemberChips();
 }
 
@@ -136,6 +144,9 @@ function openProjectSheet(id){
   editingProjectId = id;
   projectMembersDraftUnverified=!!state.projectMembersDataError;
   const overlay = document.getElementById('projectSheetOverlay');
+  if(!overlay.classList.contains('active')) projectSheetOpener=document.activeElement;
+  document.getElementById('pf-stage-name').value='';
+  document.getElementById('pf-stage-date').value='';
   const title = document.getElementById('projectSheetTitle');
   const deleteBtn = document.getElementById('pf-delete');
 
@@ -285,13 +296,15 @@ function openProjectSheet(id){
 }
 
 
-function closeProjectSheet(){
+function closeProjectSheet(event){
   resetProjectNumberDraft();
   document.getElementById('projectSheetOverlay').classList.remove('active');
   document.getElementById('pf-category').disabled=false;
   projectMembersDraftUnverified=false;
   editingProjectId = null;
   editingProjectLoadedAt = null;
+  if(event?.currentTarget && projectSheetOpener?.isConnected) projectSheetOpener.focus({preventScroll:true});
+  projectSheetOpener=null;
 }
 
 let projectSaveInFlight=false;
