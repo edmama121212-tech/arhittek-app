@@ -78,3 +78,4 @@ tests/session-security.cjs,Набор,0,5.87,,,0,
 tests/stage-responsiveness.cjs,Набор,0,16.1,,,0,
 tests/visual-audit.cjs,Набор,0,50.69,,,0,
 tests/workflow-mobile-audit.cjs,Набор,0,24.03,,,0,
+tests/finance-task-journeys.cjs,Набор,1,,0,14.56,0,12 целевых маршрутов после исправления потери фокуса; длительность суммы маршрутов без запуска браузера

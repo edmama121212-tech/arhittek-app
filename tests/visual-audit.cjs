@@ -31,7 +31,7 @@ const fixture = () => {
     workspace:{version:2,active:true,revision:2,as_of:day,generated_at:timestamp,opening_mode:'reconciled',
       cash,reserve:215000,balances,available_30:185000,minimum:185000,forecast,rules:[],warnings:[],unscheduled_projects:[],unmatched:[],
       items:[{key:'rent',label:'Аренда студии',direction:'expense',remaining:30000,amount:30000,due_date:'2026-11-12',status:'planned',origin:'manual',funding:'reserve'}],
-      wallets:[{id:'studio-bank',name:'Расчётный счёт',kind:'bank',balance:cash,active:true}]}};
+      wallets:[{id:'studio-safe',name:'Сейф',kind:'unallocated',is_default:true,balance:cash,active:true}]}};
   const e=employees.find(e=>e.id===actor);
   if(e)localStorage.setItem('arhittek_session',JSON.stringify({employeeId:e.id,name:e.name,isAdmin:e.id==='admin',token:'isolated-'+e.id,createdAt:Date.now()}));
   else localStorage.removeItem('arhittek_session');

@@ -57,7 +57,7 @@ function renderActiveDeptSplit(){
       else if(d < 0){ dateTxt = 'просрочен на ' + Math.abs(d) + ' дн.'; dateColor = 'var(--red)'; }
       else if(d <= 7){ dateTxt = d + ' дн. до сдачи'; dateColor = 'var(--gold)'; }
       else { dateTxt = d + ' дн. до сдачи'; dateColor = 'var(--text-dim)'; }
-      return '<div class="list-item" onclick="openProjectSheet(\'' + p.id + '\')" style="cursor:pointer;">' +
+      return '<div data-key-activate tabindex="0" role="button" class="list-item" onclick="openProjectSheet(\'' + p.id + '\')" style="cursor:pointer;">' +
         '<div style="min-width:0;">' +
           '<div class="li-name">' + escapeHtml(p.name) + '</div>' +
           '<div class="li-meta">оплачено ' + fmtMoney(paid) + ' · осталось ' + fmtMoney(balance) + '</div>' +

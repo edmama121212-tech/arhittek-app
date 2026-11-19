@@ -750,21 +750,21 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
 
     <!-- Фильтр по этажности -->
     <div class="filters" id="cards-filters" style="flex-wrap:wrap;gap:6px;">
-      <div class="filter-chip active" data-floors="all" onclick="filterCards('all',this)">Все</div>
-      <div class="filter-chip" data-floors="1" onclick="filterCards('1',this)">1 этаж</div>
-      <div class="filter-chip" data-floors="2" onclick="filterCards('2',this)">2 этажа</div>
-      <div class="filter-chip" data-floors="3" onclick="filterCards('3',this)">3+ этажей</div>
+      <button type="button" class="filter-chip active" aria-pressed="true" data-floors="all" onclick="filterCards('all',this)">Все</button>
+      <button type="button" class="filter-chip" aria-pressed="false" data-floors="1" onclick="filterCards('1',this)">1 этаж</button>
+      <button type="button" class="filter-chip" aria-pressed="false" data-floors="2" onclick="filterCards('2',this)">2 этажа</button>
+      <button type="button" class="filter-chip" aria-pressed="false" data-floors="3" onclick="filterCards('3',this)">3+ этажей</button>
     </div>
     <div class="filters" id="feature-filters" style="flex-wrap:wrap;gap:6px;margin-top:6px;">
-      <div class="filter-chip active" data-feature="all" onclick="filterFeature('all',this)">Без доп.</div>
-      <div class="filter-chip" data-feature="basement" onclick="filterFeature('basement',this)">Цокольный этаж</div>
-      <div class="filter-chip" data-feature="mansard" onclick="filterFeature('mansard',this)">Мансарда</div>
-      <div class="filter-chip" data-feature="flat" onclick="filterFeature('flat',this)">Плоская кровля</div>
+      <button type="button" class="filter-chip active" aria-pressed="true" data-feature="all" onclick="filterFeature('all',this)">Без доп.</button>
+      <button type="button" class="filter-chip" aria-pressed="false" data-feature="basement" onclick="filterFeature('basement',this)">Цокольный этаж</button>
+      <button type="button" class="filter-chip" aria-pressed="false" data-feature="mansard" onclick="filterFeature('mansard',this)">Мансарда</button>
+      <button type="button" class="filter-chip" aria-pressed="false" data-feature="flat" onclick="filterFeature('flat',this)">Плоская кровля</button>
     </div>
     <div class="filters" id="style-filters" style="flex-wrap:wrap;gap:6px;margin-top:6px;">
-      <div class="filter-chip active" data-style="all" onclick="filterStyle('all',this)">Все стили</div>
-      <div class="filter-chip" data-style="classic" onclick="filterStyle('classic',this)">Классический</div>
-      <div class="filter-chip" data-style="modern" onclick="filterStyle('modern',this)">Современный</div>
+      <button type="button" class="filter-chip active" aria-pressed="true" data-style="all" onclick="filterStyle('all',this)">Все стили</button>
+      <button type="button" class="filter-chip" aria-pressed="false" data-style="classic" onclick="filterStyle('classic',this)">Классический</button>
+      <button type="button" class="filter-chip" aria-pressed="false" data-style="modern" onclick="filterStyle('modern',this)">Современный</button>
     </div>
 
     <!-- Счётчик: всего проектов + разбивка по этажам/стилю -->
@@ -808,7 +808,7 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
       <div class="loading-state">Загрузка…</div>
     </div>
 
-    <div class='section-label' id='historyToggle' onclick='toggleHistorySection()' style='cursor:pointer;'>
+    <div data-key-activate tabindex="0" role="button" class='section-label' id='historyToggle' onclick='toggleHistorySection()' style='cursor:pointer;'>
             <span class='lbl-text'>История изменений</span><span class='section-label-line'></span>
             <span id='historyChevron' style='margin-left:6px;display:inline-block;transition:transform .2s;'>▸</span>
           </div>
@@ -2818,6 +2818,8 @@ function applyRole(){
   if(!session){ userPill.style.display = 'none'; applyAccessVisibility(); return; }
 
   userPill.style.display = 'flex';
+  userPill.title = session.name + ' · Выйти из аккаунта';
+  userPill.setAttribute('aria-label', userPill.title);
   const roleLabel = getEmployeeRole() ? ` · ${getEmployeeRole()}` : (session.isAdmin ? '' : ' · исполнитель');
   userPill.innerHTML = `<span style="font-weight:600;">${escapeHtml(session.name)}</span><span style="opacity:0.6;">${escapeHtml(roleLabel)}</span>`;
 
@@ -3769,7 +3771,7 @@ function renderConstrSummary(){
   const totFeePaid = rows.reduce((s,r)=>s+r.f.paid,0);
 
   const rowsHtml = rows.map(({p, received, cashOutgoing, directPaid, balance, isOverspent, f, st}) => `
-    <tr onclick="openObjectView('${p.id}')" style="cursor:pointer;" class="constr-sum-row">
+    <tr data-key-activate tabindex="0" onclick="openObjectView('${p.id}')" style="cursor:pointer;" class="constr-sum-row">
       <td>
         <div class="entity-name" title="${escapeHtml(p.name)}" style="font-weight:600; font-size:13px; color:var(--text);">${escapeHtml(p.name)}</div>
         ${st ? `<div style="font-size:10px; color:var(--text-dim); margin-top:2px;">${escapeHtml(st.name)}</div>` : ''}
@@ -3832,11 +3834,11 @@ function renderOverview(){
 
   const kpiGrid = document.getElementById('kpiGrid');
   kpiGrid.innerHTML = `
-    <div class="kpi accent-red" style="cursor:pointer;" onclick="document.getElementById('debtCard').scrollIntoView({behavior:'smooth'})">
+    <div data-key-activate tabindex="0" role="button" class="kpi accent-red" style="cursor:pointer;" onclick="document.getElementById('debtCard').scrollIntoView({behavior:'smooth'})">
       <div class="big" data-countup="${overdue.length}">0</div>
       <div class="lbl">Просрочки</div>
     </div>
-    <div class="kpi accent-gold" style="cursor:pointer;" onclick="document.getElementById('debtCard').scrollIntoView({behavior:'smooth'})">
+    <div data-key-activate tabindex="0" role="button" class="kpi accent-gold" style="cursor:pointer;" onclick="document.getElementById('debtCard').scrollIntoView({behavior:'smooth'})">
       <div class="big">${fmt(totalDebt)} ₽</div>
       <div class="lbl">Должны клиенты${mismatchCount > 0 ? ` <span style="color:var(--red);">⚠${mismatchCount}</span>` : ''}</div>
     </div>
@@ -3883,7 +3885,7 @@ function renderOverview(){
 
     const rowsHtml = rows.map(({p, balance, expenses, net, feeTotal, isMismatch})=>{
       const netColor = net < 0 ? 'var(--red)' : 'var(--green)';
-      return `<tr onclick="openProjectSheet('${p.id}')" style="cursor:pointer;" class="constr-sum-row">
+      return `<tr data-key-activate tabindex="0" onclick="openProjectSheet('${p.id}')" style="cursor:pointer;" class="constr-sum-row">
         <td>
           <div class="entity-name" title="${escapeHtml(p.name)}" style="font-weight:600; font-size:12px; color:var(--text);">${escapeHtml(p.name)}</div>
           ${isMismatch ? `<div style="font-size:9px; color:var(--gold); margin-top:1px;">⚠ статус «Оплачен»</div>` : ''}
@@ -3937,7 +3939,7 @@ function renderOverview(){
       if(d < 0){ dateTxt = `просрочен на ${Math.abs(d)} дн.`; dateColor = 'var(--red)'; }
       else if(d <= 7){ dateTxt = `${d} дн. до сдачи`; dateColor = 'var(--gold)'; }
       else { dateTxt = `${d} дн. до сдачи`; dateColor = 'var(--text-dim)'; }
-      html += `<div class="list-item" onclick="openProjectSheet('${p.id}')" style="cursor:pointer;">
+      html += `<div data-key-activate tabindex="0" role="button" class="list-item" onclick="openProjectSheet('${p.id}')" style="cursor:pointer;">
         <div>
           <div class="li-name">${escapeHtml(p.name)}</div>
           <div class="li-meta">${st ? escapeHtml(st.name) : ''} · сдача ${fmtDate(p.end_date)}</div>
@@ -3949,7 +3951,7 @@ function renderOverview(){
     });
     withoutDeadline.forEach(p=>{
       const st = findStatus(p.status_id);
-      html += `<div class="list-item" onclick="openProjectSheet('${p.id}')" style="cursor:pointer;">
+      html += `<div data-key-activate tabindex="0" role="button" class="list-item" onclick="openProjectSheet('${p.id}')" style="cursor:pointer;">
         <div>
           <div class="li-name">${escapeHtml(p.name)}</div>
           <div class="li-meta">${st ? escapeHtml(st.name) : ''}</div>
@@ -3977,7 +3979,7 @@ function renderOverview(){
         <div class="card">
           ${overdueStages.map(s=>{
             const p = state.projects.find(x=>x.id===s.project_id);
-            return `<div class="list-item" onclick="openProjectSheet('${s.project_id}')" style="cursor:pointer;">
+            return `<div data-key-activate tabindex="0" role="button" class="list-item" onclick="openProjectSheet('${s.project_id}')" style="cursor:pointer;">
               <div>
                 <div class="li-name">${escapeHtml(s.name)}</div>
                 <div class="li-meta" style="color:var(--red);">${p ? escapeHtml(p.name) : ''} · срок был ${fmtDate(s.due_date)} · ${Math.abs(daysUntil(s.due_date))} дн. назад</div>
@@ -4056,7 +4058,7 @@ function renderActiveDeptSplit(){
       else if(d < 0){ dateTxt = 'просрочен на ' + Math.abs(d) + ' дн.'; dateColor = 'var(--red)'; }
       else if(d <= 7){ dateTxt = d + ' дн. до сдачи'; dateColor = 'var(--gold)'; }
       else { dateTxt = d + ' дн. до сдачи'; dateColor = 'var(--text-dim)'; }
-      return '<div class="list-item" onclick="openProjectSheet(\'' + p.id + '\')" style="cursor:pointer;">' +
+      return '<div data-key-activate tabindex="0" role="button" class="list-item" onclick="openProjectSheet(\'' + p.id + '\')" style="cursor:pointer;">' +
         '<div style="min-width:0;">' +
           '<div class="li-name">' + escapeHtml(p.name) + '</div>' +
           '<div class="li-meta">оплачено ' + fmtMoney(paid) + ' · осталось ' + fmtMoney(balance) + '</div>' +
@@ -4798,7 +4800,7 @@ function renderProjectRow(p){
     const rowStyle = (isDone || frozen) ? 'opacity:0.55;' : '';
     const donePrefix = isDone ? '✓ ' : (frozen ? '❄ ' : '');
 
-    return `<div class="proj-row" onclick="openProjectSheet('${p.id}')" style="${rowStyle}">
+    return `<div data-key-activate tabindex="0" role="button" class="proj-row" onclick="openProjectSheet('${p.id}')" style="${rowStyle}">
       <div>
         <div class="proj-name" title="${escapeHtml(p.name)}">${donePrefix}${escapeHtml(p.name)}</div>
         <div class="proj-meta">${metaParts.join(' · ')}</div>
@@ -7740,7 +7742,7 @@ function renderConstruction(){
     const {received, directPaid, matTotal, workTotal, otherTotal, manualTotal, expenses, cashOutgoing, unpaidInvoices, balance, pct, isOverspent} = fin;
 
     if(!showFinance){
-      return `<div class="obj-card" onclick="openObjectView('${p.id}')">
+      return `<div data-key-activate tabindex="0" role="button" class="obj-card" onclick="openObjectView('${p.id}')">
         <div class="obj-head"><div><div class="obj-title">${escapeHtml(p.name)}</div><div class="obj-sub">${escapeHtml(p.address||'Нажмите для просмотра')}</div></div><div class="obj-chevron">›</div></div>
         ${st ? `<div class="status-chip" data-status="${escapeHtml(st.name)}" style="margin-top:8px; display:inline-block;">${escapeHtml(st.name)}</div>` : ''}
         <div class="obj-bar" style="margin-top:10px;"><i style="width:${pct}%"></i></div>
@@ -7748,7 +7750,7 @@ function renderConstruction(){
       </div>`;
     }
 
-    return `<div class="obj-card" onclick="openObjectView('${p.id}')">
+    return `<div data-key-activate tabindex="0" role="button" class="obj-card" onclick="openObjectView('${p.id}')">
       <div class="obj-head"><div><div class="obj-title">${escapeHtml(p.name)}</div><div class="obj-sub">${escapeHtml(p.address||'')}</div></div><div style="display:flex; align-items:center; gap:6px;">${st ? `<span class="status-chip" data-status="${escapeHtml(st.name)}">${escapeHtml(st.name)}</span>` : ''}<div class="obj-chevron">›</div></div></div>
       <div class="obj-bar" style="margin-bottom:4px;"><i style="width:${pct}%; background:${pct>90?'var(--red)':pct>70?'var(--gold)':'var(--blue)'};"></i></div>
       <div class="obj-bar-lbl"><span>Выплачено ${pct}% от полученного</span><span style="color:${isOverspent?'var(--red)':''}">${isOverspent ? '⚠ Недостаток: '+fmtMoney(Math.abs(balance)) : 'Деньги: '+fmtMoney(balance)}</span></div>
@@ -7907,7 +7909,7 @@ function renderObjectIncomeHistory(projectId){
 // Строка накладной (с категорией) для плоского списка материалов/работ
 function makeInvoiceRow(inv){
   const typeCls = inv.item_type==='Работа'?'work':inv.item_type==='Доставка'?'del':'mat';
-  return `<div class="inv-row" onclick="openInvoiceSheet('${inv.id}')" style="cursor:pointer;" title="Открыть накладную">
+  return `<div data-key-activate tabindex="0" role="button" class="inv-row" onclick="openInvoiceSheet('${inv.id}')" style="cursor:pointer;" title="Открыть накладную">
       <div style="min-width:0;">
         <div class="inv-num">${escapeHtml(inv.number||inv.description||'—')}</div>
         ${inv.description && inv.number && inv.description!==inv.number ? `<div class="inv-desc">${escapeHtml(inv.description)}</div>` : ''}
@@ -7977,7 +7979,7 @@ function renderObjTabs(){
     {id:'photos', label:'📷 Фото'},
     {id:'audit', label:'🔍 Сверка'},
   ];
-  el.innerHTML = tabs.map(t=>`<div class="filter-chip ${activeObjTab===t.id?'active':''}" onclick="switchObjTab('${t.id}')">${t.label}</div>`).join('');
+  el.innerHTML = tabs.map(t=>`<button type="button" aria-pressed="${activeObjTab===t.id}" class="filter-chip ${activeObjTab===t.id?'active':''}" onclick="switchObjTab('${t.id}')">${t.label}</button>`).join('');
 }
 
 function switchObjTab(tab){
@@ -7999,7 +8001,7 @@ function buildInvoiceGroupsHtml(invoices){
     .map(([catName, items])=>{
       const catTotal = items.reduce((s,i)=>s+Number(i.amount),0);
       const sorted = [...items].sort((a,b)=>(b.invoice_date||'').localeCompare(a.invoice_date||''));
-      const makeRow = inv => `<div class="inv-row" onclick="openInvoiceSheet('${inv.id}')" style="cursor:pointer;" title="Открыть накладную">
+      const makeRow = inv => `<div data-key-activate tabindex="0" role="button" class="inv-row" onclick="openInvoiceSheet('${inv.id}')" style="cursor:pointer;" title="Открыть накладную">
           <div>
             <div class="inv-num">${escapeHtml(inv.number||inv.description||'—')}</div>
             ${inv.description && inv.number && inv.description!==inv.number ? `<div class="inv-desc">${escapeHtml(inv.description)}</div>` : ''}
@@ -8072,20 +8074,20 @@ function renderObjTabContent(){
     const categories = [...new Set(projInvoices.map(i=>i.category).filter(Boolean))];
     el.innerHTML = `<div class="card" style="margin-top:4px;">
       <div class="add-invoice-form">
-        <label>Номер накладной</label>
+        <label for="inv-num-obj">Номер накладной</label>
         <input type="text" id="inv-num-obj" placeholder="например: БИ 14.04.26">
-        <label>Дата</label>
+        <label for="inv-date-obj">Дата</label>
         <input type="date" id="inv-date-obj" value="${financeToday()}">
-        <label>Категория</label>
+        <label for="inv-cat-obj">Категория</label>
         <select id="inv-cat-obj" onchange="(function(s){var c=document.getElementById('inv-cat-obj-custom');c.style.display=s.value==='__other__'?'block':'none';})(this)">
           <option value="">— выберите —</option>
           ${categories.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')}
           <option value="__other__">Другое…</option>
         </select>
         <input type="text" id="inv-cat-obj-custom" placeholder="Введите категорию вручную" style="display:none;margin-top:6px">
-        <label>Описание</label>
+        <label for="inv-desc-obj">Описание</label>
         <input type="text" id="inv-desc-obj" placeholder="что куплено / какая работа">
-        <label>Тип записи</label>
+        <label for="inv-type-obj">Тип записи</label>
         <select id="inv-type-obj">
           <option value="Материал">Материал</option>
           <option value="Работа">Работа</option>
@@ -8093,7 +8095,7 @@ function renderObjTabContent(){
           <option value="Инструмент">Инструмент</option>
           <option value="Расходник">Расходник</option>
         </select>
-        <label>Сумма, ₽</label>
+        <label for="inv-amount-obj">Сумма, ₽</label>
         <input type="number" id="inv-amount-obj" placeholder="0">
         <div style="display:flex;align-items:center;gap:8px;margin:6px 0;">
           <input type="checkbox" id="inv-paid-client-obj" style="width:auto;">
@@ -8101,8 +8103,8 @@ function renderObjTabContent(){
         </div>
         <label>Фото накладной (необязательно)</label>
         <div style="display:flex; gap:8px; margin-bottom:6px;">
-          <label class="photo-upload-label" style="flex:1; margin:0;" for="inv-photo-obj">🖼 Из галереи</label>
-          <label class="photo-upload-label" style="flex:1; margin:0;" for="inv-camera-obj">📷 Сделать фото</label>
+          <label class="photo-upload-label" tabindex="0" role="button" data-key-activate style="flex:1; margin:0;" for="inv-photo-obj">🖼 Из галереи</label>
+          <label class="photo-upload-label" tabindex="0" role="button" data-key-activate style="flex:1; margin:0;" for="inv-camera-obj">📷 Сделать фото</label>
         </div>
         <input type="file" id="inv-photo-obj" accept="image/*" style="display:none;" onchange="onInvoicePhotoPicked(this,'inv-photo-status-obj')">
         <input type="file" id="inv-camera-obj" accept="image/*" capture="environment" style="display:none;" onchange="handleInvoicePhotoCapture(this,'inv-photo-obj','inv-photo-status-obj')">
@@ -9497,8 +9499,8 @@ function renderKpServices(){
       ${item.desc ? `<div class="note" style="background:var(--bg-soft); border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:10px;">${escapeHtml(item.desc)}</div>` : ''}
       <div class="field-row">
         <div class="field">
-          <label>${item.unit === 'м²' ? 'Площадь, м²' : 'Количество, шт'}</label>
-          <input type="number" value="${s.qty}" min="0" step="0.01" oninput="updateKpServiceNumber('${s.id}','qty', this.value)">
+          <label for="kp-qty-${escapeHtml(s.id)}">${item.unit === 'м²' ? 'Площадь, м²' : 'Количество, шт'}</label>
+          <input id="kp-qty-${escapeHtml(s.id)}" type="number" value="${s.qty}" min="0" step="0.01" oninput="updateKpServiceNumber('${s.id}','qty', this.value)">
         </div>
         <div class="field">
           <label>Цена для клиента, ₽/${escapeHtml(item.unit)}</label>
@@ -10819,6 +10821,15 @@ document.querySelectorAll('.nav-btn').forEach(btn=>{
   });
 });
 
+// Keep keyboard activation on the same action and permission checks as a pointer click.
+document.addEventListener('keydown', event=>{
+  if(event.defaultPrevented || event.repeat || !['Enter',' '].includes(event.key))return;
+  const control=event.target;
+  if(!control.matches?.('[data-key-activate]'))return;
+  event.preventDefault();
+  control.click();
+});
+
 // ============================================================
 // EVENT BINDINGS
 // ============================================================
@@ -11155,24 +11166,27 @@ async function backfillCardThumbnails(){
 }
 
 // ── Рендер списка карточек ──
+function setCatalogFilterButton(selector,selected){
+  document.querySelectorAll(selector).forEach(button=>{
+    button.classList.toggle('active',button===selected);
+    button.setAttribute('aria-pressed',String(button===selected));
+  });
+}
 function filterCards(val, el){
   currentCardFloorFilter = val;
-  document.querySelectorAll('#cards-filters .filter-chip').forEach(c=>c.classList.remove('active'));
-  if(el) el.classList.add('active');
+  setCatalogFilterButton('#cards-filters .filter-chip',el);
   renderCardsList();
 }
 
 function filterStyle(val, el){
   currentCardStyleFilter = val;
-  document.querySelectorAll('#style-filters .filter-chip').forEach(c=>c.classList.remove('active'));
-  if(el) el.classList.add('active');
+  setCatalogFilterButton('#style-filters .filter-chip',el);
   renderCardsList();
 }
 
 function filterFeature(val, el){
   currentFeatureFilter = val;
-  document.querySelectorAll('#feature-filters .filter-chip').forEach(c=>c.classList.remove('active'));
-  if(el) el.classList.add('active');
+  setCatalogFilterButton('#feature-filters .filter-chip',el);
   renderCardsList();
 }
 
@@ -11341,8 +11355,8 @@ function openCardEditor(id){
       setVal('ce-title', titleForEdit);
       setVal('ce-area', card.total_area||'');
       setVal('ce-footprint', card.footprint||'');
-      setVal('ce-beds', card.beds||'');
-      setVal('ce-baths', card.baths||'');
+      setVal('ce-beds', card.beds??'');
+      setVal('ce-baths', card.baths??'');
       setVal('ce-price', card.price||'');
       setVal('ce-tags', (card.tags||[]).join(', '));
       CatalogFloors.definitions.forEach(f=>{
@@ -11861,8 +11875,8 @@ async function saveCard(){
       floors: ceFloorsSelected,
       total_area: document.getElementById('ce-area').value.trim(),
       footprint: document.getElementById('ce-footprint').value.trim(),
-      beds: parseInt(document.getElementById('ce-beds').value)||null,
-      baths: parseInt(document.getElementById('ce-baths').value)||null,
+      beds: document.getElementById('ce-beds').value === '' ? null : parseInt(document.getElementById('ce-beds').value,10),
+      baths: document.getElementById('ce-baths').value === '' ? null : parseInt(document.getElementById('ce-baths').value,10),
       price: document.getElementById('ce-price').value.trim(),
       tags: (()=>{
         const systemTags = ['Классический','Современный','Цокольный этаж','Мансарда','Плоская кровля'];

@@ -159,7 +159,7 @@ function renderProjectRow(p){
     const rowStyle = (isDone || frozen) ? 'opacity:0.55;' : '';
     const donePrefix = isDone ? '✓ ' : (frozen ? '❄ ' : '');
 
-    return `<div class="proj-row" onclick="openProjectSheet('${p.id}')" style="${rowStyle}">
+    return `<div data-key-activate tabindex="0" role="button" class="proj-row" onclick="openProjectSheet('${p.id}')" style="${rowStyle}">
       <div>
         <div class="proj-name" title="${escapeHtml(p.name)}">${donePrefix}${escapeHtml(p.name)}</div>
         <div class="proj-meta">${metaParts.join(' · ')}</div>

@@ -496,8 +496,8 @@ function renderKpServices(){
       ${item.desc ? `<div class="note" style="background:var(--bg-soft); border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:10px;">${escapeHtml(item.desc)}</div>` : ''}
       <div class="field-row">
         <div class="field">
-          <label>${item.unit === 'м²' ? 'Площадь, м²' : 'Количество, шт'}</label>
-          <input type="number" value="${s.qty}" min="0" step="0.01" oninput="updateKpServiceNumber('${s.id}','qty', this.value)">
+          <label for="kp-qty-${escapeHtml(s.id)}">${item.unit === 'м²' ? 'Площадь, м²' : 'Количество, шт'}</label>
+          <input id="kp-qty-${escapeHtml(s.id)}" type="number" value="${s.qty}" min="0" step="0.01" oninput="updateKpServiceNumber('${s.id}','qty', this.value)">
         </div>
         <div class="field">
           <label>Цена для клиента, ₽/${escapeHtml(item.unit)}</label>

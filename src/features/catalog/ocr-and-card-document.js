@@ -269,8 +269,8 @@ async function saveCard(){
       floors: ceFloorsSelected,
       total_area: document.getElementById('ce-area').value.trim(),
       footprint: document.getElementById('ce-footprint').value.trim(),
-      beds: parseInt(document.getElementById('ce-beds').value)||null,
-      baths: parseInt(document.getElementById('ce-baths').value)||null,
+      beds: document.getElementById('ce-beds').value === '' ? null : parseInt(document.getElementById('ce-beds').value,10),
+      baths: document.getElementById('ce-baths').value === '' ? null : parseInt(document.getElementById('ce-baths').value,10),
       price: document.getElementById('ce-price').value.trim(),
       tags: (()=>{
         const systemTags = ['Классический','Современный','Цокольный этаж','Мансарда','Плоская кровля'];

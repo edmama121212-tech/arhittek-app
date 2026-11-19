@@ -13,7 +13,14 @@
  const num=s=>Number(String(s??'').replace(/\s/g,'').replace(',','.'));
  function reviewCard(card,meta,{strict=!!meta}={}){
   const issues=[],plans=meta?.sources?.plans||{};
-  if(!strict)return {version:VERSION,passed:true,issues:[],scope:'manual-card'};
+  if(!strict){
+   const title=String(card.title||'').replace(/^Проект\s*№.*?—\s*/u,'').trim();
+   const fields=[card.project_number,title,card.total_area,card.footprint,card.beds,card.baths,card.price,...(card.tags||[])];
+   const hasContent=fields.some(value=>String(value??'').trim())||card.images?.some(Boolean)||
+    floors.some(([,area,rooms])=>String(card[area]??'').trim()||card[rooms]?.length);
+   if(!hasContent)issues.push('Карточка пуста. Заполните данные проекта перед сохранением.');
+   return {version:VERSION,passed:!issues.length,issues,scope:'manual-card'};
+  }
   if(!String(card.project_number||'').trim())issues.push('Укажите номер проекта');
   else if(!/^[\p{L}\d][\p{L}\d._\/-]{0,39}$/u.test(String(card.project_number).trim()))issues.push('В номере проекта есть лишний текст или недопустимые символы');
   if(!String(card.title||'').replace(/^Проект\s*№.*?—\s*/u,'').trim())issues.push('Укажите название проекта');
@@ -40,7 +47,7 @@
 
  function show(review){const box=document.getElementById('ce-quality-status');if(!box)return;box.hidden=false;box.textContent=review.passed?(review.scope==='manual-card'?'Заполненные данные проверены. Автоматическая проверка геометрии доступна для планов из PDF.':'Проверка пройдена: планы, экспликации и данные согласованы. Можно сохранить проект.'):'Сохранение заблокировано. Исправьте:\n• '+review.issues.join('\n• ');box.style.whiteSpace='pre-line';}
  function checkEditor(){
-  const value=id=>document.getElementById(id)?.value||'',card={project_number:value('ce-num'),title:value('ce-title'),floors:ceFloorsSelected,total_area:value('ce-area'),price:value('ce-price'),beds:value('ce-beds'),baths:value('ce-baths'),tags:ceFeatureSelected.includes('basement')?['Цокольный этаж']:[],images:ceImages};
+  const value=id=>document.getElementById(id)?.value||'',card={project_number:value('ce-num'),title:value('ce-title'),floors:ceFloorsSelected,total_area:value('ce-area'),footprint:value('ce-footprint'),price:value('ce-price'),beds:value('ce-beds'),baths:value('ce-baths'),tags:[...value('ce-tags').split(',').map(tag=>tag.trim()).filter(Boolean),...ceFeatureSelected,...(typeof ceStyleSelected==='string'&&ceStyleSelected?[ceStyleSelected]:[]),...(ceFeatureSelected.includes('basement')?['Цокольный этаж']:[])],images:ceImages};
   for(const f of CatalogFloors.definitions){card[f.area]=value('ce-area'+f.suffix);card[f.rooms]=parseExpl(value('ce-expl'+f.suffix));}
   let meta=cePdfImportMeta||cardsData.find(c=>c.id===ceCurrentId)?.pdf_import_meta;const screenshots=typeof ceScreenshotPlans==='undefined'?{}:ceScreenshotPlans;if(Object.keys(screenshots).length)meta={...meta,sources:{...meta?.sources,plans:{...meta?.sources?.plans,...screenshots}}};
   const review=reviewCard(card,meta);show(review);return review;

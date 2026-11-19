@@ -137,7 +137,7 @@ function renderObjectIncomeHistory(projectId){
 // Строка накладной (с категорией) для плоского списка материалов/работ
 function makeInvoiceRow(inv){
   const typeCls = inv.item_type==='Работа'?'work':inv.item_type==='Доставка'?'del':'mat';
-  return `<div class="inv-row" onclick="openInvoiceSheet('${inv.id}')" style="cursor:pointer;" title="Открыть накладную">
+  return `<div data-key-activate tabindex="0" role="button" class="inv-row" onclick="openInvoiceSheet('${inv.id}')" style="cursor:pointer;" title="Открыть накладную">
       <div style="min-width:0;">
         <div class="inv-num">${escapeHtml(inv.number||inv.description||'—')}</div>
         ${inv.description && inv.number && inv.description!==inv.number ? `<div class="inv-desc">${escapeHtml(inv.description)}</div>` : ''}
@@ -207,7 +207,7 @@ function renderObjTabs(){
     {id:'photos', label:'📷 Фото'},
     {id:'audit', label:'🔍 Сверка'},
   ];
-  el.innerHTML = tabs.map(t=>`<div class="filter-chip ${activeObjTab===t.id?'active':''}" onclick="switchObjTab('${t.id}')">${t.label}</div>`).join('');
+  el.innerHTML = tabs.map(t=>`<button type="button" aria-pressed="${activeObjTab===t.id}" class="filter-chip ${activeObjTab===t.id?'active':''}" onclick="switchObjTab('${t.id}')">${t.label}</button>`).join('');
 }
 
 function switchObjTab(tab){
@@ -229,7 +229,7 @@ function buildInvoiceGroupsHtml(invoices){
     .map(([catName, items])=>{
       const catTotal = items.reduce((s,i)=>s+Number(i.amount),0);
       const sorted = [...items].sort((a,b)=>(b.invoice_date||'').localeCompare(a.invoice_date||''));
-      const makeRow = inv => `<div class="inv-row" onclick="openInvoiceSheet('${inv.id}')" style="cursor:pointer;" title="Открыть накладную">
+      const makeRow = inv => `<div data-key-activate tabindex="0" role="button" class="inv-row" onclick="openInvoiceSheet('${inv.id}')" style="cursor:pointer;" title="Открыть накладную">
           <div>
             <div class="inv-num">${escapeHtml(inv.number||inv.description||'—')}</div>
             ${inv.description && inv.number && inv.description!==inv.number ? `<div class="inv-desc">${escapeHtml(inv.description)}</div>` : ''}
@@ -302,20 +302,20 @@ function renderObjTabContent(){
     const categories = [...new Set(projInvoices.map(i=>i.category).filter(Boolean))];
     el.innerHTML = `<div class="card" style="margin-top:4px;">
       <div class="add-invoice-form">
-        <label>Номер накладной</label>
+        <label for="inv-num-obj">Номер накладной</label>
         <input type="text" id="inv-num-obj" placeholder="например: БИ 14.04.26">
-        <label>Дата</label>
+        <label for="inv-date-obj">Дата</label>
         <input type="date" id="inv-date-obj" value="${financeToday()}">
-        <label>Категория</label>
+        <label for="inv-cat-obj">Категория</label>
         <select id="inv-cat-obj" onchange="(function(s){var c=document.getElementById('inv-cat-obj-custom');c.style.display=s.value==='__other__'?'block':'none';})(this)">
           <option value="">— выберите —</option>
           ${categories.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')}
           <option value="__other__">Другое…</option>
         </select>
         <input type="text" id="inv-cat-obj-custom" placeholder="Введите категорию вручную" style="display:none;margin-top:6px">
-        <label>Описание</label>
+        <label for="inv-desc-obj">Описание</label>
         <input type="text" id="inv-desc-obj" placeholder="что куплено / какая работа">
-        <label>Тип записи</label>
+        <label for="inv-type-obj">Тип записи</label>
         <select id="inv-type-obj">
           <option value="Материал">Материал</option>
           <option value="Работа">Работа</option>
@@ -323,7 +323,7 @@ function renderObjTabContent(){
           <option value="Инструмент">Инструмент</option>
           <option value="Расходник">Расходник</option>
         </select>
-        <label>Сумма, ₽</label>
+        <label for="inv-amount-obj">Сумма, ₽</label>
         <input type="number" id="inv-amount-obj" placeholder="0">
         <div style="display:flex;align-items:center;gap:8px;margin:6px 0;">
           <input type="checkbox" id="inv-paid-client-obj" style="width:auto;">
@@ -331,8 +331,8 @@ function renderObjTabContent(){
         </div>
         <label>Фото накладной (необязательно)</label>
         <div style="display:flex; gap:8px; margin-bottom:6px;">
-          <label class="photo-upload-label" style="flex:1; margin:0;" for="inv-photo-obj">🖼 Из галереи</label>
-          <label class="photo-upload-label" style="flex:1; margin:0;" for="inv-camera-obj">📷 Сделать фото</label>
+          <label class="photo-upload-label" tabindex="0" role="button" data-key-activate style="flex:1; margin:0;" for="inv-photo-obj">🖼 Из галереи</label>
+          <label class="photo-upload-label" tabindex="0" role="button" data-key-activate style="flex:1; margin:0;" for="inv-camera-obj">📷 Сделать фото</label>
         </div>
         <input type="file" id="inv-photo-obj" accept="image/*" style="display:none;" onchange="onInvoicePhotoPicked(this,'inv-photo-status-obj')">
         <input type="file" id="inv-camera-obj" accept="image/*" capture="environment" style="display:none;" onchange="handleInvoicePhotoCapture(this,'inv-photo-obj','inv-photo-status-obj')">

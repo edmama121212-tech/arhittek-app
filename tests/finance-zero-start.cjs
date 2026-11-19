@@ -10,6 +10,16 @@ try{
  await db.query("insert into public.projects(id,name,price,advance,created_at) values($1,'Historical project',100000,10000,'2026-10-01')",[U(3)]);
  await db.query("insert into public.company_income(id,category,amount,income_date,description) values($1,'Old receipt',50000,'2026-10-01','Archived receipt')",[U(4)]);
  await db.exec(sql('supabase/install-owner-access.sql'));await db.exec(sql('supabase/financial-journal.sql'));await db.exec(sql('supabase/migrations/20261030192422_finance_workspace.sql'));
+ const safeMigration=sql('supabase/migrations/20261119213000_company_safe_name.sql');
+ const legacyName='Общая касса · не распределено по счетам';
+ const walletRows=async()=>(await db.query('select * from arhittek_finance.wallets order by id')).rows;
+ const fresh=await walletRows();
+ eq(fresh.length,1,'Fresh installation creates one system wallet');
+ eq([fresh[0].name,fresh[0].is_default,fresh[0].kind],[legacyName,true,'unallocated'],'Original system wallet is identifiable without a fixed UUID');
+ await db.exec('begin');
+ await db.exec(safeMigration);
+ eq(await walletRows(),[{...fresh[0],name:'Сейф'}],'Fresh installation retains the wallet UUID and metadata');
+ await db.exec('rollback');
  const roles=async owner=>{await db.exec('reset role;set role anon');await db.query("select set_config('request.headers',$1,false)",[JSON.stringify({'x-session-token':(owner?'z':'x').repeat(64),'x-finance-client':'1'})]);};
  const read=async()=>(await db.query('select public.get_financial_journal() j')).rows[0].j;
  const denied=async fn=>{await assert.rejects(fn);passed++};
@@ -41,5 +51,24 @@ try{
  const beforeReapply=j.revision;await db.exec('reset role');await db.exec(sql(migration));await roles(true);j=await read();eq([j.revision,j.workspace.cash],[beforeReapply,900],'Reapplying migration cannot wipe live November balances');
  await roles(false);await denied(read);await denied(()=>db.query('select * from arhittek_finance.settings'));await roles(true);
  eq((await db.query('select sum(amount)::numeric n from public.company_income where income_date<\'2026-11-01\'')).rows[0].n,'51000','Archive values are preserved');
+ await db.exec('reset role');
+ await db.query('insert into arhittek_finance.wallets(id,name,kind) values($1,$2,$3),($4,$5,$6)',[U(80),legacyName,'cash',U(81),'Сейф','bank']);
+ const oldWallets=await walletRows();
+ const ledgerState=async()=>(await db.query(`
+  select (select jsonb_agg(e order by e.id) from arhittek_finance.wallet_entries e) entries,
+         (select jsonb_agg(o order by o.id) from arhittek_finance.operations o) operations,
+         (select jsonb_agg(s order by s.source_id) from arhittek_finance.settlements s) settlements,
+         (select jsonb_agg(r order by r.id) from arhittek_finance.workspace_requests r) requests`)).rows[0];
+ const beforeRename=await ledgerState();
+ assert(beforeRename.entries.length>0&&beforeRename.operations.length>0);
+ await db.exec(safeMigration);
+ await db.exec(safeMigration);
+ eq(await walletRows(),oldWallets.map(w=>w.is_default?{...w,name:'Сейф'}:w),'Reapplying changes only the unique default wallet, regardless of other wallets’ names');
+ eq(await ledgerState(),beforeRename,'All journal entries, wallet links and stored requests retain their identity and contents');
+ await roles(true);
+ const renamed=await read();
+ eq([renamed.revision,renamed.balances,renamed.workspace.cash],[j.revision,j.balances,j.workspace.cash],'Renaming does not create a financial transaction');
+ const safe=renamed.workspace.wallets.find(w=>w.is_default);
+ eq([safe.id,safe.name,safe.balance],[wallet,'Сейф',900],'The owner snapshot exposes the same funded wallet under the new name');
  console.log(JSON.stringify({passed,failed:[]}));
 }finally{await db.close()}})().catch(e=>{console.error(e);process.exitCode=1});

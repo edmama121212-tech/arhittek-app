@@ -46,7 +46,7 @@ function inspectControls() {
     const hitTarget=!!hit&&(hit===e||e.contains(hit)||hit===forControl||
       !!(e.labels&&[...e.labels].some(l=>l.contains(hit))));
     const scrolled=rect.bottom>0&&rect.right>0&&rect.left<innerWidth&&rect.top<innerHeight;
-    const focusTarget=forControl||e;
+    const focusTarget=e.tabIndex>=0?e:(forControl||e);
     const sequential=focusTarget.tabIndex>=0 && !disabled;
     if(sequential)focusTarget.focus({preventScroll:true});
     const focusable=sequential && focusTarget===document.activeElement;

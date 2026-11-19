@@ -129,24 +129,27 @@ async function backfillCardThumbnails(){
 }
 
 // ── Рендер списка карточек ──
+function setCatalogFilterButton(selector,selected){
+  document.querySelectorAll(selector).forEach(button=>{
+    button.classList.toggle('active',button===selected);
+    button.setAttribute('aria-pressed',String(button===selected));
+  });
+}
 function filterCards(val, el){
   currentCardFloorFilter = val;
-  document.querySelectorAll('#cards-filters .filter-chip').forEach(c=>c.classList.remove('active'));
-  if(el) el.classList.add('active');
+  setCatalogFilterButton('#cards-filters .filter-chip',el);
   renderCardsList();
 }
 
 function filterStyle(val, el){
   currentCardStyleFilter = val;
-  document.querySelectorAll('#style-filters .filter-chip').forEach(c=>c.classList.remove('active'));
-  if(el) el.classList.add('active');
+  setCatalogFilterButton('#style-filters .filter-chip',el);
   renderCardsList();
 }
 
 function filterFeature(val, el){
   currentFeatureFilter = val;
-  document.querySelectorAll('#feature-filters .filter-chip').forEach(c=>c.classList.remove('active'));
-  if(el) el.classList.add('active');
+  setCatalogFilterButton('#feature-filters .filter-chip',el);
   renderCardsList();
 }
 
@@ -315,8 +318,8 @@ function openCardEditor(id){
       setVal('ce-title', titleForEdit);
       setVal('ce-area', card.total_area||'');
       setVal('ce-footprint', card.footprint||'');
-      setVal('ce-beds', card.beds||'');
-      setVal('ce-baths', card.baths||'');
+      setVal('ce-beds', card.beds??'');
+      setVal('ce-baths', card.baths??'');
       setVal('ce-price', card.price||'');
       setVal('ce-tags', (card.tags||[]).join(', '));
       CatalogFloors.definitions.forEach(f=>{

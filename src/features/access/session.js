@@ -314,6 +314,8 @@ function applyRole(){
   if(!session){ userPill.style.display = 'none'; applyAccessVisibility(); return; }
 
   userPill.style.display = 'flex';
+  userPill.title = session.name + ' · Выйти из аккаунта';
+  userPill.setAttribute('aria-label', userPill.title);
   const roleLabel = getEmployeeRole() ? ` · ${getEmployeeRole()}` : (session.isAdmin ? '' : ' · исполнитель');
   userPill.innerHTML = `<span style="font-weight:600;">${escapeHtml(session.name)}</span><span style="opacity:0.6;">${escapeHtml(roleLabel)}</span>`;
 

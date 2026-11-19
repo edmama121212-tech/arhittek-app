@@ -51,9 +51,43 @@ try{
  await page.locator('#financeWorkspace [data-fw-tab="overview"]').click();
  await cmd('activate',activatePayload,201,0);await page.evaluate(()=>loadAll());
  eq(await page.locator('#financeWorkspace h1').textContent(),'Финансы');eq(await page.evaluate(()=>ARHITTEKFinanceWorkspace.enabled()),true);
- eq(await page.locator('.studio-money-grid article span').allTextContents(),['Всего денег','Расходы за месяц','Ожидаем до конца месяца']);
+ eq(await page.evaluate(()=>{
+  const calculate=ARHITTEKBudget.calculate;
+  let calls=0;
+  try{
+   ARHITTEKBudget.calculate=(...args)=>{calls++;return calculate(...args)};
+   ARHITTEKFinanceWorkspace.render();
+   return calls;
+  }finally{ARHITTEKBudget.calculate=calculate;}
+ }),0);
+ eq(await page.locator('.studio-money-grid article span').allTextContents(),['Сейф','Расходы за месяц','Ожидаем до конца месяца']);
+ // A legacy installation can retain separate wallets. Their funds cannot be attributed to the safe.
+ const split=await page.evaluate(()=>{
+  const journal=state.financialJournal,workspace=journal.workspace;
+  const original=workspace.wallets;
+  try{
+   const safe=original.find(w=>w.is_default===true);
+   workspace.wallets=[{id:'external-bank',name:'Отдельный счёт',active:true,balance:10000,kind:'bank'},
+    {...safe,balance:workspace.cash-10000,name:'Общая касса · не распределено по счетам'}];
+   ARHITTEKFinanceWorkspace.render();
+   const tile=document.querySelector('.studio-money-grid article'),label=tile.querySelector('span').textContent;
+   const amount=tile.querySelector('strong').textContent.replace(/\s/g,'');
+   document.querySelector('[data-fw-tab="more"]').click();
+   document.querySelector('[data-fw="record-expense"]').click();
+   const picker=document.querySelector('#financeWorkspaceModal select[name="wallet_id"]');
+   const choices=[...picker.options].map(option=>option.textContent.split(' · ')[0]);
+   const defaultsToSafe=picker.value===safe.id;
+   picker.value='external-bank';
+   const keptOtherWallet=new FormData(picker.form).get('wallet_id')==='external-bank';
+   document.querySelector('#financeWorkspaceModal [data-close]').click();
+   document.querySelector('[data-fw-tab="overview"]').click();
+   return [label,amount,choices,defaultsToSafe,keptOtherWallet];
+  }finally{workspace.wallets=original;ARHITTEKFinanceWorkspace.render();}
+ });
+ eq(split,['Сейф','90000,00₽',['Сейф','Отдельный счёт'],true,true]);
  await page.locator('[data-fw-tab="more"]').click();
  const workspace=page.locator('#financeWorkspace');
+ eq(await page.evaluate(()=>{ARHITTEKFinanceWorkspace.render();return document.activeElement===document.querySelector('#financeWorkspace h1');}),true);
  eq(await workspace.locator('.fw-group h2').allTextContents(),['Записать операцию','Найти операцию','Запланировать','Настроить']);
  eq(await workspace.locator('.fw-grid').isVisible(),false);
  for(const width of [320,390,768,1280]){
@@ -66,6 +100,20 @@ try{
   await workspace.locator('[data-fw-tab="'+screen+'"]').click();
   if(screen==='history'){
    const search=workspace.locator('[data-fw-search]');
+   const sample=await page.evaluate(()=>{
+    const original=state.financialJournal;
+    try{
+     const deltas=[10000,-10000,0];
+     state.financialJournal={...original,history:[],operations:deltas.map((cash_delta,i)=>({id:'movement-'+i,kind:'activate',reason:'Тест движения',cash_delta,revision:i+1,created_at:'2026-11-19T12:00:00Z',balances_after:{reserve:500}}))};
+     ARHITTEKFinanceWorkspace.render();
+     const entries=Array.from(document.querySelectorAll('[data-fw-operation]'));
+     const values=entries.map(entry=>[entry.querySelector('.fw-row span').textContent,entry.querySelector('.fw-row strong').textContent.replace(/\s/g,''),entry.querySelectorAll('.fw-row span')[1].textContent]);
+     const field=document.querySelector('[data-fw-search]');
+     const filter=q=>{field.value=q;field.dispatchEvent(new Event('input'));return entries.filter(e=>!e.hidden).length;};
+     return [values,filter('10 000'),filter('-10000'),filter('Расход')];
+    }finally{state.financialJournal=original;ARHITTEKFinanceWorkspace.render();}
+   });
+   eq(sample,[[['Поступление','10000,00₽','Резерв после операции'],['Расход','10000,00₽','Резерв после операции'],['Движение денег','0,00₽','Резерв после операции']],2,1,1]);
    await search.fill('операция-которой-нет');
    eq(await workspace.locator('[data-fw-no-match]').isVisible(),true);
    await page.evaluate(()=>ARHITTEKFinanceWorkspace.render());
@@ -75,7 +123,22 @@ try{
   }
   await workspace.locator('[data-fw-tab="more"]').click();
  }
- eq(await page.locator('#financeWorkspace .fw-grid small').allTextContents(),['Выручка','Расход','Чистый доход','Прогноз']);
+ for(const [screen,message] of [['history','В истории пока нет подтверждённых операций.'],['calendar','В календаре пока нет платежей.']]){
+  await workspace.locator('[data-fw-tab="'+screen+'"]').click();
+  const emptyResult=await page.evaluate(()=>{
+   const original=state.financialJournal;
+   try{
+    state.financialJournal={...original,operations:[],history:[],workspace:{...original.workspace,items:[],unmatched:[],unscheduled_projects:[],changes:[],links:[]}};
+    ARHITTEKFinanceWorkspace.render();
+    const section=document.getElementById('financeWorkspace');
+    return [section.textContent,section.querySelectorAll('[data-fw-section="unmatched"],[data-fw-section="payment-links"],[data-fw-section="plan-history"]').length];
+   }finally{state.financialJournal=original;ARHITTEKFinanceWorkspace.render();}
+  });
+  eq(emptyResult[0].includes(message),true);
+  eq(emptyResult[1],0);
+  await workspace.locator('[data-fw-tab="more"]').click();
+ }
+ eq(await page.locator('#financeWorkspace .fw-grid small').allTextContents(),['Выручка','Расход','Чистый доход']);
  const cashCases=await page.evaluate(()=>{
   const original={...state},day=financeToday();
   const project={id:'design',name:'Договор',price:50000,advance:0,fee_percent:20,fee_base:'price',employee_id:'worker'};
@@ -102,7 +165,15 @@ try{
  });
  eq(cashCases,[[0,0,0,40000],[40000,0,40000,0],[40000,0,40000,-2000.35],[40000,4500.35,35499.65,2500],[50000,4500.35,45499.65,-7500]]);
  await page.locator('#financeWorkspace [data-fw="record-income"]').click();
- const modal=page.locator('#financeWorkspaceModal');await modal.locator('[name="label"]').fill('Actual company income');await modal.locator('[name="amount"]').fill('1000');eq(await modal.locator('[name="employee_id"]').isVisible(),false);await modal.locator('[type="submit"]').click();
+ const modal=page.locator('#financeWorkspaceModal');
+ const amount=modal.locator('[name="amount"]'),paidOn=modal.locator('[name="date"]');
+ eq(await amount.evaluate(input=>input.validity.valueMissing),true);
+ eq(await modal.locator('[name="label"]').evaluate(input=>input.validity.valueMissing),true);
+ const today=await paidOn.inputValue();
+ await paidOn.fill('2099-12-31');
+ eq(await paidOn.evaluate(input=>input.validity.rangeOverflow),true);
+ await paidOn.fill(today);
+ await modal.locator('[name="label"]').fill('Actual company income');await modal.locator('[name="amount"]').fill('1000');eq(await modal.locator('[name="employee_id"]').isVisible(),false);await modal.locator('[type="submit"]').click();
  await page.waitForFunction(()=>!document.getElementById('financeWorkspaceModal')&&state.financialJournal.workspace.cash===101000);eq((await snapshot()).workspace.reserve,100950);
  await page.locator('#financeWorkspace [data-fw="record-expense"]').click();await modal.locator('[name="label"]').fill('Actual company expense');await modal.locator('[name="amount"]').fill('200');await modal.locator('summary').click();await modal.locator('[name="reason"]').fill('Lost response scenario');await page.evaluate(()=>window.__loseOnce=true);await modal.locator('[type="submit"]').click();
  await modal.locator('[role="alert"]').filter({hasText:'Simulated lost response'}).waitFor();eq((await snapshot()).workspace.cash,100800);

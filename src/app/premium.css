@@ -312,3 +312,14 @@ html{background:var(--bg)!important}body{max-width:none!important;margin:0!impor
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Keyboard and pointer targets shared by staff views. */
+[data-key-activate]:focus-visible,.filter-chip:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#userPill{min-height:28px}
+#userPill>span{min-width:0;overflow:hidden;text-overflow:ellipsis}
+#userPill>span+span{flex-shrink:1}
+#historyToggle,summary{min-height:24px}
+#view-projects select,#cards-search{min-height:32px}
+/* The existing ::before expands the 24 px indicator into a 46 px pointer target. */
+.list-item.stage-item>.stage-check{width:24px;height:24px;min-width:24px;max-width:24px;flex-basis:24px}
+#view-kp input[type=checkbox],#inv-paid-client-obj{min-width:24px;min-height:24px}
