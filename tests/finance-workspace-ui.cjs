@@ -45,6 +45,7 @@ try{
  await page.evaluate(()=>{window.__beforeZero=state.financialJournal;const j=state.financialJournal;state.financialJournal={...j,opening_mode:'zero',start_date:'2026-11-01',workspace:{...j.workspace,opening_mode:'zero',start_date:'2026-11-01'}};ARHITTEKFinanceWorkspace.render();});
  eq(await page.locator('#financeWorkspace').getByText('Запланирован старт с нуля',{exact:true}).isVisible(),true);
  eq(await page.locator('#financeWorkspace [data-journal="activate"]').count(),0);
+ await page.locator('#financeWorkspace [data-fw-tab="more"]').click();
  await page.locator('#financeWorkspace [data-fw-tab="archive"]').click();eq(await page.locator('#financeWorkspace').getByText(await page.evaluate(()=> 'Операции до '+fmtDate('2026-11-01')),{exact:true}).isVisible(),true);
  await page.evaluate(()=>{state.financialJournal=__beforeZero;ARHITTEKFinanceWorkspace.render();});
  await page.locator('#financeWorkspace [data-fw-tab="overview"]').click();
@@ -52,6 +53,28 @@ try{
  eq(await page.locator('#financeWorkspace h1').textContent(),'Финансы');eq(await page.evaluate(()=>ARHITTEKFinanceWorkspace.enabled()),true);
  eq(await page.locator('.studio-money-grid article span').allTextContents(),['Всего денег','Расходы за месяц','Ожидаем до конца месяца']);
  await page.locator('[data-fw-tab="more"]').click();
+ const workspace=page.locator('#financeWorkspace');
+ eq(await workspace.locator('.fw-group h2').allTextContents(),['Записать операцию','Найти операцию','Запланировать','Настроить']);
+ eq(await workspace.locator('.fw-grid').isVisible(),false);
+ for(const width of [320,390,768,1280]){
+  await page.setViewportSize({width,height:844});
+  eq(await workspace.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
+ }
+ await workspace.locator('[data-fw-section="month-report"] summary').click();
+ eq(await workspace.locator('.fw-grid').isVisible(),true);
+ for(const screen of ['accounts','settings','history']){
+  await workspace.locator('[data-fw-tab="'+screen+'"]').click();
+  if(screen==='history'){
+   const search=workspace.locator('[data-fw-search]');
+   await search.fill('операция-которой-нет');
+   eq(await workspace.locator('[data-fw-no-match]').isVisible(),true);
+   await page.evaluate(()=>ARHITTEKFinanceWorkspace.render());
+   eq(await search.inputValue(),'операция-которой-нет');
+   await search.fill('');
+   eq(await workspace.locator('[data-fw-no-match]').isVisible(),false);
+  }
+  await workspace.locator('[data-fw-tab="more"]').click();
+ }
  eq(await page.locator('#financeWorkspace .fw-grid small').allTextContents(),['Выручка','Расход','Чистый доход','Прогноз']);
  const cashCases=await page.evaluate(()=>{
   const original={...state},day=financeToday();
@@ -79,14 +102,15 @@ try{
  });
  eq(cashCases,[[0,0,0,40000],[40000,0,40000,0],[40000,0,40000,-2000.35],[40000,4500.35,35499.65,2500],[50000,4500.35,45499.65,-7500]]);
  await page.locator('#financeWorkspace [data-fw="record-income"]').click();
- const modal=page.locator('#financeWorkspaceModal');await modal.locator('[name="label"]').fill('Actual company income');await modal.locator('[name="amount"]').fill('1000');await modal.locator('[name="reason"]').fill('Confirmed in isolated database');await modal.locator('[type="submit"]').click();
+ const modal=page.locator('#financeWorkspaceModal');await modal.locator('[name="label"]').fill('Actual company income');await modal.locator('[name="amount"]').fill('1000');eq(await modal.locator('[name="employee_id"]').isVisible(),false);await modal.locator('[type="submit"]').click();
  await page.waitForFunction(()=>!document.getElementById('financeWorkspaceModal')&&state.financialJournal.workspace.cash===101000);eq((await snapshot()).workspace.reserve,100950);
- await page.locator('#financeWorkspace [data-fw="record-expense"]').click();await modal.locator('[name="label"]').fill('Actual company expense');await modal.locator('[name="amount"]').fill('200');await modal.locator('[name="reason"]').fill('Lost response scenario');await page.evaluate(()=>window.__loseOnce=true);await modal.locator('[type="submit"]').click();
+ await page.locator('#financeWorkspace [data-fw="record-expense"]').click();await modal.locator('[name="label"]').fill('Actual company expense');await modal.locator('[name="amount"]').fill('200');await modal.locator('summary').click();await modal.locator('[name="reason"]').fill('Lost response scenario');await page.evaluate(()=>window.__loseOnce=true);await modal.locator('[type="submit"]').click();
  await modal.locator('[role="alert"]').filter({hasText:'Simulated lost response'}).waitFor();eq((await snapshot()).workspace.cash,100800);
  await modal.locator('[data-close]').click();await page.locator('#financeWorkspace [data-fw="retry"]').click();await page.waitForFunction(()=>state.financialJournal.workspace.cash===100800&&!document.querySelector('[data-fw="retry"]'));
  eq((await db.query('select count(*)::int n from public.company_expenses')).rows[0].n,1);
- await page.locator('#financeWorkspace [data-fw-tab="calendar"]').click();await page.locator('#financeWorkspace [data-fw="expense"]').click();await modal.locator('[name="label"]').fill('Known future obligation');await modal.locator('[name="amount"]').fill('3000');await modal.locator('[name="reason"]').fill('Confirmed service agreement');await modal.locator('[type="submit"]').click();await page.waitForSelector('#financeWorkspaceModal',{state:'detached'});
+ await page.locator('#financeWorkspace [data-fw-tab="calendar"]').click();await page.locator('#financeWorkspace [data-fw="expense"]').click();await modal.locator('[name="label"]').fill('Known future obligation');await modal.locator('[name="amount"]').fill('3000');await modal.locator('summary').click();await modal.locator('[name="reason"]').fill('Confirmed service agreement');await modal.locator('[type="submit"]').click();await page.waitForSelector('#financeWorkspaceModal',{state:'detached'});
  eq((await snapshot()).workspace.items.some(x=>x.label==='Known future obligation'),true);
+ await page.locator('#financeWorkspace [data-fw-tab="more"]').click();
  await page.locator('#financeWorkspace [data-fw-tab="forecast"]').click();eq(await page.locator('#financeWorkspace').getByText('Прогноз по проектам',{exact:true}).isVisible(),true);
  for(const width of [320,390,1024]){await page.setViewportSize({width,height:844});eq(await page.locator('#financeWorkspace').evaluate(e=>e.scrollWidth<=e.clientWidth+1),true);}
  await page.setViewportSize({width:390,height:844});await page.locator('#financeWorkspace [data-fw-tab="overview"]').click();

@@ -1,7 +1,7 @@
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const browserName=process.env.TEST_BROWSER||'chromium',engine=require('playwright')[browserName],root=path.resolve(__dirname,'..');
 (async()=>{
- const browser=await engine.launch({headless:true,args:browserName==='chromium'?['--no-sandbox','--disable-dev-shm-usage']:[]});
+ const browser=await engine.launch({executablePath:process.env.BROWSER_EXECUTABLE||undefined,headless:true,args:browserName==='chromium'?['--no-sandbox','--disable-dev-shm-usage']:[]});
  const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,serviceWorkers:'block'});
  const fixture=fs.readFileSync(path.join(root,'tests/mock.js'),'utf8');
  await context.addInitScript({content:fixture+'\n'+`(()=>{
@@ -36,7 +36,7 @@ const browserName=process.env.TEST_BROWSER||'chromium',engine=require('playwrigh
  await page.locator('#addProjectFab').click();
  await check('A new card requires direction first and the prefix is not an editable input',async()=>{assert.equal(await page.locator('#pf-category').inputValue(),'');assert.equal(await page.locator('#pf-name').isDisabled(),true);assert.equal(await page.locator('#pf-number-prefix').evaluate(el=>el.tagName),'DIV');const a=await page.locator('#pf-category').boundingBox(),b=await page.locator('#pf-name').boundingBox();assert.ok(a.y<b.y);});
  await page.locator('#pf-category').selectOption('arch');await page.locator('#pf-name').fill('Только название');
- await check('Changing direction updates the prefix and keeps the entered title',async()=>{assert.equal(await page.locator('#pf-number-prefix').innerText(),'Проект №174'+yy);for(const [cat,prefix]of [['design','Проект ДИ №32'],['land','Проект ЛД №1']]){await page.locator('#pf-category').selectOption(cat);assert.equal(await page.locator('#pf-number-prefix').innerText(),prefix+yy);assert.equal(await page.locator('#pf-name').inputValue(),'Только название');}});
+ await check('Changing direction updates the prefix and keeps the entered title',async()=>{assert.equal(await page.locator('#pf-number-prefix').innerText(),'№174'+yy);for(const [cat,prefix]of [['design','№32'],['land','№1']]){await page.locator('#pf-category').selectOption(cat);assert.equal(await page.locator('#pf-number-prefix').innerText(),prefix+yy);assert.equal(await page.locator('#pf-name').inputValue(),'Только название');}});
  await page.locator('#pf-category').selectOption('arch');
  await check('Concurrent clicks insert once and use the authoritative server result',async()=>{await page.evaluate(()=>Promise.all([saveProject(),saveProject()]));const p=await page.evaluate(()=>__db.projects.find(p=>p.project_title==='Только название'));assert.equal(p.name,'Проект №174'+yy+' Только название');assert.equal(await page.evaluate(()=>__db.projects.filter(p=>p.project_title==='Только название').length),1);assert.equal(await page.locator('#projectSheetOverlay').evaluate(el=>el.classList.contains('active')),false);});
  const savedId=await page.evaluate(()=>__db.projects.find(p=>p.project_title==='Только название')?.id);

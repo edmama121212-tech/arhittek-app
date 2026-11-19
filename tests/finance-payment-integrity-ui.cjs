@@ -31,9 +31,13 @@ const root=path.resolve(__dirname,'..');
    await loadAll();
   });
   await page.locator('.nav-btn[data-view="view-finance"]').click();
+  await page.locator('#financeWorkspace [data-fw-tab="more"]').click();
   await page.locator('#financeWorkspace [data-fw-tab="calendar"]').click();
   const openLink=async()=>{
-   await page.getByText('Оплаты, внесённые вне календаря',{exact:true}).click();
+   const section=page.locator('#financeWorkspace details[data-fw-section="unmatched"]');
+   if(!await section.evaluate(el=>el.open))await section.locator('summary').click();
+   await page.evaluate(()=>ARHITTEKFinanceWorkspace.render());
+   assert.equal(await section.evaluate(el=>el.open),true);
    await page.locator('#financeWorkspace [data-fw="link"]').click();
   };
   await openLink();

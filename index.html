@@ -746,7 +746,7 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
       <span class="section-label-line"></span>
     </div>
 
-    <input id="cards-search" type="search" aria-label="Поиск по номеру или названию" placeholder="Поиск по номеру или названию" oninput="renderCardsList()" style="width:100%;margin:4px 0 10px;">
+    <input id="cards-search" type="search" aria-label="Поиск по номеру или названию" placeholder="Поиск по номеру или названию" oninput="renderCardsList()">
 
     <!-- Фильтр по этажности -->
     <div class="filters" id="cards-filters" style="flex-wrap:wrap;gap:6px;">
@@ -1617,13 +1617,13 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
       <button class="sheet-close" id="projectSheetClose">✕</button>
     </div>
 
-    <div class="field-row">
+    <div class="field-row project-category-status">
       <div class="field">
         <label for="pf-category">Направление проекта</label>
         <select id="pf-category"></select>
       </div>
       <div class="field">
-        <label>Статус (этап работы)</label>
+        <label for="pf-status">Статус (этап работы)</label>
         <select id="pf-status"></select>
       </div>
     </div>
@@ -4578,7 +4578,7 @@ function renderProjectNumberField(){
   const saved=state.projects.find(p=>p.id===editingProjectId),series=projectNumberSeries(category.value);
   const fixed=saved?projectNumberPrefix(saved):nextProjectNumbers?.find(n=>n.category_id===category.value)?.prefix;
   prefix.hidden=!!saved&&!saved.number_series||(!saved&&!series);
-  prefix.textContent=prefix.hidden?'':fixed||(projectNumbersRequest?'Загружаем номер…':'');
+  prefix.textContent=prefix.hidden?'':fixed?fixed.slice(fixed.indexOf('№')):(projectNumbersRequest?'Загружаем номер…':'');
   hint.hidden=!!saved||!series;
   hint.textContent=fixed?'Номер закрепится при сохранении.':projectNumbersRequest?'':'Не удалось получить номер. Повторите сохранение после восстановления связи.';
   input.disabled=!saved&&!category.value;

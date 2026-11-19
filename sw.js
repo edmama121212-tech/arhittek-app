@@ -1,5 +1,5 @@
 // ARHITTEK: complete reads, consistent budgets and safe app updates.
-const CACHE = 'arhittek-v3.71-catalog-search';
+const CACHE = 'arhittek-v3.72-delivery-audit';
 const ASSETS = ['./index.html','./brief-media.js','./premium.css','./premium.js','./contract-pricing.js','./contract-customer.js','./employee-access.js','./data-access.js','./catalog-floors.js','./catalog-floors.css','./catalog-pdf-core.js','./catalog-quality.js','./catalog-pdf.js','./catalog-plan.js','./catalog-pdf-io.js','./catalog-ocr.js','./catalog-pdf-optimize-worker.js','./catalog-pdf.css','./financial-journal.js','./project-budget.js','./cash-finance.js','./finance-workspace.js','./app-refresh.js','./construction-finance.js','./construction-workflow.js','./construction-operations.js','./client.css','./catalog.html','./tz.html','./landscape-brief.js','./manifest.json','./icon-192.png','./icon-512.png'];
 const APP_BASE = new URL('./', self.location.href);
 // CDN-библиотеки — кэшируем отдельно от основных ASSETS: если jsdelivr на
@@ -42,6 +42,9 @@ self.addEventListener('fetch', e=>{
   }
   // Кэшируем только ресурсы этого приложения и перечисленные публичные библиотеки.
   const requestURL = new URL(e.request.url);
+  // A shared catalogue URL may contain the client's access token.
+  // Leave these navigations to the browser without writing their URLs to Cache Storage.
+  if(requestURL.origin === APP_BASE.origin && requestURL.pathname === new URL('catalog.html', APP_BASE).pathname && requestURL.search) return;
   const isOwnGet = requestURL.origin === APP_BASE.origin &&
     (requestURL.pathname === APP_BASE.pathname || ASSETS.some(path=>new URL(path, APP_BASE).pathname === requestURL.pathname));
   if(!isOwnGet && !CDN_ASSETS.includes(e.request.url)) return;
@@ -58,7 +61,16 @@ self.addEventListener('fetch', e=>{
         }
         return res;
       })
-      .catch(async()=>await (await caches.open(CACHE)).match(e.request) || new Response('Нет подключения. Откройте приложение после восстановления связи.',{status:503,headers:{'Content-Type':'text/plain; charset=utf-8'}}))
+      .catch(async()=>{
+        const cache = await caches.open(CACHE);
+        const cached = await cache.match(e.request);
+        if(cached) return cached;
+        if(requestURL.origin === APP_BASE.origin && requestURL.pathname === APP_BASE.pathname && !requestURL.search){
+          const installedShell = await cache.match(new URL('index.html', APP_BASE).href);
+          if(installedShell) return installedShell;
+        }
+        return new Response('Нет подключения. Откройте приложение после восстановления связи.',{status:503,headers:{'Content-Type':'text/plain; charset=utf-8'}});
+      })
   );
 });
 

@@ -193,7 +193,8 @@
     section.append(listPanel(s.invoices,invoice => {
       const item = el('div','item'), header = el('div','item-heading'), paid = invoice.company_paid_kopeks + invoice.direct_paid_kopeks;
       header.append(el('div','item-title',invoice.title),el('div','item-amount',rubles(invoice.net_amount_kopeks))); item.append(header,el('div','item-meta',`${invoice.number ? '№ ' + invoice.number + ' · ' : ''}${dayFormat(invoice.date)} · ${invoice.kind}`));
-      item.append(el('span','badge ' + (paid === invoice.net_amount_kopeks ? 'completed' : paid ? 'in_progress' : 'planned'),paid === invoice.net_amount_kopeks ? 'Оплачена' : paid ? 'Оплачена частично' : 'Не оплачена'));
+      const settled = paid >= invoice.net_amount_kopeks;
+      item.append(el('span','badge ' + (settled ? 'completed' : paid ? 'in_progress' : 'planned'),settled ? 'Оплачена' : paid ? 'Оплачена частично' : 'Не оплачена'));
       if (invoice.credit_kopeks) item.append(el('div','item-meta','Стоимость документа: ' + rubles(invoice.amount_kopeks) + ' · Уменьшение: ' + rubles(invoice.credit_kopeks)));
       if (invoice.overpaid_kopeks) item.append(el('p','warning','Переплата по документу: ' + rubles(invoice.overpaid_kopeks) + '. Уменьшение стоимости само по себе не возвращает деньги.'));
       item.append(el('div','item-meta','Оплачено компанией: ' + rubles(invoice.company_paid_kopeks)));
