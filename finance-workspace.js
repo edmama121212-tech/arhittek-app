@@ -3,6 +3,7 @@
 'use strict';
 const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=n=>new Intl.NumberFormat('ru-RU',{style:'currency',currency:'RUB',maximumFractionDigits:2}).format(Number(n)||0),number=n=>Number(n)||0;
+let historyRequest=null;
 let tab='overview',modal=null,busy=false,refreshing=null,renderQueued=false,lastRead=0;
 const owner=()=>typeof isOwner==='function'&&isOwner(),snapshot=()=>state.financialJournal?.workspace;
 const enabled=()=>owner()&&snapshot()?.version===2;
@@ -231,7 +232,12 @@ function render(){
     row(movement,Math.abs(delta))+availableRows(reserve)+
     (canReverse?journalBtn('Отменить с причиной','reverse',o.id):'')+'</article>';
   }
-  html+=btn('Более ранние операции','history','',locked)+receiptCorrections+btn('Корректировать резерв','reserve-adjust','',locked);
+  const atStart=j.historyComplete||ops.some(o=>o.revision===1);
+  if(ops.length){
+   html+=atStart?'<p data-fw-history-end role="status">Все операции загружены.</p>':
+    btn(historyRequest===j?'Загрузка операций…':'Более ранние операции','history','',locked||historyRequest===j);
+  }
+  html+=receiptCorrections+btn('Исправить сумму свободных денег','reserve-adjust','',locked);
   if(s.links?.length)html+='<details class="fw-card" data-fw-section="payment-links"><summary>Связи ранее внесённых оплат</summary>'+(s.links||[]).map(l=>'<div class="fw-row">'+linkDetails(l,j)+btn('Отменить связь','unlink',l.id,locked)+'</div>').join('')+'</details>';
   if(s.changes?.length)html+='<details class="fw-card" data-fw-section="plan-history"><summary>История планов и переводов</summary>'+(s.changes||[]).map(h=>'<div class="fw-card"><b>'+esc(h.after_value?.label||h.after_value?.reason||({plan:'План платежа',pay:'Фактическая оплата',rule:'Регулярное обязательство',wallet_transfer:'Перевод между счетами',reschedule:'Перенос срока',cancel:'Отмена остатка плана',wallet:'Новый счёт',stop_rule:'Остановка регулярного платежа'}[h.entity]||'Финансовое действие'))+'</b><p>'+esc(new Date(h.created_at).toLocaleString('ru-RU'))+'</p>'+(h.before_value?.amount?row('Сумма до',h.before_value.amount):'')+(h.after_value?.amount?row('Сумма после / операции',h.after_value.amount):'')+'<p>Прежний срок: '+esc(h.before_value?.due_date||'—')+' · Новый срок: '+esc(h.after_value?.due_date||'—')+'</p></div>').join('')+'</details>';
  }
@@ -369,12 +375,28 @@ async function act(action,id){
   fields.label.minLength=2;
   fields.label.maxLength=180;
   fields.amount.required=true;
+  if(fields.obligation){
+   const estimate=fields.certainty.querySelector('option[value="expected"]');
+   const note=document.createElement('p');
+   note.hidden=true;
+   note.textContent='Начисление подтверждает сумму долга и резервирует деньги до оплаты.';
+   fields.obligation.closest('label').after(note);
+   let previous=fields.certainty.value;
+   fields.obligation.addEventListener('change',()=>{
+    const debt=fields.obligation.value==='true';
+    if(debt)previous=fields.certainty.value;
+    fields.certainty.value=debt?'confirmed':previous;
+    estimate.disabled=debt;
+    note.hidden=!debt;
+   });
+  }
   if(record){fields.date.required=true;fields.date.max=s.as_of;fields.wallet_id.required=true;}
 
  }else if(action==='wallet-reconcile'||action==='reserve-adjust'){
-  const title=action==='reserve-adjust'?'Корректировать свободный резерв':walletOptions.length===1&&s.wallets.some(w=>w.active&&w.is_default)?'Сверка сейфа':'Сверка остатка';
-  form(title,walletField('Где пересчитали деньги',walletOptions)+input(action==='reserve-adjust'?'Новый свободный резерв':'Сколько денег при пересчёте','target',action==='reserve-adjust'&&s.reserve>=0?s.reserve:'','number').replace('min="0.01"',action==='reserve-adjust'?'min="0" required':'min="0"')+'<p>Разница будет отдельной записью с причиной. Деньги проектов и обязательства сохраняются. Перед подтверждением сверьте введённую сумму с фактическим остатком.</p><label class="fw-count-confirmation"><input name="confirmed" type="checkbox" required> Фактическую сумму проверил</label>',f=>{if(f.target==='')throw new Error('Введите фактическую сумму');return {command:action==='reserve-adjust'?'reserve_adjust':'wallet_reconcile',payload:{...f,target:number(f.target),confirmed:f.confirmed==='on'}};});
-  if(action==='wallet-reconcile'){
+  const reserveAdjustment=action==='reserve-adjust';
+  const title=reserveAdjustment?'Исправить сумму свободных денег':walletOptions.length===1&&s.wallets.some(w=>w.active&&w.is_default)?'Сверка сейфа':'Сверка остатка';
+  form(title,walletField(reserveAdjustment?'Где учесть разницу':'Где пересчитали деньги',walletOptions)+input(reserveAdjustment?'Сколько свободно для расходов':'Сколько денег при пересчёте','target',action==='reserve-adjust'&&s.reserve>=0?s.reserve:'','number').replace('min="0.01"',action==='reserve-adjust'?'min="0" required':'min="0"')+ '<p>'+(reserveAdjustment?'Укажите только свободную часть денег компании. Разница изменит остаток в выбранном месте хранения. Целевые деньги сохранятся.':'Разница будет отдельной записью с причиной. Деньги проектов и обязательства сохраняются. Перед подтверждением сверьте введённую сумму с фактическим остатком.')+'</p><label class="fw-count-confirmation"><input name="confirmed" type="checkbox" required> Фактическую сумму проверил</label>',f=>{if(f.target==='')throw new Error('Введите фактическую сумму');return {command:action==='reserve-adjust'?'reserve_adjust':'wallet_reconcile',payload:{...f,target:number(f.target),confirmed:f.confirmed==='on'}};});
+  {
    const fields=modal.querySelector('form').elements;
    const preview=document.createElement('p');
    preview.dataset.fwCountPreview='';
@@ -385,6 +407,13 @@ async function act(action,id){
     const counted=fields.target.valueAsNumber;
     preview.hidden=!wallet||!Number.isFinite(counted)||!fields.target.validity.valid;
     if(preview.hidden){preview.textContent='';return;}
+    if(reserveAdjustment){
+     const delta=Math.round(counted*100)-Math.round(s.reserve*100);
+     const after=Math.round(wallet.balance*100)+delta;
+     preview.textContent=after<0?'Недостаточно денег в выбранном месте хранения.':
+      walletName(wallet)+' после исправления: '+money(after/100)+'. Всего у компании: '+money((Math.round(s.cash*100)+delta)/100)+'.';
+     return;
+    }
     const difference=Math.round(counted*100)-Math.round(wallet.balance*100);
     preview.textContent=difference<0?'По пересчёту меньше на '+money(-difference/100):difference>0?'По пересчёту больше на '+money(difference/100):'Пересчёт совпадает с учётом.';
    };
@@ -409,7 +438,25 @@ async function act(action,id){
    '<p>Фактические оплаты и история сохранятся.</p>',f=>({command:'cancel',payload:{...f,id}}));
  }
  else if(action==='wallet')form('Добавить место хранения',input('Название','name')+select('Тип','kind',[['cash','Наличные'],['bank','Банковский счёт']]),f=>({command:'wallet',payload:f}));
- else if(action==='wallet-transfer')form('Перевести деньги',select('Откуда','from',walletOptions)+select('Куда','to',walletOptions,walletOptions[1]?.[0])+input('Сумма','amount','','number')+'<p>Движение между своими счетами не создаёт доход и не уменьшает резерв.</p>',f=>({command:'wallet_transfer',payload:{...f,amount:number(f.amount)}}));
+ else if(action==='wallet-transfer'){
+  form('Перевести деньги',select('Откуда','from',walletOptions)+select('Куда','to',walletOptions,walletOptions[1]?.[0])+
+   input('Сумма','amount','','number')+'<p data-transfer-limit></p><p>Перевод меняет остатки двух мест хранения. Общая сумма денег компании сохраняется.</p>',
+   f=>({command:'wallet_transfer',payload:{...f,amount:number(f.amount)}}));
+  const {from,to,amount}=modal.querySelector('form').elements;
+  amount.required=true;
+  let previous=from.value;
+  const sync=()=>{
+   const selected=to.value;
+   for(const option of to.options)option.disabled=option.value===from.value;
+   if(selected===from.value)to.value=previous;
+   previous=from.value;
+   const wallet=s.wallets.find(w=>w.id===from.value);
+   amount.max=String(Math.max(0,wallet.balance));
+   modal.querySelector('[data-transfer-limit]').textContent='Доступно для перевода: '+money(amount.max);
+  };
+  from.addEventListener('change',sync);
+  sync();
+ }
  else if(['rule','replace-rule','salary-rule'].includes(action)){
   const old=s.rules.find(x=>x.id===id),employee=action==='salary-rule'?(state.employees||[]).find(e=>e.id===id):null;
   if(employee&&s.rules.some(r=>r.employee_id===employee.id&&!r.end_month))throw new Error('Оклад уже есть в регулярных обязательствах. Измените его с нового месяца.');
@@ -488,7 +535,28 @@ async function act(action,id){
    f=>({command:'unlink',payload:{...f,id}}));
  }
  else if(action==='history'){
-  const j=state.financialJournal,ops=[...j.operations,...(j.history||[])],actor=session.token;const r=await sb.rpc('get_financial_journal_history',{p_before:ops.length?Math.min(...ops.map(o=>o.revision)):null});if(r.error)throw r.error;if(actor!==session?.token||!owner())return;const seen=new Set(ops.map(o=>o.id));j.history=[...(j.history||[]),...(r.data||[]).filter(o=>!seen.has(o.id))];render();
+  const j=state.financialJournal,actor=session.token;
+  const ops=[...j.operations,...(j.history||[])];
+  if(historyRequest===j||j.historyComplete||!ops.length)return;
+  const cursor=Math.min(...ops.map(o=>o.revision));
+  historyRequest=j;
+  render();
+  try{
+   const response=await sb.rpc('get_financial_journal_history',{p_before:cursor});
+   if(actor!==session?.token||!owner()||j!==state.financialJournal)return;
+   if(response.error)throw response.error;
+   if(!Array.isArray(response.data))throw new Error('Не удалось загрузить историю. Повторите попытку.');
+   const seen=new Set(ops.map(o=>o.id));
+   const earlier=response.data.filter(o=>{
+    if(seen.has(o.id)||o.revision>=cursor)return false;
+    seen.add(o.id);return true;
+   });
+   j.history=[...(j.history||[]),...earlier];
+   j.historyComplete=response.data.length<100||earlier.length===0;
+  }finally{
+   if(historyRequest===j)historyRequest=null;
+   render();
+  }
  }
 }
 const moneyForms=new Set(['companyExpenseSheetOverlay','companyIncomeSheetOverlay','paymentSheetOverlay','salaryPaymentSheetOverlay','cashInvoiceOverlay']);

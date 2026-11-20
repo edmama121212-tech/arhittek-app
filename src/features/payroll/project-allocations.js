@@ -184,9 +184,12 @@ async function addProjectExpense(){
   document.getElementById('pf-expense-add-btn').disabled=true;
   try{
     if(editingProjectExpenseId){
-      const before=(state.ledger||[]).find(x=>x.id===editingProjectExpenseId);
-      const {error}=await sb.from('ledger_entries').update({description:desc,amount,entry_date}).eq('id',editingProjectExpenseId);
+      const before=(state.ledger||[]).find(x=>x.id===editingProjectExpenseId && x.project_id===projectId && x.type==='project_expense' && !x.deleted_at);
+      if(!before){showToast('Расход уже недоступен в этом проекте');return;}
+      const {data:updated,error}=await sb.from('ledger_entries').update({description:desc,amount,entry_date})
+        .eq('id',before.id).eq('project_id',projectId).eq('type','project_expense').is('deleted_at',null).select('id').maybeSingle();
       if(error) throw error;
+      if(!updated){showToast('Расход уже недоступен в этом проекте');return;}
       await logAudit('project', projectId, p?p.name:'', 'update', {
         project_expense_edited:{old:before ? ((before.description||'Расход')+' — '+fmtMoney(before.amount)) : null, new:desc+' — '+fmtMoney(amount)}
       });
@@ -209,9 +212,10 @@ async function addProjectExpense(){
       if(error) throw error;
       await logAudit('project', projectId, p?p.name:'', 'update', {project_expense_added:{old:null,new:desc+' — '+fmtMoney(amount)}});
     }
-    resetProjectExpenseEditor();
+    if(editingProjectId===projectId)resetProjectExpenseEditor();
     await loadAll();
     const total=await syncProjectExpensesTotal(projectId);
+    if(editingProjectId!==projectId)return;
     renderProjectExpenses(projectId);
     const expEl=document.getElementById('pf-expenses'); if(expEl) expEl.value=total;
     updateCompanyRemainderField(projectId);

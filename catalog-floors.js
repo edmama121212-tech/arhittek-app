@@ -8,7 +8,8 @@
     {key:'floor3', suffix:'3', label:'3-й этаж', title:'3-й этаж', area:'floor3_area', rooms:'expl3', image:4, number:3}
   ].map(Object.freeze));
   const esc = value=>String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-  const tags = card=>Array.isArray(card.tags)?card.tags:String(card.tags||'').split(',').map(t=>t.trim());
+  const tags = card=>(Array.isArray(card.tags)?card.tags:String(card.tags||'').split(','))
+    .filter(tag=>typeof tag==='string').map(tag=>tag.trim()).filter(Boolean);
   const enabled = (floor,card)=>floor.key==='basement'?tags(card).includes('Цокольный этаж'):Number(card.floors||1)>=floor.number;
   const active = card=>definitions.filter(floor=>enabled(floor,card));
   const slots = values=>Array.from({length:Math.max(6,Array.isArray(values)?values.length:0)},(_,i)=>values?.[i]||null);

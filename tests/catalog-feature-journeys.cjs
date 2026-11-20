@@ -7,7 +7,17 @@ const { chromium } = require('playwright');
 const root = path.resolve(__dirname, '..');
 const mock = fs.readFileSync(path.join(__dirname, 'mock.js'), 'utf8');
 const basement = 'Цокольный этаж';
-const cards = [
+const mansard = process.argv.includes('--mansard');
+const cards = (mansard ? [
+  [15,'Альфа',1,['Мансарда','Современный']],
+  [14,'Альфа',1,['Современный']],
+  [13,'Старая башня',3,'Классический, Мансарда'],
+  [12,'Два уровня',2,[basement,'Мансарда','Классический']],
+  [11,'Компактный',1,[' Мансарда ','Классический']],
+  [10,'Новая башня',4,['Плоская кровля','Современный']],
+  [9,'Мансарда в названии',2,null],
+  [8,'Снята с продажи',1,['Мансарда']],
+] : [
   [15, 'Склон', 1, [basement,'Современный']],
   [14, 'Склон', 2, ['Плоская кровля','Современный']],
   [13, 'Веранда', 2, ['Классический','Мансарда',basement]],
@@ -16,11 +26,23 @@ const cards = [
   [10, 'Дом без описания', 1, null],
   [9, 'Башня', 3, ['Классический','Мансарда']],
   [8, 'Коттедж с цоколем снят', 2, [basement,'Современный']],
-].map(([n,title,floors,tags]) => ({id:'house-'+n,project_number:n+'26',title,floors,tags,created_at:'2026-10-16',deleted_at:n===8?'2026-10-17':null,images:[],thumbnails:[]}));
+]).map(([n,title,floors,tags]) => ({id:'house-'+n,project_number:n+'26',title,floors,tags,created_at:'2026-10-16',deleted_at:n===8?'2026-10-17':null,images:[],thumbnails:[]}));
 const all = [15,14,13,12,11,10,9];
 const chosen = [15,13,12,11];
 // Each pair is a concrete, ordered shortlist both before and after lifting the requirement.
-const cases = [
+const cases = mansard ? [
+  ['Подготовить полный список мансардных домов',null,[],[15,13,12,11]],
+  ['Отобрать только компактные одноэтажные варианты',null,[['floors','1']],[15,11]],
+  ['Найти двухэтажный проект с цоколем и мансардой',null,[['floors','2'],['feature','basement']],[12]],
+  ['Отличить мансарду от плоской кровли на высоких домах',null,[['floors','3'],['feature','flat']],[13]],
+  ['Отделить одноимённый дом без мансарды',null,[['text','Альфа']],[15]],
+  ['Открыть редактор ранее внесённой карточки с текстовым перечнем особенностей',null,[['text','1326']],[13]],
+  ['Найти особенность из списка с пробелами у старой карточки',null,[['text','Компактный']],[11]],
+  ['Отобрать несколько домов в классическом стиле по размеру каталога',null,[['style','classic']],[13,12,11]],
+  ['Проверить отсутствие высоких современных домов с жилой мансардой',null,[['style','modern'],['floors','3']],[]],
+  ['Проверить заявленное в названии свойство по данным карточки',null,[['text','Мансарда в названии']],[]],
+  ['Проверить доступность снятого с продажи предложения',null,[['text','Снята с продажи']],[]],
+] : [
   ['Сравнить доступные дома с цоколем','Вернуть каталог со всеми особенностями',[],chosen,all],
   ['Найти одноэтажные дома с подземным уровнем','Вернуть одноэтажный дом без описания',[['floors','1']],[15,11],[15,11,10]],
   ['Сверить цоколь в старой карточке с тегами строкой','Сохранить классический стиль при расширении выбора',[['style','classic']],[13,11],[13,11,9]],
@@ -73,7 +95,8 @@ const frames = page => page.evaluate(() => new Promise(resolve => requestAnimati
             await filter.click();
           }
         }
-        for(const [control,key,task,expected] of [['UI-0059','basement',restrictTask,restricted],['UI-0058','all',clearTask,cleared]]){
+        const actions = mansard ? [['UI-0060','mansard',restrictTask,restricted]] : [['UI-0059','basement',restrictTask,restricted],['UI-0058','all',clearTask,cleared]];
+        for(const [control,key,task,expected] of actions){
           const button = view.locator('[data-feature="'+key+'"]');
           await button.evaluate(el=>el.addEventListener('click',()=>{window.featureClicked=performance.now()},{capture:true,once:true}));
           await button.click();
@@ -93,18 +116,39 @@ const frames = page => page.evaluate(() => new Promise(resolve => requestAnimati
           assert.ok(rect.width>0&&rect.height>0&&rect.x>=0&&rect.x+rect.width<=390);
           assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
           let result;
+          const cardSteps=[];
           if(expected.length){
             const last=expected.at(-1);
             await rows.last().click();
             const record=cards.find(c=>c.id==='house-'+last);
+            cardSteps.push('открыть карточку №'+record.project_number);
             const frame=page.frameLocator('#cardViewerFrame');
             await frame.locator('.project-title').getByText(record.title,{exact:true}).waitFor();
             assert.equal((await frame.locator('.swiper-num').innerText()).trim(),'№ '+record.project_number);
             assert.equal(await page.locator('#cardViewerCounter').innerText(),expected.length+' / '+expected.length);
             assert.equal(await page.locator('#cardViewerNext').isVisible(),false);
-            await page.locator('#cardViewerOverlay').getByTitle('Закрыть').click();
+            if(mansard){
+              assert.ok(await frame.locator('.tags').getByText('Мансарда',{exact:true}).isVisible());
+              if(criteria.some(([type,value])=>type==='feature'&&value==='basement')){
+                assert.ok(await frame.locator('.tags').getByText(basement,{exact:true}).isVisible());
+              }
+            }
+            const editLegacy=mansard && criteria.some(([type,value])=>type==='text'&&value==='1326');
+            if(editLegacy){
+              await page.locator('#cardViewerEditBtn').click();
+              await page.locator('#cardEditorOverlay').waitFor();
+              assert.equal(await page.locator('#ce-num').inputValue(),record.project_number);
+              assert.ok((await page.locator('#ce-tags').inputValue()).includes('Мансарда'));
+              assert.equal(await page.locator('#feature-btn-mansard').getAttribute('aria-pressed'),'true');
+              if(process.env.FEATURE_OUTPUT)await page.screenshot({path:path.join(process.env.FEATURE_OUTPUT,'mansard-editor.png')});
+              cardSteps.push('открыть редактор, сверить номер и тег, закрыть');
+              await page.locator('#cardEditorOverlay button[onclick="closeCardEditor()"]').click();
+            }else{
+              await page.locator('#cardViewerOverlay').getByTitle('Закрыть').click();
+              cardSteps.push('закрыть карточку');
+            }
             assert.deepEqual(await rowNumbers(),expected.map(n=>n+'26'));
-            result='Открылась карточка №'+record.project_number+'; после возврата подборка сохранилась.';
+            result='Открылась карточка №'+record.project_number+(editLegacy?' и её редактор с выбранной мансардой':'')+'; после возврата подборка сохранилась.';
           } else {
             assert.ok(await view.getByText('Проекты не найдены',{exact:true}).isVisible());
             assert.equal(await page.locator('#cardViewerOverlay').isVisible(),false);
@@ -122,7 +166,7 @@ const frames = page => page.evaluate(() => new Promise(resolve => requestAnimati
           const shortList=expected.map(n=>'№'+n+'26').join(', ')||'пусто';
           assert.equal(await page.evaluate(()=>__writes.filter(w=>w.table==='project_cards').length),0);
           report.push([control+'/'+(i+1),task,build,new Date().toISOString(),'Chromium '+browser.version()+'; локальные синтетические карточки; 390×844',
-            steps.join(' → ')+(expected.length?' → последняя карточка → закрыть':''),shortList+'. '+result,ms,
+            steps.concat(cardSteps).join(' → '),shortList+'. '+result,ms,
             'Кнопка '+Math.round(rect.width)+'×'+Math.round(rect.height)+' px; активна одна особенность; без горизонтальной прокрутки. '+(hasConstraint?message:'Видна сводка полного каталога.'),
             (hasConstraint?'Размер подборки виден до открытия карточки.':'Весь каталог доступен после одного нажатия.')+' Остальные условия сохранены.','PASS']);
         }
@@ -130,7 +174,7 @@ const frames = page => page.evaluate(() => new Promise(resolve => requestAnimati
       finally { await ctx.close(); }
     }
     if(errors.length)throw Error(errors.join('\n'));
-    if(process.env.FEATURE_OUTPUT)fs.writeFileSync(path.join(process.env.FEATURE_OUTPUT,'QA_CATALOG_FEATURE_RUNS.csv'),'\uFEFF'+report.map(r=>r.map(quote).join(',')).join('\n')+'\n');
+    if(process.env.FEATURE_OUTPUT)fs.writeFileSync(path.join(process.env.FEATURE_OUTPUT,mansard?'QA_CATALOG_MANSARD_RUNS.csv':'QA_CATALOG_FEATURE_RUNS.csv'),'\uFEFF'+report.map(r=>r.map(quote).join(',')).join('\n')+'\n');
     console.log(report.length-1+' сценариев пройдено. Сборка '+build);
   } finally {await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

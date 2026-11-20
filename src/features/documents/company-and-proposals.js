@@ -116,7 +116,13 @@ function getCompanyExportSections(scope){
   function exportCompanyInfo(){
     const scope = document.getElementById('co-export-scope').value;
     const format = document.getElementById('co-export-format').value;
-    const sections = getCompanyExportSections(scope);
+    const sections = getCompanyExportSections(scope).filter(section=>
+      Object.values(section.data).some(value=>value.trim())
+    );
+    if(!sections.length){
+      showToast('Заполните реквизиты выбранного раздела');
+      return;
+    }
     const companyName = (document.getElementById('co-short-name').value || document.getElementById('co-full-name').value || 'Company').trim();
     const safeName = companyName.replace(/[^a-zA-Zа-яА-Я0-9]/g,'_').slice(0,40) || 'Company';
     const fileBase = 'Rekvizity-' + safeName + '-' + financeToday();
@@ -136,9 +142,12 @@ function getCompanyExportSections(scope){
         doc.setFont('Roboto','normal'); doc.setFontSize(10); doc.setTextColor(60);
         Object.entries(sec.data).forEach(([label,val])=>{
           if(!val) return;
-          if(y>280){ doc.addPage(); y=20; }
           const lines = doc.splitTextToSize(label+': '+val, pageWidth - margin*2);
-          lines.forEach(line=>{ doc.text(line, margin, y); y+=5.5; });
+          for(const line of lines){
+            if(y>280){ doc.addPage(); y=20; }
+            doc.text(line, margin, y);
+            y+=5.5;
+          }
   });
         y += 4;
   });

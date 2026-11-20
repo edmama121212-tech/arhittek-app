@@ -4961,6 +4961,7 @@ document.addEventListener('change', (e)=>{
 function openProjectSheet(id){
   if(id&&!isProjectMember(id)){showToast("Нет доступа к этому проекту");return;}
   resetProjectNumberDraft();
+  resetProjectExpenseEditor();
   editingProjectId = id;
   projectMembersDraftUnverified=!!state.projectMembersDataError;
   const overlay = document.getElementById('projectSheetOverlay');
@@ -6450,9 +6451,10 @@ function renderPaymentHistory(projectId){
 
 // ---- Расходы проекта (несколько записей: на что + сумма + дата) ----
 let editingProjectExpenseId = null;
+const expenseRubles = new Intl.NumberFormat('ru-RU',{style:'currency',currency:'RUB',minimumFractionDigits:0,maximumFractionDigits:2});
 
 function editProjectExpense(entryId){
-  const e=(state.ledger||[]).find(x=>x.id===entryId && x.type==='project_expense');
+  const e=(state.ledger||[]).find(x=>x.id===entryId && x.project_id===editingProjectId && x.type==='project_expense' && !x.deleted_at);
   if(!e) return;
   editingProjectExpenseId=entryId;
   document.getElementById('pf-expense-desc').value=e.description||'';
@@ -6486,17 +6488,17 @@ function renderProjectExpenses(projectId){
   el.innerHTML = `<div class="card" style="margin-bottom:0;">` + items.map(e=>`
     <div class="list-item">
       <div style="min-width:0;">
-        <div class="li-name">${escapeHtml(e.description||'Расход')} — <span style="color:var(--red)">−${fmtMoney(e.amount)}</span></div>
+        <div class="li-name">${escapeHtml(e.description||'Расход')} — <span style="color:var(--red)">−${expenseRubles.format(e.amount)}</span></div>
         <div class="li-meta">${fmtDate(e.entry_date)}</div>
       </div>
       <div class="li-actions">
-        <button class="icon-btn" title="Редактировать расход" onclick="editProjectExpense('${e.id}')">✏️</button>
+        <button class="icon-btn" title="Редактировать расход" data-edit-expense="${escapeHtml(e.id)}" onclick="editProjectExpense('${e.id}')">✏️</button>
         <button class="icon-btn danger" title="Удалить расход" onclick="deleteProjectExpense('${e.id}','${projectId}')">🗑</button>
       </div>
     </div>`).join('') +
     `<div class="list-item" style="border-top:1px solid var(--line-strong);">
       <div class="li-name" style="font-weight:700;">Итого расходов</div>
-      <div class="li-name" style="font-weight:700;color:var(--red);">−${fmtMoney(total)}</div>
+      <div class="li-name" style="font-weight:700;color:var(--red);">−${expenseRubles.format(total)}</div>
     </div></div>`;
 }
 
@@ -6702,9 +6704,12 @@ async function addProjectExpense(){
   document.getElementById('pf-expense-add-btn').disabled=true;
   try{
     if(editingProjectExpenseId){
-      const before=(state.ledger||[]).find(x=>x.id===editingProjectExpenseId);
-      const {error}=await sb.from('ledger_entries').update({description:desc,amount,entry_date}).eq('id',editingProjectExpenseId);
+      const before=(state.ledger||[]).find(x=>x.id===editingProjectExpenseId && x.project_id===projectId && x.type==='project_expense' && !x.deleted_at);
+      if(!before){showToast('Расход уже недоступен в этом проекте');return;}
+      const {data:updated,error}=await sb.from('ledger_entries').update({description:desc,amount,entry_date})
+        .eq('id',before.id).eq('project_id',projectId).eq('type','project_expense').is('deleted_at',null).select('id').maybeSingle();
       if(error) throw error;
+      if(!updated){showToast('Расход уже недоступен в этом проекте');return;}
       await logAudit('project', projectId, p?p.name:'', 'update', {
         project_expense_edited:{old:before ? ((before.description||'Расход')+' — '+fmtMoney(before.amount)) : null, new:desc+' — '+fmtMoney(amount)}
       });
@@ -6727,9 +6732,10 @@ async function addProjectExpense(){
       if(error) throw error;
       await logAudit('project', projectId, p?p.name:'', 'update', {project_expense_added:{old:null,new:desc+' — '+fmtMoney(amount)}});
     }
-    resetProjectExpenseEditor();
+    if(editingProjectId===projectId)resetProjectExpenseEditor();
     await loadAll();
     const total=await syncProjectExpensesTotal(projectId);
+    if(editingProjectId!==projectId)return;
     renderProjectExpenses(projectId);
     const expEl=document.getElementById('pf-expenses'); if(expEl) expEl.value=total;
     updateCompanyRemainderField(projectId);
@@ -7019,7 +7025,11 @@ async function savePayment(){
 
 document.getElementById('pf-add-payment').addEventListener('click', ()=>openPaymentSheet());
 document.getElementById('pf-expense-add-btn').addEventListener('click', addProjectExpense);
-document.getElementById('pf-expense-cancel-edit')?.addEventListener('click', resetProjectExpenseEditor);
+document.getElementById('pf-expense-cancel-edit')?.addEventListener('click', ()=>{
+  const edited=document.querySelector('#pf-expenses-list [data-edit-expense="'+CSS.escape(editingProjectExpenseId)+'"]');
+  resetProjectExpenseEditor();
+  edited?.focus();
+});
 document.getElementById('paymentSheetClose').addEventListener('click', ()=>{
   document.getElementById('paymentSheetOverlay').classList.remove('active');
 });
@@ -10179,7 +10189,13 @@ function getCompanyExportSections(scope){
   function exportCompanyInfo(){
     const scope = document.getElementById('co-export-scope').value;
     const format = document.getElementById('co-export-format').value;
-    const sections = getCompanyExportSections(scope);
+    const sections = getCompanyExportSections(scope).filter(section=>
+      Object.values(section.data).some(value=>value.trim())
+    );
+    if(!sections.length){
+      showToast('Заполните реквизиты выбранного раздела');
+      return;
+    }
     const companyName = (document.getElementById('co-short-name').value || document.getElementById('co-full-name').value || 'Company').trim();
     const safeName = companyName.replace(/[^a-zA-Zа-яА-Я0-9]/g,'_').slice(0,40) || 'Company';
     const fileBase = 'Rekvizity-' + safeName + '-' + financeToday();
@@ -10199,9 +10215,12 @@ function getCompanyExportSections(scope){
         doc.setFont('Roboto','normal'); doc.setFontSize(10); doc.setTextColor(60);
         Object.entries(sec.data).forEach(([label,val])=>{
           if(!val) return;
-          if(y>280){ doc.addPage(); y=20; }
           const lines = doc.splitTextToSize(label+': '+val, pageWidth - margin*2);
-          lines.forEach(line=>{ doc.text(line, margin, y); y+=5.5; });
+          for(const line of lines){
+            if(y>280){ doc.addPage(); y=20; }
+            doc.text(line, margin, y);
+            y+=5.5;
+          }
   });
         y += 4;
   });
@@ -11229,7 +11248,7 @@ function renderCardsStats(){
     const f = Number(c.floors) || 1;
     if(f >= 3) byFloors['3plus']++;
     else byFloors[f] = (byFloors[f]||0) + 1;
-    const tags = Array.isArray(c.tags) ? c.tags : (c.tags||'').split(',').map(t=>t.trim());
+    const tags = CatalogFloors.tags(c);
     if(tags.includes('Классический')) classic++;
     if(tags.includes('Современный')) modern++;
   });
@@ -11290,7 +11309,7 @@ function renderCardsList(){
     const featureTag = featureTagMap[currentFeatureFilter];
     if(featureTag){
       filtered = filtered.filter(c => {
-        const tags = Array.isArray(c.tags) ? c.tags : (c.tags||'').split(',').map(t=>t.trim());
+        const tags = CatalogFloors.tags(c);
         return tags.includes(featureTag);
       });
     }
@@ -11298,7 +11317,7 @@ function renderCardsList(){
   if(currentCardStyleFilter !== 'all'){
     const styleKey = currentCardStyleFilter === 'classic' ? 'Классический' : 'Современный';
     filtered = filtered.filter(c => {
-      const tags = Array.isArray(c.tags) ? c.tags : (c.tags||'').split(',').map(t=>t.trim());
+      const tags = CatalogFloors.tags(c);
       return tags.includes(styleKey);
     });
   }
@@ -11400,14 +11419,14 @@ function openCardEditor(id){
       setVal('ce-beds', card.beds??'');
       setVal('ce-baths', card.baths??'');
       setVal('ce-price', card.price||'');
-      setVal('ce-tags', (card.tags||[]).join(', '));
+      const cardTags = CatalogFloors.tags(card);
+      setVal('ce-tags', cardTags.join(', '));
       CatalogFloors.definitions.forEach(f=>{
         setVal('ce-area'+f.suffix,card[f.area]||'');
         setVal('ce-expl'+f.suffix,CatalogFloors.normalizeRooms(card[f.rooms],{expectedArea:card[f.area]}).map(r=>`${r.name}: ${r.area}`).join('\n'));
       });
       selectFloors(card.floors||2);
       // Load style and features from tags
-      const cardTags = Array.isArray(card.tags) ? card.tags : (card.tags||'').split(',').map(t=>t.trim());
       if(cardTags.includes('Классический')) selectStyle('classic');
       else if(cardTags.includes('Современный')) selectStyle('modern');
       else { ceStyleSelected=''; ['classic','modern'].forEach(id=>{const btn=document.getElementById('style-btn-'+id);if(btn){btn.style.borderColor='#374151';btn.style.background='transparent';btn.style.color='#6b7280';}}); }

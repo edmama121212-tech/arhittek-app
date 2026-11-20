@@ -21,6 +21,9 @@ const quote = value => '"' + String(value).replaceAll('"', '""') + '"';
 const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 
 (async () => {
+  const reserveAdjust = process.argv.includes('--reserve-adjust');
+  const walletTransfer = process.argv.includes('--wallet-transfer');
+  const expensePlan = process.argv.includes('--expense-plan');
   const cancelPlan = process.argv.includes('--cancel-plan');
   const paymentLinks = process.argv.includes('--payment-links');
   const unlinkPayments = process.argv.includes('--unlink-payments');
@@ -29,7 +32,7 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
   const recurring = process.argv.includes('--recurring');
   const homeActions = process.argv.includes('--home-actions');
   const cashFloor = process.argv.includes('--cash-floor');
-  const dedicated = cancelPlan || paymentLinks || unlinkPayments || stopRule || createRule || recurring || homeActions || cashFloor;
+  const dedicated = reserveAdjust || expensePlan || walletTransfer || cancelPlan || paymentLinks || unlinkPayments || stopRule || createRule || recurring || homeActions || cashFloor;
   const db = new PGlite();
   await db.waitReady;
   const browser = await chromium.launch({executablePath:process.env.BROWSER_EXECUTABLE || undefined, args:['--no-sandbox']});
@@ -74,7 +77,7 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
     if(!dedicated) await command('plan',plan(cases[6][1],'expense',day,2000),uuid(50));
     if(!dedicated) await command('pay',{key:idFor(5),amount:407.75,wallet_id:wallet,date:day,reason:'Часть суммы уже оплачена'},uuid(51));
 
-    const ctx = await browser.newContext({hasTouch:createRule||stopRule||paymentLinks||unlinkPayments||cancelPlan,locale:'ru-RU',viewport:{width:390,height:844},serviceWorkers:'block',reducedMotion:'reduce'});
+    const ctx = await browser.newContext({hasTouch:walletTransfer||createRule||stopRule||paymentLinks||unlinkPayments||cancelPlan,locale:'ru-RU',viewport:{width:390,height:844},serviceWorkers:'block',reducedMotion:'reduce'});
     await ctx.addInitScript({path:path.join(__dirname,'mock.js')});
     const servedHashes = {};
     await ctx.route('**/*',route=>{
@@ -117,6 +120,21 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
     const csv = [['Элемент','Сборка SHA256 index/finance-workspace','Дата UTC','Браузер','Задача','Данные','Шаги','Результат и связи','Открытие до 2 кадров, мс','Завершение до 2 кадров, мс','Визуальная проверка','Удобство','Статус']];
     if(qa) fs.mkdirSync(qa,{recursive:true});
     await page.locator('.nav-btn[data-view="view-finance"]').click();
+    if(reserveAdjust){
+      await require('./helpers/reserve-adjust-ui.cjs')({page,fw,command,snap,wallet,uuid,build,browser,expectedTile,twoFrames});
+      assert.deepEqual(errors,[]);
+      return;
+    }
+    if(walletTransfer){
+      await require('./helpers/wallet-transfer-ui.cjs')({page,fw,command,snap,day,wallet,uuid,build,browser,expectedTile,twoFrames});
+      assert.deepEqual(errors,[]);
+      return;
+    }
+    if(expensePlan){
+      await require('./helpers/expense-plan-ui.cjs')({page,fw,snap,day,shift,build,browser,expectedTile,twoFrames});
+      assert.deepEqual(errors,[]);
+      return;
+    }
     if(cancelPlan){
       await require('./helpers/cancel-plan-ui.cjs')({page,fw,db,command,snap,day,wallet,uuid,shift,build,browser,expectedTile,twoFrames,errors});
       assert.deepEqual(errors,[]);

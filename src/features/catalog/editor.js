@@ -168,7 +168,7 @@ function renderCardsStats(){
     const f = Number(c.floors) || 1;
     if(f >= 3) byFloors['3plus']++;
     else byFloors[f] = (byFloors[f]||0) + 1;
-    const tags = Array.isArray(c.tags) ? c.tags : (c.tags||'').split(',').map(t=>t.trim());
+    const tags = CatalogFloors.tags(c);
     if(tags.includes('Классический')) classic++;
     if(tags.includes('Современный')) modern++;
   });
@@ -229,7 +229,7 @@ function renderCardsList(){
     const featureTag = featureTagMap[currentFeatureFilter];
     if(featureTag){
       filtered = filtered.filter(c => {
-        const tags = Array.isArray(c.tags) ? c.tags : (c.tags||'').split(',').map(t=>t.trim());
+        const tags = CatalogFloors.tags(c);
         return tags.includes(featureTag);
       });
     }
@@ -237,7 +237,7 @@ function renderCardsList(){
   if(currentCardStyleFilter !== 'all'){
     const styleKey = currentCardStyleFilter === 'classic' ? 'Классический' : 'Современный';
     filtered = filtered.filter(c => {
-      const tags = Array.isArray(c.tags) ? c.tags : (c.tags||'').split(',').map(t=>t.trim());
+      const tags = CatalogFloors.tags(c);
       return tags.includes(styleKey);
     });
   }
@@ -339,14 +339,14 @@ function openCardEditor(id){
       setVal('ce-beds', card.beds??'');
       setVal('ce-baths', card.baths??'');
       setVal('ce-price', card.price||'');
-      setVal('ce-tags', (card.tags||[]).join(', '));
+      const cardTags = CatalogFloors.tags(card);
+      setVal('ce-tags', cardTags.join(', '));
       CatalogFloors.definitions.forEach(f=>{
         setVal('ce-area'+f.suffix,card[f.area]||'');
         setVal('ce-expl'+f.suffix,CatalogFloors.normalizeRooms(card[f.rooms],{expectedArea:card[f.area]}).map(r=>`${r.name}: ${r.area}`).join('\n'));
       });
       selectFloors(card.floors||2);
       // Load style and features from tags
-      const cardTags = Array.isArray(card.tags) ? card.tags : (card.tags||'').split(',').map(t=>t.trim());
       if(cardTags.includes('Классический')) selectStyle('classic');
       else if(cardTags.includes('Современный')) selectStyle('modern');
       else { ceStyleSelected=''; ['classic','modern'].forEach(id=>{const btn=document.getElementById('style-btn-'+id);if(btn){btn.style.borderColor='#374151';btn.style.background='transparent';btn.style.color='#6b7280';}}); }

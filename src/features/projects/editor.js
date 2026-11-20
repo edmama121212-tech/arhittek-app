@@ -141,6 +141,7 @@ document.addEventListener('change', (e)=>{
 function openProjectSheet(id){
   if(id&&!isProjectMember(id)){showToast("Нет доступа к этому проекту");return;}
   resetProjectNumberDraft();
+  resetProjectExpenseEditor();
   editingProjectId = id;
   projectMembersDraftUnverified=!!state.projectMembersDataError;
   const overlay = document.getElementById('projectSheetOverlay');

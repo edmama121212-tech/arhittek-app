@@ -150,7 +150,11 @@ async function savePayment(){
 
 document.getElementById('pf-add-payment').addEventListener('click', ()=>openPaymentSheet());
 document.getElementById('pf-expense-add-btn').addEventListener('click', addProjectExpense);
-document.getElementById('pf-expense-cancel-edit')?.addEventListener('click', resetProjectExpenseEditor);
+document.getElementById('pf-expense-cancel-edit')?.addEventListener('click', ()=>{
+  const edited=document.querySelector('#pf-expenses-list [data-edit-expense="'+CSS.escape(editingProjectExpenseId)+'"]');
+  resetProjectExpenseEditor();
+  edited?.focus();
+});
 document.getElementById('paymentSheetClose').addEventListener('click', ()=>{
   document.getElementById('paymentSheetOverlay').classList.remove('active');
 });
