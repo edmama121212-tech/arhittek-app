@@ -61,6 +61,13 @@ try{
   }finally{ARHITTEKBudget.calculate=calculate;}
  }),0);
  eq(await page.locator('.studio-money-grid article span').allTextContents(),['Сейф','Расходы за месяц','Ожидаем до конца месяца']);
+ const safeShortcut=page.locator('#financeWorkspace .studio-money-grid [data-fw="wallet-reconcile"]');
+ eq(await safeShortcut.isVisible(),true);
+ await safeShortcut.click();
+ eq(await page.locator('#financeWorkspaceModal h2').textContent(),'Сверка сейфа');
+ eq(await page.locator('#financeWorkspaceModal [name="target"]').count(),1);
+ await page.locator('#financeWorkspaceModal [data-close]').click();
+ eq(await page.locator('#financeWorkspaceModal').count(),0);
  // A legacy installation can retain separate wallets. Their funds cannot be attributed to the safe.
  const split=await page.evaluate(()=>{
   const journal=state.financialJournal,workspace=journal.workspace;
