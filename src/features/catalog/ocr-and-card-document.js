@@ -228,12 +228,7 @@ async function uploadCardImages(images,targetId=ceCurrentId){
     if(typeof img === 'string' && (img.startsWith('http://') || img.startsWith('https://'))){ out.push(img); continue; }
     if(typeof img === 'string' && img.startsWith('data:')){
       try{
-        const blob = dataURLtoBlob(img),contentType=blob.type==='image/png'?'image/png':'image/jpeg',extension=contentType==='image/png'?'png':'jpg';
-        const fileName = `cards/${targetId||'new'}_${Date.now()}_${i}_${Math.random().toString(36).slice(2,7)}.${extension}`;
-        const {error: upErr} = await sb.storage.from('expense-photos').upload(fileName, blob, {contentType, upsert:true});
-        if(upErr) throw upErr;
-        const {data: urlData} = sb.storage.from('expense-photos').getPublicUrl(fileName);
-        out.push(urlData.publicUrl || img);
+        out.push(await storeCatalogMedia(img,targetId || 'new'));
       }catch(e){
         console.warn('Не удалось выгрузить фото карточки в Storage, оставляю base64', e);
         out.push(img); // безопасный фоллбэк — карточка не теряет фото
