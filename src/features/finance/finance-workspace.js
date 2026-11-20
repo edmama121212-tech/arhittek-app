@@ -143,12 +143,12 @@ function render(){
   const month=s.as_of.slice(0,7);
   const expected=s.items.filter(item=>item.direction==='income'&&item.due_date?.startsWith(month))
     .reduce((sum,item)=>sum+Math.round(number(item.remaining)*100),0)/100;
-  const tile=(label,value,note='')=>'<article><span>'+esc(label)+'</span><strong>'+money(value)+'</strong>'+(note?'<small>'+esc(note)+'</small>':'')+'</article>';
+  const tile=(label,value,note='',reconcile=false)=>'<article><span>'+esc(label)+'</span><strong>'+money(value)+'</strong>'+(note?'<small>'+esc(note)+'</small>':'')+(reconcile?'<button type="button" class="fw-safe-reconcile" data-fw="wallet-reconcile" title="Указать фактический остаток после пересчёта" '+(locked||!s.active?'disabled':'')+'>Сверить сейф</button>':'')+'</article>';
   const storage=safe?safe.balance:s.cash;
   const deficits=(storage<0?row(safe?'Недостача по учёту сейфа':'Недостача по учёту денег',-storage):'')+
    (s.reserve<0?availableRows(s.reserve):'');
   root.innerHTML='<h1>Финансы</h1>'+(pending()?'<div class="fw-warning">Операция ожидает подтверждения '+btn('Проверить','retry')+'</div>':'')+
-    '<div class="studio-money-grid">'+tile(safe?'Сейф':'Всего денег',Math.max(0,storage),'По учёту')+tile('Расходы за месяц',monthActuals(state,s,constructionIds(state,getFinancialProjects())).expense)+
+    '<div class="studio-money-grid">'+tile(safe?'Сейф':'Всего денег',Math.max(0,storage),'По учёту',!!safe)+tile('Расходы за месяц',monthActuals(state,s,constructionIds(state,getFinancialProjects())).expense)+
     tile('Ожидаем до конца месяца',expected)+'<button type="button" data-fw-tab="more"><b>···</b>Ещё</button></div>'+(deficits?'<article class="fw-card">'+deficits+'</article>':'')+recordActions;
   bind(root,retainHeadingFocus);
   if(restoreIncomeFocus)root.querySelector('[data-fw="record-income"]')?.focus({preventScroll:true});
@@ -455,6 +455,7 @@ style.textContent += `
 #financeWorkspace .fw-group button:disabled{opacity:.45;cursor:default}
 #financeWorkspace .fw-report .fw-grid{margin-top:14px;grid-template-columns:repeat(3,minmax(0,1fr))}
 @media(max-width:740px){#financeWorkspace .fw-report .fw-grid{grid-template-columns:1fr}}
+#financeWorkspace .studio-money-grid .fw-safe-reconcile{display:flex;align-items:center;min-height:44px;margin-top:6px;padding:4px 0;border:0;background:none;color:var(--blue);font:inherit;font-size:13px;font-weight:600;cursor:pointer}#financeWorkspace .fw-safe-reconcile:disabled{opacity:.45;cursor:default}
 #financeWorkspace details>summary{cursor:pointer;min-height:44px;align-content:center}
 #financeWorkspace .fw-search{display:grid;gap:6px;margin:12px 0 18px;font-size:14px;font-weight:600}
 #financeWorkspace .fw-search input{width:100%;min-height:44px;padding:10px 14px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--text);font:inherit}
