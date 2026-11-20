@@ -4,6 +4,7 @@
 const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=n=>new Intl.NumberFormat('ru-RU',{style:'currency',currency:'RUB',maximumFractionDigits:2}).format(Number(n)||0),number=n=>Number(n)||0;
 let historyRequest=null;
+let pendingActionFocus=null;
 let tab='overview',modal=null,busy=false,refreshing=null,renderQueued=false,lastRead=0;
 const owner=()=>typeof isOwner==='function'&&isOwner(),snapshot=()=>state.financialJournal?.workspace;
 const enabled=()=>owner()&&snapshot()?.version===2;
@@ -129,7 +130,13 @@ function render(){
  const view=$('view-finance');if(!view)return;
  if(!enabled()){view.classList.remove('finance-unified');$('financeWorkspace')?.remove();if(!owner())clear();return;}
  view.classList.add('finance-unified');let root=$('financeWorkspace');if(!root){root=document.createElement('section');root.id='financeWorkspace';view.appendChild(root);}
- const retainHeadingFocus=root.querySelector('h1')===document.activeElement;
+ const focused=document.activeElement;
+ const retainHeadingFocus=root.querySelector('h1')===focused;
+ if(root.contains(focused)&&focused.matches('[data-fw]')){
+  pendingActionFocus={action:focused.dataset.fw,id:focused.dataset.id,tab};
+ }else if(focused!==document.body||pendingActionFocus?.tab!==tab||!view.classList.contains('active')){
+  pendingActionFocus=null;
+ }
  const s=snapshot(),j=state.financialJournal,balances=s.balances||{},locked=!ready()||busy,zero=s.opening_mode==='zero';
  if(!validWorkspace(j)){root.innerHTML='<article class="fw-card">Не удалось загрузить все финансовые данные. '+btn('Обновить','refresh')+'</article>';bind(root,retainHeadingFocus);return;}
  
@@ -153,7 +160,6 @@ function render(){
  if(!s.active&&zero&&['overview','forecast'].includes(tab)){root.innerHTML=html+'<article class="fw-card"><h2>Начальные остатки — 0 ₽</h2><p>Учёт включится автоматически с '+esc(fmtDate(s.start_date))+' по московскому времени. Поступления и расходы до этой даты останутся в прежнем периоде. Можно заранее внести будущие платежи и регулярные расходы.</p></article>';bind(root,retainHeadingFocus);return;}
  if(!s.active&&['overview','forecast'].includes(tab)){root.innerHTML=html+'<article class="fw-card">Точные остатки и прогноз появятся после начальной сверки. Для планирования откройте «Операции и планы».</article>';bind(root,retainHeadingFocus);return;}
  if(tab==='overview'){
-  const restoreIncomeFocus=root.querySelector('[data-fw="record-income"]')===document.activeElement;
   const month=s.as_of.slice(0,7);
   const expected=s.items.filter(item=>item.direction==='income'&&item.due_date?.startsWith(month))
     .reduce((sum,item)=>sum+Math.round(number(item.remaining)*100),0)/100;
@@ -165,7 +171,6 @@ function render(){
     '<div class="studio-money-grid">'+tile(safe?'Сейф':'Всего денег',Math.max(0,storage),'По учёту')+tile('Расходы за месяц',monthActuals(state,s,constructionIds(state,getFinancialProjects())).expense)+
     tile('Ожидаем до конца месяца',expected)+'<button type="button" data-fw-tab="more"><b>···</b>Ещё</button></div>'+(deficits?'<article class="fw-card">'+deficits+'</article>':'')+recordActions;
   bind(root,retainHeadingFocus);
-  if(restoreIncomeFocus)root.querySelector('[data-fw="record-income"]')?.focus({preventScroll:true});
   return;
  }
  if(tab==='more'||tab==='forecast'){
@@ -268,8 +273,6 @@ function render(){
   if(s.links?.length)html+='<details class="fw-card" data-fw-section="payment-links"><summary>Связи ранее внесённых оплат</summary>'+(s.links||[]).map(l=>'<div class="fw-row">'+linkDetails(l,j)+btn('Отменить связь','unlink',l.id,locked)+'</div>').join('')+'</details>';
   if(s.changes?.length)html+='<details class="fw-card" data-fw-section="plan-history"><summary>История планов и переводов</summary>'+(s.changes||[]).map(h=>'<div class="fw-card"><b>'+esc(h.after_value?.label||h.after_value?.reason||({plan:'План платежа',pay:'Фактическая оплата',rule:'Регулярное обязательство',wallet_transfer:'Перевод между счетами',reschedule:'Перенос срока',cancel:'Отмена остатка плана',wallet:'Новый счёт',stop_rule:'Остановка регулярного платежа'}[h.entity]||'Финансовое действие'))+'</b><p>'+esc(new Date(h.created_at).toLocaleString('ru-RU'))+'</p>'+(h.before_value?.amount?row('Сумма до',h.before_value.amount):'')+(h.after_value?.amount?row('Сумма после / операции',h.after_value.amount):'')+'<p>Прежний срок: '+esc(h.before_value?.due_date||'—')+' · Новый срок: '+esc(h.after_value?.due_date||'—')+'</p></div>').join('')+'</details>';
  }
- const activeAction=root.contains(document.activeElement)?document.activeElement.dataset.fw:null;
- const activeId=document.activeElement?.dataset.id;
  const openSections = new Set(Array.from(root.querySelectorAll("details[data-fw-section][open]"), element => element.dataset.fwSection));
  const search=root.querySelector('[data-fw-search]');
  const query=search?.value||'';
@@ -297,10 +300,6 @@ function render(){
  }
  for (const section of root.querySelectorAll("details[data-fw-section]")) section.open = openSections.has(section.dataset.fwSection);
  bind(root,retainHeadingFocus);
- if(activeAction){
-  const restored=[...root.querySelectorAll('[data-fw]')].find(button=>button.dataset.fw===activeAction&&button.dataset.id===activeId);
-  restored?.focus({preventScroll:true});
- }
 }
 function focusPageTitle(root){
  const heading=root.querySelector('h1');
@@ -308,6 +307,12 @@ function focusPageTitle(root){
 }
 function bind(root,retainHeadingFocus){
  if(retainHeadingFocus)focusPageTitle(root);
+ if(pendingActionFocus){
+  const {action,id}=pendingActionFocus;
+  const button=[...root.querySelectorAll('[data-fw]')].find(el=>el.dataset.fw===action&&el.dataset.id===id);
+  if(button&&!button.disabled){pendingActionFocus=null;button.focus({preventScroll:true});}
+  else if(!button&&ready())pendingActionFocus=null;
+ }
  for(const button of root.querySelectorAll('[data-fw-tab]')){
   button.onclick=()=>{
    tab=button.dataset.fwTab;
@@ -317,7 +322,10 @@ function bind(root,retainHeadingFocus){
   };
  }
  for(const button of root.querySelectorAll('[data-fw]')){
-  button.onclick=()=>act(button.dataset.fw,button.dataset.id).catch(error=>showToast(error.message));
+  button.onclick=()=>{
+   button.focus({preventScroll:true});
+   return act(button.dataset.fw,button.dataset.id).catch(error=>showToast(error.message));
+  };
  }
 }
 function input(label,name,value='',type='text'){return '<label>'+esc(label)+'<input name="'+name+'" type="'+type+'" value="'+esc(value)+'" '+(type==='number'?'min="0.01" step="0.01"':'')+'></label>';}
@@ -333,7 +341,8 @@ function form(title,html,build,options={}){
  const close=()=>{
   modal?.remove();modal=null;
   const restored=opener?.isConnected?opener:[...document.querySelectorAll('#financeWorkspace [data-fw]')].find(b=>b.dataset.fw===opener?.dataset.fw&&b.dataset.id===opener?.dataset.id);
-  restored?.focus();
+  if(restored?.disabled&&restored.dataset.fw)pendingActionFocus={action:restored.dataset.fw,id:restored.dataset.id,tab};
+  else restored?.focus();
  };
  modal.addEventListener('keydown',event=>{
   if(event.key==='Escape'){event.stopPropagation();if(!busy)close();return;}
@@ -672,7 +681,7 @@ function observeMoneyForm(overlay){if(!moneyForms.has(overlay.id))return;new Mut
 function selectedWallet(){if(!enabled()||!snapshot().active)return null;return [...document.querySelectorAll('.sheet-overlay.active .fw-wallet-select')].find(el=>el.closest('.fw-wallet-picker')?.getClientRects().length)?.value||null;}
 for(const id of moneyForms){if($(id))observeMoneyForm($(id));}
 new MutationObserver(records=>{for(const r of records)for(const node of r.addedNodes)if(node.nodeType===1)observeMoneyForm(node);}).observe(document.body,{childList:true});
-function clear(){document.querySelectorAll('.fw-wallet-picker').forEach(el=>el.remove());for(const id of moneyForms)if($(id))delete $(id).dataset.financeWallet;modal?.remove();modal=null;$('financeWorkspace')?.remove();document.getElementById('view-finance')?.classList.remove('finance-unified');}
+function clear(){pendingActionFocus=null;document.querySelectorAll('.fw-wallet-picker').forEach(el=>el.remove());for(const id of moneyForms)if($(id))delete $(id).dataset.financeWallet;modal?.remove();modal=null;$('financeWorkspace')?.remove();document.getElementById('view-finance')?.classList.remove('finance-unified');}
 const style=document.createElement('style');style.textContent=`#view-finance.finance-unified>:not(#financeWorkspace){display:none!important}#financeWorkspace{max-width:1100px;margin:auto;color:var(--text)}.fw-head,.fw-row,.fw-actions{display:flex;justify-content:space-between;align-items:center;gap:12px}.fw-head h1{margin:0;font-size:28px}.fw-head p,.fw-card p,.fw-status{font-size:13px;line-height:1.6;color:var(--text-dim)}.fw-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:20px 0}.fw-tabs button{border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:10px;padding:12px;min-height:44px;cursor:pointer}.fw-tabs .active{background:var(--blue);color:white}.fw-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.fw-card{background:var(--card);border:1px solid var(--line);padding:20px;border-radius:14px;margin-bottom:14px;min-width:0}.fw-archive-entry{content-visibility:auto;contain-intrinsic-block-size:auto 110px;overflow-wrap:anywhere}.fw-card h2{font-size:19px;margin-top:0}.fw-card h3{font-size:16px;margin:0}.fw-amount{display:block;font-size:26px;margin-top:12px}.fw-row{padding:10px 0;border-bottom:1px solid var(--line);align-items:flex-start}.fw-row>span,.fw-link-details{min-width:0;overflow-wrap:anywhere}.fw-row>strong{flex-shrink:0}.fw-actions{justify-content:flex-start;flex-wrap:wrap;margin:12px 0}.fw-card .btn,.fw-actions .btn,.fw-head .btn,.fw-warning .btn,#financeWorkspace>.btn{width:auto;min-height:44px;padding:11px 14px}.fw-warning{padding:14px;border:1px solid var(--line);border-radius:10px;line-height:1.5;margin:10px 0;color:var(--text)}.fw-form label{display:grid;gap:7px;margin:14px 0;font-size:13px}.fw-form input,.fw-form select{font:inherit;width:100%;box-sizing:border-box;min-height:44px;border:1px solid var(--line);border-radius:8px;padding:11px;background:var(--card);color:var(--text)}.fw-form{max-width:700px}.fw-wallet-fixed{display:grid;gap:5px;margin:14px 0;font-size:13px}.fw-wallet-fixed strong{font-weight:600}.fw-form-error{color:var(--red)}.fw-table{overflow:auto}.fw-table table{border-collapse:collapse;width:100%;font-size:13px}.fw-table td,.fw-table th{padding:10px;border-bottom:1px solid var(--line);white-space:nowrap}@media(max-width:600px){.fw-grid{grid-template-columns:1fr}.fw-row{flex-wrap:wrap}.fw-head{align-items:flex-start}.fw-tabs button{flex:1 0 27%}.fw-card{padding:16px}.fw-amount{font-size:24px}}`;document.head.appendChild(style);
 style.textContent += `
 #paymentSheetOverlay[data-prior-receipt] .fw-wallet-picker{display:none}

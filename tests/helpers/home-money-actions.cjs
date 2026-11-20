@@ -47,6 +47,25 @@ module.exports = async function run({page,fw,db,command,snap,day,wallet,uuid,shi
   await fw.getByRole('button',{name:/Ещё/}).click();
   assert.equal(await noExpense.count(),0);
   await home();
+  const focusAcrossRefresh=await fw.evaluate(root=>{
+    const income=()=>root.querySelector('[data-fw="record-income"]');
+    const prior=loadAllInFlight;
+    const results=[];
+    try{
+      for(const move of [false,true]){
+        income().focus();
+        loadAllInFlight=true;
+        ARHITTEKFinanceWorkspace.render();
+        results.push(income().disabled);
+        if(move)root.querySelector('[data-fw-tab="more"]').focus();
+        loadAllInFlight=false;
+        ARHITTEKFinanceWorkspace.render();
+        results.push(document.activeElement===income());
+      }
+    }finally{loadAllInFlight=prior;ARHITTEKFinanceWorkspace.render();}
+    return results;
+  });
+  assert.deepEqual(focusAcrossRefresh,[true,true,true,false],'A refresh restores focus unless the user has moved on');
     for(const [i,[mode,scenario,amount]] of modes.entries()){
       const title=scenario;
       if(mode==='wallet'){
