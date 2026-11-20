@@ -45,6 +45,7 @@ function populateProjectFormSelects(){
 document.addEventListener('change', (e)=>{
   if(e.target && e.target.id === 'pf-category'){
     renderProjectNumberField();
+    updateProjectBalancePreview();
     const cat = findCategory(e.target.value);
     if(cat && cat.department_id){
       document.getElementById('pf-department').value = cat.department_id;
@@ -82,10 +83,32 @@ function recalcLiveFeeSummary(){
 }
 
 
+function outstandingProjectBalance(price,advance){
+  return Math.max(0,Math.round(price*100)-Math.round(advance*100))/100;
+}
+
+function updateProjectBalancePreview(){
+  const project=state.projects.find(p=>p.id===editingProjectId);
+  const category=document.getElementById('pf-category').value;
+  const construction=project?isConstructionProject({...project,category_id:category}):isConstructionCategory(category);
+  const received=document.getElementById('pf-advance'),balance=document.getElementById('pf-balance');
+  document.querySelector('label[for="pf-balance"]').textContent=construction?'Деньги объекта, ₽':'Долг клиента, ₽';
+  balance.title=construction?'Полученные деньги минус выплаты из бюджета объекта':'Рассчитывается автоматически: Цена − Получено';
+  document.getElementById('pf-payment-help').textContent=construction
+    ?'Деньги объекта рассчитываются по поступлениям и выплатам в журнале.'
+    :'Долг клиента — цена договора за вычетом полученной оплаты.';
+  if(construction){
+    const cash=project?getConstructionFinancials(project):{received:0,balance:0};
+    received.value=cash.received;
+    balance.value=cash.balance;
+  }else{
+    received.value=project?.advance??'';
+    balance.value=outstandingProjectBalance(Number(document.getElementById('pf-price').value)||0,Number(received.value)||0);
+  }
+}
+
 document.getElementById('pf-price').addEventListener('input', ()=>{
-  const price = parseFloat(document.getElementById('pf-price').value) || 0;
-  const advance = parseFloat(document.getElementById('pf-advance').value) || 0;
-  document.getElementById('pf-balance').value = Math.max(0, price - advance);
+  updateProjectBalancePreview();
   recalcLiveFeeSummary();
 });
 ['pf-expenses','pf-feepercent','pf-feebase','pf-feepaid','pf-co-employee','pf-co-feepercent','pf-co-feepaid'].forEach(id=>{
@@ -141,7 +164,10 @@ document.addEventListener('change', (e)=>{
 function openProjectSheet(id){
   if(id&&!isProjectMember(id)){showToast("Нет доступа к этому проекту");return;}
   resetProjectNumberDraft();
+  resetProjectExpenseEditor();
   editingProjectId = id;
+  const statusSelect = document.getElementById('pf-status');
+  statusSelect.querySelector('[data-current-only]')?.remove();
   projectMembersDraftUnverified=!!state.projectMembersDataError;
   const overlay = document.getElementById('projectSheetOverlay');
   if(!overlay.classList.contains('active')) projectSheetOpener=document.activeElement;
@@ -150,16 +176,33 @@ function openProjectSheet(id){
   const title = document.getElementById('projectSheetTitle');
   const deleteBtn = document.getElementById('pf-delete');
 
+  // Archived assignees stay visible on their original project only.
+  for(const option of overlay.querySelectorAll('option[data-archived-assignee]')) option.remove();
   if(id){
     const p = state.projects.find(x=>x.id===id);
     if(!p) return;
+    for(const [employeeId,selectIds] of [[p.employee_id,['pf-employee','pf-employee-fee']],[p.co_employee_id,['pf-co-employee','pf-co-employee-fee']]]){
+      const employee=state.employees.find(e=>e.id===employeeId);
+      if(employee?.active!==false) continue;
+      for(const selectId of selectIds){
+        const option=new Option(employee.name+' (архив)',employee.id);
+        option.dataset.archivedAssignee='true';
+        document.getElementById(selectId).add(option);
+      }
+    }
     editingProjectLoadedAt = p.updated_at || null;
     title.textContent = 'Редактировать проект';
     deleteBtn.style.display = '';
     document.getElementById('pf-name').value = p.number_series ? p.project_title || '' : p.name || '';
     document.getElementById('pf-category').disabled = false;
     document.getElementById('pf-category').value = p.category_id || '';
-    document.getElementById('pf-status').value = p.status_id || '';
+    if(p.status_id && !Array.from(statusSelect.options).some(option=>option.value===p.status_id)){
+      const status = findStatus(p.status_id);
+      const option = new Option(status?.name || 'Прежний статус',p.status_id);
+      option.dataset.currentOnly = '';
+      statusSelect.add(option);
+    }
+    statusSelect.value = p.status_id || '';
     document.getElementById('pf-payment').value = p.payment_status || 'Ждём оплату';
     const cat = findCategory(p.category_id);
     document.getElementById('pf-department').value = cat ? (cat.department_id || '') : '';
@@ -174,7 +217,7 @@ function openProjectSheet(id){
     document.getElementById('pf-advance').value = p.advance ?? '';
     document.getElementById('pf-balance').value = p.balance ?? '';
     document.getElementById('pf-area').value = p.area ?? '';
-    document.getElementById('pf-expenses').value = p.expenses ?? '';
+    document.getElementById('pf-expenses').value = getProjectExpenses(p);
     document.getElementById('pf-feepaid').value = p.fee_paid ?? '';
     document.getElementById('pf-feepercent').value = p.fee_percent ?? '';
     document.getElementById('pf-feebase').value = p.fee_base || '';
@@ -208,11 +251,6 @@ function openProjectSheet(id){
     // Для Архитектуры и Дизайна интерьера она не нужна.
     const isConstr = isConstructionProject(p);
     document.getElementById('pf-open-as-object').style.display = isConstr ? '' : 'none';
-    if(isConstr){
-      const financials=getConstructionFinancials(p);
-      document.getElementById('pf-advance').value=financials.received;
-      document.getElementById('pf-balance').value=financials.balance;
-    }
     // Для строительных объектов расходы считаются из накладных (вкладка «Стройка»),
     // а не из этого списка — прячем блок, чтобы не путал устаревшим/нерелевантным числом.
     const expBlock = document.getElementById('pf-expenses-block');
@@ -220,25 +258,10 @@ function openProjectSheet(id){
       expBlock.style.display = isConstr ? 'none' : '';
       const expField = document.getElementById('pf-expenses');
       if(expField){
-        expField.value = isConstr ? getProjectExpenses(p) : (p.expenses ?? '');
         expField.title = isConstr ? 'Считается из накладных объекта (вкладка «Стройка»)' : 'Складывается из списка расходов ниже';
       }
     }
 
-    // История изменений по проекту
-    renderProjectHistory(id);
-    const histToggle = document.getElementById('pf-history-toggle');
-    const histList = document.getElementById('pf-history-list');
-    if(histToggle && histList){
-      histList.style.display = 'none';
-      histToggle.textContent = '📋 Показать историю изменений';
-      histToggle.onclick = function(){
-        const shown = histList.style.display !== 'none';
-        histList.style.display = shown ? 'none' : '';
-        histToggle.textContent = shown ? '📋 Показать историю изменений' : '📋 Скрыть историю изменений';
-        if(!shown) renderProjectHistory(id);
-      };
-    }
   }else{
     editingProjectLoadedAt = null;
     title.textContent = 'Новый проект';
@@ -283,9 +306,21 @@ function openProjectSheet(id){
     renderStagesList(null);
     renderTasksList(null);
     document.getElementById('pf-open-as-object').style.display = 'none';
-    const histList0 = document.getElementById('pf-history-list');
-    if(histList0){ histList0.style.display = 'none'; histList0.innerHTML = '<div class="empty-state">Сохраните проект, чтобы вести историю</div>'; }
   }
+  updateProjectBalancePreview();
+  const historyToggle = document.getElementById('pf-history-toggle');
+  const historyList = document.getElementById('pf-history-list');
+  historyList.style.display = 'none';
+  historyList.replaceChildren();
+  historyToggle.setAttribute('aria-expanded','false');
+  historyToggle.textContent = 'Показать историю изменений';
+  historyToggle.onclick = ()=>{
+    const open = historyToggle.getAttribute('aria-expanded') !== 'true';
+    historyToggle.setAttribute('aria-expanded',String(open));
+    historyToggle.textContent = open ? 'Скрыть историю изменений' : 'Показать историю изменений';
+    historyList.style.display = open ? '' : 'none';
+    if(open) renderProjectHistory(editingProjectId);
+  };
 
   renderProjectNumberField();
   if(!id)void refreshProjectNumbers();
@@ -312,6 +347,7 @@ async function saveProject(){
   if(projectSaveInFlight) return;
   if(state.projectMembersDataError||projectMembersDraftUnverified){showToast('Состав команды не загружен. Обновите приложение перед сохранением проекта.');return;}
   if(!await prepareProjectNumberSave()||projectSaveInFlight)return;
+  const priceField=document.getElementById('pf-price');
   const wantedMemberIds=[...new Set(currentProjectMembers.map(m=>m.employee_id).filter(Boolean))];
   const price = parseFloat(document.getElementById('pf-price').value) || 0;
   const advance = parseFloat(document.getElementById('pf-advance').value) || 0;
@@ -321,17 +357,24 @@ async function saveProject(){
     return;
   }
 
+  const priorPrice=state.projects.find(p=>p.id===editingProjectId)?.price;
+  if(priceField.validity.badInput || (priceField.validity.stepMismatch && price!==Number(priorPrice))){
+    showToast('Введите цену в рублях с точностью до копейки');
+    priceField.focus();
+    return;
+  }
+
   const addressInput = document.getElementById('pf-address').value.trim();
-  if(addressInput){
-    const normalize = s => (s||'').trim().toLowerCase().replace(/\s+/g,' ');
-    const dupe = state.projects.find(p =>
-      p.id !== editingProjectId &&
-      !p.deleted_at &&
-      normalize(p.address) === normalize(addressInput)
+  const normalizeAddress = value => String(value || '').trim().toLowerCase().replace(/\s+/g,' ');
+  const currentProject = state.projects.find(project => project.id === editingProjectId);
+  if(addressInput && normalizeAddress(addressInput) !== normalizeAddress(currentProject?.address)){
+    const dupe = state.projects.find(project =>
+      project.id !== editingProjectId && !project.deleted_at &&
+      normalizeAddress(project.address) === normalizeAddress(addressInput)
     );
     if(dupe){
-      const proceed = confirm(`Объект с адресом «${addressInput}» уже есть в системе («${dupe.name}»). Всё равно создать ещё один?`);
-      if(!proceed) return;
+      const action = editingProjectId ? 'Сохранить этот адрес в текущем проекте?' : 'Создать новый проект по этому адресу?';
+      if(!confirm(`Адрес «${addressInput}» уже указан в проекте «${dupe.name}». ${action}`)) return;
     }
   }
 
@@ -369,7 +412,7 @@ async function saveProject(){
   // фактических приходов/прямых оплат/расходов после сохранения и никогда
   // не перезаписывается общей формулой price - advance.
   if(!isConstr){
-    payload.balance = Math.max(0, price - advance);
+    payload.balance = outstandingProjectBalance(price,advance);
     payload.expenses = Math.max(0, directExpensesInput);
   }
 

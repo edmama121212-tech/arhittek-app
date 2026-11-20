@@ -5,8 +5,12 @@ function renderEmployees(){
   const card = document.getElementById('employeesCard');
   let list = state.employees.slice();
   if(employeeSearchQuery.trim()){
-    const q = employeeSearchQuery.trim().toLowerCase();
-    list = list.filter(e=>(e.name||'').toLowerCase().includes(q) || (e.role||'').toLowerCase().includes(q));
+    const normalize = text => text.toLocaleLowerCase('ru').replaceAll('ё','е');
+    const words = normalize(employeeSearchQuery.trim()).split(/\s+/);
+    list = list.filter(employee => {
+      const details = normalize([employee.name, employee.role].join(' '));
+      return words.every(word => details.includes(word));
+    });
   }
   if(!list.length){
     card.innerHTML = '<div class="empty-state">Сотрудники не найдены</div>';
@@ -30,6 +34,12 @@ function populateEmployeeFormSelects(){
   // used elsewhere if needed
 }
 
+let constructionFollowsRole=false;
+document.getElementById('ef-see-construction').addEventListener('change',()=>{constructionFollowsRole=false;});
+document.getElementById('ef-role').addEventListener('change',event=>{
+  if(constructionFollowsRole)document.getElementById('ef-see-construction').checked=canSeeConstructionForRole(event.target.value);
+});
+
 function openEmployeeSheet(id){
   if(!isOwner())return;
   employeeFormGeneration++;
@@ -38,7 +48,6 @@ function openEmployeeSheet(id){
   const title = document.getElementById('empSheetTitle');
   const deleteBtn = document.getElementById('ef-delete');
   const pinField = document.getElementById('ef-pin-field');
-  const cardEditField = document.getElementById('ef-card-edit-field');
   const isAdmin = session && session.isAdmin;
 
   const roleSelect = document.getElementById('ef-role');
@@ -63,9 +72,9 @@ function openEmployeeSheet(id){
       const option=new Option(e.role,e.role);option.dataset.legacyRole='true';roleSelect.add(option);
     }
     roleSelect.value=e.role||'Сотрудник';
+    constructionFollowsRole=e.can_see_construction==null;
     document.getElementById('ef-active').value = e.active===false ? 'false' : 'true';
     document.getElementById('ef-pin').value = '';
-    document.getElementById('ef-can-edit-cards').checked = !!e.can_edit_cards;
     // Если поля can_see_* ещё не заданы явно (null) — подставляем текущее фактическое поведение по роли, как отправную точку
     document.getElementById('ef-see-projects').checked = (e.can_see_projects === null || e.can_see_projects === undefined) ? canSeeProjectsForRole(e.role) : !!e.can_see_projects;
     document.getElementById('ef-see-construction').checked = (e.can_see_construction === null || e.can_see_construction === undefined) ? canSeeConstructionForRole(e.role) : !!e.can_see_construction;
@@ -73,27 +82,25 @@ function openEmployeeSheet(id){
     document.getElementById('ef-fixed-salary').value = e.fixed_salary ?? '';
     document.getElementById('ef-fixed-salary-row').style.display = e.is_salaried ? '' : 'none';
     pinField.style.display = isAdmin ? '' : 'none';
-    if(cardEditField) cardEditField.style.display = isAdmin ? '' : 'none';
     const sectionsField = document.getElementById('ef-sections-field');
-    if(sectionsField) sectionsField.style.display = isAdmin ? '' : 'none';
+    if(sectionsField) sectionsField.style.display = isAdmin && id !== session.employeeId ? '' : 'none';
     const salaryField = document.getElementById('ef-salary-field');
     if(salaryField) salaryField.style.display = isAdmin ? '' : 'none';
   }else{
     title.textContent = 'Новый сотрудник';
+    constructionFollowsRole=true;
     deleteBtn.style.display = 'none';
     deleteBtn.textContent = 'Удалить';
     document.getElementById('ef-name').value = '';
     document.getElementById('ef-role').value = 'Сотрудник';
     document.getElementById('ef-active').value = 'true';
     document.getElementById('ef-pin').value = '';
-    document.getElementById('ef-can-edit-cards').checked = false;
     document.getElementById('ef-see-projects').checked = true;
     document.getElementById('ef-see-construction').checked = false;
     document.getElementById('ef-is-salaried').checked = false;
     document.getElementById('ef-fixed-salary').value = '';
     document.getElementById('ef-fixed-salary-row').style.display = 'none';
     pinField.style.display = isAdmin ? '' : 'none';
-    if(cardEditField) cardEditField.style.display = isAdmin ? '' : 'none';
     const sectionsField2 = document.getElementById('ef-sections-field');
     if(sectionsField2) sectionsField2.style.display = isAdmin ? '' : 'none';
     const salaryField2 = document.getElementById('ef-salary-field');
@@ -131,9 +138,11 @@ async function saveEmployee(){
       // Редактирование — меняем PIN, только если поле не пустое
       payload.pin_code = pinInput;
     }
-    payload.can_edit_cards = document.getElementById('ef-can-edit-cards').checked;
-    payload.can_see_projects = document.getElementById('ef-see-projects').checked;
-    payload.can_see_construction = document.getElementById('ef-see-construction').checked;
+    if(employeeId !== session.employeeId){
+      payload.can_see_projects = document.getElementById('ef-see-projects').checked;
+      const construction=document.getElementById('ef-see-construction').checked;
+      payload.can_see_construction=constructionFollowsRole&&construction===canSeeConstructionForRole(payload.role)?null:construction;
+    }
     payload.is_salaried = document.getElementById('ef-is-salaried').checked;
     payload.fixed_salary = payload.is_salaried ? (parseFloat(document.getElementById('ef-fixed-salary').value) || 0) : 0;
   }

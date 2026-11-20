@@ -99,7 +99,15 @@ async function adjustReserve(){
  const preview=()=>{const target=Number($('journalReserve').value);$('journalReservePreview').textContent=$('journalReserve').value!==''&&Number.isFinite(target)&&target>=0?'Изменение резерва: '+money(target-before)+'. Все деньги после корректировки: '+money(cash+target-before):'';};
  $('journalReserve').addEventListener('input',preview);preview();
 }
-function reverse(id){const snap=state.financialJournal,o=[...snap.operations,...(snap.history||[])].find(x=>x.id===id);if(!o)return;sheet('Отмена финансовой записи','<p>'+esc(o.reason)+'</p><p>Исходная запись сохранится в истории. Сервер проверит, что зависимые распределения позволяют отмену.</p>'+reasonField(),async()=>({command:'reverse',revision:snap.revision,payload:{operation:id,reason:reason()}}));}
+function reverse(id,title){
+ const snap=state.financialJournal,operation=[...snap.operations,...(snap.history||[])].find(o=>o.id===id);
+ if(!operation)return;
+ const change=-num(operation.cash_delta);
+ const effect=change>0?'Вернётся в место хранения':change<0?'Будет списано из места хранения':'Изменение общей суммы денег';
+ sheet('Отмена записи №'+operation.revision,'<p>'+esc(title||operation.reason)+'</p>'+row(effect,Math.abs(change))+
+  '<p>Исходная запись и причина отмены сохранятся в истории.</p>'+reasonField(),
+  async()=>({command:'reverse',revision:snap.revision,payload:{operation:id,reason:reason()}}));
+}
 function panel(id,html){let p=$('cash-panel-'+id);if(!p){const target=document.querySelector('.finance-visual-panel[data-fin-panel="'+id+'"]');if(!target)return;target.classList.add('cash-managed');p=document.createElement('section');p.id='cash-panel-'+id;target.appendChild(p);}p.innerHTML=html;}
 const btn=(text,action,id='')=>'<button class="btn btn-secondary" data-journal="'+action+'" data-id="'+esc(id)+'">'+esc(text)+'</button>';
 const row=(label,value)=>'<div class="fee-row"><div class="fl">'+esc(label)+'</div><div class="fv">'+money(value)+'</div></div>';
@@ -162,7 +170,7 @@ async function safeFetch(input,options={}){
 }
 document.addEventListener('click',async e=>{const button=e.target.closest('[data-journal]');if(!button||!ready())return;button.disabled=true;try{
  const action=button.dataset.journal,id=button.dataset.id;
- if(action==='adjust-reserve')await adjustReserve();else if(action==='history')await olderHistory();else if(action==='activate')await activate();else if(action==='close')await closeProject(id);else if(action==='transfer')transfer();else if(action==='reconcile')reconcile();else if(action==='reverse')reverse(id);else if(action==='income')openCompanyIncomeSheet(null);
+ if(action==='adjust-reserve')await adjustReserve();else if(action==='history')await olderHistory();else if(action==='activate')await activate();else if(action==='close')await closeProject(id);else if(action==='transfer')transfer();else if(action==='reconcile')reconcile();else if(action==='reverse')reverse(id,button.closest('[data-fw-operation]')?.querySelector('h3')?.textContent);else if(action==='income')openCompanyIncomeSheet(null);
  }catch(error){showToast(error.message);}finally{button.disabled=false;}});
 function clear(){modal?.remove();modal=null;$('journalSalaryField')?.remove();}
 window.ARHITTEKJournal={adjustReserve,clear,active,valid,budget,renderFinance,salaryField,salaryDescription,safeFetch};

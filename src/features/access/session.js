@@ -3,6 +3,7 @@
 // ============================================================
 let session = null; // {employeeId, name, isAdmin}
 let loginSelectedEmployee = null;
+let loginAttemptVersion = 0;
 
 // Permissions come only from the current server session, never saved admin flags.
 let verifiedAccess=null;
@@ -81,6 +82,8 @@ function applyAccessVisibility(){
   for(const id of ['openCompanyBtn','openPriceListBtn','exportXlsxBtn','openTimesheetBtn','settingsBtn','more-admin-sections','openFamilyTreeBtn','cardViewerPdfBtn']){
     const el=document.getElementById(id);if(el)el.style.display=isOwner()?'':'none';
   }
+  const empty=document.getElementById('noEmployeeSections');
+  if(empty)empty.hidden=mode!=='staff'||canSeeProjects()||canSeeConstruction();
   const active=document.querySelector('.view.active');
   if(!active||!canAccessView(active.id)){
     document.querySelectorAll('.view.active,.nav-btn.active').forEach(el=>el.classList.remove('active'));
@@ -169,6 +172,9 @@ function showLoginScreen(){
   document.getElementById('loginStep1').style.display = '';
   document.getElementById('loginStep2').style.display = 'none';
   loginSelectedEmployee = null;
+  loginAttemptVersion++;
+  document.getElementById('loginSubmitBtn').disabled = false;
+  document.getElementById('loginPin').value = '';
 
   const list = document.getElementById('loginEmployeeList');
   const employees = state.employees.filter(e=>e.active!==false);
@@ -197,7 +203,9 @@ async function attemptLogin(){
   if(!pin){ showToast('Введите PIN-код'); return; }
 
   const submitBtn = document.getElementById('loginSubmitBtn');
-  if(submitBtn) submitBtn.disabled = true;
+  if(submitBtn.disabled) return;
+  submitBtn.disabled = true;
+  const attemptVersion = ++loginAttemptVersion;
 
   try{
     const { data, error } = await sb.rpc('verify_employee_pin', {
@@ -205,6 +213,11 @@ async function attemptLogin(){
       p_pin: pin,
     });
 
+    if(attemptVersion!==loginAttemptVersion){
+      const discarded = Array.isArray(data) ? data[0] : data;
+      if(discarded?.session_token)await sb.rpc('logout_session',{p_token:discarded.session_token});
+      return;
+    }
     if(error){
       console.error(error);
       showToast('Ошибка входа. Попробуйте ещё раз.');
@@ -240,9 +253,9 @@ async function attemptLogin(){
     if('Notification' in window && Notification.permission === 'granted') subscribeToPush();
   }catch(e){
     console.error(e);
-    showToast('Ошибка входа. Попробуйте ещё раз.');
+    if(attemptVersion===loginAttemptVersion)showToast('Ошибка входа. Попробуйте ещё раз.');
   }finally{
-    if(submitBtn) submitBtn.disabled = false;
+    if(attemptVersion===loginAttemptVersion) submitBtn.disabled = false;
   }
 }
 

@@ -184,14 +184,17 @@ async function addProjectExpense(){
   document.getElementById('pf-expense-add-btn').disabled=true;
   try{
     if(editingProjectExpenseId){
-      const before=(state.ledger||[]).find(x=>x.id===editingProjectExpenseId);
-      const {error}=await sb.from('ledger_entries').update({description:desc,amount,entry_date}).eq('id',editingProjectExpenseId);
+      const before=(state.ledger||[]).find(x=>x.id===editingProjectExpenseId && x.project_id===projectId && x.type==='project_expense' && !x.deleted_at);
+      if(!before){showToast('Расход уже недоступен в этом проекте');return;}
+      const {data:updated,error}=await sb.from('ledger_entries').update({description:desc,amount,entry_date})
+        .eq('id',before.id).eq('project_id',projectId).eq('type','project_expense').is('deleted_at',null).select('id').maybeSingle();
       if(error) throw error;
+      if(!updated){showToast('Расход уже недоступен в этом проекте');return;}
       await logAudit('project', projectId, p?p.name:'', 'update', {
         project_expense_edited:{old:before ? ((before.description||'Расход')+' — '+fmtMoney(before.amount)) : null, new:desc+' — '+fmtMoney(amount)}
       });
     }else{
-      const existing = state.ledger.filter(l=>l.project_id===projectId && l.type==='project_expense' && !l.deleted_at);
+      const existing = projectDirectExpenseRows(projectId);
       if(!existing.length && p && !isConstructionProject(p) && Number(p.expenses) > 0){
         const {error:importError}=await sb.from('ledger_entries').insert({
           type:'project_expense', project_id:projectId,
@@ -209,13 +212,15 @@ async function addProjectExpense(){
       if(error) throw error;
       await logAudit('project', projectId, p?p.name:'', 'update', {project_expense_added:{old:null,new:desc+' — '+fmtMoney(amount)}});
     }
-    resetProjectExpenseEditor();
+    if(editingProjectId===projectId)resetProjectExpenseEditor();
     await loadAll();
     const total=await syncProjectExpensesTotal(projectId);
+    if(editingProjectId!==projectId)return;
     renderProjectExpenses(projectId);
     const expEl=document.getElementById('pf-expenses'); if(expEl) expEl.value=total;
     updateCompanyRemainderField(projectId);
     const up=state.projects.find(x=>x.id===projectId); if(up) renderFeeSummaryForProject(up);
+    window.refreshProjectWorkspace?.();
     showToast(wasEditing ? 'Расход изменён' : 'Расход добавлен');
   }catch(e){ console.error(e); showToast(window.ARHITTEKCash?.insufficientFundsNotice(e)||(wasEditing ? 'Ошибка изменения расхода' : 'Ошибка добавления расхода'));
   }finally{ projectExpenseSaveInFlight=false; document.getElementById('pf-expense-add-btn').disabled=false; }
@@ -227,11 +232,13 @@ async function deleteProjectExpense(entryId, projectId){
     const {error:payoutDeleteError}=await sb.from('ledger_entries').update({deleted_at:new Date().toISOString()}).eq('id', entryId);
     if(payoutDeleteError) throw payoutDeleteError;
     await loadAll();
-    const total = await syncProjectExpensesTotal(projectId);
+    const total = await syncProjectExpensesTotal(projectId,{deletedExpense:true});
+    if(editingProjectId!==projectId)return;
     renderProjectExpenses(projectId);
     const expEl = document.getElementById('pf-expenses'); if(expEl) expEl.value = total;
     updateCompanyRemainderField(projectId);
     const up = state.projects.find(x=>x.id===projectId); if(up) renderFeeSummaryForProject(up);
+    window.refreshProjectWorkspace?.();
     showToast('Расход удалён');
   }catch(e){ console.error(e); showToast('Ошибка удаления'); }
 }
@@ -337,7 +344,7 @@ async function addLedgerEntry(){
     const {data, error} = await sb.from('ledger_entries').insert({type, project_id, description, amount, entry_date, received_by: session ? session.employeeId : null}).select().single();
     if(error) throw error;
     const proj = state.projects.find(p=>p.id===project_id);
-    await logAudit('ledger_entry', data.id, (proj?proj.name+' — ':'')+(description||ledgerTypeLabels[type]?.label||''), 'create', {});
+    await logAudit('ledger_entry', data.id, (proj?proj.name+' — ':'')+(description||ledgerTypeLabels[type]?.label||''), 'create', {_project_id:project_id});
     document.getElementById('ledgerDesc').value = '';
     document.getElementById('ledgerAmount').value = '';
     document.getElementById('ledgerDate').value = '';

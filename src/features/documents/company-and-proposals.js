@@ -1,9 +1,13 @@
 // ============================================================
 // КОМПАНИЯ (реквизиты)
 // ============================================================
+// Both first-time editors insert the same primary key, so only one can create the company card.
+const FIRST_COMPANY_ID='00000000-0000-4000-8000-000000000001';
+let companyFormRecord=null;
 function openCompanyView(){
   if(!isOwner())return;
   const c = state.companyInfo || {};
+  companyFormRecord=c.id ? {id:c.id,updated_at:c.updated_at} : null;
   document.getElementById('co-full-name').value = c.full_name || '';
   document.getElementById('co-short-name').value = c.short_name || '';
   document.getElementById('co-director').value = c.director || '';
@@ -41,7 +45,10 @@ function renderCatalogPriceSettings(){
 }
 
 async function saveCompanyInfo(){
-  if(!session?.isAdmin){showToast("Требуются права администратора");return;}
+  if(!isOwner()){showToast("Требуются права владельца");return;}
+  const button=document.getElementById('companySaveBtn');
+  if(button.disabled)return;
+  const record=companyFormRecord;
   const payload = {
     full_name: document.getElementById('co-full-name').value.trim(),
     short_name: document.getElementById('co-short-name').value.trim(),
@@ -64,20 +71,33 @@ async function saveCompanyInfo(){
     updated_at: new Date().toISOString(),
   };
 
+  button.disabled=true;
   showToast('Сохранение…');
   try{
-    if(state.companyInfo && state.companyInfo.id){
-      const {error} = await sb.from('company_info').update(payload).eq('id', state.companyInfo.id);
-      if(error) throw error;
+    let request;
+    if(record){
+      request=sb.from('company_info').update(payload).eq('id',record.id);
+      request=record.updated_at==null ? request.is('updated_at',null) : request.eq('updated_at',record.updated_at);
     }else{
-      const {error} = await sb.from('company_info').insert(payload);
-      if(error) throw error;
+      const existing=await sb.from('company_info').select('id').limit(1).maybeSingle();
+      if(existing.error)throw existing.error;
+      if(!existing.data)request=sb.from('company_info').insert({...payload,id:FIRST_COMPANY_ID});
     }
+    const saved=request ? await request.select('id,updated_at').maybeSingle() : {data:null};
+    if(saved.error && (record || saved.error.code!=='23505'))throw saved.error;
+    if(!saved.data){
+      showToast('Реквизиты изменились. Откройте карточку заново и сверьте данные.');
+      await loadAll();
+      return;
+    }
+    companyFormRecord=saved.data;
     showToast('Реквизиты сохранены');
     await loadAll();
   }catch(e){
     console.error(e);
     showToast('Ошибка сохранения');
+  }finally{
+    button.disabled=false;
   }
 }
 
@@ -96,10 +116,10 @@ function getCompanyExportSections(scope){
       'Email': document.getElementById('co-email').value,
   };
     const account = {
-      'Банк': document.getElementById('co-bank-name').value,
-      'Номер счёта (р/с)': document.getElementById('co-bank-account').value,
-      'БИК банка': document.getElementById('co-bik').value,
-      'Корр. счёт': document.getElementById('co-corr-account').value,
+      'Банк': document.getElementById('co-bank-name').value.trim(),
+      'Номер счёта (р/с)': document.getElementById('co-bank-account').value.trim(),
+      'БИК банка': document.getElementById('co-bik').value.trim(),
+      'Корр. счёт': document.getElementById('co-corr-account').value.trim(),
   };
     const card = {
       'Номер карты': document.getElementById('co-card-number').value,
@@ -116,10 +136,17 @@ function getCompanyExportSections(scope){
   function exportCompanyInfo(){
     const scope = document.getElementById('co-export-scope').value;
     const format = document.getElementById('co-export-format').value;
-    const sections = getCompanyExportSections(scope);
+    const sections = getCompanyExportSections(scope).filter(section=>
+      Object.values(section.data).some(value=>value.trim())
+    );
+    if(!sections.length){
+      showToast('Заполните реквизиты выбранного раздела');
+      return;
+    }
     const companyName = (document.getElementById('co-short-name').value || document.getElementById('co-full-name').value || 'Company').trim();
     const safeName = companyName.replace(/[^a-zA-Zа-яА-Я0-9]/g,'_').slice(0,40) || 'Company';
-    const fileBase = 'Rekvizity-' + safeName + '-' + financeToday();
+    const exportName = {general:'Общие', account:'Расчётный_счёт', card:'Карта', all:'Все_реквизиты'}[scope];
+    const fileBase = 'Rekvizity-' + safeName + '-' + exportName + '-' + financeToday();
 
     if(format==='pdf'){
       const { jsPDF } = window.jspdf;
@@ -136,9 +163,12 @@ function getCompanyExportSections(scope){
         doc.setFont('Roboto','normal'); doc.setFontSize(10); doc.setTextColor(60);
         Object.entries(sec.data).forEach(([label,val])=>{
           if(!val) return;
-          if(y>280){ doc.addPage(); y=20; }
           const lines = doc.splitTextToSize(label+': '+val, pageWidth - margin*2);
-          lines.forEach(line=>{ doc.text(line, margin, y); y+=5.5; });
+          for(const line of lines){
+            if(y>280){ doc.addPage(); y=20; }
+            doc.text(line, margin, y);
+            y+=5.5;
+          }
   });
         y += 4;
   });
@@ -274,6 +304,25 @@ function registerPdfFonts(doc){
 
 function pdfMoney(n){
   return kpNumber(n) + ' руб.';
+}
+
+function kpExportRequisites(data){
+  const fields = [];
+  const methods = [];
+  if(data.showCompany){
+    fields.push(['Компания', data.company], ['ИНН', data.inn], ['КПП', data.kpp],
+      ['ОГРН', data.ogrn], ['Фактический адрес', data.officeAddr], ['Телефон', data.companyPhone]);
+  }
+  if(data.showAccount){
+    fields.push(['Р/с', data.bankAcc], ['Банк', data.bankName], ['БИК', data.bik], ['К/с', data.corrAccount]);
+    if(data.bankAcc) methods.push('расчётный счёт');
+  }
+  if(data.showCard){
+    fields.push(['Карта для оплаты', data.cardNumber], ['Получатель', data.cardHolder], ['Банк карты', data.cardBank]);
+    if(data.cardNumber) methods.push('банковская карта');
+  }
+  const title = 'Реквизиты исполнителя' + (methods.length ? ' (оплата: ' + methods.join(', ') + ')' : '');
+  return {title, rows: fields.filter(([, value])=>value)};
 }
 
 function exportKpToPdf(){
@@ -427,44 +476,14 @@ function exportKpToPdf(){
 
   finalY += 14;
 
-  // Requisites block
-  const showAnyReq = data.showCompany || data.showAccount || data.showCard;
-  if(showAnyReq){
+  const requisites = kpExportRequisites(data);
+  if(requisites.rows.length){
     if(finalY > 250){ doc.addPage(); finalY = 20; }
     doc.setDrawColor(180); doc.line(margin, finalY, pageWidth-margin, finalY); finalY += 6;
     doc.setFont('Roboto','bold'); doc.setFontSize(9); doc.setTextColor(0);
-    const reqTitle = ['Реквизиты исполнителя'];
-    const methods = [];
-    if(data.showAccount) methods.push('расчётный счёт');
-    if(data.showCard) methods.push('банковская карта');
-    if(methods.length) reqTitle.push(`(оплата: ${methods.join(', ')})`);
-    doc.text(reqTitle.join(' '), margin, finalY); finalY += 5;
+    doc.text(requisites.title, margin, finalY); finalY += 5;
     doc.setFont('Roboto','normal'); doc.setFontSize(8); doc.setTextColor(50);
-
-    let reqRows = [];
-
-    if(data.showCompany){
-      if(data.company) reqRows.push(`Компания: ${data.company}`);
-      if(data.inn) reqRows.push(`ИНН: ${data.inn}${data.kpp?' | КПП: '+data.kpp:''}${data.ogrn?' | ОГРН: '+data.ogrn:''}`);
-      if(data.officeAddr) reqRows.push(`Фактический адрес: ${data.officeAddr}`);
-      if(data.companyPhone) reqRows.push(`Тел.: ${data.companyPhone}`);
-    }
-
-    if(data.showAccount){
-      if(!data.bankAcc) reqRows.push('⚠ Реквизиты счёта не заполнены — заполните в разделе «Компания»');
-      if(data.bankAcc) reqRows.push(`Р/с: ${data.bankAcc}`);
-      if(data.bankName) reqRows.push(`Банк: ${data.bankName}`);
-      if(data.bik) reqRows.push(`БИК: ${data.bik}${data.corrAccount?' | К/с: '+data.corrAccount:''}`);
-    }
-
-    if(data.showCard){
-      if(!data.cardNumber && !data.cardHolder) reqRows.push('⚠ Реквизиты карты не заполнены — заполните в разделе «Компания»');
-      if(data.cardNumber) reqRows.push(`Карта для оплаты: ${data.cardNumber}`);
-      if(data.cardHolder) reqRows.push(`Получатель: ${data.cardHolder}`);
-      if(data.cardBank) reqRows.push(`Банк карты: ${data.cardBank}`);
-    }
-
-    reqRows.forEach(r=>{ for(const line of doc.splitTextToSize(r,pageWidth-2*margin)){
+    requisites.rows.forEach(([label,value])=>{ for(const line of doc.splitTextToSize(label+': '+value,pageWidth-2*margin)){
       if(finalY>268){doc.addPage();finalY=20;}
       doc.text(line,margin,finalY);finalY+=4.5;
     } });
@@ -476,7 +495,6 @@ function exportKpToPdf(){
 
   if(finalY > 272){doc.addPage();finalY=20;}
   doc.text('ARHITTEK — архитектурное проектирование, дизайн интерьера, ремонт под ключ', margin, finalY);
-  pdfCompanyAddress(doc, margin, finalY+5, 0, data.officeAddr);
 
   const fileName = kpFileName(data, 'pdf');
   deliverDocumentPdf(doc,fileName);
@@ -495,9 +513,14 @@ function exportKpToXlsx(){
   rows.push(['Дата', fmtDate(data.date)]);
   rows.push([]);
   if(data.comment) rows.push(['Комментарий', data.comment]);
-  rows.push(['№','Услуга','Объём','Ед.','По тарифу, ₽ за ед.','Для клиента, ₽ за ед.','Сумма, ₽']);
+  const preliminary=data.services.some(service=>service.preliminaryArea);
+  const headings=['№','Услуга','Объём','Ед.','По тарифу, ₽ за ед.','Для клиента, ₽ за ед.','Сумма, ₽'];
+  if(preliminary)headings.push('Основание расчёта');
+  rows.push(headings);
   data.services.forEach((s,i)=>{
-    rows.push([i+1, s.name, s.qty, s.unit, s.listRate, s.rate, s.sum]);
+    const line=[i+1, s.name, s.qty, s.unit, s.listRate, s.rate, s.sum];
+    if(s.preliminaryArea)line.push('Предварительная площадь');
+    rows.push(line);
   });
   rows.push([]);
   rows.push(['', '', '', '', '', 'Стоимость до скидок:', data.beforeDiscounts]);
@@ -507,6 +530,7 @@ function exportKpToXlsx(){
   rows.push(['', '', '', '', '', data.advancePercent===100?'Оплата (100%):':'Аванс (50%):', data.advance]);
   rows.push(['', '', '', '', '', 'Остаток:', data.remainder]);
 
+  if(preliminary)rows.push(['Итог предварительный и зависит от уточнённой площади отмеченных услуг.']);
   const withDesc = data.services.filter(s=>s.desc);
   if(withDesc.length){
     rows.push([]);
@@ -524,32 +548,11 @@ function exportKpToXlsx(){
     if(data.deadline) rows.push(['Срок выполнения', data.deadline]);
   }
 
-  // Requisites — выбранные блоки
-  if(data.showCompany || data.showAccount || data.showCard){
-    rows.push([]);
-    const xlsMethods = [];
-    if(data.showAccount) xlsMethods.push('расчётный счёт');
-    if(data.showCard) xlsMethods.push('банковская карта');
-    rows.push([`Реквизиты исполнителя${xlsMethods.length?' (оплата: '+xlsMethods.join(', ')+')':''}`]);
-    if(data.showCompany){
-      if(data.company) rows.push(['Компания', data.company]);
-      if(data.inn) rows.push(['ИНН / КПП / ОГРН', [data.inn, data.kpp, data.ogrn].filter(Boolean).join(' / ')]);
-      if(data.officeAddr) rows.push(['Фактический адрес', data.officeAddr]);
-      if(data.companyPhone) rows.push(['Телефон', data.companyPhone]);
-    }
-    if(data.showAccount){
-      if(data.bankAcc) rows.push(['Р/с', data.bankAcc]);
-      if(data.bankName) rows.push(['Банк', data.bankName]);
-      if(data.bik) rows.push(['БИК / К/с', [data.bik, data.corrAccount].filter(Boolean).join(' / ')]);
-    }
-    if(data.showCard){
-      if(data.cardNumber) rows.push(['Карта для оплаты', data.cardNumber]);
-      if(data.cardHolder) rows.push(['Получатель', data.cardHolder]);
-      if(data.cardBank) rows.push(['Банк карты', data.cardBank]);
-    }
-  }
+  const requisites = kpExportRequisites(data);
+  if(requisites.rows.length)rows.push([], [requisites.title], ...requisites.rows);
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols']=[26,36,12,10,23,26,18,28].slice(0,headings.length).map(wch=>({wch}));
   XLSX.utils.book_append_sheet(wb, ws, 'КП');
 
   const fileName = kpFileName(data, 'xlsx');
@@ -557,8 +560,19 @@ function exportKpToXlsx(){
   showToast('Excel скачивается...');
 }
 
+function updateKpRequisitesHint(){
+  const company = state.companyInfo || {};
+  const missing = [];
+  if(document.getElementById('kp-show-account').checked && !company.bank_account)missing.push('номер расчётного счёта');
+  if(document.getElementById('kp-show-card').checked && !company.card_number)missing.push('номер карты');
+  const hint = document.getElementById('kp-requisites-hint');
+  hint.textContent = missing.length ? 'Для оплаты укажите ' + missing.join(' и ') + ' в разделе «Реквизиты».' : '';
+  hint.hidden = !missing.length;
+}
+
 function openKpView(){
   if(!canUseDocuments())return;
+  updateKpRequisitesHint();
   if(!kpServices.length) addKpService();
   if(!document.getElementById('kp-date').value) document.getElementById('kp-date').value = financeToday();
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
@@ -572,7 +586,15 @@ let editingKpId = null;
 let editingKpProjectId = null;
 let kpSaveInFlight = false;
 
+function resetKpExportSections(){
+  for(const id of ['kp-show-company','kp-show-account','kp-show-card']){
+    const field=document.getElementById(id);
+    field.checked=field.defaultChecked;
+  }
+  updateKpRequisitesHint();
+}
 function resetKpForm(){
+  resetKpExportSections();
   editingKpId = null;
   editingKpProjectId = null;
   kpServices = [];
@@ -592,6 +614,7 @@ function resetKpForm(){
 }
 
 function loadKpForm(kp){
+  if(kp.id!==editingKpId)resetKpExportSections();
   editingKpId = kp.id;
   editingKpProjectId = kp.project_id || null;
   document.getElementById('kp-client-name').value = kp.client_name || '';
@@ -734,6 +757,7 @@ function openKpViewForProject(projectId){
   document.getElementById('kp-object').value = p.address || p.name || '';
 }
 
+document.querySelector('.kp-requisites').addEventListener('change',updateKpRequisitesHint);
 document.getElementById('kpNewBtn').addEventListener('click', resetKpForm);
 document.getElementById('kpSaveBtn').addEventListener('click', saveKpForm);
 
