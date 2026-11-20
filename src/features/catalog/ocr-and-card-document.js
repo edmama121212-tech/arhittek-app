@@ -181,7 +181,7 @@ function cePreview(){
   set('prev-title',num?`Проект №${num}${title?' — '+title:''}`:'Проект №—');
   set('prev-num',num?'№ '+num:'№ —');
   set('prev-area',v('ce-area')||'—');set('prev-beds',v('ce-beds')||'—');set('prev-footprint',v('ce-footprint')||'—');
-  set('prev-floors-stat',ceFloorsSelected);set('prev-price',(v('ce-price')||'—')+' ₽');
+  set('prev-floors-stat',ceFloorsSelected??'—');set('prev-price',(v('ce-price')||'—')+' ₽');
   const tags=v('ce-tags').split(',').map(t=>t.trim()).filter(t=>t&&t!=='Цокольный этаж');
   if(ceFeatureSelected.includes('basement')&&!tags.includes('Цокольный этаж'))tags.push('Цокольный этаж');
   document.getElementById('prev-tags').innerHTML=tags.map(t=>`<div class="tag" style="color:#2a72c0">${escapeHtml(t)}</div>`).join('');
@@ -699,7 +699,7 @@ ${CatalogFloors.panels(card)}
   <div class="stats">
     <div class="stat"><div class="stat-val">${escapeHtml(String(card.total_area||'—'))}</div><div class="stat-sub">м² общая</div></div>
     <div class="stat"><div class="stat-val">${escapeHtml(String(card.beds||'—'))}</div><div class="stat-sub">спальни</div></div>
-    <div class="stat"><div class="stat-val">${escapeHtml(String(card.floors||'—'))}</div><div class="stat-sub">этажа</div></div>
+    <div class="stat"><div class="stat-val">${CatalogFloors.count(card)??'—'}</div><div class="stat-sub">этажность</div></div>
     <div class="stat"><div class="stat-val" style="font-size:12px">${escapeHtml(card.footprint||'—')}</div><div class="stat-sub">габарит</div></div>
   </div>
   <div class="tags">${tags}</div>

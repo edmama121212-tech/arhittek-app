@@ -21,6 +21,11 @@ const quote = value => '"' + String(value).replaceAll('"', '""') + '"';
 const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 
 (async () => {
+  const cardTiming = process.argv.includes('--card-timing');
+  const recordReversal = process.argv.includes('--record-reversal');
+  const cardPayment = process.argv.includes('--card-payment');
+  const receiptDate = process.argv.includes('--receipt-date');
+  const journalReverse = process.argv.includes('--journal-reverse');
   const projectSchedule = process.argv.includes('--project-schedule');
   const releasePlan = process.argv.includes('--release-plan');
   const salaryRule = process.argv.includes('--salary-rule');
@@ -37,7 +42,7 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
   const recurring = process.argv.includes('--recurring');
   const homeActions = process.argv.includes('--home-actions');
   const cashFloor = process.argv.includes('--cash-floor');
-  const dedicated = salaryRule || releasePlan || storageCreate || incomePlan || projectSchedule || reserveAdjust || expensePlan || walletTransfer || cancelPlan || paymentLinks || unlinkPayments || stopRule || createRule || recurring || homeActions || cashFloor;
+  const dedicated = recordReversal || cardTiming || journalReverse || cardPayment || receiptDate || salaryRule || releasePlan || storageCreate || incomePlan || projectSchedule || reserveAdjust || expensePlan || walletTransfer || cancelPlan || paymentLinks || unlinkPayments || stopRule || createRule || recurring || homeActions || cashFloor;
   const db = new PGlite();
   await db.waitReady;
   const browser = await chromium.launch({executablePath:process.env.BROWSER_EXECUTABLE || undefined, args:['--no-sandbox']});
@@ -48,6 +53,20 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
     for (const file of ['supabase/install-owner-access.sql', 'supabase/financial-journal.sql',
       ...fs.readdirSync(path.join(root, 'supabase/migrations')).filter(name => /^20261030|^20261031|^20261101|employee_salary_history\.sql$|(?:finance_(?:payment_integrity|link_details)|project_schedule_balance)\.sql$|recurring_(?:replacement|stop)\.sql$|(?:finance_spending_limits|storage_names|salary_rule_direction)\.sql$/.test(name)).sort().map(name => 'supabase/migrations/' + name)]) {
       await db.exec(read(file));
+    }
+    if(!recordReversal)await db.exec(read('supabase/migrations/20261120100000_record_reversal.sql'));
+    if(cardTiming){
+      await db.exec(read('supabase/receipt-timing.sql'));
+      await require('./helpers/card-timing-ui.cjs').prepare(db,uuid,root);
+    }
+    if(cardPayment){
+      await db.exec(read('supabase/receipt-timing.sql'));
+      await db.exec(read('supabase/migrations/20261120090000_project_card_payment.sql'));
+      await require('./helpers/card-payment-ui.cjs').prepare(db,uuid);
+    }
+    if(receiptDate){
+      await db.exec(read('supabase/receipt-timing.sql'));
+      await require('./helpers/receipt-date-ui.cjs').prepare(db,uuid);
     }
     if(projectSchedule){
       for(let i=0;i<12;i++)await db.query('insert into public.projects(id,name,price,advance,balance) values($1,$2,1200,200,1000)',[uuid(4200+i),'Учебный дом '+(i===4?3:i)]);
@@ -132,6 +151,21 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
     const csv = [['Элемент','Сборка SHA256 index/finance-workspace','Дата UTC','Браузер','Задача','Данные','Шаги','Результат и связи','Открытие до 2 кадров, мс','Завершение до 2 кадров, мс','Визуальная проверка','Удобство','Статус']];
     if(qa) fs.mkdirSync(qa,{recursive:true});
     await page.locator('.nav-btn[data-view="view-finance"]').click();
+    if(cardTiming){
+      await require('./helpers/card-timing-ui.cjs').run({page,fw,db,uuid,day,shift,snap,build,browser,expectedTile,twoFrames});
+      assert.deepEqual(errors,[]);
+      return;
+    }
+    if(cardPayment){
+      await require('./helpers/card-payment-ui.cjs').run({page,db,uuid,day,shift,snap,build,browser,expectedTile,twoFrames});
+      assert.deepEqual(errors,[]);
+      return;
+    }
+    if(receiptDate){
+      await require('./helpers/receipt-date-ui.cjs').run({page,fw,db,command,snap,wallet,uuid,day,shift,build,browser,expectedTile,twoFrames});
+      assert.deepEqual(errors,[]);
+      return;
+    }
     if(projectSchedule){
       await require('./helpers/project-schedule-ui.cjs')({page,fw,db,command,snap,wallet,uuid,day,shift,build,browser,expectedTile,twoFrames});
       assert.deepEqual(errors,[]);
@@ -144,6 +178,15 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
     }
     if(salaryRule){
       await require('./helpers/salary-rule-ui.cjs').run({page,fw,db,command,snap,wallet,uuid,day,shift,build,browser,expectedTile,twoFrames});
+      assert.deepEqual(errors,[]);
+      return;
+    }
+    if(recordReversal){
+      await require('./helpers/record-reversal-ui.cjs')({page,fw,db,command,snap,day,wallet,uuid,shift,build,browser,expectedTile,twoFrames,root,read});
+      assert.deepEqual(errors,[]);return;
+    }
+    if(journalReverse){
+      await require('./helpers/journal-reverse-ui.cjs')({page,fw,db,command,snap,day,wallet,uuid,build,browser,expectedTile,twoFrames});
       assert.deepEqual(errors,[]);
       return;
     }

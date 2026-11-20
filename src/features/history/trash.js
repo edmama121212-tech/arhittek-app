@@ -86,7 +86,7 @@ function renderTrash(){
     html += `<div class="trash-item">
       <div>
         <div class="li-name">${escapeHtml(name)}</div>
-        <div class="li-meta">Тариф · ${fmtMoney(t.rate||0)} / ${escapeHtml(t.unit||'м²')} · удалён ${fmtDateTime(t.deleted_at)}</div>
+        <div class="li-meta">Тариф · ${kpNumber(t.rate||0)} ₽ / ${escapeHtml(t.unit||'м²')} · удалён ${fmtDateTime(t.deleted_at)}</div>
       </div>
       <div class="li-actions">
         <button class="icon-btn" onclick="restoreItem('kp_catalog','${t.id}',${htmlJsArg(name)})">↺ Восстановить</button>

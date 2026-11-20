@@ -220,7 +220,7 @@ function setFilter(val, el){
 }
 
 function matchesFloorFilter(card, filter){
-  return String(filter) === '3' ? Number(card.floors) >= 3 : String(card.floors) === String(filter);
+  return CatalogFloors.matchesCount(card,filter);
 }
 
 function renderFeed(){
@@ -279,7 +279,7 @@ function buildCardHTML(card, idx){
     <div class="stats">
       <div class="stat"><div class="stat-val">${escapeHtml(String(card.total_area||'—'))}</div><div class="stat-sub">м² общая</div></div>
       <div class="stat"><div class="stat-val">${escapeHtml(String(card.beds||'—'))}</div><div class="stat-sub">спальни</div></div>
-      <div class="stat"><div class="stat-val">${escapeHtml(String(card.floors||'—'))}</div><div class="stat-sub">этажа</div></div>
+      <div class="stat"><div class="stat-val">${CatalogFloors.count(card)??'—'}</div><div class="stat-sub">этажность</div></div>
       <div class="stat"><div class="stat-val" style="font-size:11px">${escapeHtml(card.footprint||'—')}</div><div class="stat-sub">габарит</div></div>
     </div>
     <div class="tags">${tags}</div>

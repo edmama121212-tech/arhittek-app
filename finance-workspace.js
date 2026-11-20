@@ -226,10 +226,24 @@ function render(){
   });
   html+='<article class="fw-card"><h2>Оклады из карточек сотрудников</h2><p>Проверьте сумму и месяц начала выплат.</p>'+salaryRows.join('')+'</article>';
  }else if(tab==='archive'){
-  const events=ARHITTEKCash.cashEvents(state).filter(x=>x.date<s.start_date);
-  html+='<article class="fw-card"><h2>Операции до '+esc(fmtDate(s.start_date))+'</h2><p>Сохранённая история прежнего учёта. Эти записи не меняют новый резерв, амортизацию или остатки счетов. При необходимости прежний долг можно отдельно внести в платёжный календарь.</p></article>'+events.slice(0,100).map(x=>'<article class="fw-card"><p>'+esc(fmtDate(x.date))+' · '+esc(x.row.description||x.row.category||x.row.type||'Операция')+'</p>'+row(x.amount>0?'Поступление':'Расход',Math.abs(x.amount))+'</article>').join('')+(events.length>100?'<p>Показаны последние 100 архивных операций; остальные записи сохранены в исходных разделах.</p>':'');
+  const events=ARHITTEKCash.cashEvents(state).filter(event=>event.date<s.start_date);
+  // These receipts belong to the old period even when their stored date is only a placeholder.
+  for(const receipt of state.ledger||[]){
+   if(receipt.received_before_start&&!receipt.deleted_at&&number(receipt.amount)>0&&['advance','final_payment','income','materials_budget','construction_budget'].includes(receipt.type)){
+    events.push({row:receipt,date:null,amount:number(receipt.amount)});
+   }
+  }
+  const projects=new Map(getFinancialProjects().map(project=>[project.id,project.name]));
+  html+='<article class="fw-card"><h2>Операции до '+esc(fmtDate(s.start_date))+'</h2><p>Эти суммы относятся к прежнему учёту. Остаток в сейфе и отчёт за текущий период считаются отдельно.</p></article>';
+  if(!events.length)html+='<p class="fw-empty">Архивных операций пока нет.</p>';
+  html+=events.map(({row:source,date,amount})=>{
+   const title=historyTitle(source.description||source.category||ledgerTypeLabels[source.type]?.label||'Операция');
+   const details=[date?fmtDate(date):'Дата неизвестна',projects.get(source.project_id)].filter(Boolean).join(' · ');
+   return '<article class="fw-card fw-archive-entry"><h3>'+esc(title)+'</h3><p>'+esc(details)+'</p>'+row(amount>0?'Поступление':'Расход',Math.abs(amount))+'</article>';
+  }).join('');
  }else{
   const ops=[...(j.operations||[]),...(j.history||[])],reversed=new Set(ops.map(x=>x.reverses).filter(Boolean));
+  const revisions=new Map(ops.map(o=>[o.id,o.revision]));
   html+='<label class="fw-search">Поиск по загруженным операциям<input type="search" data-fw-search placeholder="Название, дата или сумма"></label><p data-fw-no-match hidden>Операций по запросу нет.</p>';
   const receipts=(state.ledger||[]).filter(x=>!x.deleted_at&&['advance','final_payment','income','materials_budget','construction_budget'].includes(x.type));
   const receiptCorrections=receipts.length?'<details class="fw-card" data-fw-section="receipt-corrections"><summary>Исправить дату или учёт оплаты клиента</summary><p>Оплата до начала текущего учёта сохраняется в проекте, но не прибавляется к уже подтверждённому начальному остатку. Каждое исправление требует причины.</p>'+receipts.map(x=>'<div class="fw-row"><span>'+esc((state.projects||[]).find(p=>p.id===x.project_id)?.name||'Оплата клиента')+' · '+money(x.amount)+' · '+esc(x.received_before_start?'Ранее получено, дата неизвестна':fmtDate(x.entry_date))+'</span>'+btn('Исправить оплату','correct-receipt',x.id,locked)+'</div>').join('')+'</details>':'';
@@ -238,8 +252,11 @@ function render(){
    const delta=number(o.cash_delta),reserve=o.balances_after?.reserve;
    const movement=delta<0?'Расход':delta>0?'Поступление':'Движение денег';
    const canReverse=!['activate','obligation','obligation_release','receipt_correction','historical_receipt'].includes(o.kind)&&!o.reverses&&!o.is_reversed&&!reversed.has(o.id);
+   const originalRevision=revisions.get(o.reverses);
+   const status=o.reverses?(originalRevision?'Отмена записи №'+originalRevision:'Отмена предыдущей записи'):
+    (o.is_reversed||reversed.has(o.id)?'Запись отменена':'');
    html+='<article class="fw-card" data-fw-operation data-fw-delta="'+esc(o.cash_delta)+'" data-fw-reason="'+esc(o.reason)+'"><h3>'+esc(historyTitle(o.reason))+'</h3><p>'+esc(new Date(o.created_at).toLocaleString('ru-RU',{timeZone:'Europe/Moscow'}))+' · №'+o.revision+'</p>'+
-    row(movement,Math.abs(delta))+availableRows(reserve)+
+    (status?'<p>'+esc(status)+'</p>':'')+row(movement,Math.abs(delta))+availableRows(reserve)+
     (canReverse?journalBtn('Отменить с причиной','reverse',o.id):'')+'</article>';
   }
   const atStart=j.historyComplete||ops.some(o=>o.revision===1);
@@ -347,14 +364,31 @@ async function send(command,payload,restore=null){
 function correctReceipt(id){
  if(!ready())throw new Error('Обновите финансовые данные');
  const e=(state.ledger||[]).find(x=>x.id===id);if(!e)return;
- form('Исправить оплату клиента',row('Оплата клиента',e.amount)+
+ const project=getFinancialProjects().find(p=>p.id===e.project_id);
+ const start=snapshot().start_date||(state.financialJournal.activated_at?ARHITTEKCash.day(new Date(state.financialJournal.activated_at)):null);
+ const wasCurrent=!e.received_before_start&&(!start||e.entry_date>=start);
+ form('Исправить оплату клиента',row(project?.name||'Оплата клиента',e.amount)+
  select('Как получены деньги','mode',[['date','Известна фактическая дата'],['before','До начала текущего учёта · дата неизвестна']])+
  input('Фактическая дата получения','date',e.entry_date,'date')+
- '<p>До '+esc(fmtDate(snapshot().start_date))+' — прежняя оплата: долг клиента уменьшится, но текущие деньги и выручка не увеличатся. Сумма и проект не меняются.</p>',
+ '<p data-fw-receipt-preview aria-live="polite"></p>'+ (project?'<p>Сумма оплаты и долг клиента останутся прежними.</p>':''),
  f=>({command:'correct_receipt',payload:{source:id,date:f.mode==='date'?f.date:null,before_start:f.mode==='before',reason:f.reason}}));
  const mode=modal.querySelector('[name="mode"]'),date=modal.querySelector('[name="date"]');
  mode.value=e.received_before_start?'before':'date';date.max=snapshot().as_of;
- const sync=()=>{date.disabled=mode.value==='before';};mode.onchange=sync;sync();
+ date.required=true;
+ const preview=modal.querySelector('[data-fw-receipt-preview]');
+ const sync=()=>{
+  const unknown=mode.value==='before';
+  date.disabled=unknown;
+  if(!unknown&&(!date.value||date.value>date.max)){
+   preview.textContent='Укажите дату получения денег не позднее '+fmtDate(date.max)+'.';
+   return;
+  }
+  const current=!unknown&&(!start||date.value>=start);
+  preview.textContent=current===wasCurrent?'Остаток денег сохранится.':
+   'После подтверждения учётный остаток '+(current?'увеличится':'уменьшится')+' на '+money(e.amount)+'.';
+  if(!current)preview.textContent+=' Оплата относится к периоду до начала текущего учёта.';
+ };
+ mode.onchange=sync;date.oninput=sync;sync();
 }
 async function act(action,id){
  if(!owner())return;
@@ -639,8 +673,9 @@ function selectedWallet(){if(!enabled()||!snapshot().active)return null;return [
 for(const id of moneyForms){if($(id))observeMoneyForm($(id));}
 new MutationObserver(records=>{for(const r of records)for(const node of r.addedNodes)if(node.nodeType===1)observeMoneyForm(node);}).observe(document.body,{childList:true});
 function clear(){document.querySelectorAll('.fw-wallet-picker').forEach(el=>el.remove());for(const id of moneyForms)if($(id))delete $(id).dataset.financeWallet;modal?.remove();modal=null;$('financeWorkspace')?.remove();document.getElementById('view-finance')?.classList.remove('finance-unified');}
-const style=document.createElement('style');style.textContent=`#view-finance.finance-unified>:not(#financeWorkspace){display:none!important}#financeWorkspace{max-width:1100px;margin:auto;color:var(--text)}.fw-head,.fw-row,.fw-actions{display:flex;justify-content:space-between;align-items:center;gap:12px}.fw-head h1{margin:0;font-size:28px}.fw-head p,.fw-card p,.fw-status{font-size:13px;line-height:1.6;color:var(--text-dim)}.fw-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:20px 0}.fw-tabs button{border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:10px;padding:12px;min-height:44px;cursor:pointer}.fw-tabs .active{background:var(--blue);color:white}.fw-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.fw-card{background:var(--card);border:1px solid var(--line);padding:20px;border-radius:14px;margin-bottom:14px;min-width:0}.fw-card h2{font-size:19px;margin-top:0}.fw-card h3{font-size:16px;margin:0}.fw-amount{display:block;font-size:26px;margin-top:12px}.fw-row{padding:10px 0;border-bottom:1px solid var(--line);align-items:flex-start}.fw-row>span,.fw-link-details{min-width:0;overflow-wrap:anywhere}.fw-row>strong{flex-shrink:0}.fw-actions{justify-content:flex-start;flex-wrap:wrap;margin:12px 0}.fw-card .btn,.fw-actions .btn,.fw-head .btn,.fw-warning .btn,#financeWorkspace>.btn{width:auto;min-height:44px;padding:11px 14px}.fw-warning{padding:14px;border:1px solid var(--line);border-radius:10px;line-height:1.5;margin:10px 0;color:var(--text)}.fw-form label{display:grid;gap:7px;margin:14px 0;font-size:13px}.fw-form input,.fw-form select{font:inherit;width:100%;box-sizing:border-box;min-height:44px;border:1px solid var(--line);border-radius:8px;padding:11px;background:var(--card);color:var(--text)}.fw-form{max-width:700px}.fw-wallet-fixed{display:grid;gap:5px;margin:14px 0;font-size:13px}.fw-wallet-fixed strong{font-weight:600}.fw-form-error{color:var(--red)}.fw-table{overflow:auto}.fw-table table{border-collapse:collapse;width:100%;font-size:13px}.fw-table td,.fw-table th{padding:10px;border-bottom:1px solid var(--line);white-space:nowrap}@media(max-width:600px){.fw-grid{grid-template-columns:1fr}.fw-row{flex-wrap:wrap}.fw-head{align-items:flex-start}.fw-tabs button{flex:1 0 27%}.fw-card{padding:16px}.fw-amount{font-size:24px}}`;document.head.appendChild(style);
+const style=document.createElement('style');style.textContent=`#view-finance.finance-unified>:not(#financeWorkspace){display:none!important}#financeWorkspace{max-width:1100px;margin:auto;color:var(--text)}.fw-head,.fw-row,.fw-actions{display:flex;justify-content:space-between;align-items:center;gap:12px}.fw-head h1{margin:0;font-size:28px}.fw-head p,.fw-card p,.fw-status{font-size:13px;line-height:1.6;color:var(--text-dim)}.fw-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:20px 0}.fw-tabs button{border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:10px;padding:12px;min-height:44px;cursor:pointer}.fw-tabs .active{background:var(--blue);color:white}.fw-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.fw-card{background:var(--card);border:1px solid var(--line);padding:20px;border-radius:14px;margin-bottom:14px;min-width:0}.fw-archive-entry{content-visibility:auto;contain-intrinsic-block-size:auto 110px;overflow-wrap:anywhere}.fw-card h2{font-size:19px;margin-top:0}.fw-card h3{font-size:16px;margin:0}.fw-amount{display:block;font-size:26px;margin-top:12px}.fw-row{padding:10px 0;border-bottom:1px solid var(--line);align-items:flex-start}.fw-row>span,.fw-link-details{min-width:0;overflow-wrap:anywhere}.fw-row>strong{flex-shrink:0}.fw-actions{justify-content:flex-start;flex-wrap:wrap;margin:12px 0}.fw-card .btn,.fw-actions .btn,.fw-head .btn,.fw-warning .btn,#financeWorkspace>.btn{width:auto;min-height:44px;padding:11px 14px}.fw-warning{padding:14px;border:1px solid var(--line);border-radius:10px;line-height:1.5;margin:10px 0;color:var(--text)}.fw-form label{display:grid;gap:7px;margin:14px 0;font-size:13px}.fw-form input,.fw-form select{font:inherit;width:100%;box-sizing:border-box;min-height:44px;border:1px solid var(--line);border-radius:8px;padding:11px;background:var(--card);color:var(--text)}.fw-form{max-width:700px}.fw-wallet-fixed{display:grid;gap:5px;margin:14px 0;font-size:13px}.fw-wallet-fixed strong{font-weight:600}.fw-form-error{color:var(--red)}.fw-table{overflow:auto}.fw-table table{border-collapse:collapse;width:100%;font-size:13px}.fw-table td,.fw-table th{padding:10px;border-bottom:1px solid var(--line);white-space:nowrap}@media(max-width:600px){.fw-grid{grid-template-columns:1fr}.fw-row{flex-wrap:wrap}.fw-head{align-items:flex-start}.fw-tabs button{flex:1 0 27%}.fw-card{padding:16px}.fw-amount{font-size:24px}}`;document.head.appendChild(style);
 style.textContent += `
+#paymentSheetOverlay[data-prior-receipt] .fw-wallet-picker{display:none}
 .fw-form .fw-count-confirmation{display:flex;align-items:center;gap:10px;min-height:44px;cursor:pointer}
 .fw-form .fw-count-confirmation input{width:20px;height:20px;min-height:0;padding:0;margin:0;flex:none}
 #financeWorkspace .fw-page-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 20px}

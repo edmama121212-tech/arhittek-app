@@ -116,10 +116,10 @@ function getCompanyExportSections(scope){
       'Email': document.getElementById('co-email').value,
   };
     const account = {
-      'Банк': document.getElementById('co-bank-name').value,
-      'Номер счёта (р/с)': document.getElementById('co-bank-account').value,
-      'БИК банка': document.getElementById('co-bik').value,
-      'Корр. счёт': document.getElementById('co-corr-account').value,
+      'Банк': document.getElementById('co-bank-name').value.trim(),
+      'Номер счёта (р/с)': document.getElementById('co-bank-account').value.trim(),
+      'БИК банка': document.getElementById('co-bik').value.trim(),
+      'Корр. счёт': document.getElementById('co-corr-account').value.trim(),
   };
     const card = {
       'Номер карты': document.getElementById('co-card-number').value,
@@ -145,7 +145,8 @@ function getCompanyExportSections(scope){
     }
     const companyName = (document.getElementById('co-short-name').value || document.getElementById('co-full-name').value || 'Company').trim();
     const safeName = companyName.replace(/[^a-zA-Zа-яА-Я0-9]/g,'_').slice(0,40) || 'Company';
-    const fileBase = 'Rekvizity-' + safeName + '-' + financeToday();
+    const exportName = {general:'Общие', account:'Расчётный_счёт', card:'Карта', all:'Все_реквизиты'}[scope];
+    const fileBase = 'Rekvizity-' + safeName + '-' + exportName + '-' + financeToday();
 
     if(format==='pdf'){
       const { jsPDF } = window.jspdf;
@@ -305,6 +306,25 @@ function pdfMoney(n){
   return kpNumber(n) + ' руб.';
 }
 
+function kpExportRequisites(data){
+  const fields = [];
+  const methods = [];
+  if(data.showCompany){
+    fields.push(['Компания', data.company], ['ИНН', data.inn], ['КПП', data.kpp],
+      ['ОГРН', data.ogrn], ['Фактический адрес', data.officeAddr], ['Телефон', data.companyPhone]);
+  }
+  if(data.showAccount){
+    fields.push(['Р/с', data.bankAcc], ['Банк', data.bankName], ['БИК', data.bik], ['К/с', data.corrAccount]);
+    if(data.bankAcc) methods.push('расчётный счёт');
+  }
+  if(data.showCard){
+    fields.push(['Карта для оплаты', data.cardNumber], ['Получатель', data.cardHolder], ['Банк карты', data.cardBank]);
+    if(data.cardNumber) methods.push('банковская карта');
+  }
+  const title = 'Реквизиты исполнителя' + (methods.length ? ' (оплата: ' + methods.join(', ') + ')' : '');
+  return {title, rows: fields.filter(([, value])=>value)};
+}
+
 function exportKpToPdf(){
   const data = getKpData();
   const { jsPDF } = window.jspdf;
@@ -456,44 +476,14 @@ function exportKpToPdf(){
 
   finalY += 14;
 
-  // Requisites block
-  const showAnyReq = data.showCompany || data.showAccount || data.showCard;
-  if(showAnyReq){
+  const requisites = kpExportRequisites(data);
+  if(requisites.rows.length){
     if(finalY > 250){ doc.addPage(); finalY = 20; }
     doc.setDrawColor(180); doc.line(margin, finalY, pageWidth-margin, finalY); finalY += 6;
     doc.setFont('Roboto','bold'); doc.setFontSize(9); doc.setTextColor(0);
-    const reqTitle = ['Реквизиты исполнителя'];
-    const methods = [];
-    if(data.showAccount) methods.push('расчётный счёт');
-    if(data.showCard) methods.push('банковская карта');
-    if(methods.length) reqTitle.push(`(оплата: ${methods.join(', ')})`);
-    doc.text(reqTitle.join(' '), margin, finalY); finalY += 5;
+    doc.text(requisites.title, margin, finalY); finalY += 5;
     doc.setFont('Roboto','normal'); doc.setFontSize(8); doc.setTextColor(50);
-
-    let reqRows = [];
-
-    if(data.showCompany){
-      if(data.company) reqRows.push(`Компания: ${data.company}`);
-      if(data.inn) reqRows.push(`ИНН: ${data.inn}${data.kpp?' | КПП: '+data.kpp:''}${data.ogrn?' | ОГРН: '+data.ogrn:''}`);
-      if(data.officeAddr) reqRows.push(`Фактический адрес: ${data.officeAddr}`);
-      if(data.companyPhone) reqRows.push(`Тел.: ${data.companyPhone}`);
-    }
-
-    if(data.showAccount){
-      if(!data.bankAcc) reqRows.push('⚠ Реквизиты счёта не заполнены — заполните в разделе «Компания»');
-      if(data.bankAcc) reqRows.push(`Р/с: ${data.bankAcc}`);
-      if(data.bankName) reqRows.push(`Банк: ${data.bankName}`);
-      if(data.bik) reqRows.push(`БИК: ${data.bik}${data.corrAccount?' | К/с: '+data.corrAccount:''}`);
-    }
-
-    if(data.showCard){
-      if(!data.cardNumber && !data.cardHolder) reqRows.push('⚠ Реквизиты карты не заполнены — заполните в разделе «Компания»');
-      if(data.cardNumber) reqRows.push(`Карта для оплаты: ${data.cardNumber}`);
-      if(data.cardHolder) reqRows.push(`Получатель: ${data.cardHolder}`);
-      if(data.cardBank) reqRows.push(`Банк карты: ${data.cardBank}`);
-    }
-
-    reqRows.forEach(r=>{ for(const line of doc.splitTextToSize(r,pageWidth-2*margin)){
+    requisites.rows.forEach(([label,value])=>{ for(const line of doc.splitTextToSize(label+': '+value,pageWidth-2*margin)){
       if(finalY>268){doc.addPage();finalY=20;}
       doc.text(line,margin,finalY);finalY+=4.5;
     } });
@@ -505,7 +495,6 @@ function exportKpToPdf(){
 
   if(finalY > 272){doc.addPage();finalY=20;}
   doc.text('ARHITTEK — архитектурное проектирование, дизайн интерьера, ремонт под ключ', margin, finalY);
-  pdfCompanyAddress(doc, margin, finalY+5, 0, data.officeAddr);
 
   const fileName = kpFileName(data, 'pdf');
   deliverDocumentPdf(doc,fileName);
@@ -559,33 +548,8 @@ function exportKpToXlsx(){
     if(data.deadline) rows.push(['Срок выполнения', data.deadline]);
   }
 
-  // Requisites — выбранные блоки
-  if(data.showCompany || data.showAccount || data.showCard){
-    rows.push([]);
-    const xlsMethods = [];
-    if(data.showAccount) xlsMethods.push('расчётный счёт');
-    if(data.showCard) xlsMethods.push('банковская карта');
-    rows.push([`Реквизиты исполнителя${xlsMethods.length?' (оплата: '+xlsMethods.join(', ')+')':''}`]);
-    if(data.showCompany){
-      if(data.company) rows.push(['Компания', data.company]);
-      if(data.inn) rows.push(['ИНН',data.inn]);
-      if(data.kpp) rows.push(['КПП',data.kpp]);
-      if(data.ogrn) rows.push(['ОГРН',data.ogrn]);
-      if(data.officeAddr) rows.push(['Фактический адрес', data.officeAddr]);
-      if(data.companyPhone) rows.push(['Телефон', data.companyPhone]);
-    }
-    if(data.showAccount){
-      if(data.bankAcc) rows.push(['Р/с', data.bankAcc]);
-      if(data.bankName) rows.push(['Банк', data.bankName]);
-      if(data.bik) rows.push(['БИК',data.bik]);
-      if(data.corrAccount) rows.push(['К/с',data.corrAccount]);
-    }
-    if(data.showCard){
-      if(data.cardNumber) rows.push(['Карта для оплаты', data.cardNumber]);
-      if(data.cardHolder) rows.push(['Получатель', data.cardHolder]);
-      if(data.cardBank) rows.push(['Банк карты', data.cardBank]);
-    }
-  }
+  const requisites = kpExportRequisites(data);
+  if(requisites.rows.length)rows.push([], [requisites.title], ...requisites.rows);
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
   ws['!cols']=[26,36,12,10,23,26,18,28].slice(0,headings.length).map(wch=>({wch}));
@@ -596,8 +560,19 @@ function exportKpToXlsx(){
   showToast('Excel скачивается...');
 }
 
+function updateKpRequisitesHint(){
+  const company = state.companyInfo || {};
+  const missing = [];
+  if(document.getElementById('kp-show-account').checked && !company.bank_account)missing.push('номер расчётного счёта');
+  if(document.getElementById('kp-show-card').checked && !company.card_number)missing.push('номер карты');
+  const hint = document.getElementById('kp-requisites-hint');
+  hint.textContent = missing.length ? 'Для оплаты укажите ' + missing.join(' и ') + ' в разделе «Реквизиты».' : '';
+  hint.hidden = !missing.length;
+}
+
 function openKpView(){
   if(!canUseDocuments())return;
+  updateKpRequisitesHint();
   if(!kpServices.length) addKpService();
   if(!document.getElementById('kp-date').value) document.getElementById('kp-date').value = financeToday();
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
@@ -616,6 +591,7 @@ function resetKpExportSections(){
     const field=document.getElementById(id);
     field.checked=field.defaultChecked;
   }
+  updateKpRequisitesHint();
 }
 function resetKpForm(){
   resetKpExportSections();
@@ -781,6 +757,7 @@ function openKpViewForProject(projectId){
   document.getElementById('kp-object').value = p.address || p.name || '';
 }
 
+document.querySelector('.kp-requisites').addEventListener('change',updateKpRequisitesHint);
 document.getElementById('kpNewBtn').addEventListener('click', resetKpForm);
 document.getElementById('kpSaveBtn').addEventListener('click', saveKpForm);
 

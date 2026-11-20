@@ -96,21 +96,24 @@ function renderProjectExpenses(projectId){
   const el = document.getElementById('pf-expenses-list');
   if(!el) return;
   if(!projectId){ el.innerHTML = ''; return; }
-  const items = state.ledger
-    .filter(l=>l.project_id===projectId && l.type==='project_expense')
-    .sort((a,b)=> new Date(b.entry_date) - new Date(a.entry_date) || new Date(b.created_at) - new Date(a.created_at));
-  if(!items.length){ el.innerHTML = '<div class="empty-state" style="padding:10px;">Расходов пока нет</div>'; return; }
-  const total = items.reduce((s,e)=>s+Number(e.amount||0),0);
+  const project=state.projects.find(p=>p.id===projectId);
+  const items=projectDirectExpenseRows(projectId)
+    .sort((a,b)=>new Date(b.entry_date)-new Date(a.entry_date)||new Date(b.created_at)-new Date(a.created_at));
+  const total=getProjectExpenses(project);
+  if(!items.length){
+    el.innerHTML='<div class="empty-state" style="padding:10px;">'+(total?'Ранее внесённые расходы — '+rublesWithKopecks.format(total):'Расходов пока нет')+'</div>';
+    return;
+  }
   el.innerHTML = `<div class="card" style="margin-bottom:0;">` + items.map(e=>`
     <div class="list-item">
       <div style="min-width:0;">
-        <div class="li-name">${escapeHtml(e.description||'Расход')} — <span style="color:var(--red)">−${rublesWithKopecks.format(e.amount)}</span></div>
+        <div class="li-name">${escapeHtml(ARHITTEKCash.isImportedExpense(e)?'Ранее внесённые расходы':e.description||'Расход')} — <span style="color:var(--red)">−${rublesWithKopecks.format(e.amount)}</span></div>
         <div class="li-meta">${fmtDate(e.entry_date)}</div>
       </div>
-      <div class="li-actions">
+      ${e.type==='project_expense'?`<div class="li-actions">
         <button class="icon-btn" title="Редактировать расход" data-edit-expense="${escapeHtml(e.id)}" onclick="editProjectExpense('${e.id}')">✏️</button>
         <button class="icon-btn danger" title="Удалить расход" onclick="deleteProjectExpense('${e.id}','${projectId}')">🗑</button>
-      </div>
+      </div>`:''}
     </div>`).join('') +
     `<div class="list-item" style="border-top:1px solid var(--line-strong);">
       <div class="li-name" style="font-weight:700;">Итого расходов</div>
@@ -118,19 +121,17 @@ function renderProjectExpenses(projectId){
     </div></div>`;
 }
 
-// Пересчёт суммы расходов проекта и синхронизация p.expenses (используется в расчёте гонорара).
-// Считаем и обычные расходы (project_expense), и начисления исполнителям по м² (role_payout) —
-// последние тоже уменьшают прибыль/остаток компании по проекту.
-async function syncProjectExpensesTotal(projectId){
+async function syncProjectExpensesTotal(projectId,{deletedExpense=false}={}){
   const p = state.projects.find(x=>x.id===projectId);
   if(!p) return 0;
   // role_payout — ФОТ, а не прямой расход проекта. Не записываем его в
   // projects.expenses, иначе он попадает в себестоимость и затем повторно в ФОТ.
-  const total = isConstructionProject(p)?getProjectExpenses({...p,expenses:0}):(state.ledger||[]).filter(e=>e.project_id===projectId&&e.type==='project_expense'&&!e.deleted_at).reduce((sum,e)=>sum+(Number(e.amount)||0),0);
+  const total=getProjectExpenses(deletedExpense?{...p,expenses:0}:p);
   const {error} = await sb.from('projects')
     .update({expenses: total, updated_at:new Date().toISOString()})
     .eq('id', projectId);
   if(error) throw error;
+  p.expenses=total;
   return total;
 }
 

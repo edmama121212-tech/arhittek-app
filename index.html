@@ -314,6 +314,7 @@
   select, select option{ background-color: var(--bg-soft); color: var(--text); }
   /* align-items:end — чтобы input/select в паре не съезжали, когда лейбл слева в 2 строки, а справа в 1 */
   .field-row{display:grid; grid-template-columns:1fr 1fr; gap:10px; align-items:end;}
+  @media(max-width:480px){#view-company .company-bank-codes{grid-template-columns:minmax(0,1fr);}}
   .field-row3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; align-items:end;}
   .field-row > .field, .field-row3 > .field{margin-bottom:10px; min-width:0;}
   /* min-width:0 обязателен: date/number-инпуты имеют большой min-content и иначе ломают равные колонки грида */
@@ -533,6 +534,8 @@
   }
   .yn-btn.selected{background:var(--blue-soft); border-color:rgba(0,113,235,0.5); color:var(--blue);}
 
+  .kp-requisites label{display:flex;align-items:center;gap:10px;min-height:44px;cursor:pointer;font-size:14px;}
+  .kp-requisites input{flex:none;width:18px;height:18px;accent-color:var(--blue);}
   .kp-service{background:var(--card); border-radius:var(--radius); padding:14px; border:1px solid var(--line); margin-bottom:10px;}
   .kp-service-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;}
   .kp-service-title{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:13.5px; color:var(--text-dim);}
@@ -582,8 +585,9 @@ html:not([data-access="owner"]) #more-admin-sections,
 html:not([data-access="owner"]) #openFamilyTreeBtn,
 html:not([data-access="owner"]) #view-more button:not(#openKpBtn):not(#openContractsBtn),
 html[data-access="staff"] #view-more,html[data-access="staff"] #view-kp,
-html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[data-view="view-more"],
-#ef-card-edit-field {display:none!important}
+html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[data-view="view-more"] {display:none!important}
+#noEmployeeSections p {margin-top:6px}
+body:has(#noEmployeeSections:not([hidden])) .bottom-nav {display:none!important}
 </style>
 </head>
 <body>
@@ -605,7 +609,7 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
     <div id="loginStep2" style="display:none;">
       <div class="section-label"><span class="lbl-text" id="loginSelectedName">Сотрудник</span><span class="section-label-line"></span></div>
       <div class="field">
-        <label>PIN-код</label>
+        <label for="loginPin">PIN-код</label>
         <input type="password" id="loginPin" inputmode="numeric" maxlength="6" pattern="[0-9]*" placeholder="••••••" style="text-align:center; font-size:24px; letter-spacing:0.4em;">
       </div>
       <button class="btn btn-primary" id="loginSubmitBtn">Войти</button>
@@ -632,6 +636,10 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
 </header>
 
 <main>
+  <div class="card" id="noEmployeeSections" role="status" hidden>
+    <strong>Пока нет доступных разделов</strong>
+    <p>Чтобы начать работу, попросите владельца открыть вам нужный раздел.</p>
+  </div>
 
   <!-- ===================== ОБЗОР ===================== -->
   <div class="view active" id="view-overview">
@@ -928,23 +936,12 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
       </div>
     </div>
 
-    <div class="section-label"><span class="lbl-text">Реквизиты в PDF</span><span class="section-label-line"></span></div>
-    <div class="card">
-      <div class="field" style="margin-bottom:0;">
-        <label>Какие блоки показать в PDF</label>
-        <div style="display:flex; flex-direction:column; gap:10px; margin-top:6px;">
-          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; text-transform:none; letter-spacing:0; color:var(--text); font-weight:normal;">
-            <input type="checkbox" id="kp-show-company" checked style="width:16px;height:16px;accent-color:var(--blue);"> Реквизиты компании (ИНН, ОГРН, адрес)
-          </label>
-          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; text-transform:none; letter-spacing:0; color:var(--text); font-weight:normal;">
-            <input type="checkbox" id="kp-show-account" style="width:16px;height:16px;accent-color:var(--blue);"> Реквизиты расчётного счёта
-          </label>
-          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; text-transform:none; letter-spacing:0; color:var(--text); font-weight:normal;">
-            <input type="checkbox" id="kp-show-card" style="width:16px;height:16px;accent-color:var(--blue);"> Банковская карта
-          </label>
-        </div>
-        <div class="hint" style="margin-top:8px;">Выберите один или несколько блоков — они появятся в PDF и Excel.</div>
-      </div>
+    <div class="section-label"><span class="lbl-text">Реквизиты в PDF и Excel</span><span class="section-label-line"></span></div>
+    <div class="card kp-requisites" role="group" aria-label="Реквизиты в PDF и Excel">
+      <label><input type="checkbox" id="kp-show-company" checked> Реквизиты компании (ИНН, ОГРН, адрес)</label>
+      <label><input type="checkbox" id="kp-show-account"> Реквизиты расчётного счёта</label>
+      <label><input type="checkbox" id="kp-show-card"> Банковская карта</label>
+      <div id="kp-requisites-hint" class="hint" aria-live="polite" hidden></div>
     </div>
 
     <div class="section-label"><span class="lbl-text">Услуги</span><span class="section-label-line"></span></div>
@@ -1063,7 +1060,7 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
         <label>Номер счёта (р/с)</label>
         <input type="text" id="co-bank-account" placeholder="00000000000000000000">
       </div>
-      <div class="field-row">
+      <div class="field-row company-bank-codes">
         <div class="field">
           <label>БИК банка</label>
           <input type="text" id="co-bik" placeholder="000000000">
@@ -1376,7 +1373,7 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
             <button id="floors-btn-2" onclick="selectFloors(2)" style="flex:1;padding:9px;border-radius:9px;border:1px solid #374151;background:transparent;color:#6b7280;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">2 этажа</button>
             <button id="floors-btn-3" onclick="selectFloors(3)" style="flex:1;padding:9px;border-radius:9px;border:1px solid #374151;background:transparent;color:#6b7280;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">3 этажа</button>
           </div>
-          <div style="margin-top:7px;font-size:11px;color:#9ca3af;">Надземные этажи. Цоколь добавляется отдельно.</div>
+          <div id="ce-floor-hint" style="margin-top:7px;font-size:11px;color:#9ca3af;">Надземные этажи. Цоколь добавляется отдельно.</div>
         </div>
         <div style="margin-bottom:14px;">
           <div style="font-size:10px;color:#6b7280;letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:8px;">ОСОБЕННОСТИ</div>
@@ -1992,16 +1989,16 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
     <div class="field-row">
       <div class="field">
         <label>Сумма, ₽</label>
-        <input type="number" id="payment-amount" placeholder="0">
+        <input type="number" min="0.01" step="0.01" id="payment-amount" placeholder="0">
       </div>
       <div class="field">
-        <label>Фактическая дата платежа (можно прошедшую)</label>
-        <input type="date" id="payment-date">
+        <label for="payment-date">Фактическая дата платежа</label>
+        <input type="date" id="payment-date" required>
       </div>
     </div>
 
-    <label style="display:flex;align-items:center;gap:10px"><input type="checkbox" id="payment-before-start" style="width:auto">Получено до начала текущего учёта, точная дата неизвестна</label>
-    <p class="note">Прежняя оплата уменьшит долг клиента, но не увеличит сегодняшнюю выручку или деньги сверх начального остатка.</p>
+    <div id="payment-history-field"><label style="display:flex;align-items:center;gap:10px"><input type="checkbox" id="payment-before-start" style="width:auto">Получено до начала текущего учёта, точная дата неизвестна</label></div>
+    <p class="note" id="payment-history-note" hidden>Прежняя оплата уменьшит долг клиента, но не увеличит сегодняшнюю выручку или деньги сверх начального остатка.</p>
     <div class="field">
       <label>Комментарий</label>
       <input type="text" id="payment-note" placeholder="например: наличными / переводом на карту / причина вывода средств...">
@@ -2046,12 +2043,6 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
           🔀 Случайный
         </button>
       </div>
-    </div>
-    <div class="field" id="ef-card-edit-field" style="display:none;">
-      <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
-        <input type="checkbox" id="ef-can-edit-cards" style="width:18px;height:18px;cursor:pointer;">
-        <span>Может редактировать каталог готовых проектов</span>
-      </label>
     </div>
     <div class="field" id="ef-sections-field" style="display:none;">
       <label>Видимые разделы приложения</label>
@@ -2146,7 +2137,7 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
       </div>
       <div class="field">
         <label>Ставка, ₽</label>
-        <input type="number" id="tf-rate" placeholder="0">
+        <input type="number" id="tf-rate" min="0" step="0.01" placeholder="0">
       </div>
     </div>
     <div class="field">
@@ -2229,7 +2220,7 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
   </div>
 </div>
 
-<div class="toast" id="toast"></div><button class="fab" id="addProjectFab">+</button>
+<div class="toast" id="toast"></div><button type="button" class="fab" id="addProjectFab" aria-label="Добавить проект или объект">+</button>
 
 <script>
 // ============================================================
@@ -2409,16 +2400,18 @@ function getFinancialProjects(){
   const archived=(state.financialProjects||[]).filter(p=>p.deleted_at&&!ids.has(p.id));
   return [...live,...archived];
 }
+function projectDirectExpenseRows(projectId){
+  return (state.ledger||[]).filter(e=>e.project_id===projectId && !e.deleted_at &&
+    (['expense','project_expense'].includes(e.type)||(e.type==='payment'&&!e.payee_employee_id)) &&
+    !isInvoiceLinkedExpense(e));
+}
 function getProjectExpenses(p){
   if(!p) return 0;
   if(isConstructionProject(p))return getConstructionExpenses(p).expenses;
-  const manual = (state.ledger||[])
-    .filter(e => e.project_id===p.id && !e.deleted_at && (['expense','project_expense'].includes(e.type)||(e.type==='payment'&&!e.payee_employee_id)))
-    .filter(e => !isInvoiceLinkedExpense(e))
-    .reduce((sum,e)=>sum + Number(e.amount||0),0);
-
+  const entries=projectDirectExpenseRows(p.id);
+  if(entries.length)return entries.reduce((sum,e)=>sum+Math.round(Number(e.amount||0)*100),0)/100;
   // Старые проекты могли хранить расходы только в projects.expenses.
-  return manual > 0 ? manual : Math.max(0, Number(p.expenses)||0);
+  return Math.max(0,Number(p.expenses)||0);
 }
 function isInvoiceLinkedExpense(entry){
   const id=typeof ARHITTEKCash!=='undefined'?ARHITTEKCash.invoicePaymentId(entry):null;
@@ -2510,6 +2503,7 @@ function fmtDateTime(iso){
 // ============================================================
 let session = null; // {employeeId, name, isAdmin}
 let loginSelectedEmployee = null;
+let loginAttemptVersion = 0;
 
 // Permissions come only from the current server session, never saved admin flags.
 let verifiedAccess=null;
@@ -2588,6 +2582,8 @@ function applyAccessVisibility(){
   for(const id of ['openCompanyBtn','openPriceListBtn','exportXlsxBtn','openTimesheetBtn','settingsBtn','more-admin-sections','openFamilyTreeBtn','cardViewerPdfBtn']){
     const el=document.getElementById(id);if(el)el.style.display=isOwner()?'':'none';
   }
+  const empty=document.getElementById('noEmployeeSections');
+  if(empty)empty.hidden=mode!=='staff'||canSeeProjects()||canSeeConstruction();
   const active=document.querySelector('.view.active');
   if(!active||!canAccessView(active.id)){
     document.querySelectorAll('.view.active,.nav-btn.active').forEach(el=>el.classList.remove('active'));
@@ -2676,6 +2672,9 @@ function showLoginScreen(){
   document.getElementById('loginStep1').style.display = '';
   document.getElementById('loginStep2').style.display = 'none';
   loginSelectedEmployee = null;
+  loginAttemptVersion++;
+  document.getElementById('loginSubmitBtn').disabled = false;
+  document.getElementById('loginPin').value = '';
 
   const list = document.getElementById('loginEmployeeList');
   const employees = state.employees.filter(e=>e.active!==false);
@@ -2704,7 +2703,9 @@ async function attemptLogin(){
   if(!pin){ showToast('Введите PIN-код'); return; }
 
   const submitBtn = document.getElementById('loginSubmitBtn');
-  if(submitBtn) submitBtn.disabled = true;
+  if(submitBtn.disabled) return;
+  submitBtn.disabled = true;
+  const attemptVersion = ++loginAttemptVersion;
 
   try{
     const { data, error } = await sb.rpc('verify_employee_pin', {
@@ -2712,6 +2713,11 @@ async function attemptLogin(){
       p_pin: pin,
     });
 
+    if(attemptVersion!==loginAttemptVersion){
+      const discarded = Array.isArray(data) ? data[0] : data;
+      if(discarded?.session_token)await sb.rpc('logout_session',{p_token:discarded.session_token});
+      return;
+    }
     if(error){
       console.error(error);
       showToast('Ошибка входа. Попробуйте ещё раз.');
@@ -2747,9 +2753,9 @@ async function attemptLogin(){
     if('Notification' in window && Notification.permission === 'granted') subscribeToPush();
   }catch(e){
     console.error(e);
-    showToast('Ошибка входа. Попробуйте ещё раз.');
+    if(attemptVersion===loginAttemptVersion)showToast('Ошибка входа. Попробуйте ещё раз.');
   }finally{
-    if(submitBtn) submitBtn.disabled = false;
+    if(attemptVersion===loginAttemptVersion) submitBtn.disabled = false;
   }
 }
 
@@ -5019,7 +5025,7 @@ function openProjectSheet(id){
     document.getElementById('pf-advance').value = p.advance ?? '';
     document.getElementById('pf-balance').value = p.balance ?? '';
     document.getElementById('pf-area').value = p.area ?? '';
-    document.getElementById('pf-expenses').value = p.expenses ?? '';
+    document.getElementById('pf-expenses').value = getProjectExpenses(p);
     document.getElementById('pf-feepaid').value = p.fee_paid ?? '';
     document.getElementById('pf-feepercent').value = p.fee_percent ?? '';
     document.getElementById('pf-feebase').value = p.fee_base || '';
@@ -5065,7 +5071,6 @@ function openProjectSheet(id){
       expBlock.style.display = isConstr ? 'none' : '';
       const expField = document.getElementById('pf-expenses');
       if(expField){
-        expField.value = isConstr ? getProjectExpenses(p) : (p.expenses ?? '');
         expField.title = isConstr ? 'Считается из накладных объекта (вкладка «Стройка»)' : 'Складывается из списка расходов ниже';
       }
     }
@@ -6511,21 +6516,24 @@ function renderProjectExpenses(projectId){
   const el = document.getElementById('pf-expenses-list');
   if(!el) return;
   if(!projectId){ el.innerHTML = ''; return; }
-  const items = state.ledger
-    .filter(l=>l.project_id===projectId && l.type==='project_expense')
-    .sort((a,b)=> new Date(b.entry_date) - new Date(a.entry_date) || new Date(b.created_at) - new Date(a.created_at));
-  if(!items.length){ el.innerHTML = '<div class="empty-state" style="padding:10px;">Расходов пока нет</div>'; return; }
-  const total = items.reduce((s,e)=>s+Number(e.amount||0),0);
+  const project=state.projects.find(p=>p.id===projectId);
+  const items=projectDirectExpenseRows(projectId)
+    .sort((a,b)=>new Date(b.entry_date)-new Date(a.entry_date)||new Date(b.created_at)-new Date(a.created_at));
+  const total=getProjectExpenses(project);
+  if(!items.length){
+    el.innerHTML='<div class="empty-state" style="padding:10px;">'+(total?'Ранее внесённые расходы — '+rublesWithKopecks.format(total):'Расходов пока нет')+'</div>';
+    return;
+  }
   el.innerHTML = `<div class="card" style="margin-bottom:0;">` + items.map(e=>`
     <div class="list-item">
       <div style="min-width:0;">
-        <div class="li-name">${escapeHtml(e.description||'Расход')} — <span style="color:var(--red)">−${rublesWithKopecks.format(e.amount)}</span></div>
+        <div class="li-name">${escapeHtml(ARHITTEKCash.isImportedExpense(e)?'Ранее внесённые расходы':e.description||'Расход')} — <span style="color:var(--red)">−${rublesWithKopecks.format(e.amount)}</span></div>
         <div class="li-meta">${fmtDate(e.entry_date)}</div>
       </div>
-      <div class="li-actions">
+      ${e.type==='project_expense'?`<div class="li-actions">
         <button class="icon-btn" title="Редактировать расход" data-edit-expense="${escapeHtml(e.id)}" onclick="editProjectExpense('${e.id}')">✏️</button>
         <button class="icon-btn danger" title="Удалить расход" onclick="deleteProjectExpense('${e.id}','${projectId}')">🗑</button>
-      </div>
+      </div>`:''}
     </div>`).join('') +
     `<div class="list-item" style="border-top:1px solid var(--line-strong);">
       <div class="li-name" style="font-weight:700;">Итого расходов</div>
@@ -6533,19 +6541,17 @@ function renderProjectExpenses(projectId){
     </div></div>`;
 }
 
-// Пересчёт суммы расходов проекта и синхронизация p.expenses (используется в расчёте гонорара).
-// Считаем и обычные расходы (project_expense), и начисления исполнителям по м² (role_payout) —
-// последние тоже уменьшают прибыль/остаток компании по проекту.
-async function syncProjectExpensesTotal(projectId){
+async function syncProjectExpensesTotal(projectId,{deletedExpense=false}={}){
   const p = state.projects.find(x=>x.id===projectId);
   if(!p) return 0;
   // role_payout — ФОТ, а не прямой расход проекта. Не записываем его в
   // projects.expenses, иначе он попадает в себестоимость и затем повторно в ФОТ.
-  const total = isConstructionProject(p)?getProjectExpenses({...p,expenses:0}):(state.ledger||[]).filter(e=>e.project_id===projectId&&e.type==='project_expense'&&!e.deleted_at).reduce((sum,e)=>sum+(Number(e.amount)||0),0);
+  const total=getProjectExpenses(deletedExpense?{...p,expenses:0}:p);
   const {error} = await sb.from('projects')
     .update({expenses: total, updated_at:new Date().toISOString()})
     .eq('id', projectId);
   if(error) throw error;
+  p.expenses=total;
   return total;
 }
 
@@ -6745,7 +6751,7 @@ async function addProjectExpense(){
         project_expense_edited:{old:before ? ((before.description||'Расход')+' — '+fmtMoney(before.amount)) : null, new:desc+' — '+fmtMoney(amount)}
       });
     }else{
-      const existing = state.ledger.filter(l=>l.project_id===projectId && l.type==='project_expense' && !l.deleted_at);
+      const existing = projectDirectExpenseRows(projectId);
       if(!existing.length && p && !isConstructionProject(p) && Number(p.expenses) > 0){
         const {error:importError}=await sb.from('ledger_entries').insert({
           type:'project_expense', project_id:projectId,
@@ -6771,6 +6777,7 @@ async function addProjectExpense(){
     const expEl=document.getElementById('pf-expenses'); if(expEl) expEl.value=total;
     updateCompanyRemainderField(projectId);
     const up=state.projects.find(x=>x.id===projectId); if(up) renderFeeSummaryForProject(up);
+    window.refreshProjectWorkspace?.();
     showToast(wasEditing ? 'Расход изменён' : 'Расход добавлен');
   }catch(e){ console.error(e); showToast(window.ARHITTEKCash?.insufficientFundsNotice(e)||(wasEditing ? 'Ошибка изменения расхода' : 'Ошибка добавления расхода'));
   }finally{ projectExpenseSaveInFlight=false; document.getElementById('pf-expense-add-btn').disabled=false; }
@@ -6782,11 +6789,13 @@ async function deleteProjectExpense(entryId, projectId){
     const {error:payoutDeleteError}=await sb.from('ledger_entries').update({deleted_at:new Date().toISOString()}).eq('id', entryId);
     if(payoutDeleteError) throw payoutDeleteError;
     await loadAll();
-    const total = await syncProjectExpensesTotal(projectId);
+    const total = await syncProjectExpensesTotal(projectId,{deletedExpense:true});
+    if(editingProjectId!==projectId)return;
     renderProjectExpenses(projectId);
     const expEl = document.getElementById('pf-expenses'); if(expEl) expEl.value = total;
     updateCompanyRemainderField(projectId);
     const up = state.projects.find(x=>x.id===projectId); if(up) renderFeeSummaryForProject(up);
+    window.refreshProjectWorkspace?.();
     showToast('Расход удалён');
   }catch(e){ console.error(e); showToast('Ошибка удаления'); }
 }
@@ -6915,8 +6924,26 @@ const paymentHints = {
   final_payment: 'Увеличит «Получено» и уменьшит «Остаток» по проекту — оплата финального остатка.',
   materials_budget: 'Деньги клиента на закупку материалов — увеличит «Получено» и уменьшит «Остаток» (учитывается в общем приходе по проекту).',
   fee_payment: 'Фактическая выплата выбранному сотруднику. Уменьшит деньги компании и будет учтена в табеле; оплату клиента не меняет.',
-  withdrawal: 'Запись о выводе средств из бюджета объекта (например, наличные на материалы). Не влияет на «Получено»/«Остаток» — только запись в истории с указанием причины. Укажите причину в комментарии.',
+  withdrawal: 'Уменьшит деньги в сейфе. Полученную от клиента сумму и долг по договору сохранит. Укажите причину вывода в комментарии.',
 };
+
+function syncPaymentTiming(){
+  const date=document.getElementById('payment-date');
+  const prior=document.getElementById('payment-before-start');
+  const receipt=['advance','final_payment','materials_budget'].includes(paymentType);
+  if(!receipt)prior.checked=false;
+  prior.disabled=!receipt;
+  document.getElementById('payment-history-field').hidden=!receipt;
+  date.disabled=prior.checked;
+  date.closest('.field').hidden=prior.checked;
+  const journal=state.financialJournal;
+  const start=journal?.workspace?.start_date||(journal?.activated_at?ARHITTEKCash.day(new Date(journal.activated_at)):null);
+  const previousReceipt=receipt&&(prior.checked||Boolean(date.value&&start&&date.value<start));
+  document.getElementById('payment-history-note').hidden=!previousReceipt;
+  document.getElementById('paymentSheetOverlay').toggleAttribute('data-prior-receipt',previousReceipt);
+}
+document.getElementById('payment-before-start').addEventListener('change',syncPaymentTiming);
+document.getElementById('payment-date').addEventListener('input',syncPaymentTiming);
 
 function openPaymentSheet(projectId){
   paymentProjectId = projectId || editingProjectId;
@@ -6926,7 +6953,9 @@ function openPaymentSheet(projectId){
   document.querySelectorAll('#payment-type .yn-btn').forEach(b=>b.classList.toggle('selected', b.dataset.value==='advance'));
   document.getElementById('payment-amount').value = '';
   document.getElementById('payment-note').value = '';
+  document.getElementById('payment-date').max = financeToday();
   document.getElementById('payment-date').value = financeToday();
+  syncPaymentTiming();
   document.getElementById('payment-hint').textContent = paymentHints.advance;
   const p=state.projects.find(p=>p.id===paymentProjectId);
   const ids=[...new Set([p?.employee_id,p?.co_employee_id,...projectRolePayoutEntries(paymentProjectId).map(r=>r.payee_employee_id)].filter(Boolean))];
@@ -6941,6 +6970,7 @@ document.querySelectorAll('#payment-type .yn-btn').forEach(btn=>{
     document.querySelectorAll('#payment-type .yn-btn').forEach(b=>b.classList.remove('selected'));
     btn.classList.add('selected');
     paymentType = btn.dataset.value;
+    syncPaymentTiming();
     document.getElementById('payment-payee-field').hidden=paymentType!=='fee_payment';
     document.getElementById('payment-hint').textContent = paymentHints[paymentType] || '';
   });
@@ -6961,10 +6991,14 @@ async function savePayment(){
   const projectId = paymentProjectId || editingProjectId;
   if(!projectId) return;
   const amount = parseFloat(document.getElementById('payment-amount').value);
-  const entry_date = document.getElementById('payment-date').value || financeToday();
+  const historical=document.getElementById('payment-before-start').checked;
+  const entry_date=historical?financeToday():document.getElementById('payment-date').value;
   const note = document.getElementById('payment-note').value.trim();
 
   if(!Number.isFinite(amount) || amount <= 0){ showToast('Укажите сумму платежа'); return; }
+  if(document.getElementById('payment-amount').validity.stepMismatch){showToast('Введите сумму с точностью до копейки');return;}
+  if(!entry_date){showToast('Укажите фактическую дату платежа');return;}
+  if(entry_date>financeToday()){showToast('Фактический платёж не может быть в будущем');return;}
   if(paymentType === 'withdrawal' && !note){ showToast('Укажите причину вывода средств'); return; }
 
   const p = state.projects.find(x=>x.id===projectId);
@@ -6972,7 +7006,6 @@ async function savePayment(){
   const payeeEmployeeId=paymentType==='fee_payment'?document.getElementById('payment-payee').value:null;
   if(paymentType==='fee_payment'&&!payeeEmployeeId){showToast('Укажите сотрудника в команде проекта');return;}
 
-  const historical=document.getElementById('payment-before-start').checked;
   if(historical&&!['advance','final_payment','income','materials_budget','construction_budget'].includes(paymentType)){showToast('Прежняя оплата доступна только для поступлений клиента');return;}
   const updates = {};
   if(paymentType === 'fee_payment'){
@@ -6981,39 +7014,51 @@ async function savePayment(){
   }else if(paymentType === 'withdrawal'){
     // No effect on project financial fields — purely a journal record with a reason
   }else{
-    const newAdvance = (Number(p.advance)||0) + amount;
+    const newAdvance = (Math.round((Number(p.advance)||0)*100)+Math.round(amount*100))/100;
     updates.advance = newAdvance;
-    updates.balance = Math.max(0, (Number(p.price)||0) - newAdvance);
+    updates.balance = outstandingProjectBalance(Number(p.price)||0,newAdvance);
+    if(!isConstructionProject(p))updates.payment_status=newAdvance>=Number(p.price)&&Number(p.price)>0?'Оплачен':'Частично оплачен';
   }
 
   paymentSaveInFlight=true;
   document.getElementById('payment-save').disabled=true;
   showToast('Сохранение…');
-  let insertedPayment=null,projectSynced=false;
+  let projectSynced=false;
   try{
     const t = ledgerTypeLabels[paymentType];
     const description = window.ARHITTEKCash?.operationDescription ? ARHITTEKCash.operationDescription('payment-note',note || t?.label || 'Платёж') : note || t?.label || 'Платёж';
-    const {data, error} = await sb.from('ledger_entries').insert({
-      type: paymentType, project_id: projectId, description, amount, entry_date,
-      ...(paymentType==='fee_payment'?{payee_employee_id:payeeEmployeeId}:{}),
-      received_by: session ? session.employeeId : null,
-      received_before_start:historical,
-    }).select().single();
-    if(error) throw error;
-    insertedPayment=data;
-
+    const entry={type:paymentType,project_id:projectId,description,amount,entry_date,
+      payee_employee_id:payeeEmployeeId,received_before_start:historical};
     if(isConstructionProject(p)){
-      const finAfterPayment = getConstructionFinancials(p, [...(state.ledger||[]), data]);
+      const finAfterPayment=getConstructionFinancials(p,[...(state.ledger||[]),entry]);
       updates.balance=finAfterPayment.balance;
       if(CONSTRUCTION_INCOME_TYPES.includes(paymentType))updates.advance=finAfterPayment.received;
     }
-    if(Object.keys(updates).length){
-      let query=sb.from('projects').update(updates).eq('id',projectId);
-      for(const field of Object.keys(updates)) query=p[field]==null?query.is(field,null):query.eq(field,p[field]);
-      const {data:updated,error:projErr}=await query.select().maybeSingle();
-      if(projErr) throw projErr;
-      if(!updated) throw new Error('Проект изменился на другом устройстве. Обновите данные перед повтором.');
+    const expected={};
+    for(const field of ['price','category_id','employee_id','co_employee_id','fee_base',...Object.keys(updates)])expected[field]=p[field]??null;
+    // Reuse the request ID if confirmation was lost, including after a reload.
+    const key='arhittek.project-payment.'+session.employeeId+'.'+projectId;
+    const signature=JSON.stringify([entry,window.ARHITTEKFinanceWorkspace?.selectedWallet()||null]);
+    let pending;
+    try{pending=JSON.parse(sessionStorage.getItem(key));}catch{}
+    if(pending&&pending.signature!==signature){
+      const previous=await sb.from('ledger_entries').select('id').eq('id',pending.id).maybeSingle();
+      if(!previous.error&&previous.data){
+        sessionStorage.removeItem(key);
+        showToast('Предыдущий платёж уже сохранён. Сверьте историю перед новой оплатой.');
+      }else showToast('Результат предыдущей отправки неизвестен. Проверьте историю и повторите прежние данные.');
+      return;
     }
+    entry.id=pending?.id||crypto.randomUUID();
+    sessionStorage.setItem(key,JSON.stringify({signature,id:entry.id}));
+    const {data,error}=await sb.rpc('record_project_card_payment',{p_entry:entry,p_expected:expected,p_updates:updates});
+    if(error){
+      // A definite SQL rejection rolled back the transaction. A transport error may have lost only the response.
+      if(/^(22|23|40|42)/.test(error.code||'')||error.code==='PGRST202')sessionStorage.removeItem(key);
+      throw error;
+    }
+    if(data!==entry.id)throw new Error('Не получено подтверждение платежа');
+    sessionStorage.removeItem(key);
     projectSynced=true;
 
     await logAudit('project', projectId, p.name, 'update', {
@@ -7031,6 +7076,9 @@ async function savePayment(){
         document.getElementById('pf-advance').value = updated.advance ?? '';
         document.getElementById('pf-balance').value = updated.balance ?? '';
         document.getElementById('pf-feepaid').value = updated.fee_paid ?? '';
+        document.getElementById('pf-co-feepaid').value = updated.co_fee_paid ?? '';
+        if(updates.payment_status)document.getElementById('pf-payment').value=updated.payment_status;
+        window.refreshProjectWorkspace?.();
       }
       renderPaymentHistory(projectId);
       renderFeeSummaryForProject(updated);
@@ -7043,10 +7091,8 @@ async function savePayment(){
     }
   }catch(e){
     console.error(e);
-    if(insertedPayment&&!projectSynced){
-      const rollback=await sb.from('ledger_entries').update({deleted_at:new Date().toISOString()}).eq('id',insertedPayment.id);
-      showToast(rollback.error?'Не удалось завершить платёж. Проверьте журнал перед повтором':'Платёж не сохранён: данные проекта изменились или недоступны');
-    }else showToast(projectSynced?'Платёж сохранён. Обновите страницу для проверки':'Платёж не сохранён. Проверьте журнал перед повтором');
+    const notice=e?.code==='40001'?'Данные проекта изменились. Обновите карточку перед повтором.':window.ARHITTEKCash?.insufficientFundsNotice(e);
+    showToast(projectSynced?'Платёж сохранён. Обновите страницу для проверки':(notice||'Проверьте историю платежей перед повтором'));
     await loadAll();
   }finally{
     paymentSaveInFlight=false;
@@ -7213,7 +7259,6 @@ function openEmployeeSheet(id){
   const title = document.getElementById('empSheetTitle');
   const deleteBtn = document.getElementById('ef-delete');
   const pinField = document.getElementById('ef-pin-field');
-  const cardEditField = document.getElementById('ef-card-edit-field');
   const isAdmin = session && session.isAdmin;
 
   const roleSelect = document.getElementById('ef-role');
@@ -7241,7 +7286,6 @@ function openEmployeeSheet(id){
     constructionFollowsRole=e.can_see_construction==null;
     document.getElementById('ef-active').value = e.active===false ? 'false' : 'true';
     document.getElementById('ef-pin').value = '';
-    document.getElementById('ef-can-edit-cards').checked = !!e.can_edit_cards;
     // Если поля can_see_* ещё не заданы явно (null) — подставляем текущее фактическое поведение по роли, как отправную точку
     document.getElementById('ef-see-projects').checked = (e.can_see_projects === null || e.can_see_projects === undefined) ? canSeeProjectsForRole(e.role) : !!e.can_see_projects;
     document.getElementById('ef-see-construction').checked = (e.can_see_construction === null || e.can_see_construction === undefined) ? canSeeConstructionForRole(e.role) : !!e.can_see_construction;
@@ -7249,9 +7293,8 @@ function openEmployeeSheet(id){
     document.getElementById('ef-fixed-salary').value = e.fixed_salary ?? '';
     document.getElementById('ef-fixed-salary-row').style.display = e.is_salaried ? '' : 'none';
     pinField.style.display = isAdmin ? '' : 'none';
-    if(cardEditField) cardEditField.style.display = isAdmin ? '' : 'none';
     const sectionsField = document.getElementById('ef-sections-field');
-    if(sectionsField) sectionsField.style.display = isAdmin ? '' : 'none';
+    if(sectionsField) sectionsField.style.display = isAdmin && id !== session.employeeId ? '' : 'none';
     const salaryField = document.getElementById('ef-salary-field');
     if(salaryField) salaryField.style.display = isAdmin ? '' : 'none';
   }else{
@@ -7263,14 +7306,12 @@ function openEmployeeSheet(id){
     document.getElementById('ef-role').value = 'Сотрудник';
     document.getElementById('ef-active').value = 'true';
     document.getElementById('ef-pin').value = '';
-    document.getElementById('ef-can-edit-cards').checked = false;
     document.getElementById('ef-see-projects').checked = true;
     document.getElementById('ef-see-construction').checked = false;
     document.getElementById('ef-is-salaried').checked = false;
     document.getElementById('ef-fixed-salary').value = '';
     document.getElementById('ef-fixed-salary-row').style.display = 'none';
     pinField.style.display = isAdmin ? '' : 'none';
-    if(cardEditField) cardEditField.style.display = isAdmin ? '' : 'none';
     const sectionsField2 = document.getElementById('ef-sections-field');
     if(sectionsField2) sectionsField2.style.display = isAdmin ? '' : 'none';
     const salaryField2 = document.getElementById('ef-salary-field');
@@ -7308,10 +7349,11 @@ async function saveEmployee(){
       // Редактирование — меняем PIN, только если поле не пустое
       payload.pin_code = pinInput;
     }
-    payload.can_edit_cards = document.getElementById('ef-can-edit-cards').checked;
-    payload.can_see_projects = document.getElementById('ef-see-projects').checked;
-    const construction=document.getElementById('ef-see-construction').checked;
-    payload.can_see_construction=constructionFollowsRole&&construction===canSeeConstructionForRole(payload.role)?null:construction;
+    if(employeeId !== session.employeeId){
+      payload.can_see_projects = document.getElementById('ef-see-projects').checked;
+      const construction=document.getElementById('ef-see-construction').checked;
+      payload.can_see_construction=constructionFollowsRole&&construction===canSeeConstructionForRole(payload.role)?null:construction;
+    }
     payload.is_salaried = document.getElementById('ef-is-salaried').checked;
     payload.fixed_salary = payload.is_salaried ? (parseFloat(document.getElementById('ef-fixed-salary').value) || 0) : 0;
   }
@@ -7526,6 +7568,9 @@ async function deleteCategory(){
 // ТАРИФЫ УСЛУГ (КП) — управление ставками по направлениям
 // ============================================================
 let editingTariffId = null;
+let tariffOpenedAt = null;
+let tariffDraftId = null;
+let tariffWritePending = false;
 
 function renderTariffs(){
   const card = document.getElementById('tariffsCard');
@@ -7544,7 +7589,7 @@ function renderTariffs(){
       html += `<div class="list-item">
         <div>
           <div class="li-name">${escapeHtml(it.name)}</div>
-          <div class="li-meta">${fmt(it.rate)} ₽ / ${escapeHtml(it.unit)}</div>
+          <div class="li-meta">${kpNumber(it.rate)} ₽ / ${escapeHtml(it.unit)}</div>
         </div>
         <div class="li-actions">
           ${editable
@@ -7558,13 +7603,17 @@ function renderTariffs(){
 }
 
 function openTariffSheet(id, presetGroup, presetName, presetRate, presetUnit, presetDesc){
+  if(tariffWritePending)return;
   editingTariffId = id || null;
+  tariffOpenedAt = null;
+  tariffDraftId = id ? null : crypto.randomUUID();
   const overlay = document.getElementById('tariffSheetOverlay');
   const title = document.getElementById('tariffSheetTitle');
   const deleteBtn = document.getElementById('tf-delete');
   if(id){
     const it = (state.kpCatalog||[]).find(x=>x.id===id);
     if(!it) return;
+    tariffOpenedAt = it.updated_at;
     title.textContent = 'Редактировать тариф';
     deleteBtn.style.display = '';
     document.getElementById('tf-group').value = it.group_name || '';
@@ -7584,13 +7633,26 @@ function openTariffSheet(id, presetGroup, presetName, presetRate, presetUnit, pr
   overlay.classList.add('active');
 }
 
-function closeTariffSheet(){
+function closeTariffSheet(written){
+  if(tariffWritePending && written!==true)return;
   document.getElementById('tariffSheetOverlay').classList.remove('active');
   editingTariffId = null;
 }
 
+function setTariffPending(pending){
+  tariffWritePending=pending;
+  for(const button of document.querySelectorAll('#tariffSheetOverlay button'))button.disabled=pending;
+}
+
+function updateOpenedTariff(payload){
+  const query=sb.from('kp_catalog').update(payload).eq('id',editingTariffId).is('deleted_at',null);
+  const version=tariffOpenedAt==null ? query.is('updated_at',null) : query.eq('updated_at',tariffOpenedAt);
+  return version.select('id').maybeSingle();
+}
+
 async function saveTariff(){
   if(!session?.isAdmin){showToast("Требуются права администратора");return;}
+  if(tariffWritePending)return;
   const group_name = document.getElementById('tf-group').value.trim();
   const name = document.getElementById('tf-name').value.trim();
   const unit = document.getElementById('tf-unit').value;
@@ -7598,42 +7660,61 @@ async function saveTariff(){
   const description = document.getElementById('tf-desc').value.trim();
   if(!group_name || !name){ showToast('Укажите направление и название услуги'); return; }
   if(!Number.isFinite(rate)||rate<0){showToast('Стоимость не может быть отрицательной');return;}
+  const fields={group_name,name,unit,rate,description};
+  setTariffPending(true);
   try{
+    let saved;
     if(editingTariffId){
-      const {error} = await sb.from('kp_catalog').update({group_name, name, unit, rate, description, updated_at: new Date().toISOString()}).eq('id', editingTariffId);
-      if(error) throw error;
+      saved=await updateOpenedTariff({...fields,updated_at:new Date().toISOString()});
     }else{
-      const sort_order = (state.kpCatalog||[]).length;
-      const {error} = await sb.from('kp_catalog').insert({group_name, name, unit, rate, description, sort_order});
-      if(error) throw error;
+      const sort_order=(state.kpCatalog||[]).length;
+      saved=await sb.from('kp_catalog').insert({...fields,id:tariffDraftId,sort_order}).select('id').maybeSingle();
+      // A reply may have been lost after the server committed this draft.
+      if(saved.error?.code==='23505'){
+        saved=await sb.from('kp_catalog').select('id,group_name,name,unit,rate,description')
+          .eq('id',tariffDraftId).is('deleted_at',null).maybeSingle();
+        if(saved.data && Object.entries(fields).some(([key,value])=>String(saved.data[key]??'')!==String(value)))saved={data:null};
+      }
+    }
+    if(saved.error)throw saved.error;
+    if(!saved.data){
+      showToast('Тариф изменился или удалён. Откройте актуальную запись и сверьте черновик.');
+      await loadAll();
+      return;
     }
     showToast('Тариф сохранён');
-    closeTariffSheet();
+    closeTariffSheet(true);
     await loadAll();
   }catch(e){
     console.error(e);
-    showToast('Ошибка сохранения тарифа — проверьте, что миграция kp_catalog выполнена в Supabase');
-  }
+    showToast('Не удалось сохранить тариф. Черновик остался в форме.');
+  }finally{setTariffPending(false);}
 }
 
 async function deleteTariff(){
   if(!session?.isAdmin){showToast("Требуются права администратора");return;}
-  if(!editingTariffId) return;
-  if(!confirm('Переместить тариф в корзину? Его можно будет восстановить.')) return;
+  if(!editingTariffId||tariffWritePending)return;
+  if(!confirm('Переместить тариф в корзину? Его можно будет восстановить.'))return;
+  setTariffPending(true);
   try{
     const before=(state.kpCatalog||[]).find(x=>x.id===editingTariffId);
-    const {error} = await sb.from('kp_catalog').update({deleted_at: new Date().toISOString()}).eq('id', editingTariffId);
-    if(error) throw error;
+    const now=new Date().toISOString();
+    const saved=await updateOpenedTariff({deleted_at:now,updated_at:now});
+    if(saved.error)throw saved.error;
+    if(!saved.data){
+      showToast('Тариф изменился или удалён. Откройте актуальную запись перед удалением.');
+      await loadAll();
+      return;
+    }
     await logAudit('tariff',editingTariffId,before?((before.group_name||'Прайс')+' — '+(before.name||'Тариф')):'Тариф','delete',{});
     showToast('Тариф перемещён в корзину');
-    closeTariffSheet();
+    closeTariffSheet(true);
     await loadAll();
   }catch(e){
     console.error(e);
     showToast('Ошибка удаления');
-  }
+  }finally{setTariffPending(false);}
 }
-
 // ============================================================
 // STATUSES (view only + reorder not needed, simple list)
 // ============================================================
@@ -8894,7 +8975,7 @@ function renderTrash(){
     html += `<div class="trash-item">
       <div>
         <div class="li-name">${escapeHtml(name)}</div>
-        <div class="li-meta">Тариф · ${fmtMoney(t.rate||0)} / ${escapeHtml(t.unit||'м²')} · удалён ${fmtDateTime(t.deleted_at)}</div>
+        <div class="li-meta">Тариф · ${kpNumber(t.rate||0)} ₽ / ${escapeHtml(t.unit||'м²')} · удалён ${fmtDateTime(t.deleted_at)}</div>
       </div>
       <div class="li-actions">
         <button class="icon-btn" onclick="restoreItem('kp_catalog','${t.id}',${htmlJsArg(name)})">↺ Восстановить</button>
@@ -9552,12 +9633,12 @@ function renderKpServices(){
     const item = kpServiceItem(s);
     const effectiveRate = (s.customRate !== null && s.customRate !== undefined) ? s.customRate : item.rate;
     const selectedIndex=flat.findIndex(it=>it.name===item.name && it.unit===item.unit && Number(it.rate)===Number(item.rate) && (it.desc||'')===(item.desc||'') && (!item.id || it.id===item.id));
-    let optionsHtml = selectedIndex<0 ? `<option value="snapshot" selected>Согласовано: ${escapeHtml(item.name)} (${fmt(item.rate)} ₽/${escapeHtml(item.unit)})</option>` : '';
+    let optionsHtml = selectedIndex<0 ? `<option value="snapshot" selected>Согласовано: ${escapeHtml(item.name)} (${kpNumber(item.rate)} ₽/${escapeHtml(item.unit)})</option>` : '';
     let flatIdx = 0;
     groups.forEach(g=>{
       optionsHtml += `<optgroup label="${escapeHtml(g.group)}">`;
       g.items.forEach(it=>{
-        optionsHtml += `<option value="${flatIdx}" ${flatIdx===selectedIndex?'selected':''}>${escapeHtml(it.name)} (${fmt(it.rate)} ₽/${it.unit})</option>`;
+        optionsHtml += `<option value="${flatIdx}" ${flatIdx===selectedIndex?'selected':''}>${escapeHtml(it.name)} (${kpNumber(it.rate)} ₽/${it.unit})</option>`;
         flatIdx++;
       });
       optionsHtml += `</optgroup>`;
@@ -10231,10 +10312,10 @@ function getCompanyExportSections(scope){
       'Email': document.getElementById('co-email').value,
   };
     const account = {
-      'Банк': document.getElementById('co-bank-name').value,
-      'Номер счёта (р/с)': document.getElementById('co-bank-account').value,
-      'БИК банка': document.getElementById('co-bik').value,
-      'Корр. счёт': document.getElementById('co-corr-account').value,
+      'Банк': document.getElementById('co-bank-name').value.trim(),
+      'Номер счёта (р/с)': document.getElementById('co-bank-account').value.trim(),
+      'БИК банка': document.getElementById('co-bik').value.trim(),
+      'Корр. счёт': document.getElementById('co-corr-account').value.trim(),
   };
     const card = {
       'Номер карты': document.getElementById('co-card-number').value,
@@ -10260,7 +10341,8 @@ function getCompanyExportSections(scope){
     }
     const companyName = (document.getElementById('co-short-name').value || document.getElementById('co-full-name').value || 'Company').trim();
     const safeName = companyName.replace(/[^a-zA-Zа-яА-Я0-9]/g,'_').slice(0,40) || 'Company';
-    const fileBase = 'Rekvizity-' + safeName + '-' + financeToday();
+    const exportName = {general:'Общие', account:'Расчётный_счёт', card:'Карта', all:'Все_реквизиты'}[scope];
+    const fileBase = 'Rekvizity-' + safeName + '-' + exportName + '-' + financeToday();
 
     if(format==='pdf'){
       const { jsPDF } = window.jspdf;
@@ -10420,6 +10502,25 @@ function pdfMoney(n){
   return kpNumber(n) + ' руб.';
 }
 
+function kpExportRequisites(data){
+  const fields = [];
+  const methods = [];
+  if(data.showCompany){
+    fields.push(['Компания', data.company], ['ИНН', data.inn], ['КПП', data.kpp],
+      ['ОГРН', data.ogrn], ['Фактический адрес', data.officeAddr], ['Телефон', data.companyPhone]);
+  }
+  if(data.showAccount){
+    fields.push(['Р/с', data.bankAcc], ['Банк', data.bankName], ['БИК', data.bik], ['К/с', data.corrAccount]);
+    if(data.bankAcc) methods.push('расчётный счёт');
+  }
+  if(data.showCard){
+    fields.push(['Карта для оплаты', data.cardNumber], ['Получатель', data.cardHolder], ['Банк карты', data.cardBank]);
+    if(data.cardNumber) methods.push('банковская карта');
+  }
+  const title = 'Реквизиты исполнителя' + (methods.length ? ' (оплата: ' + methods.join(', ') + ')' : '');
+  return {title, rows: fields.filter(([, value])=>value)};
+}
+
 function exportKpToPdf(){
   const data = getKpData();
   const { jsPDF } = window.jspdf;
@@ -10571,44 +10672,14 @@ function exportKpToPdf(){
 
   finalY += 14;
 
-  // Requisites block
-  const showAnyReq = data.showCompany || data.showAccount || data.showCard;
-  if(showAnyReq){
+  const requisites = kpExportRequisites(data);
+  if(requisites.rows.length){
     if(finalY > 250){ doc.addPage(); finalY = 20; }
     doc.setDrawColor(180); doc.line(margin, finalY, pageWidth-margin, finalY); finalY += 6;
     doc.setFont('Roboto','bold'); doc.setFontSize(9); doc.setTextColor(0);
-    const reqTitle = ['Реквизиты исполнителя'];
-    const methods = [];
-    if(data.showAccount) methods.push('расчётный счёт');
-    if(data.showCard) methods.push('банковская карта');
-    if(methods.length) reqTitle.push(`(оплата: ${methods.join(', ')})`);
-    doc.text(reqTitle.join(' '), margin, finalY); finalY += 5;
+    doc.text(requisites.title, margin, finalY); finalY += 5;
     doc.setFont('Roboto','normal'); doc.setFontSize(8); doc.setTextColor(50);
-
-    let reqRows = [];
-
-    if(data.showCompany){
-      if(data.company) reqRows.push(`Компания: ${data.company}`);
-      if(data.inn) reqRows.push(`ИНН: ${data.inn}${data.kpp?' | КПП: '+data.kpp:''}${data.ogrn?' | ОГРН: '+data.ogrn:''}`);
-      if(data.officeAddr) reqRows.push(`Фактический адрес: ${data.officeAddr}`);
-      if(data.companyPhone) reqRows.push(`Тел.: ${data.companyPhone}`);
-    }
-
-    if(data.showAccount){
-      if(!data.bankAcc) reqRows.push('⚠ Реквизиты счёта не заполнены — заполните в разделе «Компания»');
-      if(data.bankAcc) reqRows.push(`Р/с: ${data.bankAcc}`);
-      if(data.bankName) reqRows.push(`Банк: ${data.bankName}`);
-      if(data.bik) reqRows.push(`БИК: ${data.bik}${data.corrAccount?' | К/с: '+data.corrAccount:''}`);
-    }
-
-    if(data.showCard){
-      if(!data.cardNumber && !data.cardHolder) reqRows.push('⚠ Реквизиты карты не заполнены — заполните в разделе «Компания»');
-      if(data.cardNumber) reqRows.push(`Карта для оплаты: ${data.cardNumber}`);
-      if(data.cardHolder) reqRows.push(`Получатель: ${data.cardHolder}`);
-      if(data.cardBank) reqRows.push(`Банк карты: ${data.cardBank}`);
-    }
-
-    reqRows.forEach(r=>{ for(const line of doc.splitTextToSize(r,pageWidth-2*margin)){
+    requisites.rows.forEach(([label,value])=>{ for(const line of doc.splitTextToSize(label+': '+value,pageWidth-2*margin)){
       if(finalY>268){doc.addPage();finalY=20;}
       doc.text(line,margin,finalY);finalY+=4.5;
     } });
@@ -10620,7 +10691,6 @@ function exportKpToPdf(){
 
   if(finalY > 272){doc.addPage();finalY=20;}
   doc.text('ARHITTEK — архитектурное проектирование, дизайн интерьера, ремонт под ключ', margin, finalY);
-  pdfCompanyAddress(doc, margin, finalY+5, 0, data.officeAddr);
 
   const fileName = kpFileName(data, 'pdf');
   deliverDocumentPdf(doc,fileName);
@@ -10674,33 +10744,8 @@ function exportKpToXlsx(){
     if(data.deadline) rows.push(['Срок выполнения', data.deadline]);
   }
 
-  // Requisites — выбранные блоки
-  if(data.showCompany || data.showAccount || data.showCard){
-    rows.push([]);
-    const xlsMethods = [];
-    if(data.showAccount) xlsMethods.push('расчётный счёт');
-    if(data.showCard) xlsMethods.push('банковская карта');
-    rows.push([`Реквизиты исполнителя${xlsMethods.length?' (оплата: '+xlsMethods.join(', ')+')':''}`]);
-    if(data.showCompany){
-      if(data.company) rows.push(['Компания', data.company]);
-      if(data.inn) rows.push(['ИНН',data.inn]);
-      if(data.kpp) rows.push(['КПП',data.kpp]);
-      if(data.ogrn) rows.push(['ОГРН',data.ogrn]);
-      if(data.officeAddr) rows.push(['Фактический адрес', data.officeAddr]);
-      if(data.companyPhone) rows.push(['Телефон', data.companyPhone]);
-    }
-    if(data.showAccount){
-      if(data.bankAcc) rows.push(['Р/с', data.bankAcc]);
-      if(data.bankName) rows.push(['Банк', data.bankName]);
-      if(data.bik) rows.push(['БИК',data.bik]);
-      if(data.corrAccount) rows.push(['К/с',data.corrAccount]);
-    }
-    if(data.showCard){
-      if(data.cardNumber) rows.push(['Карта для оплаты', data.cardNumber]);
-      if(data.cardHolder) rows.push(['Получатель', data.cardHolder]);
-      if(data.cardBank) rows.push(['Банк карты', data.cardBank]);
-    }
-  }
+  const requisites = kpExportRequisites(data);
+  if(requisites.rows.length)rows.push([], [requisites.title], ...requisites.rows);
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
   ws['!cols']=[26,36,12,10,23,26,18,28].slice(0,headings.length).map(wch=>({wch}));
@@ -10711,8 +10756,19 @@ function exportKpToXlsx(){
   showToast('Excel скачивается...');
 }
 
+function updateKpRequisitesHint(){
+  const company = state.companyInfo || {};
+  const missing = [];
+  if(document.getElementById('kp-show-account').checked && !company.bank_account)missing.push('номер расчётного счёта');
+  if(document.getElementById('kp-show-card').checked && !company.card_number)missing.push('номер карты');
+  const hint = document.getElementById('kp-requisites-hint');
+  hint.textContent = missing.length ? 'Для оплаты укажите ' + missing.join(' и ') + ' в разделе «Реквизиты».' : '';
+  hint.hidden = !missing.length;
+}
+
 function openKpView(){
   if(!canUseDocuments())return;
+  updateKpRequisitesHint();
   if(!kpServices.length) addKpService();
   if(!document.getElementById('kp-date').value) document.getElementById('kp-date').value = financeToday();
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
@@ -10731,6 +10787,7 @@ function resetKpExportSections(){
     const field=document.getElementById(id);
     field.checked=field.defaultChecked;
   }
+  updateKpRequisitesHint();
 }
 function resetKpForm(){
   resetKpExportSections();
@@ -10896,6 +10953,7 @@ function openKpViewForProject(projectId){
   document.getElementById('kp-object').value = p.address || p.name || '';
 }
 
+document.querySelector('.kp-requisites').addEventListener('change',updateKpRequisitesHint);
 document.getElementById('kpNewBtn').addEventListener('click', resetKpForm);
 document.getElementById('kpSaveBtn').addEventListener('click', saveKpForm);
 
@@ -10958,16 +11016,15 @@ document.addEventListener('keydown', event=>{
 // ============================================================
 document.getElementById('addProjectFab').addEventListener('click', ()=>{
   const activeView = document.querySelector('.view.active');
-  // FAB работает только для Проектный и Стройка
-  if(activeView && activeView.id === 'view-cards') return;
+  if(!['view-projects','view-construction'].includes(activeView?.id)) return;
   openProjectSheet(null);
-  // If opened from Стройка — pre-select construction category
-  if(activeView && activeView.id === 'view-construction'){
-    const constrCat = state.categories.find(c=>{
-      const nm = (c.name||'').toLowerCase();
-      return nm.includes('строительств') || nm.includes('ремонт') || nm.includes('монтаж');
-    });
-    if(constrCat) document.getElementById('pf-category').value = constrCat.id;
+  if(activeView.id === 'view-construction'){
+    const category = state.categories.find(c=>isConstructionCategory(c.id));
+    if(category){
+      const select = document.getElementById('pf-category');
+      select.value = category.id;
+      select.dispatchEvent(new Event('change',{bubbles:true}));
+    }
   }
 });
 
@@ -11148,11 +11205,7 @@ document.getElementById('loginPin').addEventListener('input', (e)=>{
 document.getElementById('loginPin').addEventListener('keydown', (e)=>{
   if(e.key === 'Enter') attemptLogin();
 });
-document.getElementById('loginBackBtn').addEventListener('click', ()=>{
-  loginSelectedEmployee = null;
-  document.getElementById('loginStep1').style.display = '';
-  document.getElementById('loginStep2').style.display = 'none';
-});
+document.getElementById('loginBackBtn').addEventListener('click', showLoginScreen);
 document.getElementById('userPill').addEventListener('click', ()=>{
   if(confirm('Выйти из аккаунта?')) clearSession();
 });
@@ -11322,18 +11375,19 @@ function renderCardsStats(){
   if(!cardsData.length){ el.innerHTML = ''; return; }
 
   const total = cardsData.length;
-  const byFloors = {1:0, 2:0, '3plus':0};
+  const byFloors = {1:0, 2:0, '3plus':0, unknown:0};
   let classic = 0, modern = 0;
   cardsData.forEach(c=>{
-    const f = Number(c.floors) || 1;
-    if(f >= 3) byFloors['3plus']++;
+    const f = CatalogFloors.count(c);
+    if(f===null)byFloors.unknown++;
+    else if(f >= 3) byFloors['3plus']++;
     else byFloors[f] = (byFloors[f]||0) + 1;
     const tags = CatalogFloors.tags(c);
     if(tags.includes('Классический')) classic++;
     if(tags.includes('Современный')) modern++;
   });
 
-  const maxFloorCount = Math.max(byFloors[1], byFloors[2], byFloors['3plus'], 1);
+  const maxFloorCount = Math.max(byFloors[1], byFloors[2], byFloors['3plus'], byFloors.unknown, 1);
   const barPct = n => Math.max(n>0?6:0, Math.round((n/maxFloorCount)*100));
 
   el.innerHTML = `
@@ -11343,6 +11397,7 @@ function renderCardsStats(){
         <div class="cat-sb-row"><span class="cat-sb-label">1 этаж</span><div class="cat-sb-bars"><div class="cat-sb-seg" style="width:${barPct(byFloors[1])}%; opacity:${byFloors[1]?1:0.25};"></div></div><span class="cat-sb-val">${byFloors[1]}</span></div>
         <div class="cat-sb-row"><span class="cat-sb-label">2 этажа</span><div class="cat-sb-bars"><div class="cat-sb-seg" style="width:${barPct(byFloors[2])}%; opacity:${byFloors[2]?1:0.25};"></div></div><span class="cat-sb-val">${byFloors[2]}</span></div>
         <div class="cat-sb-row"><span class="cat-sb-label">3+ этажей</span><div class="cat-sb-bars"><div class="cat-sb-seg" style="width:${barPct(byFloors['3plus'])}%; opacity:${byFloors['3plus']?1:0.25};"></div></div><span class="cat-sb-val">${byFloors['3plus']}</span></div>
+        ${byFloors.unknown ? `<div class="cat-sb-row"><span class="cat-sb-label" style="width:auto">Не указана</span><div class="cat-sb-bars"><div class="cat-sb-seg" style="width:${barPct(byFloors.unknown)}%;"></div></div><span class="cat-sb-val">${byFloors.unknown}</span></div>` : ''}
       </div>
     </div>
     <div class="cat-stat-grid">
@@ -11381,8 +11436,7 @@ function renderCardsList(){
       || String(a.id).localeCompare(String(b.id));
   });
   if(currentCardFloorFilter !== 'all'){
-    const floorCount = Number(currentCardFloorFilter);
-    filtered = filtered.filter(card => floorCount === 3 ? Number(card.floors) >= 3 : Number(card.floors) === floorCount);
+    filtered = filtered.filter(card => CatalogFloors.matchesCount(card,currentCardFloorFilter));
   }
   if(currentFeatureFilter !== 'all'){
     const featureTagMap = {basement:'Цокольный этаж',mansard:'Мансарда',flat:'Плоская кровля'};
@@ -11426,7 +11480,7 @@ function renderCardsList(){
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:700;line-height:1.35;margin-bottom:3px;">${escapeHtml(catalogListTitle(card))}</div>
           <div style="font-size:11px;color:var(--text-dim);">
-            ${card.floors} эт. · ${card.total_area||'—'} м² · ${card.footprint||''}
+            ${escapeHtml(String(card.total_area||'—'))} м²${card.footprint?' · '+escapeHtml(String(card.footprint)):''}
           </div>
           <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
             <span style="font-size:10px;background:rgba(0,113,235,0.15);color:var(--blue);padding:2px 8px;border-radius:20px;font-weight:600;">${CatalogFloors.label(card)}</span>
@@ -11505,7 +11559,6 @@ function openCardEditor(id){
         setVal('ce-area'+f.suffix,card[f.area]||'');
         setVal('ce-expl'+f.suffix,CatalogFloors.normalizeRooms(card[f.rooms],{expectedArea:card[f.area]}).map(r=>`${r.name}: ${r.area}`).join('\n'));
       });
-      selectFloors(card.floors||2);
       // Load style and features from tags
       if(cardTags.includes('Классический')) selectStyle('classic');
       else if(cardTags.includes('Современный')) selectStyle('modern');
@@ -11515,6 +11568,7 @@ function openCardEditor(id){
       if(cardTags.includes('Цокольный этаж')){ceFeatureSelected.push('basement');const b=document.getElementById('feature-btn-basement');if(b){b.style.borderColor='#3b82f6';b.style.background='rgba(59,130,246,0.15)';b.style.color='#3b82f6';}}
       if(cardTags.includes('Мансарда')){ceFeatureSelected.push('mansard');const b=document.getElementById('feature-btn-mansard');if(b){b.style.borderColor='#3b82f6';b.style.background='rgba(59,130,246,0.15)';b.style.color='#3b82f6';}}
       if(cardTags.includes('Плоская кровля')){ceFeatureSelected.push('flat');const b=document.getElementById('feature-btn-flat');if(b){b.style.borderColor='#3b82f6';b.style.background='rgba(59,130,246,0.15)';b.style.color='#3b82f6';}}
+      selectFloors(card.floors);
       // Show stored images as previews
       if(card.images){
         const previews = ['ce-facade-preview','ce-facade2-preview','ce-plan1-preview','ce-plan2-preview','ce-plan3-preview','ce-planb-preview'];
@@ -11564,7 +11618,7 @@ function closeCardEditor(){
 function setVal(id, val){ const el=document.getElementById(id); if(el) el.value=val; }
 
 function selectFloors(n){
-  n = Math.max(1,Math.min(3,parseInt(n)||1));
+  n = CatalogFloors.count({floors:n});
   ceFloorsSelected = n;
   markCardEditorDirty();
   [1,2,3].forEach(i=>{
@@ -11576,7 +11630,8 @@ function selectFloors(n){
       btn.style.borderColor='#374151';btn.style.background='transparent';btn.style.color='#6b7280';
     }
   });
-  const fs = document.getElementById('prev-floors-stat'); if(fs) fs.textContent=n;
+  const hint=document.getElementById('ce-floor-hint');
+  if(hint)hint.textContent=n===null?'Этажность не указана.':n>3?'В карточке сохранено: '+CatalogFloors.label({floors:n})+'.':'Надземные этажи. Цоколь добавляется отдельно.';
   cePreview();
 }
 
@@ -11928,7 +11983,7 @@ function cePreview(){
   set('prev-title',num?`Проект №${num}${title?' — '+title:''}`:'Проект №—');
   set('prev-num',num?'№ '+num:'№ —');
   set('prev-area',v('ce-area')||'—');set('prev-beds',v('ce-beds')||'—');set('prev-footprint',v('ce-footprint')||'—');
-  set('prev-floors-stat',ceFloorsSelected);set('prev-price',(v('ce-price')||'—')+' ₽');
+  set('prev-floors-stat',ceFloorsSelected??'—');set('prev-price',(v('ce-price')||'—')+' ₽');
   const tags=v('ce-tags').split(',').map(t=>t.trim()).filter(t=>t&&t!=='Цокольный этаж');
   if(ceFeatureSelected.includes('basement')&&!tags.includes('Цокольный этаж'))tags.push('Цокольный этаж');
   document.getElementById('prev-tags').innerHTML=tags.map(t=>`<div class="tag" style="color:#2a72c0">${escapeHtml(t)}</div>`).join('');
@@ -12446,7 +12501,7 @@ ${CatalogFloors.panels(card)}
   <div class="stats">
     <div class="stat"><div class="stat-val">${escapeHtml(String(card.total_area||'—'))}</div><div class="stat-sub">м² общая</div></div>
     <div class="stat"><div class="stat-val">${escapeHtml(String(card.beds||'—'))}</div><div class="stat-sub">спальни</div></div>
-    <div class="stat"><div class="stat-val">${escapeHtml(String(card.floors||'—'))}</div><div class="stat-sub">этажа</div></div>
+    <div class="stat"><div class="stat-val">${CatalogFloors.count(card)??'—'}</div><div class="stat-sub">этажность</div></div>
     <div class="stat"><div class="stat-val" style="font-size:12px">${escapeHtml(card.footprint||'—')}</div><div class="stat-sub">габарит</div></div>
   </div>
   <div class="tags">${tags}</div>

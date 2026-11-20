@@ -198,7 +198,7 @@ function openProjectSheet(id){
     document.getElementById('pf-advance').value = p.advance ?? '';
     document.getElementById('pf-balance').value = p.balance ?? '';
     document.getElementById('pf-area').value = p.area ?? '';
-    document.getElementById('pf-expenses').value = p.expenses ?? '';
+    document.getElementById('pf-expenses').value = getProjectExpenses(p);
     document.getElementById('pf-feepaid').value = p.fee_paid ?? '';
     document.getElementById('pf-feepercent').value = p.fee_percent ?? '';
     document.getElementById('pf-feebase').value = p.fee_base || '';
@@ -244,7 +244,6 @@ function openProjectSheet(id){
       expBlock.style.display = isConstr ? 'none' : '';
       const expField = document.getElementById('pf-expenses');
       if(expField){
-        expField.value = isConstr ? getProjectExpenses(p) : (p.expenses ?? '');
         expField.title = isConstr ? 'Считается из накладных объекта (вкладка «Стройка»)' : 'Складывается из списка расходов ниже';
       }
     }

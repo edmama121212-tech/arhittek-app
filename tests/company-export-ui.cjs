@@ -24,6 +24,16 @@ const cases=[
 ];
 (async()=>{
  const browser=await chromium.launch({executablePath:process.env.BROWSER_EXECUTABLE||undefined,args:['--no-sandbox']});
+ if(process.argv.includes('--bank-fields')){
+   try{await require('./helpers/company-bank-fields.cjs')({browser,company,root,build,html});}
+   finally{await browser.close();}
+   return;
+ }
+ if(process.argv.includes('--selection')){
+   try{await require('./helpers/company-export-selection.cjs')({browser, company, root, build, html});}
+   finally{await browser.close();}
+   return;
+ }
  const report=[['Элемент','Сборка SHA256 index','UTC','Chromium','Бизнес-сценарий','Шаги','Результат и связи','От кнопки до готового файла или отказа, мс','Визуальная проверка','Удобство','Статус']];
  const failures=[];
  try{

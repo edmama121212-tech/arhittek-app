@@ -23,7 +23,21 @@
   const enabled = (floor,card)=>floor.key==='basement'?tags(card).includes('Цокольный этаж'):Number(card.floors||1)>=floor.number;
   const active = card=>definitions.filter(floor=>enabled(floor,card));
   const slots = values=>Array.from({length:Math.max(6,Array.isArray(values)?values.length:0)},(_,i)=>values?.[i]||null);
-  const label = card=>`${Number(card.floors)||1} ${Number(card.floors)===1?'этаж':'этажа'}${tags(card).includes('Цокольный этаж')?' + цоколь':''}`;
+  function count(card){
+    const value=Number(card.floors);
+    return Number.isSafeInteger(value)&&value>0?value:null;
+  }
+  function matchesCount(card,filter){
+    const value=count(card);
+    return String(filter)==='3'?value>=3:value===Number(filter);
+  }
+  const plurals=new Intl.PluralRules('ru');
+  function label(card){
+    const value=count(card);
+    const unit={one:'этаж',few:'этажа',many:'этажей'};
+    const text=value===null?'Этажность не указана':value+' '+unit[plurals.select(value)];
+    return text+(tags(card).includes('Цокольный этаж')?' + цоколь':'');
+  }
   const rows = values=>normalizeRooms(values).map((r,i)=>`<div class="expl-row"><div class="expl-num">${i+1}</div><div class="expl-name">${esc(r.name)}</div><div class="expl-area">${esc(r.area)} <sup>м²</sup></div></div>`).join('');
   const areaNumber=value=>{const text=String(value??'').trim().replace(/\s/g,'').replace(/м[²2]$/iu,'').replace(',','.');return /^\d+(?:\.\d{1,2})?$/.test(text)&&Number(text)>0?Number(text):null;};
   const areaText=value=>(Math.round(value*100)/100).toFixed(2).replace('.',',');
@@ -53,8 +67,10 @@
       const value=complete?rooms.reduce((s,r)=>s+Math.round(areaNumber(r.area)*100),0)/100:areaNumber(card[f.area]);
       if(value===null){missing.push(f.key);continue;}patch[f.area]=areaText(value);sum+=Math.round(value*100);
     }
-    if(!missing.length&&sum>0)patch.total_area=areaText(sum/100);
-    return {patch,complete:!missing.length&&sum>0,missing};
+    const levels=count(card);
+    const complete=levels!==null&&levels<=3&&!missing.length&&sum>0;
+    if(complete)patch.total_area=areaText(sum/100);
+    return {patch,complete,missing};
   }
   // Whole-house tariff, not progressive bands. Exactly 100 and 400 are middle tier.
   function rate(value){const area=areaNumber(value);return area===null?null:area<100?150:area>400?80:100;}
@@ -64,7 +80,11 @@
     return saved!==null?saved:autoPrice(card.total_area);
   }
   const priceText=card=>{const value=price(card);return value===null?'Цена по запросу':value.toLocaleString('ru-RU')+' ₽';};
-  const defaultTitle=card=>(Number(card.floors)===1?'Одноэтажный':Number(card.floors)===3?'Трёхэтажный':'Двухэтажный')+' дом';
+  function defaultTitle(card){
+    const floors=count(card);
+    const names=['','Одноэтажный дом','Двухэтажный дом','Трёхэтажный дом'];
+    return floors===null?'Жилой дом':names[floors]||'Дом в '+label({floors});
+  }
   function tabs(card,suffix='',handler='showTab'){
     return active(card).map(f=>`<div class="tab" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" onclick="${handler}('${f.key}${suffix}',this)">${f.label}</div>`).join('');
   }
@@ -93,5 +113,5 @@
   function previewPanels(){
     return definitions.map(f=>`<div id="prev-${f.key}" class="catalog-floor-preview" style="display:none"><div class="plan-wrap"><div class="plan-label">${f.title}<span id="prev-a${f.suffix}-badge">— м²</span></div><div class="plan-img-container"><img id="prev-plan${f.suffix}-img" class="plan-img" alt="${f.title}: план" style="display:none"/><span id="prev-plan${f.suffix}-ph" class="catalog-plan-empty">Загрузите план</span></div></div><div class="explication"><div class="expl-header"><span class="expl-header-title">Экспликация</span><span id="prev-total${f.suffix}" class="expl-header-total">— м²</span></div><div id="prev-expl${f.suffix}-rows"></div></div><div style="height:12px"></div></div>`).join('');
   }
-  root.CatalogFloors = Object.freeze({definitions,tags,enabled,active,slots,label,rate,autoPrice,price,priceText,rows,normalizeRooms,calculateAreas,defaultTitle,areaNumber,tabs,panels,editor,previewTabs,previewPanels});
+  root.CatalogFloors = Object.freeze({definitions,tags,enabled,active,slots,count,matchesCount,label,rate,autoPrice,price,priceText,rows,normalizeRooms,calculateAreas,defaultTitle,areaNumber,tabs,panels,editor,previewTabs,previewPanels});
 })(typeof window!=='undefined'?window:globalThis);

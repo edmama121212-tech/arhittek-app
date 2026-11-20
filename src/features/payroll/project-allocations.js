@@ -194,7 +194,7 @@ async function addProjectExpense(){
         project_expense_edited:{old:before ? ((before.description||'Расход')+' — '+fmtMoney(before.amount)) : null, new:desc+' — '+fmtMoney(amount)}
       });
     }else{
-      const existing = state.ledger.filter(l=>l.project_id===projectId && l.type==='project_expense' && !l.deleted_at);
+      const existing = projectDirectExpenseRows(projectId);
       if(!existing.length && p && !isConstructionProject(p) && Number(p.expenses) > 0){
         const {error:importError}=await sb.from('ledger_entries').insert({
           type:'project_expense', project_id:projectId,
@@ -220,6 +220,7 @@ async function addProjectExpense(){
     const expEl=document.getElementById('pf-expenses'); if(expEl) expEl.value=total;
     updateCompanyRemainderField(projectId);
     const up=state.projects.find(x=>x.id===projectId); if(up) renderFeeSummaryForProject(up);
+    window.refreshProjectWorkspace?.();
     showToast(wasEditing ? 'Расход изменён' : 'Расход добавлен');
   }catch(e){ console.error(e); showToast(window.ARHITTEKCash?.insufficientFundsNotice(e)||(wasEditing ? 'Ошибка изменения расхода' : 'Ошибка добавления расхода'));
   }finally{ projectExpenseSaveInFlight=false; document.getElementById('pf-expense-add-btn').disabled=false; }
@@ -231,11 +232,13 @@ async function deleteProjectExpense(entryId, projectId){
     const {error:payoutDeleteError}=await sb.from('ledger_entries').update({deleted_at:new Date().toISOString()}).eq('id', entryId);
     if(payoutDeleteError) throw payoutDeleteError;
     await loadAll();
-    const total = await syncProjectExpensesTotal(projectId);
+    const total = await syncProjectExpensesTotal(projectId,{deletedExpense:true});
+    if(editingProjectId!==projectId)return;
     renderProjectExpenses(projectId);
     const expEl = document.getElementById('pf-expenses'); if(expEl) expEl.value = total;
     updateCompanyRemainderField(projectId);
     const up = state.projects.find(x=>x.id===projectId); if(up) renderFeeSummaryForProject(up);
+    window.refreshProjectWorkspace?.();
     showToast('Расход удалён');
   }catch(e){ console.error(e); showToast('Ошибка удаления'); }
 }
