@@ -154,6 +154,18 @@ function cancelScannedExplication(fieldId){
   if(statusEl) statusEl.innerHTML = '';
 }
 
+function editorCardTags(){
+  const styleTags={classic:'Классический',modern:'Современный'};
+  const featureTags={basement:'Цокольный этаж',mansard:'Мансарда',flat:'Плоская кровля'};
+  const systemTags=[...Object.values(styleTags),...Object.values(featureTags)];
+  const tags=CatalogFloors.tags({tags:document.getElementById('ce-tags').value}).filter(tag=>!systemTags.includes(tag));
+  for(const [key,tag] of Object.entries(styleTags)){
+    if(ceStyleSelected==='both'||ceStyleSelected===key)tags.push(tag);
+  }
+  for(const key of ceFeatureSelected)if(featureTags[key])tags.push(featureTags[key]);
+  return tags;
+}
+
 function initCardFloorEditor(){
   const container=document.getElementById('ce-floor-sections');
   if(!container||container.dataset.ready)return;
@@ -182,8 +194,7 @@ function cePreview(){
   set('prev-num',num?'№ '+num:'№ —');
   set('prev-area',v('ce-area')||'—');set('prev-beds',v('ce-beds')||'—');set('prev-footprint',v('ce-footprint')||'—');
   set('prev-floors-stat',ceFloorsSelected??'—');set('prev-price',(v('ce-price')||'—')+' ₽');
-  const tags=v('ce-tags').split(',').map(t=>t.trim()).filter(t=>t&&t!=='Цокольный этаж');
-  if(ceFeatureSelected.includes('basement')&&!tags.includes('Цокольный этаж'))tags.push('Цокольный этаж');
+  const tags=editorCardTags();
   document.getElementById('prev-tags').innerHTML=tags.map(t=>`<div class="tag" style="color:#2a72c0">${escapeHtml(t)}</div>`).join('');
   CatalogFloors.definitions.forEach(f=>{
     const visible=CatalogFloors.enabled(f,card);
@@ -272,16 +283,7 @@ async function saveCard(){
       beds: document.getElementById('ce-beds').value === '' ? null : parseInt(document.getElementById('ce-beds').value,10),
       baths: document.getElementById('ce-baths').value === '' ? null : parseInt(document.getElementById('ce-baths').value,10),
       price: document.getElementById('ce-price').value.trim(),
-      tags: (()=>{
-        const systemTags = ['Классический','Современный','Цокольный этаж','Мансарда','Плоская кровля'];
-        const userTags = document.getElementById('ce-tags').value.split(',').map(t=>t.trim()).filter(Boolean).filter(t=>!systemTags.includes(t));
-        if(ceStyleSelected==='classic') userTags.push('Классический');
-        if(ceStyleSelected==='modern') userTags.push('Современный');
-        if(ceFeatureSelected.includes('basement')) userTags.push('Цокольный этаж');
-        if(ceFeatureSelected.includes('mansard')) userTags.push('Мансарда');
-        if(ceFeatureSelected.includes('flat')) userTags.push('Плоская кровля');
-        return userTags;
-      })(),
+      tags: editorCardTags(),
       ...Object.fromEntries(CatalogFloors.definitions.flatMap(f=>[
         [f.area,document.getElementById('ce-area'+f.suffix).value.trim()],
         [f.rooms,parseExpl(document.getElementById('ce-expl'+f.suffix).value,document.getElementById('ce-area'+f.suffix).value)]

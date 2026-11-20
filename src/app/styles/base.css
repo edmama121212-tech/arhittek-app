@@ -534,3 +534,7 @@
 #view-kp .kp-saving strong{font-size:16px}
 #view-kp .kp-saving-row{background:var(--green-soft);padding:9px 8px;gap:8px}
 #view-kp .kp-saving-row :is(.fl,.fv){font-size:15px;color:var(--green);font-weight:700}
+
+@media (max-width: 540px){
+  #pf-phone-field{display:grid;grid-template-columns:minmax(0,1fr);}
+}

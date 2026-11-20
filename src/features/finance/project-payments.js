@@ -3,6 +3,7 @@
 // ============================================================
 let paymentType = 'advance';
 let paymentProjectId = null;
+let paymentOpener = null;
 
 const paymentHints = {
   advance: 'Увеличит «Получено» и уменьшит «Остаток» по проекту.',
@@ -31,6 +32,8 @@ document.getElementById('payment-before-start').addEventListener('change',syncPa
 document.getElementById('payment-date').addEventListener('input',syncPaymentTiming);
 
 function openPaymentSheet(projectId){
+  if(paymentSaveInFlight)return;
+  paymentOpener=document.activeElement;
   paymentProjectId = projectId || editingProjectId;
   if(!paymentProjectId) return;
   paymentType = 'advance';
@@ -44,7 +47,15 @@ function openPaymentSheet(projectId){
   document.getElementById('payment-hint').textContent = paymentHints.advance;
   const p=state.projects.find(p=>p.id===paymentProjectId);
   const ids=[...new Set([p?.employee_id,p?.co_employee_id,...projectRolePayoutEntries(paymentProjectId).map(r=>r.payee_employee_id)].filter(Boolean))];
-  document.getElementById('payment-payee').innerHTML=ids.map(id=>`<option value="${escapeHtml(id)}">${escapeHtml(findEmployee(id)?.name||'Сотрудник')}</option>`).join('');
+  const payees=ids.map(id=>({id,name:findEmployee(id)?.name||'Сотрудник'}));
+  document.getElementById('payment-payee').replaceChildren(...payees.map(({id,name})=>{
+    let label=name;
+    if(payees.some(other=>other.id!==id&&other.name===name)){
+      const assignment=id===p.employee_id?'Основной исполнитель':id===p.co_employee_id?'Соисполнитель':'Начисление за м²';
+      label=name+' · '+assignment;
+    }
+    return new Option(label,id);
+  }));
   document.getElementById('payment-payee-field').hidden=true;
   document.getElementById('paymentSheetOverlay').classList.add('active');
   window.ARHITTEKCash?.attachCountField('payment-note');
@@ -54,6 +65,7 @@ document.querySelectorAll('#payment-type .yn-btn').forEach(btn=>{
   btn.addEventListener('click', ()=>{
     document.querySelectorAll('#payment-type .yn-btn').forEach(b=>b.classList.remove('selected'));
     btn.classList.add('selected');
+    if(paymentType!==btn.dataset.value)document.getElementById('paymentSheetOverlay').dataset.dirty='1';
     paymentType = btn.dataset.value;
     syncPaymentTiming();
     document.getElementById('payment-payee-field').hidden=paymentType!=='fee_payment';
@@ -95,7 +107,7 @@ async function savePayment(){
   const updates = {};
   if(paymentType === 'fee_payment'){
     const field=projectFeePaidField(p,{payee_employee_id:payeeEmployeeId});
-    if(field)updates[field]=(Number(p[field])||0)+amount;
+    if(field)updates[field]=(Math.round((Number(p[field])||0)*100)+Math.round(amount*100))/100;
   }else if(paymentType === 'withdrawal'){
     // No effect on project financial fields — purely a journal record with a reason
   }else{
@@ -106,7 +118,10 @@ async function savePayment(){
   }
 
   paymentSaveInFlight=true;
-  document.getElementById('payment-save').disabled=true;
+  const saveButton=document.getElementById('payment-save');
+  saveButton.disabled=true;
+  saveButton.textContent='Сохраняем платёж…';
+  document.getElementById('paymentSheetClose').disabled=true;
   showToast('Сохранение…');
   let projectSynced=false;
   try{
@@ -181,7 +196,9 @@ async function savePayment(){
     await loadAll();
   }finally{
     paymentSaveInFlight=false;
-    document.getElementById('payment-save').disabled=false;
+    saveButton.disabled=false;
+    saveButton.textContent='Сохранить платёж';
+    document.getElementById('paymentSheetClose').disabled=false;
   }
 }
 
@@ -194,6 +211,7 @@ document.getElementById('pf-expense-cancel-edit')?.addEventListener('click', ()=
 });
 document.getElementById('paymentSheetClose').addEventListener('click', ()=>{
   document.getElementById('paymentSheetOverlay').classList.remove('active');
+  if(paymentOpener?.isConnected)paymentOpener.focus({preventScroll:true});
 });
 document.getElementById('payment-save').addEventListener('click', savePayment);
 

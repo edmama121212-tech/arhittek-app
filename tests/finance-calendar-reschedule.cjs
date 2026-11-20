@@ -23,9 +23,13 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
 (async () => {
   const cardTiming = process.argv.includes('--card-timing');
   const recordReversal = process.argv.includes('--record-reversal');
-  const cardPayment = process.argv.includes('--card-payment');
+  const paymentPayee = process.argv.includes('--payment-payee');
+  const paymentClose = process.argv.includes('--payment-close');
+  const cardTest = paymentClose?'./helpers/payment-close-ui.cjs':paymentPayee?'./helpers/payment-payee-ui.cjs':'./helpers/card-payment-ui.cjs';
+  const cardPayment = paymentClose || paymentPayee || process.argv.includes('--card-payment');
   const receiptDate = process.argv.includes('--receipt-date');
-  const journalReverse = process.argv.includes('--journal-reverse');
+  const feeTeamReversal = process.argv.includes('--fee-team-reversal');
+  const journalReverse = feeTeamReversal || process.argv.includes('--journal-reverse');
   const projectSchedule = process.argv.includes('--project-schedule');
   const releasePlan = process.argv.includes('--release-plan');
   const salaryRule = process.argv.includes('--salary-rule');
@@ -55,6 +59,7 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
       await db.exec(read(file));
     }
     if(!recordReversal)await db.exec(read('supabase/migrations/20261120100000_record_reversal.sql'));
+    if(feeTeamReversal)await require('./helpers/fee-team-reversal-ui.cjs').seed(db,uuid);
     if(cardTiming){
       await db.exec(read('supabase/receipt-timing.sql'));
       await require('./helpers/card-timing-ui.cjs').prepare(db,uuid,root);
@@ -62,7 +67,7 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
     if(cardPayment){
       await db.exec(read('supabase/receipt-timing.sql'));
       await db.exec(read('supabase/migrations/20261120090000_project_card_payment.sql'));
-      await require('./helpers/card-payment-ui.cjs').prepare(db,uuid);
+      await require(cardTest).prepare(db,uuid);
     }
     if(receiptDate){
       await db.exec(read('supabase/receipt-timing.sql'));
@@ -109,7 +114,8 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
     if(!dedicated) await command('pay',{key:idFor(5),amount:407.75,wallet_id:wallet,date:day,reason:'Часть суммы уже оплачена'},uuid(51));
 
     const ctx = await browser.newContext({hasTouch:walletTransfer||createRule||stopRule||paymentLinks||unlinkPayments||cancelPlan,locale:'ru-RU',viewport:{width:390,height:844},serviceWorkers:'block',reducedMotion:'reduce'});
-    await ctx.addInitScript({path:path.join(__dirname,'mock.js')});
+    if(paymentClose)await ctx.addInitScript({content:'const nativeConfirm=window.confirm;\n'+read('tests/mock.js')+'\nwindow.confirm=nativeConfirm;'});
+    else await ctx.addInitScript({path:path.join(__dirname,'mock.js')});
     const servedHashes = {};
     await ctx.route('**/*',route=>{
       const url = new URL(route.request().url());
@@ -157,7 +163,7 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
       return;
     }
     if(cardPayment){
-      await require('./helpers/card-payment-ui.cjs').run({page,db,uuid,day,shift,snap,build,browser,expectedTile,twoFrames});
+      await require(cardTest).run({page,db,uuid,day,shift,snap,build,browser,expectedTile,twoFrames});
       assert.deepEqual(errors,[]);
       return;
     }
@@ -186,7 +192,8 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
       assert.deepEqual(errors,[]);return;
     }
     if(journalReverse){
-      await require('./helpers/journal-reverse-ui.cjs')({page,fw,db,command,snap,day,wallet,uuid,build,browser,expectedTile,twoFrames});
+      const reverseCases=feeTeamReversal?require('./helpers/fee-team-reversal-ui.cjs').run:require('./helpers/journal-reverse-ui.cjs');
+      await reverseCases({page,fw,db,command,snap,day,wallet,uuid,build,browser,expectedTile,twoFrames});
       assert.deepEqual(errors,[]);
       return;
     }

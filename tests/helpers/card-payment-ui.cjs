@@ -57,6 +57,7 @@ async function installBridge(page,db){
 }
 async function run({page,db,uuid,day,shift,snap,build,browser,expectedTile,twoFrames}){
  const rows=[['Элементы','Сборка SHA256 index/finance-workspace','Дата UTC / Chromium','Бизнес-сценарий','Шаги','Факт и последствия','Открытие, мс','Подтверждение до результата, мс','Визуально и удобство','Статус']];
+ const totals=[['Элементы','Сборка index/finance','UTC / Chromium','Задача','Шаги','Поля после операции и связанные разделы','Вкладка «Деньги» до двух кадров, мс','Платёж до результата, мс','Вид и удобство','Итог']];
  const people=[uuid(7801),uuid(7802)];
  await installBridge(page,db);
  await page.evaluate(async ({cases,people,category})=>{
@@ -69,7 +70,11 @@ async function run({page,db,uuid,day,shift,snap,build,browser,expectedTile,twoFr
   const id=uuid(7600+i),name='Учебный договор '+(i+1),before=(await snap()).workspace.cash;
   await page.locator('.nav-btn[data-view="view-projects"]').click();
   const project=page.locator('#projectsCard .proj-row').filter({has:page.getByText(name,{exact:true})});
-  await project.click();await page.locator('#project-tab-money').click();
+  await project.click();
+  assert.equal(await page.locator('#pf-payment').isVisible(),false,'Статус по оплате вычисляется автоматически');
+  const tabStart=performance.now();
+  await page.locator('#project-tab-money').click();await twoFrames(page);
+  const tabMs=Math.round(performance.now()-tabStart);
   let t=performance.now();
   await page.locator('#pf-add-payment').click();
   const modal=page.locator('#paymentSheetOverlay'),sum=modal.locator('#payment-amount');
@@ -122,6 +127,20 @@ async function run({page,db,uuid,day,shift,snap,build,browser,expectedTile,twoFr
   const history=page.locator('#pf-payment-history');if(invalid)await history.getByText('Платежей пока нет').waitFor();else await history.getByText(note,{exact:false}).waitFor();
   if(mode==='race'){await page.locator('#pf-cancel').click();await project.click();await page.locator('#project-tab-money').click();}
   const summary=page.locator('#project-economy .project-metric').filter({hasText:'Долг клиента'}).locator('strong');assert.ok(Math.abs(money(await summary.innerText())-debt)<1e-7,'долг в открытой карточке');
+  const fields=[['pf-advance',got],['pf-balance',debt]];
+  for(const [field,value] of fields){
+   const input=page.locator('#'+field);
+   const label=await input.evaluate(el=>[...el.labels].map(l=>l.textContent.trim()).join(' '));
+   assert.match(label,field==='pf-advance'?/Получено/:/Долг клиента/);
+   assert.ok(await input.isVisible(),field+' виден на вкладке денег');
+   assert.equal(await input.evaluate(el=>el.readOnly),true);
+   const shown=await input.inputValue();
+   assert.notEqual(shown,'',mode+' / '+field+' · сумма заполнена');
+   assert.equal(Number(shown),value,mode+' / '+field);
+   const bounds=await input.boundingBox();
+   assert.ok(bounds.width>0&&bounds.x>=0&&bounds.x+bounds.width<=page.viewportSize().width+1);
+  }
+  if(mode==='first'&&process.env.CARD_TOTALS_SHOT)await page.locator('#pf-balance').locator('xpath=ancestor::div[contains(@class,"accent-block")][1]').screenshot({path:process.env.CARD_TOTALS_SHOT});
   await page.locator('#pf-cancel').click();await project.locator('.status-chip').filter({hasText:status(got)}).waitFor();
   await page.locator('.nav-btn[data-view="view-finance"]').click();
   const expected=Math.round((before+(invalid||['legacy','dated'].includes(mode)?0:isReceipt?amount:-amount))*100)/100;
@@ -130,6 +149,8 @@ async function run({page,db,uuid,day,shift,snap,build,browser,expectedTile,twoFr
    'Проекты → '+name+' (цена 1000 ₽, принято '+advance+' ₽) → Деньги → Принять платёж → '+type+' → '+amount+' ₽, '+date+(mode==='co'?' → соисполнитель':'')+(mode==='legacy'?' → до начала учёта':'')+(mode==='race'?' → на другом устройстве изменить цену до 1050 ₽':mode==='changed'?' → потеря ответа → ввести 50 ₽ и повторить → открыть историю':mode==='retry'?' → потеря ответа → повтор с теми же данными':'')+' → '+(mode==='double'?'дважды ':'')+'Сохранить → карточка → список → Финансы',
    'Принято '+got+' ₽, долг '+debt+' ₽, '+status(got)+'. Проводок '+stored.entries.length+'. Сейф '+before+' → '+expected+' ₽. Выплат исполнителю '+stored.project.fee_paid+' ₽, соисполнителю '+stored.project.co_fee_paid+' ₽.'+(message?' Ответ: '+message:''),
    open,elapsed,'Форма '+visual.width+' px без горизонтального переполнения. '+(invalid?'Причина показана, введённая сумма сохранена.':'Долг доступен в открытой карточке и статус в списке.'),'Пройдено']);
+  const paymentRow=rows.at(-1);
+  totals.push(['UI-0203 / UI-0204',build,paymentRow[2],task,paymentRow[4]+' → прочитать поля «Получено» и «Долг клиента»',paymentRow[5],tabMs,elapsed,'Оба числовых поля видимы на вкладке, помещаются по ширине и защищены от ручного изменения.','Пройдено']);
   console.log(mode,open,elapsed);
  }
  // The journal's existing reversal updates advance directly, bypassing the card writer.
@@ -142,6 +163,7 @@ async function run({page,db,uuid,day,shift,snap,build,browser,expectedTile,twoFr
  const reversed=(await db.query('select advance,balance,payment_status from public.projects where id=$1',[uuid(7600+lastCase)])).rows[0];
  assert.equal(Number(reversed.advance),999.99);assert.equal(Number(reversed.balance),0.01);assert.equal(reversed.payment_status,'Частично оплачен');
  assert.equal(Math.round((afterLast.workspace.cash-(await snap()).workspace.cash)*100),1);
+ if(process.env.CARD_TOTALS_CSV)fs.writeFileSync(process.env.CARD_TOTALS_CSV,'\ufeff'+totals.map(row=>row.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\n')+'\n');
  if(process.env.CARD_PAYMENT_CSV)fs.writeFileSync(process.env.CARD_PAYMENT_CSV,'\ufeff'+rows.map(row=>row.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\n')+'\n');
 }
 module.exports={prepare,run,installBridge};

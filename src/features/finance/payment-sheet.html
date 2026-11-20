@@ -4,7 +4,7 @@
     <div class="sheet-handle"></div>
     <div class="sheet-title">
       <span>Принять платёж</span>
-      <button class="sheet-close" id="paymentSheetClose">✕</button>
+      <button type="button" class="sheet-close" id="paymentSheetClose" aria-label="Закрыть форму платежа">✕</button>
     </div>
 
     <div class="field">
@@ -19,7 +19,7 @@
     </div>
 
     <div class="field" id="payment-payee-field" hidden>
-      <label>Кому выдали деньги</label><select id="payment-payee"></select>
+      <label for="payment-payee">Кому выдали деньги</label><select id="payment-payee"></select>
     </div>
 
     <div class="field-row">

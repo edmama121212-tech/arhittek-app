@@ -347,9 +347,8 @@ function openCardEditor(id){
         setVal('ce-expl'+f.suffix,CatalogFloors.normalizeRooms(card[f.rooms],{expectedArea:card[f.area]}).map(r=>`${r.name}: ${r.area}`).join('\n'));
       });
       // Load style and features from tags
-      if(cardTags.includes('Классический')) selectStyle('classic');
-      else if(cardTags.includes('Современный')) selectStyle('modern');
-      else { ceStyleSelected=''; ['classic','modern'].forEach(id=>{const btn=document.getElementById('style-btn-'+id);if(btn){btn.style.borderColor='#374151';btn.style.background='transparent';btn.style.color='#6b7280';}}); }
+      const classic=cardTags.includes('Классический'),modern=cardTags.includes('Современный');
+      selectStyle(classic&&modern?'both':classic?'classic':modern?'modern':'');
       ceFeatureSelected=[];
       ['basement','mansard','flat'].forEach(id=>{const btn=document.getElementById('feature-btn-'+id);if(btn){btn.style.borderColor='#374151';btn.style.background='transparent';btn.style.color='#6b7280';}});
       if(cardTags.includes('Цокольный этаж')){ceFeatureSelected.push('basement');const b=document.getElementById('feature-btn-basement');if(b){b.style.borderColor='#3b82f6';b.style.background='rgba(59,130,246,0.15)';b.style.color='#3b82f6';}}
@@ -422,17 +421,20 @@ function selectFloors(n){
   cePreview();
 }
 
-function selectStyle(s){
+function selectStyle(s,userEdit=false){
   ceStyleSelected = s || '';
   ['classic','modern'].forEach(id=>{
     const btn=document.getElementById('style-btn-'+id);
     if(!btn) return;
-    if(s===id){
+    const selected=s==='both'||s===id;
+    btn.setAttribute('aria-pressed',String(selected));
+    if(selected){
       btn.style.borderColor='#3b82f6';btn.style.background='rgba(59,130,246,0.15)';btn.style.color='#3b82f6';
     } else {
       btn.style.borderColor='#374151';btn.style.background='transparent';btn.style.color='#6b7280';
     }
   });
+  if(userEdit){markCardEditorDirty();cePreview();}
 }
 
 function toggleFeature(f, el){

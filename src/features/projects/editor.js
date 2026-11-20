@@ -45,6 +45,7 @@ function populateProjectFormSelects(){
 document.addEventListener('change', (e)=>{
   if(e.target && e.target.id === 'pf-category'){
     renderProjectNumberField();
+    updateProjectBalancePreview();
     const cat = findCategory(e.target.value);
     if(cat && cat.department_id){
       document.getElementById('pf-department').value = cat.department_id;
@@ -86,10 +87,28 @@ function outstandingProjectBalance(price,advance){
   return Math.max(0,Math.round(price*100)-Math.round(advance*100))/100;
 }
 
+function updateProjectBalancePreview(){
+  const project=state.projects.find(p=>p.id===editingProjectId);
+  const category=document.getElementById('pf-category').value;
+  const construction=project?isConstructionProject({...project,category_id:category}):isConstructionCategory(category);
+  const received=document.getElementById('pf-advance'),balance=document.getElementById('pf-balance');
+  document.querySelector('label[for="pf-balance"]').textContent=construction?'Деньги объекта, ₽':'Долг клиента, ₽';
+  balance.title=construction?'Полученные деньги минус выплаты из бюджета объекта':'Рассчитывается автоматически: Цена − Получено';
+  document.getElementById('pf-payment-help').textContent=construction
+    ?'Деньги объекта рассчитываются по поступлениям и выплатам в журнале.'
+    :'Долг клиента — цена договора за вычетом полученной оплаты.';
+  if(construction){
+    const cash=project?getConstructionFinancials(project):{received:0,balance:0};
+    received.value=cash.received;
+    balance.value=cash.balance;
+  }else{
+    received.value=project?.advance??'';
+    balance.value=outstandingProjectBalance(Number(document.getElementById('pf-price').value)||0,Number(received.value)||0);
+  }
+}
+
 document.getElementById('pf-price').addEventListener('input', ()=>{
-  const price = parseFloat(document.getElementById('pf-price').value) || 0;
-  const advance = parseFloat(document.getElementById('pf-advance').value) || 0;
-  document.getElementById('pf-balance').value = outstandingProjectBalance(price,advance);
+  updateProjectBalancePreview();
   recalcLiveFeeSummary();
 });
 ['pf-expenses','pf-feepercent','pf-feebase','pf-feepaid','pf-co-employee','pf-co-feepercent','pf-co-feepaid'].forEach(id=>{
@@ -232,11 +251,6 @@ function openProjectSheet(id){
     // Для Архитектуры и Дизайна интерьера она не нужна.
     const isConstr = isConstructionProject(p);
     document.getElementById('pf-open-as-object').style.display = isConstr ? '' : 'none';
-    if(isConstr){
-      const financials=getConstructionFinancials(p);
-      document.getElementById('pf-advance').value=financials.received;
-      document.getElementById('pf-balance').value=financials.balance;
-    }
     // Для строительных объектов расходы считаются из накладных (вкладка «Стройка»),
     // а не из этого списка — прячем блок, чтобы не путал устаревшим/нерелевантным числом.
     const expBlock = document.getElementById('pf-expenses-block');
@@ -293,6 +307,7 @@ function openProjectSheet(id){
     renderTasksList(null);
     document.getElementById('pf-open-as-object').style.display = 'none';
   }
+  updateProjectBalancePreview();
   const historyToggle = document.getElementById('pf-history-toggle');
   const historyList = document.getElementById('pf-history-list');
   historyList.style.display = 'none';
@@ -350,16 +365,16 @@ async function saveProject(){
   }
 
   const addressInput = document.getElementById('pf-address').value.trim();
-  if(addressInput){
-    const normalize = s => (s||'').trim().toLowerCase().replace(/\s+/g,' ');
-    const dupe = state.projects.find(p =>
-      p.id !== editingProjectId &&
-      !p.deleted_at &&
-      normalize(p.address) === normalize(addressInput)
+  const normalizeAddress = value => String(value || '').trim().toLowerCase().replace(/\s+/g,' ');
+  const currentProject = state.projects.find(project => project.id === editingProjectId);
+  if(addressInput && normalizeAddress(addressInput) !== normalizeAddress(currentProject?.address)){
+    const dupe = state.projects.find(project =>
+      project.id !== editingProjectId && !project.deleted_at &&
+      normalizeAddress(project.address) === normalizeAddress(addressInput)
     );
     if(dupe){
-      const proceed = confirm(`Объект с адресом «${addressInput}» уже есть в системе («${dupe.name}»). Всё равно создать ещё один?`);
-      if(!proceed) return;
+      const action = editingProjectId ? 'Сохранить этот адрес в текущем проекте?' : 'Создать новый проект по этому адресу?';
+      if(!confirm(`Адрес «${addressInput}» уже указан в проекте «${dupe.name}». ${action}`)) return;
     }
   }
 
