@@ -1423,7 +1423,8 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
           </label>
           <img id="ce-facade2-preview" style="display:none;width:100%;height:80px;object-fit:cover;border-radius:8px;margin-top:6px;"/>
         </div>
-        <div id="ce-floor-sections"></div>
+        <section id="ce-reviewed-roof" class="ce-reviewed-plan" hidden><h3>Эксплуатируемая кровля</h3><a target="_blank" rel="noopener"><img width="270" style="max-width:100%;height:auto" alt="Открыть полный план кровли"/></a></section>
+          <div id="ce-floor-sections"></div>
 
       </div>
 
@@ -11815,6 +11816,15 @@ function markCardEditorDirty(){
 }
 function cePreview(){
   initCardFloorEditor();
+  const roofSection=document.getElementById('ce-reviewed-roof');
+  if(roofSection){
+    const saved=cardsData.find(card=>card.id===ceCurrentId);
+    const roof=saved && CatalogFloors.roofPlan(cePdfImportMeta ? {...saved,pdf_import_meta:cePdfImportMeta} : saved);
+    roofSection.hidden=!roof;
+    const link=roofSection.querySelector('a'),image=link.querySelector('img');
+    if(roof){link.href=roof.image;image.src=roof.thumbnail;}
+    else{link.removeAttribute('href');image.removeAttribute('src');}
+  }
   const v=id=>document.getElementById(id)?.value||'';
   const set=(id,val)=>{const el=document.getElementById(id);if(el)el.textContent=val;};
   const calculationCard={floors:ceFloorsSelected,tags:ceFeatureSelected.includes('basement')?['Цокольный этаж']:[],...Object.fromEntries(CatalogFloors.definitions.flatMap(f=>[[f.area,v('ce-area'+f.suffix)],[f.rooms,parseExpl(v('ce-expl'+f.suffix),v('ce-area'+f.suffix))]]))};
@@ -12447,6 +12457,8 @@ async function createCatalogCardPdf(card){
  // retain the same readable scale on additional A3 sheets.
  for(let i=0;i<levels.length;i+=2){doc.addPage();header(numberText);text('Планировочные решения',16,44,27,true,white);const pair=levels.slice(i,i+2);for(let j=0;j<pair.length;j++)await floorPanel(pair[j],16+j*199,pair.length===1?388:189);}
  for(const extra of overflow){doc.addPage();header(numberText);text(extra.floor.title+' / Экспликация',16,45,23,true,white);doc.autoTable({startY:55,head:[['№','Помещение','Площадь, м²']],body:extra.rows.map((r,i)=>[String(extra.start+i+1),roomLabel(r.name),r.area]),theme:'striped',styles:{font:'Roboto',fontSize:11,cellPadding:3},headStyles:{fillColor:blue,fontStyle:'bold'},columnStyles:{0:{cellWidth:17},2:{cellWidth:40,halign:'right'}},margin:{top:55,bottom:23,left:16,right:16},willDrawPage:()=>{header(numberText);text(extra.floor.title+' / Экспликация',16,45,23,true,white);}});}
+ const roof=CatalogFloors.roofPlan(card);
+ if(roof){doc.addPage();header(numberText);text('Эксплуатируемая кровля',16,44,27,true,white);await picture(roof.image,16,50,388,220,'План кровли');}
  const total=doc.internal.getNumberOfPages();for(let i=1;i<=total;i++){doc.setPage(i);rule(16,281,388);text('ARHITTEK / КОНЦЕПТУАЛЬНЫЙ ПРОЕКТ',16,288,7,true,gray);text('+7 922 659-38-72 · arhittek.ru',258,288,8,false,gray);text(i+' / '+total,404,288,8,true,gray,{align:'right'});}
  return {doc,missing};
 }

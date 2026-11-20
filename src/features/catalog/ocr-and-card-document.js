@@ -168,6 +168,15 @@ function markCardEditorDirty(){
 }
 function cePreview(){
   initCardFloorEditor();
+  const roofSection=document.getElementById('ce-reviewed-roof');
+  if(roofSection){
+    const saved=cardsData.find(card=>card.id===ceCurrentId);
+    const roof=saved && CatalogFloors.roofPlan(cePdfImportMeta ? {...saved,pdf_import_meta:cePdfImportMeta} : saved);
+    roofSection.hidden=!roof;
+    const link=roofSection.querySelector('a'),image=link.querySelector('img');
+    if(roof){link.href=roof.image;image.src=roof.thumbnail;}
+    else{link.removeAttribute('href');image.removeAttribute('src');}
+  }
   const v=id=>document.getElementById(id)?.value||'';
   const set=(id,val)=>{const el=document.getElementById(id);if(el)el.textContent=val;};
   const calculationCard={floors:ceFloorsSelected,tags:ceFeatureSelected.includes('basement')?['Цокольный этаж']:[],...Object.fromEntries(CatalogFloors.definitions.flatMap(f=>[[f.area,v('ce-area'+f.suffix)],[f.rooms,parseExpl(v('ce-expl'+f.suffix),v('ce-area'+f.suffix))]]))};

@@ -54,6 +54,8 @@ async function createCatalogCardPdf(card){
  // retain the same readable scale on additional A3 sheets.
  for(let i=0;i<levels.length;i+=2){doc.addPage();header(numberText);text('Планировочные решения',16,44,27,true,white);const pair=levels.slice(i,i+2);for(let j=0;j<pair.length;j++)await floorPanel(pair[j],16+j*199,pair.length===1?388:189);}
  for(const extra of overflow){doc.addPage();header(numberText);text(extra.floor.title+' / Экспликация',16,45,23,true,white);doc.autoTable({startY:55,head:[['№','Помещение','Площадь, м²']],body:extra.rows.map((r,i)=>[String(extra.start+i+1),roomLabel(r.name),r.area]),theme:'striped',styles:{font:'Roboto',fontSize:11,cellPadding:3},headStyles:{fillColor:blue,fontStyle:'bold'},columnStyles:{0:{cellWidth:17},2:{cellWidth:40,halign:'right'}},margin:{top:55,bottom:23,left:16,right:16},willDrawPage:()=>{header(numberText);text(extra.floor.title+' / Экспликация',16,45,23,true,white);}});}
+ const roof=CatalogFloors.roofPlan(card);
+ if(roof){doc.addPage();header(numberText);text('Эксплуатируемая кровля',16,44,27,true,white);await picture(roof.image,16,50,388,220,'План кровли');}
  const total=doc.internal.getNumberOfPages();for(let i=1;i<=total;i++){doc.setPage(i);rule(16,281,388);text('ARHITTEK / КОНЦЕПТУАЛЬНЫЙ ПРОЕКТ',16,288,7,true,gray);text('+7 922 659-38-72 · arhittek.ru',258,288,8,false,gray);text(i+' / '+total,404,288,8,true,gray,{align:'right'});}
  return {doc,missing};
 }
