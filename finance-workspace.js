@@ -355,23 +355,42 @@ async function act(action,id){
  const projects=[['','Без проекта'],...(state.financialProjects||state.projects||[]).filter(p=>!p.deleted_at).map(p=>[p.id,p.name])],employees=[['','Без сотрудника'],...(state.employees||[]).filter(e=>!e.deleted_at).map(e=>[e.id,e.name])];
  const walletOptions=walletOptionsFor(s);
  const funding=[['reserve','Свободный резерв'],...Object.keys(s.balances||{}).filter(k=>k!=='reserve'&&!k.startsWith('obligation:')).map(k=>[k,accountName(k)])];
- if(['income','expense','release','project-plan','record-income'].includes(action)){
-  const project=s.unscheduled_projects.find(p=>p.id===id),record=action==='record-income',direction=action==='project-plan'?'income':action.replace('record-','');
+ if(action==='project-plan'){
+  const project=s.unscheduled_projects.find(p=>p.id===id);
+  if(!project)throw new Error('Обновите календарь: остаток договора изменился.');
+  form('График оплаты проекта','<p><strong>'+esc(project.name)+'</strong> · без графика '+money(project.remaining)+'</p>'+
+   input('Назначение платежа','label','Оплата · '+project.name)+input('Сумма этапа, ₽','amount',project.remaining,'number')+
+   input('Срок оплаты','due_date','','date')+select('Согласование','certainty',[['expected','Требует уточнения'],['confirmed','Согласовано']])+
+   '<p>Если часть договора оплачивается позже, добавьте для неё отдельный срок.</p>',
+   f=>({command:'plan',payload:{...f,amount:number(f.amount),direction:'income',project_id:project.id,funding:'project:'+project.id,terms:{project_schedule:true}}}),
+   {reasonFromLabel:true,submit:'Добавить в план'});
+  const fields=modal.querySelector('form').elements;
+  fields.label.required=true;
+  fields.label.maxLength=180;
+  fields.amount.required=true;
+  fields.amount.max=String(project.remaining);
+  fields.due_date.required=true;
+  return;
+ }
+ if(['income','expense','release','record-income'].includes(action)){
+  const record=action==='record-income',direction=action.replace('record-','');
   const income=direction==='income',release=direction==='release';
   const title=record?'Записать поступление':(income?'Запланировать поступление':release?'Запланировать распределение':'Запланировать расход');
-  const label=input(release?'На что распределить деньги':income?'За что поступление':'На что расход','label',project?'Оплата · '+project.name:'');
-  const amount=input('Сумма, ₽','amount',project?.remaining||'','number');
+  const label=input(release?'На что распределить деньги':income?'За что поступление':'На что расход','label');
+  const amount=input('Сумма, ₽','amount','','number');
   const timing=record?input('Дата оплаты','date',s.as_of,'date')+walletField(income?'Куда поступили деньги':'Откуда оплатили',walletOptions):input('Плановая дата (если известна)','due_date','','date');
-  const projectField=select('Проект','project_id',projects,project?.id);
+  const projectField=select('Проект','project_id',projects);
   const debt=direction==='expense'&&!record?select('Вид платежа','obligation',[['false','Запланированный расход'],['true','Начисленный долг — зарезервировать сумму']]):'';
-  const details=select('Сотрудник','employee_id',employees)+input('Месяц начисления','payroll_month','','month')+
+  const details=(income?'':select('Сотрудник','employee_id',employees)+input('Месяц начисления','payroll_month','','month'))+
    (direction==='expense'?select('Источник средств','funding',funding):'')+
-   (record?'<input type="hidden" name="certainty" value="confirmed">':select('Согласование','certainty',[['confirmed','Согласовано'],['expected','Требует уточнения']],project?'expected':'confirmed'))+
+   (record?'<input type="hidden" name="certainty" value="confirmed">':select('Согласование','certainty',[['confirmed','Согласовано'],['expected','Требует уточнения']],'confirmed'))+
    input('Отдельный комментарий для журнала','reason');
-  const extra='<details class="fw-extra"><summary>Сотрудник, '+(direction==='expense'?'источник средств и ':'')+'другие реквизиты</summary>'+details+'</details>';
+  const extraTitle=income?(record?'Комментарий для журнала':'Согласование и комментарий'):direction==='expense'?'Сотрудник, источник средств и другие реквизиты':'Сотрудник и другие реквизиты';
+  const extra='<details class="fw-extra"><summary>'+extraTitle+'</summary>'+details+'</details>';
   form(title,label+amount+timing+projectField+debt+extra,f=>({command:record?'record':'plan',payload:{...f,amount:number(f.amount),obligation:f.obligation==='true',direction,funding:direction==='income'||direction==='release'?f.project_id?'project:'+f.project_id:'reserve':f.funding,terms:{payroll_month:f.payroll_month||null,recorded_at:new Date().toISOString(),basis:f.reason,employee:f.employee_id?(state.employees||[]).filter(e=>e.id===f.employee_id).map(e=>({id:e.id,role:e.role,fixed_salary:e.fixed_salary}))[0]:null}}}),{reasonFromLabel:true,submit:record?'Записать оплату':'Добавить в план'});
   const fields=modal.querySelector('form').elements;
   fields.label.required=true;
+  if(!record&&income&&s.opening_mode==='zero'&&s.start_date)fields.due_date.min=s.start_date;
   fields.label.minLength=2;
   fields.label.maxLength=180;
   fields.amount.required=true;
@@ -437,7 +456,18 @@ async function act(action,id){
    (item.due_date?esc(fmtDate(item.due_date)):'Без срока')+'</p>'+row('Остаток к отмене',item.remaining)+
    '<p>Фактические оплаты и история сохранятся.</p>',f=>({command:'cancel',payload:{...f,id}}));
  }
- else if(action==='wallet')form('Добавить место хранения',input('Название','name')+select('Тип','kind',[['cash','Наличные'],['bank','Банковский счёт']]),f=>({command:'wallet',payload:f}));
+ else if(action==='wallet'){
+  form('Добавить место хранения',input('Название','name')+
+   select('Тип','kind',[['cash','Наличные'],['bank','Банковский счёт']])+
+   '<p>Начальный остаток — 0 ₽. Пополнить новое место можно переводом.</p>',f=>{
+    const name=f.name.trim().replace(/\s+/g,' ');
+    if(!name)throw new Error('Введите название места хранения.');
+    const sameName=w=>walletName(w).trim().replace(/\s+/g,' ').toLocaleLowerCase('ru')===name.toLocaleLowerCase('ru');
+    if(s.wallets.some(w=>w.active&&sameName(w)))throw new Error('Это название уже используется. Введите другое название.');
+    return {command:'wallet',payload:{...f,name}};
+   });
+  modal.querySelector('[name=name]').maxLength=120;
+ }
  else if(action==='wallet-transfer'){
   form('Перевести деньги',select('Откуда','from',walletOptions)+select('Куда','to',walletOptions,walletOptions[1]?.[0])+
    input('Сумма','amount','','number')+'<p data-transfer-limit></p><p>Перевод меняет остатки двух мест хранения. Общая сумма денег компании сохраняется.</p>',

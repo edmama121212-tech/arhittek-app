@@ -143,6 +143,8 @@ function openProjectSheet(id){
   resetProjectNumberDraft();
   resetProjectExpenseEditor();
   editingProjectId = id;
+  const statusSelect = document.getElementById('pf-status');
+  statusSelect.querySelector('[data-current-only]')?.remove();
   projectMembersDraftUnverified=!!state.projectMembersDataError;
   const overlay = document.getElementById('projectSheetOverlay');
   if(!overlay.classList.contains('active')) projectSheetOpener=document.activeElement;
@@ -151,16 +153,33 @@ function openProjectSheet(id){
   const title = document.getElementById('projectSheetTitle');
   const deleteBtn = document.getElementById('pf-delete');
 
+  // Archived assignees stay visible on their original project only.
+  for(const option of overlay.querySelectorAll('option[data-archived-assignee]')) option.remove();
   if(id){
     const p = state.projects.find(x=>x.id===id);
     if(!p) return;
+    for(const [employeeId,selectIds] of [[p.employee_id,['pf-employee','pf-employee-fee']],[p.co_employee_id,['pf-co-employee','pf-co-employee-fee']]]){
+      const employee=state.employees.find(e=>e.id===employeeId);
+      if(employee?.active!==false) continue;
+      for(const selectId of selectIds){
+        const option=new Option(employee.name+' (архив)',employee.id);
+        option.dataset.archivedAssignee='true';
+        document.getElementById(selectId).add(option);
+      }
+    }
     editingProjectLoadedAt = p.updated_at || null;
     title.textContent = 'Редактировать проект';
     deleteBtn.style.display = '';
     document.getElementById('pf-name').value = p.number_series ? p.project_title || '' : p.name || '';
     document.getElementById('pf-category').disabled = false;
     document.getElementById('pf-category').value = p.category_id || '';
-    document.getElementById('pf-status').value = p.status_id || '';
+    if(p.status_id && !Array.from(statusSelect.options).some(option=>option.value===p.status_id)){
+      const status = findStatus(p.status_id);
+      const option = new Option(status?.name || 'Прежний статус',p.status_id);
+      option.dataset.currentOnly = '';
+      statusSelect.add(option);
+    }
+    statusSelect.value = p.status_id || '';
     document.getElementById('pf-payment').value = p.payment_status || 'Ждём оплату';
     const cat = findCategory(p.category_id);
     document.getElementById('pf-department').value = cat ? (cat.department_id || '') : '';
@@ -367,7 +386,7 @@ async function saveProject(){
   // фактических приходов/прямых оплат/расходов после сохранения и никогда
   // не перезаписывается общей формулой price - advance.
   if(!isConstr){
-    payload.balance = Math.max(0, price - advance);
+    payload.balance = Math.max(0, Math.round(price * 100) - Math.round(advance * 100)) / 100;
     payload.expenses = Math.max(0, directExpensesInput);
   }
 

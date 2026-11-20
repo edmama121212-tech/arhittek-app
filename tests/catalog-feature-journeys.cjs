@@ -8,7 +8,20 @@ const root = path.resolve(__dirname, '..');
 const mock = fs.readFileSync(path.join(__dirname, 'mock.js'), 'utf8');
 const basement = 'Цокольный этаж';
 const mansard = process.argv.includes('--mansard');
-const cards = (mansard ? [
+const flat = process.argv.includes('--flat');
+const roofLabel = 'Плоская кровля';
+const cards = (flat ? [
+  [17,'Патио',1,[roofLabel,'Современный','Терраса']],
+  [16,'Патио',2,['Мансарда','Современный']],
+  [15,'Белый двор',2,[roofLabel,'Классический',basement]],
+  [14,'Равнина',3,'современный, ПЛОСКАЯ  КРОВЛЯ, Гараж'],
+  [13,'Уступы',4,[roofLabel,'Современный',basement]],
+  [12,'Одноэтажная классика',1,['Классический']],
+  [11,'Щёлк',2,['плоская кровля',roofLabel,'Современный']],
+  [10,'Плоская кровля в названии',1,null],
+  [9,'С верандой',1,['Плоская кровля веранды','Классический']],
+  [8,'Старый вариант',3,[roofLabel,'Современный']],
+] : mansard ? [
   [15,'Альфа',1,['Мансарда','Современный']],
   [14,'Альфа',1,['Современный']],
   [13,'Старая башня',3,'Классический, Мансарда'],
@@ -30,7 +43,20 @@ const cards = (mansard ? [
 const all = [15,14,13,12,11,10,9];
 const chosen = [15,13,12,11];
 // Each pair is a concrete, ordered shortlist both before and after lifting the requirement.
-const cases = mansard ? [
+const cases = flat ? [
+  ['Подготовить подборку всех доступных домов с плоской кровлей',null,[],[17,15,14,13,11]],
+  ['Отобрать одноэтажный дом для безбарьерного входа',null,[['floors','1']],[17]],
+  ['Сравнить двухэтажные варианты по стилю после выбора кровли',null,[['floors','2']],[15,11]],
+  ['Включить трёх- и четырёхэтажные объекты в один запрос',null,[['floors','3']],[14,13]],
+  ['Заменить требование мансарды на плоскую кровлю у домов с одинаковым названием',null,[['feature','mansard'],['text','Патио']],[17]],
+  ['Сверить наличие цоколя в классическом доме с плоской кровлей',null,[['feature','basement'],['style','classic']],[15]],
+  ['Открыть редактор старой карточки по номеру и проверить введённые вручную теги',null,[['text','1426']],[14]],
+  ['Проверить карточку с повторно внесённым признаком',null,[['text','Щёлк']],[11]],
+  ['Отличить кровлю всего дома от кровли одной веранды',null,[['text','С верандой']],[]],
+  ['Проверить неподтверждённую характеристику из названия',null,[['text','Плоская кровля в названии']],[]],
+  ['Отклонить снятое с продажи предложение по номеру',null,[['text','826']],[]],
+  ['Открыть современный дом в конце подборки и вернуться к остальным вариантам',null,[['style','modern']],[17,14,13,11]],
+] : mansard ? [
   ['Подготовить полный список мансардных домов',null,[],[15,13,12,11]],
   ['Отобрать только компактные одноэтажные варианты',null,[['floors','1']],[15,11]],
   ['Найти двухэтажный проект с цоколем и мансардой',null,[['floors','2'],['feature','basement']],[12]],
@@ -60,19 +86,24 @@ const frames = page => page.evaluate(() => new Promise(resolve => requestAnimati
   const browser = await chromium.launch({executablePath:process.env.BROWSER_EXECUTABLE || undefined});
   const index = fs.readFileSync(path.join(root,'index.html'));
   const floorJS = fs.readFileSync(path.join(root,'catalog-floors.js'));
-  const build = crypto.createHash('sha256').update(index).update(floorJS).digest('hex').slice(0,16);
-  const report = [['Элемент','Сценарий','Сборка SHA256 index и catalog-floors','Дата UTC','Стенд','Шаги','Фактический результат и связи','От клика до двух кадров, мс','Визуальная проверка','Удобство','Итог']];
+  const publicPage = fs.readFileSync(path.join(root,'catalog.html'));
+  const publicHash=crypto.createHash('sha256').update(publicPage).digest('hex').slice(0,16);
+  const digest = crypto.createHash('sha256').update(index).update(floorJS);
+  if(flat)digest.update(publicPage);
+  const build = digest.digest('hex').slice(0,16);
+  const report = [['Элемент','Сценарий',flat?'Сборка SHA256 index + catalog-floors + catalog.html':'Сборка SHA256 index и catalog-floors','Дата UTC','Стенд','Шаги','Фактический результат и связи','От клика до двух кадров, мс','Визуальная проверка','Удобство','Итог']];
   const errors = [];
   try {
     for (const [i,[restrictTask,clearTask,criteria,restricted,cleared]] of cases.entries()) {
       const ctx = await browser.newContext({viewport:{width:390,height:844},locale:'ru-RU',serviceWorkers:'block',isMobile:true,hasTouch:true,reducedMotion:'reduce'});
       try {
-        await ctx.addInitScript({content: mock+'\nwindow.__db.project_cards='+JSON.stringify(cards)});
+        await ctx.addInitScript({content: mock+'\nwindow.__db.project_cards='+JSON.stringify(cards)+';window.__db.share_links=[{token:"qa-flat",project_id:"house-14",deleted_at:null}]'});
         await ctx.route('**/*',route => {
           const url = new URL(route.request().url());
           const file = path.join(root,url.pathname==='/'?'index.html':url.pathname.slice(1));
           if(url.hostname!=='app.test')return route.fulfill({body:''});
           if(url.pathname==='/'||url.pathname==='/index.html')return route.fulfill({body:index,contentType:'text/html'});
+          if(url.pathname==='/catalog.html')return route.fulfill({body:publicPage,contentType:'text/html'});
           if(url.pathname==='/catalog-floors.js')return route.fulfill({body:floorJS,contentType:'text/javascript'});
           return fs.existsSync(file)&&fs.statSync(file).isFile()?route.fulfill({path:file}):route.fulfill({body:''});
         });
@@ -95,7 +126,7 @@ const frames = page => page.evaluate(() => new Promise(resolve => requestAnimati
             await filter.click();
           }
         }
-        const actions = mansard ? [['UI-0060','mansard',restrictTask,restricted]] : [['UI-0059','basement',restrictTask,restricted],['UI-0058','all',clearTask,cleared]];
+        const actions = flat ? [['UI-0061','flat',restrictTask,restricted]] : mansard ? [['UI-0060','mansard',restrictTask,restricted]] : [['UI-0059','basement',restrictTask,restricted],['UI-0058','all',clearTask,cleared]];
         for(const [control,key,task,expected] of actions){
           const button = view.locator('[data-feature="'+key+'"]');
           await button.evaluate(el=>el.addEventListener('click',()=>{window.featureClicked=performance.now()},{capture:true,once:true}));
@@ -127,28 +158,49 @@ const frames = page => page.evaluate(() => new Promise(resolve => requestAnimati
             assert.equal((await frame.locator('.swiper-num').innerText()).trim(),'№ '+record.project_number);
             assert.equal(await page.locator('#cardViewerCounter').innerText(),expected.length+' / '+expected.length);
             assert.equal(await page.locator('#cardViewerNext').isVisible(),false);
-            if(mansard){
-              assert.ok(await frame.locator('.tags').getByText('Мансарда',{exact:true}).isVisible());
+            if(mansard||flat){
+              const badge=frame.locator('.tags').getByText(flat?roofLabel:'Мансарда',{exact:true});
+              assert.equal(await badge.count(),1);
+              assert.ok(await badge.isVisible());
+              if(flat)assert.equal(await frame.locator('.tags').getByText(/^плоская\s+кровля$/iu).count(),1);
               if(criteria.some(([type,value])=>type==='feature'&&value==='basement')){
                 assert.ok(await frame.locator('.tags').getByText(basement,{exact:true}).isVisible());
               }
             }
-            const editLegacy=mansard && criteria.some(([type,value])=>type==='text'&&value==='1326');
+            const editLegacy=(mansard||flat) && criteria.some(([type,value])=>type==='text'&&value===(flat?'1426':'1326'));
             if(editLegacy){
               await page.locator('#cardViewerEditBtn').click();
               await page.locator('#cardEditorOverlay').waitFor();
               assert.equal(await page.locator('#ce-num').inputValue(),record.project_number);
-              assert.ok((await page.locator('#ce-tags').inputValue()).includes('Мансарда'));
-              assert.equal(await page.locator('#feature-btn-mansard').getAttribute('aria-pressed'),'true');
-              if(process.env.FEATURE_OUTPUT)await page.screenshot({path:path.join(process.env.FEATURE_OUTPUT,'mansard-editor.png')});
+              const editorTags=await page.locator('#ce-tags').inputValue();
+              assert.ok(editorTags.includes(flat?roofLabel:'Мансарда'));
+              if(flat)assert.ok(editorTags.includes('Гараж'));
+              assert.equal(await page.locator(flat?'#feature-btn-flat':'#feature-btn-mansard').getAttribute('aria-pressed'),'true');
+              if(process.env.FEATURE_OUTPUT)await page.screenshot({path:path.join(process.env.FEATURE_OUTPUT,flat?'flat-editor.png':'mansard-editor.png')});
               cardSteps.push('открыть редактор, сверить номер и тег, закрыть');
               await page.locator('#cardEditorOverlay button[onclick="closeCardEditor()"]').click();
             }else{
               await page.locator('#cardViewerOverlay').getByTitle('Закрыть').click();
               cardSteps.push('закрыть карточку');
             }
+            if(flat&&editLegacy){
+              const publicTab=await ctx.newPage();
+              await publicTab.goto('https://app.test/catalog.html?t=qa-flat');
+              const feed=publicTab.locator('#catFeed');
+              await feed.getByText('№ 1426',{exact:true}).waitFor({timeout:3000}).catch(async()=>{
+                throw new Error('Карточка по тестовой ссылке: '+await feed.innerText());
+              });
+              assert.ok(await feed.locator('.tags').getByText(roofLabel,{exact:true}).isVisible());
+              assert.equal(await feed.locator('.card').count(),1);
+              if(process.env.FEATURE_OUTPUT){
+                await feed.locator('.tags').scrollIntoViewIfNeeded();
+                await publicTab.screenshot({path:path.join(process.env.FEATURE_OUTPUT,'flat-client.png')});
+              }
+              await publicTab.close();
+              cardSteps.push('открыть тот же объект по локальной клиентской ссылке, сверить номер и кровлю');
+            }
             assert.deepEqual(await rowNumbers(),expected.map(n=>n+'26'));
-            result='Открылась карточка №'+record.project_number+(editLegacy?' и её редактор с выбранной мансардой':'')+'; после возврата подборка сохранилась.';
+            result='Открылась карточка №'+record.project_number+(editLegacy?' и её редактор с выбранной особенностью':'')+(flat&&editLegacy?'; клиентская ссылка показала этот дом с тем же тегом (catalog.html SHA256 '+publicHash+')':'')+'; после возврата подборка сохранилась.';
           } else {
             assert.ok(await view.getByText('Проекты не найдены',{exact:true}).isVisible());
             assert.equal(await page.locator('#cardViewerOverlay').isVisible(),false);
@@ -174,7 +226,7 @@ const frames = page => page.evaluate(() => new Promise(resolve => requestAnimati
       finally { await ctx.close(); }
     }
     if(errors.length)throw Error(errors.join('\n'));
-    if(process.env.FEATURE_OUTPUT)fs.writeFileSync(path.join(process.env.FEATURE_OUTPUT,mansard?'QA_CATALOG_MANSARD_RUNS.csv':'QA_CATALOG_FEATURE_RUNS.csv'),'\uFEFF'+report.map(r=>r.map(quote).join(',')).join('\n')+'\n');
+    if(process.env.FEATURE_OUTPUT)fs.writeFileSync(path.join(process.env.FEATURE_OUTPUT,flat?'QA_CATALOG_FLAT_RUNS.csv':mansard?'QA_CATALOG_MANSARD_RUNS.csv':'QA_CATALOG_FEATURE_RUNS.csv'),'\uFEFF'+report.map(r=>r.map(quote).join(',')).join('\n')+'\n');
     console.log(report.length-1+' сценариев пройдено. Сборка '+build);
   } finally {await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

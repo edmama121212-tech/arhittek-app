@@ -68,7 +68,6 @@ function renderPaymentHistory(projectId){
 
 // ---- Расходы проекта (несколько записей: на что + сумма + дата) ----
 let editingProjectExpenseId = null;
-const expenseRubles = new Intl.NumberFormat('ru-RU',{style:'currency',currency:'RUB',minimumFractionDigits:0,maximumFractionDigits:2});
 
 function editProjectExpense(entryId){
   const e=(state.ledger||[]).find(x=>x.id===entryId && x.project_id===editingProjectId && x.type==='project_expense' && !x.deleted_at);
@@ -105,7 +104,7 @@ function renderProjectExpenses(projectId){
   el.innerHTML = `<div class="card" style="margin-bottom:0;">` + items.map(e=>`
     <div class="list-item">
       <div style="min-width:0;">
-        <div class="li-name">${escapeHtml(e.description||'Расход')} — <span style="color:var(--red)">−${expenseRubles.format(e.amount)}</span></div>
+        <div class="li-name">${escapeHtml(e.description||'Расход')} — <span style="color:var(--red)">−${rublesWithKopecks.format(e.amount)}</span></div>
         <div class="li-meta">${fmtDate(e.entry_date)}</div>
       </div>
       <div class="li-actions">
@@ -115,7 +114,7 @@ function renderProjectExpenses(projectId){
     </div>`).join('') +
     `<div class="list-item" style="border-top:1px solid var(--line-strong);">
       <div class="li-name" style="font-weight:700;">Итого расходов</div>
-      <div class="li-name" style="font-weight:700;color:var(--red);">−${expenseRubles.format(total)}</div>
+      <div class="li-name" style="font-weight:700;color:var(--red);">−${rublesWithKopecks.format(total)}</div>
     </div></div>`;
 }
 

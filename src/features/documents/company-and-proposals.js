@@ -1,9 +1,13 @@
 // ============================================================
 // КОМПАНИЯ (реквизиты)
 // ============================================================
+// Both first-time editors insert the same primary key, so only one can create the company card.
+const FIRST_COMPANY_ID='00000000-0000-4000-8000-000000000001';
+let companyFormRecord=null;
 function openCompanyView(){
   if(!isOwner())return;
   const c = state.companyInfo || {};
+  companyFormRecord=c.id ? {id:c.id,updated_at:c.updated_at} : null;
   document.getElementById('co-full-name').value = c.full_name || '';
   document.getElementById('co-short-name').value = c.short_name || '';
   document.getElementById('co-director').value = c.director || '';
@@ -41,7 +45,10 @@ function renderCatalogPriceSettings(){
 }
 
 async function saveCompanyInfo(){
-  if(!session?.isAdmin){showToast("Требуются права администратора");return;}
+  if(!isOwner()){showToast("Требуются права владельца");return;}
+  const button=document.getElementById('companySaveBtn');
+  if(button.disabled)return;
+  const record=companyFormRecord;
   const payload = {
     full_name: document.getElementById('co-full-name').value.trim(),
     short_name: document.getElementById('co-short-name').value.trim(),
@@ -64,20 +71,33 @@ async function saveCompanyInfo(){
     updated_at: new Date().toISOString(),
   };
 
+  button.disabled=true;
   showToast('Сохранение…');
   try{
-    if(state.companyInfo && state.companyInfo.id){
-      const {error} = await sb.from('company_info').update(payload).eq('id', state.companyInfo.id);
-      if(error) throw error;
+    let request;
+    if(record){
+      request=sb.from('company_info').update(payload).eq('id',record.id);
+      request=record.updated_at==null ? request.is('updated_at',null) : request.eq('updated_at',record.updated_at);
     }else{
-      const {error} = await sb.from('company_info').insert(payload);
-      if(error) throw error;
+      const existing=await sb.from('company_info').select('id').limit(1).maybeSingle();
+      if(existing.error)throw existing.error;
+      if(!existing.data)request=sb.from('company_info').insert({...payload,id:FIRST_COMPANY_ID});
     }
+    const saved=request ? await request.select('id,updated_at').maybeSingle() : {data:null};
+    if(saved.error && (record || saved.error.code!=='23505'))throw saved.error;
+    if(!saved.data){
+      showToast('Реквизиты изменились. Откройте карточку заново и сверьте данные.');
+      await loadAll();
+      return;
+    }
+    companyFormRecord=saved.data;
     showToast('Реквизиты сохранены');
     await loadAll();
   }catch(e){
     console.error(e);
     showToast('Ошибка сохранения');
+  }finally{
+    button.disabled=false;
   }
 }
 

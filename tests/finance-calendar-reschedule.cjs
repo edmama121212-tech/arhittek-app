@@ -21,8 +21,11 @@ const quote = value => '"' + String(value).replaceAll('"', '""') + '"';
 const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 
 (async () => {
+  const projectSchedule = process.argv.includes('--project-schedule');
+  const storageCreate = process.argv.includes('--storage-create');
   const reserveAdjust = process.argv.includes('--reserve-adjust');
   const walletTransfer = process.argv.includes('--wallet-transfer');
+  const incomePlan = process.argv.includes('--income-plan');
   const expensePlan = process.argv.includes('--expense-plan');
   const cancelPlan = process.argv.includes('--cancel-plan');
   const paymentLinks = process.argv.includes('--payment-links');
@@ -32,7 +35,7 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
   const recurring = process.argv.includes('--recurring');
   const homeActions = process.argv.includes('--home-actions');
   const cashFloor = process.argv.includes('--cash-floor');
-  const dedicated = reserveAdjust || expensePlan || walletTransfer || cancelPlan || paymentLinks || unlinkPayments || stopRule || createRule || recurring || homeActions || cashFloor;
+  const dedicated = storageCreate || incomePlan || projectSchedule || reserveAdjust || expensePlan || walletTransfer || cancelPlan || paymentLinks || unlinkPayments || stopRule || createRule || recurring || homeActions || cashFloor;
   const db = new PGlite();
   await db.waitReady;
   const browser = await chromium.launch({executablePath:process.env.BROWSER_EXECUTABLE || undefined, args:['--no-sandbox']});
@@ -41,10 +44,13 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
     await db.query("insert into public.employees(id,name,role,is_admin) values($1,'Мансур','Генеральный директор',true)", [uuid(1)]);
     await db.query("insert into public.employee_sessions(employee_id,token,expires_at) values($1,$2,now()+interval '1 day')", [uuid(1), token]);
     for (const file of ['supabase/install-owner-access.sql', 'supabase/financial-journal.sql',
-      ...fs.readdirSync(path.join(root, 'supabase/migrations')).filter(name => /^20261030|^20261031|^20261101|employee_salary_history\.sql$|finance_(?:payment_integrity|link_details)\.sql$|recurring_(?:replacement|stop)\.sql$|finance_spending_limits\.sql$/.test(name)).sort().map(name => 'supabase/migrations/' + name)]) {
+      ...fs.readdirSync(path.join(root, 'supabase/migrations')).filter(name => /^20261030|^20261031|^20261101|employee_salary_history\.sql$|(?:finance_(?:payment_integrity|link_details)|project_schedule_balance)\.sql$|recurring_(?:replacement|stop)\.sql$|(?:finance_spending_limits|storage_names)\.sql$/.test(name)).sort().map(name => 'supabase/migrations/' + name)]) {
       await db.exec(read(file));
     }
-    if(homeActions){
+    if(projectSchedule){
+      for(let i=0;i<12;i++)await db.query('insert into public.projects(id,name,price,advance,balance) values($1,$2,1200,200,1000)',[uuid(4200+i),'Учебный дом '+(i===4?3:i)]);
+    }
+    if(homeActions || incomePlan){
       await db.query("insert into public.projects(id,name,price,balance) values($1,'Тестовый павильон',10000,10000)",[uuid(701)]);
     }
     await db.exec('set role anon');
@@ -120,6 +126,16 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
     const csv = [['Элемент','Сборка SHA256 index/finance-workspace','Дата UTC','Браузер','Задача','Данные','Шаги','Результат и связи','Открытие до 2 кадров, мс','Завершение до 2 кадров, мс','Визуальная проверка','Удобство','Статус']];
     if(qa) fs.mkdirSync(qa,{recursive:true});
     await page.locator('.nav-btn[data-view="view-finance"]').click();
+    if(projectSchedule){
+      await require('./helpers/project-schedule-ui.cjs')({page,fw,db,command,snap,wallet,uuid,day,shift,build,browser,expectedTile,twoFrames});
+      assert.deepEqual(errors,[]);
+      return;
+    }
+    if(storageCreate){
+      await require('./helpers/storage-create-ui.cjs')({page,fw,command,snap,wallet,uuid,build,browser,expectedTile,twoFrames});
+      assert.deepEqual(errors,[]);
+      return;
+    }
     if(reserveAdjust){
       await require('./helpers/reserve-adjust-ui.cjs')({page,fw,command,snap,wallet,uuid,build,browser,expectedTile,twoFrames});
       assert.deepEqual(errors,[]);
@@ -127,6 +143,11 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
     }
     if(walletTransfer){
       await require('./helpers/wallet-transfer-ui.cjs')({page,fw,command,snap,day,wallet,uuid,build,browser,expectedTile,twoFrames});
+      assert.deepEqual(errors,[]);
+      return;
+    }
+    if(incomePlan){
+      await require('./helpers/income-plan-ui.cjs')({page,fw,db,day,snap,shift,uuid,build,browser,expectedTile,twoFrames});
       assert.deepEqual(errors,[]);
       return;
     }

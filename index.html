@@ -2031,7 +2031,7 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
       <div class="hint" id="ef-role-access" style="margin-top:8px;" aria-live="polite"></div>
     </div>
     <div class="field">
-      <label>Статус</label>
+      <label for="ef-active">Статус</label>
       <select id="ef-active">
         <option value="true">Активен</option>
         <option value="false">Неактивен (архив)</option>
@@ -2362,6 +2362,7 @@ function fmt(n){
   n = Number(n) || 0;
   return Math.round(n).toLocaleString('ru-RU');
 }
+const rublesWithKopecks = new Intl.NumberFormat('ru-RU',{style:'currency',currency:'RUB',minimumFractionDigits:0,maximumFractionDigits:2});
 function fmtMoney(n){ return fmt(n) + ' ₽'; }
 
 function showToast(msg){
@@ -4812,8 +4813,8 @@ function renderProjectRow(p){
         ${statusChips}
       </div>
       ${showFinance ? `<div class="proj-right">
-        <div class="proj-sum">${fmtMoney(p.price)}</div>
-        <div class="proj-rest ${balance>0&&!isDone?'has-balance':''}">${balance>0&&!isDone ? 'остаток '+fmtMoney(balance) : '✓ закрыт'}</div>
+        <div class="proj-sum">${rublesWithKopecks.format(Number(p.price)||0)}</div>
+        <div class="proj-rest ${balance>0?'has-balance':''}">${balance>0 ? 'остаток '+rublesWithKopecks.format(balance) : '✓ закрыт'}</div>
       </div>` : ''}
     </div>`;
 }
@@ -4963,6 +4964,8 @@ function openProjectSheet(id){
   resetProjectNumberDraft();
   resetProjectExpenseEditor();
   editingProjectId = id;
+  const statusSelect = document.getElementById('pf-status');
+  statusSelect.querySelector('[data-current-only]')?.remove();
   projectMembersDraftUnverified=!!state.projectMembersDataError;
   const overlay = document.getElementById('projectSheetOverlay');
   if(!overlay.classList.contains('active')) projectSheetOpener=document.activeElement;
@@ -4971,16 +4974,33 @@ function openProjectSheet(id){
   const title = document.getElementById('projectSheetTitle');
   const deleteBtn = document.getElementById('pf-delete');
 
+  // Archived assignees stay visible on their original project only.
+  for(const option of overlay.querySelectorAll('option[data-archived-assignee]')) option.remove();
   if(id){
     const p = state.projects.find(x=>x.id===id);
     if(!p) return;
+    for(const [employeeId,selectIds] of [[p.employee_id,['pf-employee','pf-employee-fee']],[p.co_employee_id,['pf-co-employee','pf-co-employee-fee']]]){
+      const employee=state.employees.find(e=>e.id===employeeId);
+      if(employee?.active!==false) continue;
+      for(const selectId of selectIds){
+        const option=new Option(employee.name+' (архив)',employee.id);
+        option.dataset.archivedAssignee='true';
+        document.getElementById(selectId).add(option);
+      }
+    }
     editingProjectLoadedAt = p.updated_at || null;
     title.textContent = 'Редактировать проект';
     deleteBtn.style.display = '';
     document.getElementById('pf-name').value = p.number_series ? p.project_title || '' : p.name || '';
     document.getElementById('pf-category').disabled = false;
     document.getElementById('pf-category').value = p.category_id || '';
-    document.getElementById('pf-status').value = p.status_id || '';
+    if(p.status_id && !Array.from(statusSelect.options).some(option=>option.value===p.status_id)){
+      const status = findStatus(p.status_id);
+      const option = new Option(status?.name || 'Прежний статус',p.status_id);
+      option.dataset.currentOnly = '';
+      statusSelect.add(option);
+    }
+    statusSelect.value = p.status_id || '';
     document.getElementById('pf-payment').value = p.payment_status || 'Ждём оплату';
     const cat = findCategory(p.category_id);
     document.getElementById('pf-department').value = cat ? (cat.department_id || '') : '';
@@ -5187,7 +5207,7 @@ async function saveProject(){
   // фактических приходов/прямых оплат/расходов после сохранения и никогда
   // не перезаписывается общей формулой price - advance.
   if(!isConstr){
-    payload.balance = Math.max(0, price - advance);
+    payload.balance = Math.max(0, Math.round(price * 100) - Math.round(advance * 100)) / 100;
     payload.expenses = Math.max(0, directExpensesInput);
   }
 
@@ -6451,7 +6471,6 @@ function renderPaymentHistory(projectId){
 
 // ---- Расходы проекта (несколько записей: на что + сумма + дата) ----
 let editingProjectExpenseId = null;
-const expenseRubles = new Intl.NumberFormat('ru-RU',{style:'currency',currency:'RUB',minimumFractionDigits:0,maximumFractionDigits:2});
 
 function editProjectExpense(entryId){
   const e=(state.ledger||[]).find(x=>x.id===entryId && x.project_id===editingProjectId && x.type==='project_expense' && !x.deleted_at);
@@ -6488,7 +6507,7 @@ function renderProjectExpenses(projectId){
   el.innerHTML = `<div class="card" style="margin-bottom:0;">` + items.map(e=>`
     <div class="list-item">
       <div style="min-width:0;">
-        <div class="li-name">${escapeHtml(e.description||'Расход')} — <span style="color:var(--red)">−${expenseRubles.format(e.amount)}</span></div>
+        <div class="li-name">${escapeHtml(e.description||'Расход')} — <span style="color:var(--red)">−${rublesWithKopecks.format(e.amount)}</span></div>
         <div class="li-meta">${fmtDate(e.entry_date)}</div>
       </div>
       <div class="li-actions">
@@ -6498,7 +6517,7 @@ function renderProjectExpenses(projectId){
     </div>`).join('') +
     `<div class="list-item" style="border-top:1px solid var(--line-strong);">
       <div class="li-name" style="font-weight:700;">Итого расходов</div>
-      <div class="li-name" style="font-weight:700;color:var(--red);">−${expenseRubles.format(total)}</div>
+      <div class="li-name" style="font-weight:700;color:var(--red);">−${rublesWithKopecks.format(total)}</div>
     </div></div>`;
 }
 
@@ -10074,9 +10093,13 @@ document.getElementById('ct-export-pdf').addEventListener('click', exportContrac
 // ============================================================
 // КОМПАНИЯ (реквизиты)
 // ============================================================
+// Both first-time editors insert the same primary key, so only one can create the company card.
+const FIRST_COMPANY_ID='00000000-0000-4000-8000-000000000001';
+let companyFormRecord=null;
 function openCompanyView(){
   if(!isOwner())return;
   const c = state.companyInfo || {};
+  companyFormRecord=c.id ? {id:c.id,updated_at:c.updated_at} : null;
   document.getElementById('co-full-name').value = c.full_name || '';
   document.getElementById('co-short-name').value = c.short_name || '';
   document.getElementById('co-director').value = c.director || '';
@@ -10114,7 +10137,10 @@ function renderCatalogPriceSettings(){
 }
 
 async function saveCompanyInfo(){
-  if(!session?.isAdmin){showToast("Требуются права администратора");return;}
+  if(!isOwner()){showToast("Требуются права владельца");return;}
+  const button=document.getElementById('companySaveBtn');
+  if(button.disabled)return;
+  const record=companyFormRecord;
   const payload = {
     full_name: document.getElementById('co-full-name').value.trim(),
     short_name: document.getElementById('co-short-name').value.trim(),
@@ -10137,20 +10163,33 @@ async function saveCompanyInfo(){
     updated_at: new Date().toISOString(),
   };
 
+  button.disabled=true;
   showToast('Сохранение…');
   try{
-    if(state.companyInfo && state.companyInfo.id){
-      const {error} = await sb.from('company_info').update(payload).eq('id', state.companyInfo.id);
-      if(error) throw error;
+    let request;
+    if(record){
+      request=sb.from('company_info').update(payload).eq('id',record.id);
+      request=record.updated_at==null ? request.is('updated_at',null) : request.eq('updated_at',record.updated_at);
     }else{
-      const {error} = await sb.from('company_info').insert(payload);
-      if(error) throw error;
+      const existing=await sb.from('company_info').select('id').limit(1).maybeSingle();
+      if(existing.error)throw existing.error;
+      if(!existing.data)request=sb.from('company_info').insert({...payload,id:FIRST_COMPANY_ID});
     }
+    const saved=request ? await request.select('id,updated_at').maybeSingle() : {data:null};
+    if(saved.error && (record || saved.error.code!=='23505'))throw saved.error;
+    if(!saved.data){
+      showToast('Реквизиты изменились. Откройте карточку заново и сверьте данные.');
+      await loadAll();
+      return;
+    }
+    companyFormRecord=saved.data;
     showToast('Реквизиты сохранены');
     await loadAll();
   }catch(e){
     console.error(e);
     showToast('Ошибка сохранения');
+  }finally{
+    button.disabled=false;
   }
 }
 

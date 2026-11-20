@@ -170,8 +170,8 @@ function renderProjectRow(p){
         ${statusChips}
       </div>
       ${showFinance ? `<div class="proj-right">
-        <div class="proj-sum">${fmtMoney(p.price)}</div>
-        <div class="proj-rest ${balance>0&&!isDone?'has-balance':''}">${balance>0&&!isDone ? 'остаток '+fmtMoney(balance) : '✓ закрыт'}</div>
+        <div class="proj-sum">${rublesWithKopecks.format(Number(p.price)||0)}</div>
+        <div class="proj-rest ${balance>0?'has-balance':''}">${balance>0 ? 'остаток '+rublesWithKopecks.format(balance) : '✓ закрыт'}</div>
       </div>` : ''}
     </div>`;
 }

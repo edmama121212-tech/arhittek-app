@@ -5,6 +5,7 @@ function fmt(n){
   n = Number(n) || 0;
   return Math.round(n).toLocaleString('ru-RU');
 }
+const rublesWithKopecks = new Intl.NumberFormat('ru-RU',{style:'currency',currency:'RUB',minimumFractionDigits:0,maximumFractionDigits:2});
 function fmtMoney(n){ return fmt(n) + ' ₽'; }
 
 function showToast(msg){
