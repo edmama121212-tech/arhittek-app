@@ -14,6 +14,8 @@ function isConstructionProject(p){
     if(constrDept && cat.department_id === constrDept.id) return true;
     const nm = (cat.name||'').toLowerCase();
     if(nm.includes('строительств') || nm.includes('ремонт') || nm.includes('монтаж')) return true;
+    // An invoice alone identifies an old object only when its department is unknown.
+    if(state.departments.some(d=>d.id===cat.department_id && d.name==='Проектный отдел')) return false;
   }
   return (state.invoices||[]).some(inv=>inv.project_id===p.id&&!inv.deleted_at);
 }

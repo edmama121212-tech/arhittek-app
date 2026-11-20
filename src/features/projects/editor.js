@@ -82,10 +82,14 @@ function recalcLiveFeeSummary(){
 }
 
 
+function outstandingProjectBalance(price,advance){
+  return Math.max(0,Math.round(price*100)-Math.round(advance*100))/100;
+}
+
 document.getElementById('pf-price').addEventListener('input', ()=>{
   const price = parseFloat(document.getElementById('pf-price').value) || 0;
   const advance = parseFloat(document.getElementById('pf-advance').value) || 0;
-  document.getElementById('pf-balance').value = Math.max(0, price - advance);
+  document.getElementById('pf-balance').value = outstandingProjectBalance(price,advance);
   recalcLiveFeeSummary();
 });
 ['pf-expenses','pf-feepercent','pf-feebase','pf-feepaid','pf-co-employee','pf-co-feepercent','pf-co-feepaid'].forEach(id=>{
@@ -329,12 +333,20 @@ async function saveProject(){
   if(projectSaveInFlight) return;
   if(state.projectMembersDataError||projectMembersDraftUnverified){showToast('Состав команды не загружен. Обновите приложение перед сохранением проекта.');return;}
   if(!await prepareProjectNumberSave()||projectSaveInFlight)return;
+  const priceField=document.getElementById('pf-price');
   const wantedMemberIds=[...new Set(currentProjectMembers.map(m=>m.employee_id).filter(Boolean))];
   const price = parseFloat(document.getElementById('pf-price').value) || 0;
   const advance = parseFloat(document.getElementById('pf-advance').value) || 0;
 
   if(price < 0 || advance < 0){
     showToast('Сумма не может быть отрицательной');
+    return;
+  }
+
+  const priorPrice=state.projects.find(p=>p.id===editingProjectId)?.price;
+  if(priceField.validity.badInput || (priceField.validity.stepMismatch && price!==Number(priorPrice))){
+    showToast('Введите цену в рублях с точностью до копейки');
+    priceField.focus();
     return;
   }
 
@@ -386,7 +398,7 @@ async function saveProject(){
   // фактических приходов/прямых оплат/расходов после сохранения и никогда
   // не перезаписывается общей формулой price - advance.
   if(!isConstr){
-    payload.balance = Math.max(0, Math.round(price * 100) - Math.round(advance * 100)) / 100;
+    payload.balance = outstandingProjectBalance(price,advance);
     payload.expenses = Math.max(0, directExpensesInput);
   }
 

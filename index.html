@@ -1520,18 +1520,18 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
 
 <!-- ===== SHARE LINK SHEET ===== -->
 <div class="sheet-overlay" id="shareLinkOverlay">
-  <div class="sheet">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sl-title">
     <div class="sheet-handle"></div>
     <div class="sheet-title">
-      <span>Ссылка для клиента</span>
-      <button class="sheet-close" onclick="document.getElementById('shareLinkOverlay').classList.remove('active')">×</button>
+      <span id="sl-title">Ссылка для клиента</span>
+      <button class="sheet-close" aria-label="Закрыть" onclick="document.getElementById('shareLinkOverlay').classList.remove('active')">×</button>
     </div>
-    <div style="margin-bottom:14px;">
-      <label class="form-label">Название ссылки (для себя)</label>
+    <div class="field" style="margin-bottom:14px;">
+      <label class="form-label" for="sl-name">Название ссылки (для себя)</label>
       <input class="form-input" id="sl-name" placeholder="Клиент Ахмад, июль 2026"/>
     </div>
-    <div style="margin-bottom:14px;" id="sl-filter-row">
-      <label class="form-label">Фильтр карточек</label>
+    <div class="field" style="margin-bottom:14px;" id="sl-filter-row">
+      <label class="form-label" for="sl-filter">Фильтр карточек</label>
       <select class="form-input" id="sl-filter">
         <option value="all">Все карточки</option>
         <option value="1">Только 1-этажные</option>
@@ -1540,8 +1540,8 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
       </select>
     </div>
     <div id="sl-single-note" style="display:none;margin-bottom:14px;font-size:12px;color:var(--text-dim);background:var(--blue-soft);border-radius:8px;padding:8px 10px;">Ссылка ведёт только на этот конкретный проект.</div>
-    <div style="margin-bottom:16px;">
-      <label class="form-label">Срок действия ссылки</label>
+    <div class="field" style="margin-bottom:16px;">
+      <label class="form-label" for="sl-expires">Срок действия ссылки</label>
       <select class="form-input" id="sl-expires">
         <option value="2">2 дня</option>
         <option value="3">3 дня</option>
@@ -1555,12 +1555,12 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
         <option value="0">Бессрочно</option>
       </select>
     </div>
-    <button class="btn btn-primary" style="width:100%;" onclick="generateShareLink()">Создать ссылку</button>
-    <div id="sl-result" style="display:none;margin-top:14px;">
-      <label class="form-label">Ссылка готова — скопируй и отправь клиенту</label>
+    <button class="btn btn-primary" style="width:100%;" id="sl-create" onclick="generateShareLink()">Создать ссылку</button>
+    <div class="field" id="sl-result" style="display:none;margin-top:14px;">
+      <label for="sl-url">Готовая ссылка</label>
       <div style="display:flex;gap:8px;margin-top:6px;">
-        <input class="form-input" id="sl-url" readonly style="font-size:11px;"/>
-        <button class="btn btn-primary" style="flex-shrink:0;padding:0 14px;" onclick="copyShareUrl()">Копировать</button>
+        <input class="form-input" id="sl-url" readonly style="flex:1;min-width:0;font-size:13px;"/>
+        <button class="btn btn-primary" style="width:auto;flex-shrink:0;padding:0 14px;margin:0;" onclick="copyShareUrl()">Копировать</button>
       </div>
     </div>
   </div>
@@ -1693,8 +1693,8 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
     <div class="accent-title">Цена и оплата</div>
     <div class="field-row3">
       <div class="field">
-        <label>Цена, ₽</label>
-        <input type="number" id="pf-price" placeholder="0">
+        <label for="pf-price">Цена, ₽</label>
+        <input type="number" id="pf-price" min="0" step="0.01" placeholder="0">
       </div>
       <div class="field">
         <label>Получено, ₽</label>
@@ -4903,10 +4903,14 @@ function recalcLiveFeeSummary(){
 }
 
 
+function outstandingProjectBalance(price,advance){
+  return Math.max(0,Math.round(price*100)-Math.round(advance*100))/100;
+}
+
 document.getElementById('pf-price').addEventListener('input', ()=>{
   const price = parseFloat(document.getElementById('pf-price').value) || 0;
   const advance = parseFloat(document.getElementById('pf-advance').value) || 0;
-  document.getElementById('pf-balance').value = Math.max(0, price - advance);
+  document.getElementById('pf-balance').value = outstandingProjectBalance(price,advance);
   recalcLiveFeeSummary();
 });
 ['pf-expenses','pf-feepercent','pf-feebase','pf-feepaid','pf-co-employee','pf-co-feepercent','pf-co-feepaid'].forEach(id=>{
@@ -5150,12 +5154,20 @@ async function saveProject(){
   if(projectSaveInFlight) return;
   if(state.projectMembersDataError||projectMembersDraftUnverified){showToast('Состав команды не загружен. Обновите приложение перед сохранением проекта.');return;}
   if(!await prepareProjectNumberSave()||projectSaveInFlight)return;
+  const priceField=document.getElementById('pf-price');
   const wantedMemberIds=[...new Set(currentProjectMembers.map(m=>m.employee_id).filter(Boolean))];
   const price = parseFloat(document.getElementById('pf-price').value) || 0;
   const advance = parseFloat(document.getElementById('pf-advance').value) || 0;
 
   if(price < 0 || advance < 0){
     showToast('Сумма не может быть отрицательной');
+    return;
+  }
+
+  const priorPrice=state.projects.find(p=>p.id===editingProjectId)?.price;
+  if(priceField.validity.badInput || (priceField.validity.stepMismatch && price!==Number(priorPrice))){
+    showToast('Введите цену в рублях с точностью до копейки');
+    priceField.focus();
     return;
   }
 
@@ -5207,7 +5219,7 @@ async function saveProject(){
   // фактических приходов/прямых оплат/расходов после сохранения и никогда
   // не перезаписывается общей формулой price - advance.
   if(!isConstr){
-    payload.balance = Math.max(0, Math.round(price * 100) - Math.round(advance * 100)) / 100;
+    payload.balance = outstandingProjectBalance(price,advance);
     payload.expenses = Math.max(0, directExpensesInput);
   }
 
@@ -7187,6 +7199,12 @@ function populateEmployeeFormSelects(){
   // used elsewhere if needed
 }
 
+let constructionFollowsRole=false;
+document.getElementById('ef-see-construction').addEventListener('change',()=>{constructionFollowsRole=false;});
+document.getElementById('ef-role').addEventListener('change',event=>{
+  if(constructionFollowsRole)document.getElementById('ef-see-construction').checked=canSeeConstructionForRole(event.target.value);
+});
+
 function openEmployeeSheet(id){
   if(!isOwner())return;
   employeeFormGeneration++;
@@ -7220,6 +7238,7 @@ function openEmployeeSheet(id){
       const option=new Option(e.role,e.role);option.dataset.legacyRole='true';roleSelect.add(option);
     }
     roleSelect.value=e.role||'Сотрудник';
+    constructionFollowsRole=e.can_see_construction==null;
     document.getElementById('ef-active').value = e.active===false ? 'false' : 'true';
     document.getElementById('ef-pin').value = '';
     document.getElementById('ef-can-edit-cards').checked = !!e.can_edit_cards;
@@ -7237,6 +7256,7 @@ function openEmployeeSheet(id){
     if(salaryField) salaryField.style.display = isAdmin ? '' : 'none';
   }else{
     title.textContent = 'Новый сотрудник';
+    constructionFollowsRole=true;
     deleteBtn.style.display = 'none';
     deleteBtn.textContent = 'Удалить';
     document.getElementById('ef-name').value = '';
@@ -7290,7 +7310,8 @@ async function saveEmployee(){
     }
     payload.can_edit_cards = document.getElementById('ef-can-edit-cards').checked;
     payload.can_see_projects = document.getElementById('ef-see-projects').checked;
-    payload.can_see_construction = document.getElementById('ef-see-construction').checked;
+    const construction=document.getElementById('ef-see-construction').checked;
+    payload.can_see_construction=constructionFollowsRole&&construction===canSeeConstructionForRole(payload.role)?null:construction;
     payload.is_salaried = document.getElementById('ef-is-salaried').checked;
     payload.fixed_salary = payload.is_salaried ? (parseFloat(document.getElementById('ef-fixed-salary').value) || 0) : 0;
   }
@@ -7649,6 +7670,8 @@ function isConstructionProject(p){
     if(constrDept && cat.department_id === constrDept.id) return true;
     const nm = (cat.name||'').toLowerCase();
     if(nm.includes('строительств') || nm.includes('ремонт') || nm.includes('монтаж')) return true;
+    // An invoice alone identifies an old object only when its department is unknown.
+    if(state.departments.some(d=>d.id===cat.department_id && d.name==='Проектный отдел')) return false;
   }
   return (state.invoices||[]).some(inv=>inv.project_id===p.id&&!inv.deleted_at);
 }
@@ -10616,9 +10639,14 @@ function exportKpToXlsx(){
   rows.push(['Дата', fmtDate(data.date)]);
   rows.push([]);
   if(data.comment) rows.push(['Комментарий', data.comment]);
-  rows.push(['№','Услуга','Объём','Ед.','По тарифу, ₽ за ед.','Для клиента, ₽ за ед.','Сумма, ₽']);
+  const preliminary=data.services.some(service=>service.preliminaryArea);
+  const headings=['№','Услуга','Объём','Ед.','По тарифу, ₽ за ед.','Для клиента, ₽ за ед.','Сумма, ₽'];
+  if(preliminary)headings.push('Основание расчёта');
+  rows.push(headings);
   data.services.forEach((s,i)=>{
-    rows.push([i+1, s.name, s.qty, s.unit, s.listRate, s.rate, s.sum]);
+    const line=[i+1, s.name, s.qty, s.unit, s.listRate, s.rate, s.sum];
+    if(s.preliminaryArea)line.push('Предварительная площадь');
+    rows.push(line);
   });
   rows.push([]);
   rows.push(['', '', '', '', '', 'Стоимость до скидок:', data.beforeDiscounts]);
@@ -10628,6 +10656,7 @@ function exportKpToXlsx(){
   rows.push(['', '', '', '', '', data.advancePercent===100?'Оплата (100%):':'Аванс (50%):', data.advance]);
   rows.push(['', '', '', '', '', 'Остаток:', data.remainder]);
 
+  if(preliminary)rows.push(['Итог предварительный и зависит от уточнённой площади отмеченных услуг.']);
   const withDesc = data.services.filter(s=>s.desc);
   if(withDesc.length){
     rows.push([]);
@@ -10654,14 +10683,17 @@ function exportKpToXlsx(){
     rows.push([`Реквизиты исполнителя${xlsMethods.length?' (оплата: '+xlsMethods.join(', ')+')':''}`]);
     if(data.showCompany){
       if(data.company) rows.push(['Компания', data.company]);
-      if(data.inn) rows.push(['ИНН / КПП / ОГРН', [data.inn, data.kpp, data.ogrn].filter(Boolean).join(' / ')]);
+      if(data.inn) rows.push(['ИНН',data.inn]);
+      if(data.kpp) rows.push(['КПП',data.kpp]);
+      if(data.ogrn) rows.push(['ОГРН',data.ogrn]);
       if(data.officeAddr) rows.push(['Фактический адрес', data.officeAddr]);
       if(data.companyPhone) rows.push(['Телефон', data.companyPhone]);
     }
     if(data.showAccount){
       if(data.bankAcc) rows.push(['Р/с', data.bankAcc]);
       if(data.bankName) rows.push(['Банк', data.bankName]);
-      if(data.bik) rows.push(['БИК / К/с', [data.bik, data.corrAccount].filter(Boolean).join(' / ')]);
+      if(data.bik) rows.push(['БИК',data.bik]);
+      if(data.corrAccount) rows.push(['К/с',data.corrAccount]);
     }
     if(data.showCard){
       if(data.cardNumber) rows.push(['Карта для оплаты', data.cardNumber]);
@@ -10671,6 +10703,7 @@ function exportKpToXlsx(){
   }
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols']=[26,36,12,10,23,26,18,28].slice(0,headings.length).map(wch=>({wch}));
   XLSX.utils.book_append_sheet(wb, ws, 'КП');
 
   const fileName = kpFileName(data, 'xlsx');
@@ -10693,7 +10726,14 @@ let editingKpId = null;
 let editingKpProjectId = null;
 let kpSaveInFlight = false;
 
+function resetKpExportSections(){
+  for(const id of ['kp-show-company','kp-show-account','kp-show-card']){
+    const field=document.getElementById(id);
+    field.checked=field.defaultChecked;
+  }
+}
 function resetKpForm(){
+  resetKpExportSections();
   editingKpId = null;
   editingKpProjectId = null;
   kpServices = [];
@@ -10713,6 +10753,7 @@ function resetKpForm(){
 }
 
 function loadKpForm(kp){
+  if(kp.id!==editingKpId)resetKpExportSections();
   editingKpId = kp.id;
   editingKpProjectId = kp.project_id || null;
   document.getElementById('kp-client-name').value = kp.client_name || '';
@@ -12213,28 +12254,35 @@ async function renderShareLinks(){
   }).join('');
 }
 
+function openShareLinkForm(projectId, title){
+  if(!canEditCards())return;
+  shareLinkProjectId=projectId;
+  const form=document.getElementById('shareLinkOverlay');
+  const result=document.getElementById('sl-result'),submit=document.getElementById('sl-create');
+  const draft={pending:false};
+  form.shareDraft=draft;
+  document.getElementById('sl-name').value=title;
+  document.getElementById('sl-filter').value='all';
+  document.getElementById('sl-expires').value='14';
+  document.getElementById('sl-url').value='';
+  document.getElementById('sl-filter-row').style.display=projectId?'none':'';
+  document.getElementById('sl-single-note').style.display=projectId?'':'none';
+  result.style.display='none';
+  submit.disabled=false;
+  form.oninput=()=>{
+    result.style.display='none';
+    document.getElementById('sl-url').value='';
+    form.shareDraft={pending:false};
+    submit.disabled=false;
+  };
+  form.classList.add('active');
+}
 function createShareLink(){
-  shareLinkProjectId = null;
-  document.getElementById('sl-name').value = '';
-  document.getElementById('sl-result').style.display = 'none';
-  document.getElementById('sl-filter-row').style.display = '';
-  document.getElementById('sl-single-note').style.display = 'none';
-  document.getElementById('shareLinkOverlay').classList.add('active');
+  openShareLinkForm(null,'');
 }
-
-// Ссылка на один конкретный проект каталога — видна только тем, у кого есть
-// доступ к разделу «Каталог» (canEditCards): администратору и сотрудникам
-// с правом видеть готовые проекты.
 function createShareLinkForProject(cardId, cardTitle){
-  if(!canEditCards()) return;
-  shareLinkProjectId = cardId;
-  document.getElementById('sl-name').value = cardTitle || 'Проект';
-  document.getElementById('sl-result').style.display = 'none';
-  document.getElementById('sl-filter-row').style.display = 'none';
-  document.getElementById('sl-single-note').style.display = '';
-  document.getElementById('shareLinkOverlay').classList.add('active');
+  openShareLinkForm(cardId,cardTitle||'Проект');
 }
-
 async function generateShareLink(){
   if(!canEditCards())return;
   const label = document.getElementById('sl-name').value.trim() || 'Ссылка';
@@ -12242,6 +12290,11 @@ async function generateShareLink(){
   const expiresValue = document.getElementById('sl-expires').value;
   const expiresDays = Number(expiresValue);
   if(!['0','2','3','4','5','6','7','14','30','90'].includes(expiresValue)){showToast('Выберите срок действия ссылки');return;}
+  const form=document.getElementById('shareLinkOverlay'),submit=document.getElementById('sl-create');
+  const draft=form.shareDraft;
+  if(!draft||draft.pending||submit.disabled)return;
+  draft.pending=true;
+  submit.disabled=true;
   const token = (window.crypto && crypto.randomUUID)
     ? crypto.randomUUID().replace(/-/g,'')
     : Math.random().toString(36).slice(2) + Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -12257,12 +12310,16 @@ async function generateShareLink(){
     });
     if(error) throw error;
 
+    if(form.shareDraft!==draft){await renderShareLinks();return;}
     const base = location.origin + location.pathname.replace('index.html','');
     const url = base + 'catalog.html?t=' + token;
     document.getElementById('sl-url').value = url;
     document.getElementById('sl-result').style.display = 'block';
     await renderShareLinks();
   } catch(e){
+    if(form.shareDraft!==draft)return;
+    draft.pending=false;
+    submit.disabled=false;
     const details = [e.message, e.code, e.details, e.hint].filter(Boolean).join(' · ');
     showToast('Ошибка создания ссылки: ' + (details || 'неизвестная ошибка'));
     console.error('generateShareLink error:', e);
@@ -12270,8 +12327,14 @@ async function generateShareLink(){
 }
 
 function copyShareUrl(){
-  const url = document.getElementById('sl-url').value;
-  navigator.clipboard.writeText(url).then(()=>showToast('Ссылка скопирована!'));
+  const input=document.getElementById('sl-url');
+  const selectAddress=()=>{
+    input.focus();
+    input.select();
+    showToast('Адрес выделен. Скопируйте его вручную.');
+  };
+  if(!navigator.clipboard?.writeText){selectAddress();return;}
+  navigator.clipboard.writeText(input.value).then(()=>showToast('Ссылка скопирована!'),selectAddress);
 }
 
 async function deactivateLink(id){

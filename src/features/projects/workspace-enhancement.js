@@ -2,7 +2,7 @@
 (()=>{
 'use strict';
 const $=id=>document.getElementById(id), sheet=$('projectSheetOverlay').querySelector('.sheet');
-const esc=s=>escapeHtml(String(s??'')), money=n=>fmtMoney(Number(n)||0);
+const esc=s=>escapeHtml(String(s??'')), money=n=>rublesWithKopecks.format(Number(n)||0);
 const originalChildren=[...sheet.children], start=originalChildren.indexOf($('pf-category').closest('.field-row')), finish=originalChildren.indexOf($('pf-save'));
 const nav=document.createElement('div');nav.className='project-tabs';nav.setAttribute('role','tablist');nav.setAttribute('aria-label','Разделы проекта');
 const panels={};
@@ -131,7 +131,7 @@ function refresh(){
  const payment=Number($('pf-advance').value)||0;
  overview.innerHTML=`<div class="project-eyebrow">${esc(findCategory(p.category_id)?.name||'Новый проект')}</div><h3>${esc($('pf-name').value||'Начнём с основного')}</h3><p class="project-note">${esc(findStatus(p.status_id)?.name||'В работе')} · ${$('pf-end').value?'Срок: '+esc(fmtDate($('pf-end').value)):'Укажите срок проекта'}</p>`+(admin?`<div class="project-metrics">${card('Стоимость',money(p.price))}${card('Команда · '+(done?'начислено':'план'),money(total))}</div>`:'');
  const construction=isConstructionCategory(p.category_id);
- economy.innerHTML=admin?(construction?'<p class="project-note">Бюджет стройки, накладные и прямые оплаты клиента доступны в карточке объекта.</p>':`<div class="project-metrics">${card('Получено от клиента',money(payment))}${card('Долг клиента',money(Math.max(0,p.price-payment)))}</div><div class="project-equation"><span>Стоимость договора <b>${esc(money(p.price))}</b></span><span>− Прямые расходы <b>${esc(money(p.expenses))}</b></span><span>− Вознаграждения команды <b>${esc(money(total))}</b></span><span class="project-total">Остаётся компании <b>${esc(money(p.price-p.expenses-total))}</b></span></div><p class="project-note">Оклады, аренда и другие общие расходы учитываются за месяц отдельно.</p>`):'';
+ economy.innerHTML=admin?(construction?'<p class="project-note">Бюджет стройки, накладные и прямые оплаты клиента доступны в карточке объекта.</p>':`<div class="project-metrics">${card('Получено от клиента',money(payment))}${card('Долг клиента',money(outstandingProjectBalance(p.price,payment)))}</div><div class="project-equation"><span>Стоимость договора <b>${esc(money(p.price))}</b></span><span>− Прямые расходы <b>${esc(money(p.expenses))}</b></span><span>− Вознаграждения команды <b>${esc(money(total))}</b></span><span class="project-total">Остаётся компании <b>${esc(money(p.price-p.expenses-total))}</b></span></div><p class="project-note">Оклады, аренда и другие общие расходы учитываются за месяц отдельно.</p>`):'';
  if(construction){
    methods.hidden=true;baseField.hidden=true;
    compensation.querySelector('.accent-title').textContent='Открытая наценка компании';

@@ -34,6 +34,12 @@ function populateEmployeeFormSelects(){
   // used elsewhere if needed
 }
 
+let constructionFollowsRole=false;
+document.getElementById('ef-see-construction').addEventListener('change',()=>{constructionFollowsRole=false;});
+document.getElementById('ef-role').addEventListener('change',event=>{
+  if(constructionFollowsRole)document.getElementById('ef-see-construction').checked=canSeeConstructionForRole(event.target.value);
+});
+
 function openEmployeeSheet(id){
   if(!isOwner())return;
   employeeFormGeneration++;
@@ -67,6 +73,7 @@ function openEmployeeSheet(id){
       const option=new Option(e.role,e.role);option.dataset.legacyRole='true';roleSelect.add(option);
     }
     roleSelect.value=e.role||'Сотрудник';
+    constructionFollowsRole=e.can_see_construction==null;
     document.getElementById('ef-active').value = e.active===false ? 'false' : 'true';
     document.getElementById('ef-pin').value = '';
     document.getElementById('ef-can-edit-cards').checked = !!e.can_edit_cards;
@@ -84,6 +91,7 @@ function openEmployeeSheet(id){
     if(salaryField) salaryField.style.display = isAdmin ? '' : 'none';
   }else{
     title.textContent = 'Новый сотрудник';
+    constructionFollowsRole=true;
     deleteBtn.style.display = 'none';
     deleteBtn.textContent = 'Удалить';
     document.getElementById('ef-name').value = '';
@@ -137,7 +145,8 @@ async function saveEmployee(){
     }
     payload.can_edit_cards = document.getElementById('ef-can-edit-cards').checked;
     payload.can_see_projects = document.getElementById('ef-see-projects').checked;
-    payload.can_see_construction = document.getElementById('ef-see-construction').checked;
+    const construction=document.getElementById('ef-see-construction').checked;
+    payload.can_see_construction=constructionFollowsRole&&construction===canSeeConstructionForRole(payload.role)?null:construction;
     payload.is_salaried = document.getElementById('ef-is-salaried').checked;
     payload.fixed_salary = payload.is_salaried ? (parseFloat(document.getElementById('ef-fixed-salary').value) || 0) : 0;
   }

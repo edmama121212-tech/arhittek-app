@@ -524,9 +524,14 @@ function exportKpToXlsx(){
   rows.push(['Дата', fmtDate(data.date)]);
   rows.push([]);
   if(data.comment) rows.push(['Комментарий', data.comment]);
-  rows.push(['№','Услуга','Объём','Ед.','По тарифу, ₽ за ед.','Для клиента, ₽ за ед.','Сумма, ₽']);
+  const preliminary=data.services.some(service=>service.preliminaryArea);
+  const headings=['№','Услуга','Объём','Ед.','По тарифу, ₽ за ед.','Для клиента, ₽ за ед.','Сумма, ₽'];
+  if(preliminary)headings.push('Основание расчёта');
+  rows.push(headings);
   data.services.forEach((s,i)=>{
-    rows.push([i+1, s.name, s.qty, s.unit, s.listRate, s.rate, s.sum]);
+    const line=[i+1, s.name, s.qty, s.unit, s.listRate, s.rate, s.sum];
+    if(s.preliminaryArea)line.push('Предварительная площадь');
+    rows.push(line);
   });
   rows.push([]);
   rows.push(['', '', '', '', '', 'Стоимость до скидок:', data.beforeDiscounts]);
@@ -536,6 +541,7 @@ function exportKpToXlsx(){
   rows.push(['', '', '', '', '', data.advancePercent===100?'Оплата (100%):':'Аванс (50%):', data.advance]);
   rows.push(['', '', '', '', '', 'Остаток:', data.remainder]);
 
+  if(preliminary)rows.push(['Итог предварительный и зависит от уточнённой площади отмеченных услуг.']);
   const withDesc = data.services.filter(s=>s.desc);
   if(withDesc.length){
     rows.push([]);
@@ -562,14 +568,17 @@ function exportKpToXlsx(){
     rows.push([`Реквизиты исполнителя${xlsMethods.length?' (оплата: '+xlsMethods.join(', ')+')':''}`]);
     if(data.showCompany){
       if(data.company) rows.push(['Компания', data.company]);
-      if(data.inn) rows.push(['ИНН / КПП / ОГРН', [data.inn, data.kpp, data.ogrn].filter(Boolean).join(' / ')]);
+      if(data.inn) rows.push(['ИНН',data.inn]);
+      if(data.kpp) rows.push(['КПП',data.kpp]);
+      if(data.ogrn) rows.push(['ОГРН',data.ogrn]);
       if(data.officeAddr) rows.push(['Фактический адрес', data.officeAddr]);
       if(data.companyPhone) rows.push(['Телефон', data.companyPhone]);
     }
     if(data.showAccount){
       if(data.bankAcc) rows.push(['Р/с', data.bankAcc]);
       if(data.bankName) rows.push(['Банк', data.bankName]);
-      if(data.bik) rows.push(['БИК / К/с', [data.bik, data.corrAccount].filter(Boolean).join(' / ')]);
+      if(data.bik) rows.push(['БИК',data.bik]);
+      if(data.corrAccount) rows.push(['К/с',data.corrAccount]);
     }
     if(data.showCard){
       if(data.cardNumber) rows.push(['Карта для оплаты', data.cardNumber]);
@@ -579,6 +588,7 @@ function exportKpToXlsx(){
   }
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols']=[26,36,12,10,23,26,18,28].slice(0,headings.length).map(wch=>({wch}));
   XLSX.utils.book_append_sheet(wb, ws, 'КП');
 
   const fileName = kpFileName(data, 'xlsx');
@@ -601,7 +611,14 @@ let editingKpId = null;
 let editingKpProjectId = null;
 let kpSaveInFlight = false;
 
+function resetKpExportSections(){
+  for(const id of ['kp-show-company','kp-show-account','kp-show-card']){
+    const field=document.getElementById(id);
+    field.checked=field.defaultChecked;
+  }
+}
 function resetKpForm(){
+  resetKpExportSections();
   editingKpId = null;
   editingKpProjectId = null;
   kpServices = [];
@@ -621,6 +638,7 @@ function resetKpForm(){
 }
 
 function loadKpForm(kp){
+  if(kp.id!==editingKpId)resetKpExportSections();
   editingKpId = kp.id;
   editingKpProjectId = kp.project_id || null;
   document.getElementById('kp-client-name').value = kp.client_name || '';

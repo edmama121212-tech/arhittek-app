@@ -507,28 +507,35 @@ async function renderShareLinks(){
   }).join('');
 }
 
+function openShareLinkForm(projectId, title){
+  if(!canEditCards())return;
+  shareLinkProjectId=projectId;
+  const form=document.getElementById('shareLinkOverlay');
+  const result=document.getElementById('sl-result'),submit=document.getElementById('sl-create');
+  const draft={pending:false};
+  form.shareDraft=draft;
+  document.getElementById('sl-name').value=title;
+  document.getElementById('sl-filter').value='all';
+  document.getElementById('sl-expires').value='14';
+  document.getElementById('sl-url').value='';
+  document.getElementById('sl-filter-row').style.display=projectId?'none':'';
+  document.getElementById('sl-single-note').style.display=projectId?'':'none';
+  result.style.display='none';
+  submit.disabled=false;
+  form.oninput=()=>{
+    result.style.display='none';
+    document.getElementById('sl-url').value='';
+    form.shareDraft={pending:false};
+    submit.disabled=false;
+  };
+  form.classList.add('active');
+}
 function createShareLink(){
-  shareLinkProjectId = null;
-  document.getElementById('sl-name').value = '';
-  document.getElementById('sl-result').style.display = 'none';
-  document.getElementById('sl-filter-row').style.display = '';
-  document.getElementById('sl-single-note').style.display = 'none';
-  document.getElementById('shareLinkOverlay').classList.add('active');
+  openShareLinkForm(null,'');
 }
-
-// Ссылка на один конкретный проект каталога — видна только тем, у кого есть
-// доступ к разделу «Каталог» (canEditCards): администратору и сотрудникам
-// с правом видеть готовые проекты.
 function createShareLinkForProject(cardId, cardTitle){
-  if(!canEditCards()) return;
-  shareLinkProjectId = cardId;
-  document.getElementById('sl-name').value = cardTitle || 'Проект';
-  document.getElementById('sl-result').style.display = 'none';
-  document.getElementById('sl-filter-row').style.display = 'none';
-  document.getElementById('sl-single-note').style.display = '';
-  document.getElementById('shareLinkOverlay').classList.add('active');
+  openShareLinkForm(cardId,cardTitle||'Проект');
 }
-
 async function generateShareLink(){
   if(!canEditCards())return;
   const label = document.getElementById('sl-name').value.trim() || 'Ссылка';
@@ -536,6 +543,11 @@ async function generateShareLink(){
   const expiresValue = document.getElementById('sl-expires').value;
   const expiresDays = Number(expiresValue);
   if(!['0','2','3','4','5','6','7','14','30','90'].includes(expiresValue)){showToast('Выберите срок действия ссылки');return;}
+  const form=document.getElementById('shareLinkOverlay'),submit=document.getElementById('sl-create');
+  const draft=form.shareDraft;
+  if(!draft||draft.pending||submit.disabled)return;
+  draft.pending=true;
+  submit.disabled=true;
   const token = (window.crypto && crypto.randomUUID)
     ? crypto.randomUUID().replace(/-/g,'')
     : Math.random().toString(36).slice(2) + Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -551,12 +563,16 @@ async function generateShareLink(){
     });
     if(error) throw error;
 
+    if(form.shareDraft!==draft){await renderShareLinks();return;}
     const base = location.origin + location.pathname.replace('index.html','');
     const url = base + 'catalog.html?t=' + token;
     document.getElementById('sl-url').value = url;
     document.getElementById('sl-result').style.display = 'block';
     await renderShareLinks();
   } catch(e){
+    if(form.shareDraft!==draft)return;
+    draft.pending=false;
+    submit.disabled=false;
     const details = [e.message, e.code, e.details, e.hint].filter(Boolean).join(' · ');
     showToast('Ошибка создания ссылки: ' + (details || 'неизвестная ошибка'));
     console.error('generateShareLink error:', e);
@@ -564,8 +580,14 @@ async function generateShareLink(){
 }
 
 function copyShareUrl(){
-  const url = document.getElementById('sl-url').value;
-  navigator.clipboard.writeText(url).then(()=>showToast('Ссылка скопирована!'));
+  const input=document.getElementById('sl-url');
+  const selectAddress=()=>{
+    input.focus();
+    input.select();
+    showToast('Адрес выделен. Скопируйте его вручную.');
+  };
+  if(!navigator.clipboard?.writeText){selectAddress();return;}
+  navigator.clipboard.writeText(input.value).then(()=>showToast('Ссылка скопирована!'),selectAddress);
 }
 
 async function deactivateLink(id){

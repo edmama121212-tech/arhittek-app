@@ -22,6 +22,8 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
 
 (async () => {
   const projectSchedule = process.argv.includes('--project-schedule');
+  const releasePlan = process.argv.includes('--release-plan');
+  const salaryRule = process.argv.includes('--salary-rule');
   const storageCreate = process.argv.includes('--storage-create');
   const reserveAdjust = process.argv.includes('--reserve-adjust');
   const walletTransfer = process.argv.includes('--wallet-transfer');
@@ -35,7 +37,7 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
   const recurring = process.argv.includes('--recurring');
   const homeActions = process.argv.includes('--home-actions');
   const cashFloor = process.argv.includes('--cash-floor');
-  const dedicated = storageCreate || incomePlan || projectSchedule || reserveAdjust || expensePlan || walletTransfer || cancelPlan || paymentLinks || unlinkPayments || stopRule || createRule || recurring || homeActions || cashFloor;
+  const dedicated = salaryRule || releasePlan || storageCreate || incomePlan || projectSchedule || reserveAdjust || expensePlan || walletTransfer || cancelPlan || paymentLinks || unlinkPayments || stopRule || createRule || recurring || homeActions || cashFloor;
   const db = new PGlite();
   await db.waitReady;
   const browser = await chromium.launch({executablePath:process.env.BROWSER_EXECUTABLE || undefined, args:['--no-sandbox']});
@@ -44,12 +46,16 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
     await db.query("insert into public.employees(id,name,role,is_admin) values($1,'Мансур','Генеральный директор',true)", [uuid(1)]);
     await db.query("insert into public.employee_sessions(employee_id,token,expires_at) values($1,$2,now()+interval '1 day')", [uuid(1), token]);
     for (const file of ['supabase/install-owner-access.sql', 'supabase/financial-journal.sql',
-      ...fs.readdirSync(path.join(root, 'supabase/migrations')).filter(name => /^20261030|^20261031|^20261101|employee_salary_history\.sql$|(?:finance_(?:payment_integrity|link_details)|project_schedule_balance)\.sql$|recurring_(?:replacement|stop)\.sql$|(?:finance_spending_limits|storage_names)\.sql$/.test(name)).sort().map(name => 'supabase/migrations/' + name)]) {
+      ...fs.readdirSync(path.join(root, 'supabase/migrations')).filter(name => /^20261030|^20261031|^20261101|employee_salary_history\.sql$|(?:finance_(?:payment_integrity|link_details)|project_schedule_balance)\.sql$|recurring_(?:replacement|stop)\.sql$|(?:finance_spending_limits|storage_names|salary_rule_direction)\.sql$/.test(name)).sort().map(name => 'supabase/migrations/' + name)]) {
       await db.exec(read(file));
     }
     if(projectSchedule){
       for(let i=0;i<12;i++)await db.query('insert into public.projects(id,name,price,advance,balance) values($1,$2,1200,200,1000)',[uuid(4200+i),'Учебный дом '+(i===4?3:i)]);
     }
+    if(releasePlan){
+      await db.query("insert into public.projects(id,name,price,balance) values($1,'Учебный павильон',10000,10000),($2,'Учебный сад',20000,20000)",[uuid(8901),uuid(8902)]);
+    }
+    if(salaryRule)await require('./helpers/salary-rule-ui.cjs').seed(db,uuid);
     if(homeActions || incomePlan){
       await db.query("insert into public.projects(id,name,price,balance) values($1,'Тестовый павильон',10000,10000)",[uuid(701)]);
     }
@@ -128,6 +134,16 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
     await page.locator('.nav-btn[data-view="view-finance"]').click();
     if(projectSchedule){
       await require('./helpers/project-schedule-ui.cjs')({page,fw,db,command,snap,wallet,uuid,day,shift,build,browser,expectedTile,twoFrames});
+      assert.deepEqual(errors,[]);
+      return;
+    }
+    if(releasePlan){
+      await require('./helpers/release-plan-ui.cjs')({page,fw,db,command,snap,day,shift,wallet,uuid,build,browser,expectedTile,twoFrames});
+      assert.deepEqual(errors,[]);
+      return;
+    }
+    if(salaryRule){
+      await require('./helpers/salary-rule-ui.cjs').run({page,fw,db,command,snap,wallet,uuid,day,shift,build,browser,expectedTile,twoFrames});
       assert.deepEqual(errors,[]);
       return;
     }

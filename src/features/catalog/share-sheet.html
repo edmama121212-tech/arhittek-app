@@ -1,17 +1,17 @@
 <!-- ===== SHARE LINK SHEET ===== -->
 <div class="sheet-overlay" id="shareLinkOverlay">
-  <div class="sheet">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sl-title">
     <div class="sheet-handle"></div>
     <div class="sheet-title">
-      <span>Ссылка для клиента</span>
-      <button class="sheet-close" onclick="document.getElementById('shareLinkOverlay').classList.remove('active')">×</button>
+      <span id="sl-title">Ссылка для клиента</span>
+      <button class="sheet-close" aria-label="Закрыть" onclick="document.getElementById('shareLinkOverlay').classList.remove('active')">×</button>
     </div>
-    <div style="margin-bottom:14px;">
-      <label class="form-label">Название ссылки (для себя)</label>
+    <div class="field" style="margin-bottom:14px;">
+      <label class="form-label" for="sl-name">Название ссылки (для себя)</label>
       <input class="form-input" id="sl-name" placeholder="Клиент Ахмад, июль 2026"/>
     </div>
-    <div style="margin-bottom:14px;" id="sl-filter-row">
-      <label class="form-label">Фильтр карточек</label>
+    <div class="field" style="margin-bottom:14px;" id="sl-filter-row">
+      <label class="form-label" for="sl-filter">Фильтр карточек</label>
       <select class="form-input" id="sl-filter">
         <option value="all">Все карточки</option>
         <option value="1">Только 1-этажные</option>
@@ -20,8 +20,8 @@
       </select>
     </div>
     <div id="sl-single-note" style="display:none;margin-bottom:14px;font-size:12px;color:var(--text-dim);background:var(--blue-soft);border-radius:8px;padding:8px 10px;">Ссылка ведёт только на этот конкретный проект.</div>
-    <div style="margin-bottom:16px;">
-      <label class="form-label">Срок действия ссылки</label>
+    <div class="field" style="margin-bottom:16px;">
+      <label class="form-label" for="sl-expires">Срок действия ссылки</label>
       <select class="form-input" id="sl-expires">
         <option value="2">2 дня</option>
         <option value="3">3 дня</option>
@@ -35,12 +35,12 @@
         <option value="0">Бессрочно</option>
       </select>
     </div>
-    <button class="btn btn-primary" style="width:100%;" onclick="generateShareLink()">Создать ссылку</button>
-    <div id="sl-result" style="display:none;margin-top:14px;">
-      <label class="form-label">Ссылка готова — скопируй и отправь клиенту</label>
+    <button class="btn btn-primary" style="width:100%;" id="sl-create" onclick="generateShareLink()">Создать ссылку</button>
+    <div class="field" id="sl-result" style="display:none;margin-top:14px;">
+      <label for="sl-url">Готовая ссылка</label>
       <div style="display:flex;gap:8px;margin-top:6px;">
-        <input class="form-input" id="sl-url" readonly style="font-size:11px;"/>
-        <button class="btn btn-primary" style="flex-shrink:0;padding:0 14px;" onclick="copyShareUrl()">Копировать</button>
+        <input class="form-input" id="sl-url" readonly style="flex:1;min-width:0;font-size:13px;"/>
+        <button class="btn btn-primary" style="width:auto;flex-shrink:0;padding:0 14px;margin:0;" onclick="copyShareUrl()">Копировать</button>
       </div>
     </div>
   </div>
