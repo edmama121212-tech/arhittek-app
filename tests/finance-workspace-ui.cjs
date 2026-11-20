@@ -150,10 +150,19 @@ try{
     }finally{state.financialJournal=original;ARHITTEKFinanceWorkspace.render();}
    });
    eq(sample,[[['Поступление','10000,00₽','Свободно для расходов'],['Расход','10000,00₽','Свободно для расходов'],['Движение денег','0,00₽','Свободно для расходов']],[null,'3500,00₽',null],['500,00₽','0,00₽','0,00₽'],2,1,1,['Аванс [этап 3]','Выплата · ноябрь 2026 г.','Распределение'],1,1,1,1]);
-   await search.fill('операция-которой-нет');
+   await search.focus();
+   await search.press('ControlOrMeta+a');
+   await page.evaluate(()=>ARHITTEKFinanceWorkspace.render());
+   eq(await search.evaluate(el=>[el===document.activeElement,el.selectionStart,el.selectionEnd]),[true,0,'ноябрь'.length]);
+   await page.keyboard.insertText('операция-которой-нет');
    eq(await workspace.locator('[data-fw-no-match]').isVisible(),true);
    await page.evaluate(()=>ARHITTEKFinanceWorkspace.render());
    eq(await search.inputValue(),'операция-которой-нет');
+   await search.evaluate(el=>el.setSelectionRange(0,'операция'.length,'backward'));
+   await page.evaluate(()=>ARHITTEKFinanceWorkspace.render());
+   eq(await search.evaluate(el=>[el.selectionStart,el.selectionEnd,el.selectionDirection]),[0,'операция'.length,'backward']);
+   await page.keyboard.insertText('запись');
+   eq(await search.inputValue(),'запись-которой-нет');
    await search.fill('');
    eq(await workspace.locator('[data-fw-no-match]').isVisible(),false);
   }

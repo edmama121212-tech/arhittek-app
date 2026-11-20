@@ -113,7 +113,6 @@ module.exports = async function run({page,fw,command,snap,day,wallet,uuid,shift,
     const card=fw.locator('[data-fw="reschedule"][data-id="'+due.key+'"]').locator('xpath=ancestor::article');
     assert.equal(await card.locator('h3').innerText(),label);
     assert.equal(Number((await card.locator('.fw-row b').innerText()).replace(/[^\d,]/g,'').replace(',','.')),expected);
-    await card.scrollIntoViewIfNeeded();
     assert.ok(await card.evaluate(e=>e.scrollWidth<=e.clientWidth+1));
     if(out)await card.screenshot({path:path.join(out,'calendar-'+(i+1)+'.png')});
     await home();

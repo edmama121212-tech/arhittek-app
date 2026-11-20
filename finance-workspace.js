@@ -173,6 +173,7 @@ function render(){
   bind(root,retainHeadingFocus);
   return;
  }
+ let historyHeader=null;
  if(tab==='more'||tab==='forecast'){
   const kpi=(label,value,note)=>'<article class="fw-card"><small>'+label+'</small><strong class="fw-amount">'+money(value)+'</strong><p>'+note+'</p></article>';
   if(tab==='more'){
@@ -249,7 +250,8 @@ function render(){
  }else{
   const ops=[...(j.operations||[]),...(j.history||[])],reversed=new Set(ops.map(x=>x.reverses).filter(Boolean));
   const revisions=new Map(ops.map(o=>[o.id,o.revision]));
-  html+='<label class="fw-search">Поиск по загруженным операциям<input type="search" data-fw-search placeholder="Название, дата или сумма"></label><p data-fw-no-match hidden>Операций по запросу нет.</p>';
+  historyHeader=html;
+  html='<p data-fw-no-match hidden>Операций по запросу нет.</p>';
   const receipts=(state.ledger||[]).filter(x=>!x.deleted_at&&['advance','final_payment','income','materials_budget','construction_budget'].includes(x.type));
   const receiptCorrections=receipts.length?'<details class="fw-card" data-fw-section="receipt-corrections"><summary>Исправить дату или учёт оплаты клиента</summary><p>Оплата до начала текущего учёта сохраняется в проекте, но не прибавляется к уже подтверждённому начальному остатку. Каждое исправление требует причины.</p>'+receipts.map(x=>'<div class="fw-row"><span>'+esc((state.projects||[]).find(p=>p.id===x.project_id)?.name||'Оплата клиента')+' · '+money(x.amount)+' · '+esc(x.received_before_start?'Ранее получено, дата неизвестна':fmtDate(x.entry_date))+'</span>'+btn('Исправить оплату','correct-receipt',x.id,locked)+'</div>').join('')+'</details>':'';
   if(!ops.length)html+='<p class="fw-empty" data-fw-empty>В истории пока нет подтверждённых операций.</p>';
@@ -274,13 +276,23 @@ function render(){
   if(s.changes?.length)html+='<details class="fw-card" data-fw-section="plan-history"><summary>История планов и переводов</summary>'+(s.changes||[]).map(h=>'<div class="fw-card"><b>'+esc(h.after_value?.label||h.after_value?.reason||({plan:'План платежа',pay:'Фактическая оплата',rule:'Регулярное обязательство',wallet_transfer:'Перевод между счетами',reschedule:'Перенос срока',cancel:'Отмена остатка плана',wallet:'Новый счёт',stop_rule:'Остановка регулярного платежа'}[h.entity]||'Финансовое действие'))+'</b><p>'+esc(new Date(h.created_at).toLocaleString('ru-RU'))+'</p>'+(h.before_value?.amount?row('Сумма до',h.before_value.amount):'')+(h.after_value?.amount?row('Сумма после / операции',h.after_value.amount):'')+'<p>Прежний срок: '+esc(h.before_value?.due_date||'—')+' · Новый срок: '+esc(h.after_value?.due_date||'—')+'</p></div>').join('')+'</details>';
  }
  const openSections = new Set(Array.from(root.querySelectorAll("details[data-fw-section][open]"), element => element.dataset.fwSection));
- const search=root.querySelector('[data-fw-search]');
- const query=search?.value||'';
- const searchFocused=search&&document.activeElement===search;
- root.innerHTML=html;
+ if(historyHeader===null){
+  root.innerHTML=html;
+ }else{
+  // Keep the native search control attached while its surrounding results refresh.
+  // Recreating it drops the current selection and interrupts composition.
+  let label=root.querySelector('.fw-search');
+  if(!label){
+   root.innerHTML='<label class="fw-search">Поиск по загруженным операциям<input type="search" data-fw-search placeholder="Название, дата или сумма"></label>';
+   label=root.querySelector('.fw-search');
+  }else{
+   for(const child of Array.from(root.children))if(child!==label)child.remove();
+  }
+  label.insertAdjacentHTML('beforebegin',historyHeader);
+  label.insertAdjacentHTML('afterend',html);
+ }
  const searchField=root.querySelector('[data-fw-search]');
  if(searchField){
-  searchField.value=query;
   const entries=Array.from(root.querySelectorAll('[data-fw-operation]'),card=>{
    // Index the operation itself. Balance after posting and action buttons are separate information.
    const movement=card.querySelector('.fw-row');
@@ -296,7 +308,6 @@ function render(){
    root.querySelector('[data-fw-no-match]').hidden=!needle||entries.some(({card})=>!card.hidden);
   };
   searchField.oninput();
-  if(searchFocused)searchField.focus({preventScroll:true});
  }
  for (const section of root.querySelectorAll("details[data-fw-section]")) section.open = openSections.has(section.dataset.fwSection);
  bind(root,retainHeadingFocus);
