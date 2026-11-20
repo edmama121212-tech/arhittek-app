@@ -118,26 +118,24 @@ await p.locator('.nav-btn[data-view="view-finance"]').click();await p.waitForTim
 for(const [btn,view] of [['openKpBtn','view-kp'],['openContractsBtn','view-contracts'],['openCompanyBtn','view-company'],['openTimesheetBtn','view-timesheet']]){await p.locator('.nav-btn[data-view="view-more"]').click();await p.locator('#'+btn).click();await test('navigate '+view,()=>document.querySelector('.view.active').id,view);}
 await p.locator('#settingsBtn').click();await test('settings',()=>document.querySelector('.view.active').id,'view-settings');
 await test('PDF export',()=>{let n=0;const orig=jspdf.jsPDF.API.save;jspdf.jsPDF.API.save=function(){n++;return this};exportTimesheetToPdf('admin','2026-09');jspdf.jsPDF.API.save=orig;return n},1);
-await test('Native PDF sharing delivers one named attachment without downloading',async()=>{
+await test('PDF download bypasses native sharing and saves the named file',async()=>{
  const originalCanShare=Object.getOwnPropertyDescriptor(navigator,'canShare');
  const originalShare=Object.getOwnPropertyDescriptor(navigator,'share');
- const saved=[];
- const shared=[];
+ const saved=[],shared=[];
  try{
   Object.defineProperty(navigator,'canShare',{configurable:true,value:()=>true});
   Object.defineProperty(navigator,'share',{configurable:true,value:async payload=>shared.push(payload)});
   const doc=new jspdf.jsPDF();
   doc.save=name=>saved.push(name);
   await deliverDocumentPdf(doc,'Табель.pdf');
-  const payload=shared[0],attachment=payload.files[0];
-  return [shared.length,Object.keys(payload),payload.files.length,attachment.name,attachment.type,(await attachment.text()).startsWith('%PDF-'),saved.length];
+  return [saved,shared.length];
  }finally{
   for(const [key,descriptor] of [['share',originalShare],['canShare',originalCanShare]]){
    if(descriptor)Object.defineProperty(navigator,key,descriptor);
    else delete navigator[key];
   }
  }
-},[1,['files'],1,'Табель.pdf','application/pdf',true,0]);
+},[['Табель.pdf'],0]);
 await test('Excel export',()=>{let n=0;const orig=XLSX.writeFile;XLSX.writeFile=()=>n++;exportToXlsx();XLSX.writeFile=orig;return n},1);
 for(const width of [1440,1024,900,768,390,360]){await p.setViewportSize({width,height:900});await p.locator('.nav-btn[data-view="view-projects"]').click();await test('layout '+width,()=>document.documentElement.scrollWidth<=innerWidth,true);await p.evaluate(()=>openProjectSheet(null));await p.waitForTimeout(80);await test('sheet '+width,()=>{const r=document.querySelector('#projectSheetOverlay .sheet').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth+1},true);await p.evaluate(()=>closeProjectSheet());}
 const publicChecks=[];await p.goto('https://app.test/catalog.html?t=test');await p.waitForTimeout(80);await test('catalog invalid link',()=>document.getElementById('catFeed').textContent.includes('недействительна'),true);
