@@ -393,7 +393,6 @@ function openCardEditor(id){
     document.getElementById('ce-delete-row').style.display = 'none';
   }
 
-  cePlanSaveBaseline = id && cardsData.some(card=>card.id===id) ? captureCardPlanState() : null;
   const overlay=document.getElementById('cardEditorOverlay');
   if(!overlay.dataset.draftGuardInstalled){
     overlay.dataset.draftGuardInstalled='1';
@@ -413,6 +412,7 @@ function openCardEditor(id){
   document.getElementById('ce-save-btn').textContent=saving?'Сохранение…':'Сохранить проект';
   cePrevTab('prev-facade',document.querySelector('#prev-tabs > div'));
   cePreview();
+  cePlanSaveBaseline = id && cardsData.some(card=>card.id===id) ? captureCardPlanState() : null;
   overlay.style.display = 'flex';
 }
 
