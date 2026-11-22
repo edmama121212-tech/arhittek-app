@@ -21,6 +21,24 @@ const cardImageSelections = new Map();
 let ceImages = CatalogFloors.slots(); // facade1, facade2, floor1, floor2, floor3, basement
 let ceThumbs = CatalogFloors.slots();
 let ceFloorsSelected = 2;
+// Preserve the exact plan inputs shown when an existing card was opened.
+// Safe descriptive edits must not re-upload or rewrite old plans.
+let cePlanSaveBaseline = null;
+function captureCardPlanState(){
+  const value=id=>document.getElementById(id)?.value?.trim()||'';
+  return {
+    fields:[value('ce-num'),ceFloorsSelected,ceFeatureSelected.includes('basement'),ceFeatureSelected.includes('mansard'),value('ce-area'),value('ce-footprint'),value('ce-beds'),value('ce-baths'),
+      ...CatalogFloors.definitions.flatMap(f=>[value('ce-area'+f.suffix),value('ce-expl'+f.suffix)])],
+    images:ceImages.slice(),thumbnails:ceThumbs.slice()
+  };
+}
+function cardPlanUnchanged(){
+  if(!cePlanSaveBaseline)return false;
+  const now=captureCardPlanState(),before=cePlanSaveBaseline;
+  return JSON.stringify(now.fields)===JSON.stringify(before.fields)
+    && now.images.length===before.images.length && now.images.every((image,i)=>image===before.images[i])
+    && now.thumbnails.length===before.thumbnails.length && now.thumbnails.every((image,i)=>image===before.thumbnails[i]);
+}
 
 // Показ/скрытие adminbar при смене view
 function applyCardsRole(){
@@ -292,6 +310,7 @@ function openCardEditor(id){
   ceCurrentId = id || null;
   cePdfImportMeta = null;
   ceScreenshotPlans = {};
+  cePlanSaveBaseline = null;
   const qualityStatus=document.getElementById('ce-quality-status');if(qualityStatus){qualityStatus.hidden=true;qualityStatus.textContent='';}
   CatalogPdfImport.reset();
   initCardFloorEditor();
@@ -338,7 +357,9 @@ function openCardEditor(id){
       setVal('ce-beds', card.beds??'');
       setVal('ce-baths', card.baths??'');
       setVal('ce-price', card.price||'');
-      setVal('ce-tags', (card.tags||[]).join(', '));
+      // Feature and style switches own their system labels, not the free-tag input.
+      const systemTags=['Классический','Современный','Цокольный этаж','Мансарда','Плоская кровля'];
+      setVal('ce-tags', (card.tags||[]).filter(t=>!systemTags.includes(t)).join(', '));
       CatalogFloors.definitions.forEach(f=>{
         setVal('ce-area'+f.suffix,card[f.area]||'');
         setVal('ce-expl'+f.suffix,CatalogFloors.normalizeRooms(card[f.rooms],{expectedArea:card[f.area]}).map(r=>`${r.name}: ${r.area}`).join('\n'));
@@ -391,6 +412,7 @@ function openCardEditor(id){
   document.getElementById('ce-save-btn').textContent=saving?'Сохранение…':'Сохранить проект';
   cePrevTab('prev-facade',document.querySelector('#prev-tabs > div'));
   cePreview();
+  cePlanSaveBaseline = id && cardsData.some(card=>card.id===id) ? captureCardPlanState() : null;
   overlay.style.display = 'flex';
 }
 

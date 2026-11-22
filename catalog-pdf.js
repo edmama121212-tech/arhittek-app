@@ -45,12 +45,24 @@
   return {version:VERSION,passed:!issues.length,issues:[...new Set(issues)],scope:'pdf-card'};
  }
 
- function show(review){const box=document.getElementById('ce-quality-status');if(!box)return;box.hidden=false;box.textContent=review.passed?(review.scope==='manual-card'?'Заполненные данные проверены. Автоматическая проверка геометрии доступна для планов из PDF.':'Проверка пройдена: планы, экспликации и данные согласованы. Можно сохранить проект.'):'Сохранение заблокировано. Исправьте:\n• '+review.issues.join('\n• ');box.style.whiteSpace='pre-line';}
+ // Editing only descriptive fields of an already saved card does not change
+ // its approved (or legacy) plan geometry. Still validate its identity/price.
+ function reviewMetadata(card){
+  const issues=[],number=String(card.project_number||'').trim();
+  if(!number)issues.push('Укажите номер проекта');
+  else if(!/^[\p{L}\d][\p{L}\d._\/-]{0,39}$/u.test(number))issues.push('В номере проекта есть недопустимые символы');
+  if(!String(card.title||'').replace(/^Проект\s*№.*?—\s*/u,'').trim())issues.push('Укажите название проекта');
+  if(card.price!==''&&card.price!==null&&card.price!==undefined&&(!Number.isFinite(num(card.price))||num(card.price)<0))issues.push('Цена должна быть корректным неотрицательным числом');
+  return {version:VERSION,passed:!issues.length,issues,scope:'metadata-card'};
+ }
+
+ function show(review){const box=document.getElementById('ce-quality-status');if(!box)return;box.hidden=false;box.textContent=review.passed?(review.scope==='metadata-card'?'Данные карточки проверены. Планы не менялись — повторная проверка PDF не нужна. Можно сохранить проект.':review.scope==='manual-card'?'Заполненные данные проверены. Автоматическая проверка геометрии доступна для планов из PDF.':'Проверка пройдена: планы, экспликации и данные согласованы. Можно сохранить проект.'):'Сохранение заблокировано. Исправьте:\n• '+review.issues.join('\n• ');box.style.whiteSpace='pre-line';}
  function checkEditor(){
   const value=id=>document.getElementById(id)?.value||'',card={project_number:value('ce-num'),title:value('ce-title'),floors:ceFloorsSelected,total_area:value('ce-area'),footprint:value('ce-footprint'),price:value('ce-price'),beds:value('ce-beds'),baths:value('ce-baths'),tags:[...value('ce-tags').split(',').map(tag=>tag.trim()).filter(Boolean),...ceFeatureSelected,...(typeof ceStyleSelected==='string'&&ceStyleSelected?[ceStyleSelected]:[]),...(ceFeatureSelected.includes('basement')?['Цокольный этаж']:[])],images:ceImages};
   for(const f of CatalogFloors.definitions){card[f.area]=value('ce-area'+f.suffix);card[f.rooms]=parseExpl(value('ce-expl'+f.suffix));}
   let meta=cePdfImportMeta||cardsData.find(c=>c.id===ceCurrentId)?.pdf_import_meta;const screenshots=typeof ceScreenshotPlans==='undefined'?{}:ceScreenshotPlans;if(Object.keys(screenshots).length)meta={...meta,sources:{...meta?.sources,plans:{...meta?.sources?.plans,...screenshots}}};
-  const review=reviewCard(card,meta);show(review);return review;
+  const unchanged=!!ceCurrentId&&cardsData.some(c=>c.id===ceCurrentId)&&!cePdfImportMeta&&!Object.keys(screenshots).length&&typeof cardPlanUnchanged==='function'&&cardPlanUnchanged();
+  const review=unchanged?reviewMetadata(card):reviewCard(card,meta);show(review);return review;
  }
  // An already open pre-quality shell still owns its older inline saveCard.
  // Attach the current publication gate when an import is applied, after that
@@ -67,7 +79,7 @@
   }
   guardedSave.catalogQualityGuard=true;root.saveCard=guardedSave;
  }
- root.CatalogQuality=Object.freeze({version:VERSION,fingerprint,scheduleFingerprint,reviewPlan,reviewCard,show,checkEditor,protectSave});
+ root.CatalogQuality=Object.freeze({version:VERSION,fingerprint,scheduleFingerprint,reviewPlan,reviewCard,reviewMetadata,show,checkEditor,protectSave});
  if(typeof module!=='undefined')module.exports=root.CatalogQuality;
 })(typeof window!=='undefined'?window:globalThis);
 (function(root){

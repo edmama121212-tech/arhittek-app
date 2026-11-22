@@ -182,8 +182,13 @@ function cePreview(){
   set('prev-num',num?'№ '+num:'№ —');
   set('prev-area',v('ce-area')||'—');set('prev-beds',v('ce-beds')||'—');set('prev-footprint',v('ce-footprint')||'—');
   set('prev-floors-stat',ceFloorsSelected);set('prev-price',(v('ce-price')||'—')+' ₽');
-  const tags=v('ce-tags').split(',').map(t=>t.trim()).filter(t=>t&&t!=='Цокольный этаж');
-  if(ceFeatureSelected.includes('basement')&&!tags.includes('Цокольный этаж'))tags.push('Цокольный этаж');
+  const systemTags=['Классический','Современный','Цокольный этаж','Мансарда','Плоская кровля'];
+  const tags=v('ce-tags').split(',').map(t=>t.trim()).filter(t=>t&&!systemTags.includes(t));
+  if(ceStyleSelected==='classic')tags.push('Классический');
+  if(ceStyleSelected==='modern')tags.push('Современный');
+  if(ceFeatureSelected.includes('basement'))tags.push('Цокольный этаж');
+  if(ceFeatureSelected.includes('mansard'))tags.push('Мансарда');
+  if(ceFeatureSelected.includes('flat'))tags.push('Плоская кровля');
   document.getElementById('prev-tags').innerHTML=tags.map(t=>`<div class="tag" style="color:#2a72c0">${escapeHtml(t)}</div>`).join('');
   CatalogFloors.definitions.forEach(f=>{
     const visible=CatalogFloors.enabled(f,card);
@@ -254,6 +259,12 @@ async function saveCard(){
   const saveActor=session?.token;
   if(cardSavesInFlight.has(saveKey))return;
   const images=ceImages.slice(),thumbs=ceThumbs.slice();
+  // A legacy PDF quality report must not block a tag/description-only edit.
+  // Only the metadata columns may be written in this path: existing plans,
+  // images, schedules and their verification history stay untouched.
+  const metadataOnly=!!cardId&&cardsData.some(card=>card.id===cardId)
+    && !importMeta&&!Object.keys(screenshotPlans).length
+    && typeof cardPlanUnchanged==='function'&&cardPlanUnchanged();
   const btn = document.getElementById('ce-save-btn');
   cardSavesInFlight.add(saveKey);
   btn.disabled = true;
@@ -290,15 +301,25 @@ async function saveCard(){
       thumbnails: thumbs,
       updated_at: new Date().toISOString(),
     };
+    // Check the entered price before any automatic calculation can mask
+    // an invalid negative or malformed amount on a metadata-only edit.
+    const metadataReview=metadataOnly?CatalogQuality.reviewMetadata(payload):null;
+    if(metadataReview&&!metadataReview.passed){
+      CatalogQuality.show(metadataReview);
+      showToast('Сохранение заблокировано: '+metadataReview.issues[0]);
+      return {ok:false,qualityBlocked:true,error:metadataReview.issues.join('. ')};
+    }
     const resolvedPrice=CatalogFloors.price(payload);
     if(resolvedPrice!==null)payload.price=String(resolvedPrice);
     let qualityMeta=importMeta||JSON.parse(JSON.stringify(cardsData.find(c=>c.id===cardId)?.pdf_import_meta||null));
     if(Object.keys(screenshotPlans).length)qualityMeta={...qualityMeta,sources:{...qualityMeta?.sources,plans:{...qualityMeta?.sources?.plans,...screenshotPlans}}};
-    const publicationReview=CatalogQuality.reviewCard(payload,qualityMeta);CatalogQuality.show(publicationReview);
-    if(!publicationReview.passed){showToast('Сохранение заблокировано: нужна проверка карточки');return {ok:false,qualityBlocked:true,error:publicationReview.issues.join('. ')};}
-    if(qualityMeta){qualityMeta.publication_quality={...publicationReview,checked_at:new Date().toISOString()};payload.pdf_import_meta=qualityMeta;if(importMeta)Object.assign(importMeta,qualityMeta);}
-    payload.images=await uploadCardImages(images,cardId);
-    payload.thumbnails=await uploadCardImages(thumbs,cardId);
+    const publicationReview=metadataOnly?CatalogQuality.reviewMetadata(payload):CatalogQuality.reviewCard(payload,qualityMeta);CatalogQuality.show(publicationReview);
+    if(!publicationReview.passed){showToast('Сохранение заблокировано: '+publicationReview.issues[0]);return {ok:false,qualityBlocked:true,error:publicationReview.issues.join('. ')};}
+    if(!metadataOnly){
+      if(qualityMeta){qualityMeta.publication_quality={...publicationReview,checked_at:new Date().toISOString()};payload.pdf_import_meta=qualityMeta;if(importMeta)Object.assign(importMeta,qualityMeta);}
+      payload.images=await uploadCardImages(images,cardId);
+      payload.thumbnails=await uploadCardImages(thumbs,cardId);
+    }
     if(cardEditorGeneration===generation){
       if(images.length===ceImages.length&&images.every((image,index)=>image===ceImages[index]))ceImages=payload.images.slice();
       if(thumbs.length===ceThumbs.length&&thumbs.every((image,index)=>image===ceThumbs[index]))ceThumbs=payload.thumbnails.slice();
@@ -312,7 +333,8 @@ async function saveCard(){
     let result,duplicate=false,planRefresh=null;
     let savedId = cardId;
     if(cardId){
-      result = await sb.from('project_cards').update(payload).eq('id', cardId).select('id').maybeSingle();
+      const updatePayload=metadataOnly?{title:payload.title,tags:payload.tags,price:payload.price,updated_at:payload.updated_at}:payload;
+      result = await sb.from('project_cards').update(updatePayload).eq('id', cardId).select('id').maybeSingle();
     } else if(importMeta){
       payload.pdf_import_meta=importMeta;
       result=await sb.rpc('import_catalog_pdf',{p_card:payload});
@@ -687,7 +709,7 @@ ${CatalogFloors.panels(card)}
     <div class="include-cell"><div class="include-icon">📐</div><div class="include-text">Архитектурные решения (АР)</div></div>
     <div class="include-cell"><div class="include-icon">🎨</div><div class="include-text">3D-визуализация всех фасадов</div></div>
     <div class="include-cell"><div class="include-icon">✅</div><div class="include-text">Адаптация под ваш участок</div></div>
-    <div class="include-cell"><div class="include-icon">✏️</div><div class="include-text">До 3 правок — включены</div></div>
+    <div class="include-cell"><div class="include-icon">✏️</div><div class="include-text">Возможны правки</div></div>
   </div>
 </div>
 <div class="price-block">
