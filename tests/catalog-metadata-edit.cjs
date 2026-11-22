@@ -28,7 +28,7 @@ const original={
   const page=await ctx.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto('https://app.test/');
   await page.waitForFunction(()=>typeof state!=='undefined'&&state.financialDataReady&&!loadAllInFlight);
-  await page.evaluate(()=>openCardEditor('legacy-15726'));
+  await page.evaluate(async()=>{await loadCards();openCardEditor('legacy-15726')});
   const save=page.locator('#ce-save-btn'),overlay=page.locator('#cardEditorOverlay');
   assert.equal(await page.locator('#feature-btn-flat').getAttribute('aria-pressed'),'true');
   assert.equal((await page.locator('#ce-tags').inputValue()).includes('Плоская кровля'),false,'System tags belong to switches');
