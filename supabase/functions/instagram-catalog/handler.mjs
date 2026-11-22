@@ -55,7 +55,8 @@ export function createHandler(env,{fetch:send=fetch,now=()=>Date.now()}={}){
           const v=change.value;
           // Unified/Facebook Login emits comment_id; Instagram Login can emit id.
           const commentId=String(v?.comment_id||v?.id||'');
-          if(change.field!=='comments'||!v||!hasProjectKeyword(v.text)||String(v.from?.id)===env.META_IG_ACCOUNT_ID||!/^\d{1,100}$/.test(commentId))continue;
+          // Meta can flag deleted or self-authored comments even if from.id uses a different scoped ID.
+          if(change.field!=='comments'||!v||v.is_deleted===true||v.is_self===true||!hasProjectKeyword(v.text)||String(v.from?.id)===env.META_IG_ACCOUNT_ID||!/^\d{1,100}$/.test(commentId))continue;
           const timestamp=Number(entry.time)*1000;
           if(!Number.isFinite(timestamp)||timestamp<now()-7*86400000||timestamp>now()+300000)continue;
           const job=await rpc('claim_instagram_catalog_reply',{p_comment:commentId,p_account:env.META_IG_ACCOUNT_ID,p_observed:new Date(timestamp).toISOString()});
