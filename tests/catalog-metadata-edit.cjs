@@ -45,8 +45,8 @@ const original={
   const update=await page.evaluate(()=>__writes.filter(w=>w.table==='project_cards'&&w.op==='update').at(-1)?.val);
   assert.deepEqual(Object.keys(update).sort(),['price','tags','title','updated_at'],'Metadata-only writes must be narrow');
   await page.evaluate(()=>openCardEditor('legacy-15726'));
-  await page.locator('#ce-expl1').fill('Спальня: 999');
-  assert.deepEqual(await page.evaluate(()=>{const q=CatalogQuality.checkEditor();return [q.scope,q.passed]}),['pdf-card',false],'Plan change still requires PDF review');
+  await page.evaluate(()=>{ceImages[2]='https://images.test/modified-plan.jpg'});
+  assert.deepEqual(await page.evaluate(()=>{const q=CatalogQuality.checkEditor();return [q.scope,q.passed]}),['pdf-card',false],'Replacing an approved plan still requires PDF review');
   await save.click();assert(await overlay.isVisible(),'Plan change rejected');
   const unchanged=await page.evaluate(()=>__db.project_cards.find(c=>c.id==='legacy-15726'));
   assert.equal(unchanged.floor1_area,original.floor1_area);
