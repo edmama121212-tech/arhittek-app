@@ -357,7 +357,9 @@ function openCardEditor(id){
       setVal('ce-beds', card.beds??'');
       setVal('ce-baths', card.baths??'');
       setVal('ce-price', card.price||'');
-      setVal('ce-tags', (card.tags||[]).join(', '));
+      // Feature and style switches own their system labels, not the free-tag input.
+      const systemTags=['Классический','Современный','Цокольный этаж','Мансарда','Плоская кровля'];
+      setVal('ce-tags', (card.tags||[]).filter(t=>!systemTags.includes(t)).join(', '));
       CatalogFloors.definitions.forEach(f=>{
         setVal('ce-area'+f.suffix,card[f.area]||'');
         setVal('ce-expl'+f.suffix,CatalogFloors.normalizeRooms(card[f.rooms],{expectedArea:card[f.area]}).map(r=>`${r.name}: ${r.area}`).join('\n'));
