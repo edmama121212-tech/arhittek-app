@@ -16,9 +16,9 @@ const env = {
   SUPABASE_URL: 'https://example.supabase.co',
   SUPABASE_SERVICE_ROLE_KEY: 'local-test-key',
 };
-const event = ({text = 'Хочу проект', comment = '17900000000012345', seconds = fixedTime / 1000, id = account, author = '123456'} = {}) => ({
+const event = ({text = 'Хочу проект', comment = '17900000000012345', seconds = fixedTime / 1000, id = account, author = '123456', flags = {}} = {}) => ({
   object: 'instagram',
-  entry: [{id, time: seconds, changes: [{field: 'comments', value: {id: comment, from: {id: author}, text}}]}],
+  entry: [{id, time: seconds, changes: [{field: 'comments', value: {id: comment, from: {id: author}, text, ...flags}}]}],
 });
 function signedRequest(data, badSignature = false) {
   const raw = typeof data === 'string' ? data : JSON.stringify(data);
@@ -101,6 +101,7 @@ test('duplicate, irrelevant, own, unrelated account and stale comments send noth
   assert.equal(duplicate.calls.length, 1);
   for (const evt of [
     event({text: 'Спасибо'}), event({author: account}),
+    event({flags: {is_deleted: true}}), event({flags: {is_self: true}}),
     event({id: '99999999'}), event({seconds: fixedTime / 1000 - 8 * 86400}),
   ]) {
     const mock = service();
