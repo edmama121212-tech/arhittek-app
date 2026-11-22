@@ -50,8 +50,8 @@
  function reviewMetadata(card){
   const issues=[],number=String(card.project_number||'').trim();
   if(!number)issues.push('Укажите номер проекта');
-  else if(!/^[\\p{L}\\d][\\p{L}\\d._\\/-]{0,39}$/u.test(number))issues.push('В номере проекта есть недопустимые символы');
-  if(!String(card.title||'').replace(/^Проект\\s*№.*?—\\s*/u,'').trim())issues.push('Укажите название проекта');
+  else if(!/^[\p{L}\d][\p{L}\d._\/-]{0,39}$/u.test(number))issues.push('В номере проекта есть недопустимые символы');
+  if(!String(card.title||'').replace(/^Проект\s*№.*?—\s*/u,'').trim())issues.push('Укажите название проекта');
   if(card.price!==''&&card.price!==null&&card.price!==undefined&&(!Number.isFinite(num(card.price))||num(card.price)<0))issues.push('Цена должна быть корректным неотрицательным числом');
   return {version:VERSION,passed:!issues.length,issues,scope:'metadata-card'};
  }
