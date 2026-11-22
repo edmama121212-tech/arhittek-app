@@ -100,8 +100,8 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install --no-audit --no-fund
-      - name: Install WebKit
-        run: npx playwright install --with-deps webkit
+      - name: Install WebKit and Chromium for shared catalogue tests
+        run: npx playwright install --with-deps webkit chromium
       - name: Check mobile PDF import without stream async iteration
         env:
           CATALOG_BROWSER: webkit
