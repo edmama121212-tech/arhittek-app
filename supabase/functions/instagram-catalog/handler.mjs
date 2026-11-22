@@ -41,7 +41,7 @@ export function createHandler(env,{fetch:send=fetch,now=()=>Date.now()}={}){
     if(req.method!=='POST')return response('Method not allowed',405);
     // Fail closed until the owner connects their professional Instagram account.
     if(!env.META_APP_SECRET||!env.META_ACCESS_TOKEN||!env.META_IG_ACCOUNT_ID||!env.SUPABASE_SERVICE_ROLE_KEY||!/^v\d+\.\d+$/.test(env.META_GRAPH_VERSION||''))return response('Instagram is not connected',503);
-    const host=env.META_GRAPH_HOST||'graph.instagram.com';
+    const host=env.META_GRAPH_HOST||'graph.facebook.com';
     if(!['graph.instagram.com','graph.facebook.com'].includes(host)||!/^\d+$/.test(env.META_IG_ACCOUNT_ID))return response('Invalid configuration',503);
     if(Number(req.headers.get('content-length')||0)>262144)return response('Payload too large',413);
     const raw=await req.arrayBuffer();if(raw.byteLength>262144)return response('Payload too large',413);
@@ -53,20 +53,22 @@ export function createHandler(env,{fetch:send=fetch,now=()=>Date.now()}={}){
         if(String(entry.id)!==env.META_IG_ACCOUNT_ID)continue;
         for(const change of entry.changes||[]){
           const v=change.value;
-          if(change.field!=='comments'||!v||!hasProjectKeyword(v.text)||String(v.from?.id)===env.META_IG_ACCOUNT_ID||!/^\d{1,100}$/.test(String(v.id)))continue;
+          // Unified/Facebook Login emits comment_id; Instagram Login can emit id.
+          const commentId=String(v?.comment_id||v?.id||'');
+          if(change.field!=='comments'||!v||!hasProjectKeyword(v.text)||String(v.from?.id)===env.META_IG_ACCOUNT_ID||!/^\d{1,100}$/.test(commentId))continue;
           const timestamp=Number(entry.time)*1000;
           if(!Number.isFinite(timestamp)||timestamp<now()-7*86400000||timestamp>now()+300000)continue;
-          const job=await rpc('claim_instagram_catalog_reply',{p_comment:String(v.id),p_account:env.META_IG_ACCOUNT_ID,p_observed:new Date(timestamp).toISOString()});
+          const job=await rpc('claim_instagram_catalog_reply',{p_comment:commentId,p_account:env.META_IG_ACCOUNT_ID,p_observed:new Date(timestamp).toISOString()});
           if(!job.claimed){if(job.state==='sending')return response('Delivery is in progress',503);continue;}
-          const finish=(state,message=null,error=null)=>rpc('finish_instagram_catalog_reply',{p_comment:String(v.id),p_lease:job.lease,p_state:state,p_message:message,p_error:error});
+          const finish=(state,message=null,error=null)=>rpc('finish_instagram_catalog_reply',{p_comment:commentId,p_lease:job.lease,p_state:state,p_message:message,p_error:error});
           let catalog;
-          try{catalog=await issueCatalogLink(String(v.id));}
+          try{catalog=await issueCatalogLink(commentId);}
           catch(_){await finish('pending',null,'Catalog link generation failed');return response('Catalog unavailable',503);}
           let r;
           try{
             r=await send('https://'+host+'/'+env.META_GRAPH_VERSION+'/'+env.META_IG_ACCOUNT_ID+'/messages',{
               method:'POST',signal:AbortSignal.timeout(15000),headers:{Authorization:'Bearer '+env.META_ACCESS_TOKEN,'Content-Type':'application/json'},
-              body:JSON.stringify({recipient:{comment_id:String(v.id)},message:{text:'Здравствуйте! 🏡\n\nКаталог готовых проектов частных домов ARHITTEK: '+catalog+'\n\nСсылка действительна 48 часов. В каталоге доступны фасады, планировки и цены. Выберите понравившийся проект и нажмите «Получить проект», чтобы написать нам в WhatsApp.'}}),
+              body:JSON.stringify({recipient:{comment_id:commentId},message:{text:'Здравствуйте! 🏡\n\nКаталог готовых проектов частных домов ARHITTEK: '+catalog+'\n\nСсылка действительна 48 часов. В каталоге доступны фасады, планировки и цены. Выберите понравившийся проект и нажмите «Получить проект», чтобы написать нам в WhatsApp.'}}),
             });
           }catch(_){await finish('uncertain',null,'Network response lost; reconcile before resend');return response('Delivery requires reconciliation',503);}
           const data=await r.json().catch(()=>null);
