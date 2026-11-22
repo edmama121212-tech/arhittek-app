@@ -254,6 +254,12 @@ async function saveCard(){
   const saveActor=session?.token;
   if(cardSavesInFlight.has(saveKey))return;
   const images=ceImages.slice(),thumbs=ceThumbs.slice();
+  // A legacy PDF quality report must not block a tag/description-only edit.
+  // Only the metadata columns may be written in this path: existing plans,
+  // images, schedules and their verification history stay untouched.
+  const metadataOnly=!!cardId&&cardsData.some(card=>card.id===cardId)
+    && !importMeta&&!Object.keys(screenshotPlans).length
+    && typeof cardPlanUnchanged==='function'&&cardPlanUnchanged();
   const btn = document.getElementById('ce-save-btn');
   cardSavesInFlight.add(saveKey);
   btn.disabled = true;
@@ -294,11 +300,13 @@ async function saveCard(){
     if(resolvedPrice!==null)payload.price=String(resolvedPrice);
     let qualityMeta=importMeta||JSON.parse(JSON.stringify(cardsData.find(c=>c.id===cardId)?.pdf_import_meta||null));
     if(Object.keys(screenshotPlans).length)qualityMeta={...qualityMeta,sources:{...qualityMeta?.sources,plans:{...qualityMeta?.sources?.plans,...screenshotPlans}}};
-    const publicationReview=CatalogQuality.reviewCard(payload,qualityMeta);CatalogQuality.show(publicationReview);
-    if(!publicationReview.passed){showToast('Сохранение заблокировано: нужна проверка карточки');return {ok:false,qualityBlocked:true,error:publicationReview.issues.join('. ')};}
-    if(qualityMeta){qualityMeta.publication_quality={...publicationReview,checked_at:new Date().toISOString()};payload.pdf_import_meta=qualityMeta;if(importMeta)Object.assign(importMeta,qualityMeta);}
-    payload.images=await uploadCardImages(images,cardId);
-    payload.thumbnails=await uploadCardImages(thumbs,cardId);
+    const publicationReview=metadataOnly?CatalogQuality.reviewMetadata(payload):CatalogQuality.reviewCard(payload,qualityMeta);CatalogQuality.show(publicationReview);
+    if(!publicationReview.passed){showToast('Сохранение заблокировано: '+publicationReview.issues[0]);return {ok:false,qualityBlocked:true,error:publicationReview.issues.join('. ')};}
+    if(!metadataOnly){
+      if(qualityMeta){qualityMeta.publication_quality={...publicationReview,checked_at:new Date().toISOString()};payload.pdf_import_meta=qualityMeta;if(importMeta)Object.assign(importMeta,qualityMeta);}
+      payload.images=await uploadCardImages(images,cardId);
+      payload.thumbnails=await uploadCardImages(thumbs,cardId);
+    }
     if(cardEditorGeneration===generation){
       if(images.length===ceImages.length&&images.every((image,index)=>image===ceImages[index]))ceImages=payload.images.slice();
       if(thumbs.length===ceThumbs.length&&thumbs.every((image,index)=>image===ceThumbs[index]))ceThumbs=payload.thumbnails.slice();
@@ -312,7 +320,8 @@ async function saveCard(){
     let result,duplicate=false,planRefresh=null;
     let savedId = cardId;
     if(cardId){
-      result = await sb.from('project_cards').update(payload).eq('id', cardId).select('id').maybeSingle();
+      const updatePayload=metadataOnly?{title:payload.title,tags:payload.tags,price:payload.price,updated_at:payload.updated_at}:payload;
+      result = await sb.from('project_cards').update(updatePayload).eq('id', cardId).select('id').maybeSingle();
     } else if(importMeta){
       payload.pdf_import_meta=importMeta;
       result=await sb.rpc('import_catalog_pdf',{p_card:payload});
