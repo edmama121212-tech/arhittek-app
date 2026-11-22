@@ -182,8 +182,13 @@ function cePreview(){
   set('prev-num',num?'№ '+num:'№ —');
   set('prev-area',v('ce-area')||'—');set('prev-beds',v('ce-beds')||'—');set('prev-footprint',v('ce-footprint')||'—');
   set('prev-floors-stat',ceFloorsSelected);set('prev-price',(v('ce-price')||'—')+' ₽');
-  const tags=v('ce-tags').split(',').map(t=>t.trim()).filter(t=>t&&t!=='Цокольный этаж');
-  if(ceFeatureSelected.includes('basement')&&!tags.includes('Цокольный этаж'))tags.push('Цокольный этаж');
+  const systemTags=['Классический','Современный','Цокольный этаж','Мансарда','Плоская кровля'];
+  const tags=v('ce-tags').split(',').map(t=>t.trim()).filter(t=>t&&!systemTags.includes(t));
+  if(ceStyleSelected==='classic')tags.push('Классический');
+  if(ceStyleSelected==='modern')tags.push('Современный');
+  if(ceFeatureSelected.includes('basement'))tags.push('Цокольный этаж');
+  if(ceFeatureSelected.includes('mansard'))tags.push('Мансарда');
+  if(ceFeatureSelected.includes('flat'))tags.push('Плоская кровля');
   document.getElementById('prev-tags').innerHTML=tags.map(t=>`<div class="tag" style="color:#2a72c0">${escapeHtml(t)}</div>`).join('');
   CatalogFloors.definitions.forEach(f=>{
     const visible=CatalogFloors.enabled(f,card);
