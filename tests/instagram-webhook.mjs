@@ -102,6 +102,8 @@ test('duplicate, irrelevant, own, unrelated account and stale comments send noth
   for (const evt of [
     event({text: 'Спасибо'}), event({author: account}),
     event({flags: {is_deleted: true}}), event({flags: {is_self: true}}),
+    // Comments expose from.username even when the self flag is not supplied.
+    event({flags: {from: {id: 'scoped-own-id', username: 'ArHiTtEk.PlAnS'}}}),
     event({id: '99999999'}), event({seconds: fixedTime / 1000 - 8 * 86400}),
   ]) {
     const mock = service();
