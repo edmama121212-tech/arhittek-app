@@ -38,24 +38,24 @@ function cells(html, section) {
 
 const noCash = {
   received:0, cashOutgoing:0, balance:0, isOverspent:false, directPaid:0,
-  matTotal:207000.08, workTotal:0, otherTotal:0, unpaidInvoices:207000.08
+  matTotal:1234.56, workTotal:0, otherTotal:0, unpaidInvoices:1234.56
 };
 const none = {
   received:0, cashOutgoing:0, balance:0, isOverspent:false, directPaid:0,
   matTotal:0, workTotal:0, otherTotal:0, unpaidInvoices:0
 };
 const html = render([
-  {project:{id:'a',name:'Объект Ибрагим'},financials:noCash},
-  {project:{id:'b',name:'Зарета ремонт'},financials:none}
+  {project:{id:'a',name:'Тестовый объект A'},financials:noCash},
+  {project:{id:'b',name:'Тестовый объект Б'},financials:none}
 ]);
 assert.match(html, /<th>Накладные<\/th><th>Не оплачено<\/th>/);
 assert.doesNotMatch(html, /<th>% исполнителя<\/th>/);
 assert.deepEqual(cells(html,'tbody'),[
-  ['Объект Ибрагим В процессе','0 ₽','0 ₽','0 ₽','207 000,08 ₽','207 000,08 ₽'],
-  ['Зарета ремонт В процессе','0 ₽','0 ₽','0 ₽','0 ₽','0 ₽']
+  ['Тестовый объект A В процессе','0 ₽','0 ₽','0 ₽','1 234,56 ₽','1 234,56 ₽'],
+  ['Тестовый объект Б В процессе','0 ₽','0 ₽','0 ₽','0 ₽','0 ₽']
 ]);
 assert.deepEqual(cells(html,'tfoot'),[[
-  'Итого','0 ₽','0 ₽','0 ₽','207 000,08 ₽','207 000,08 ₽'
+  'Итого','0 ₽','0 ₽','0 ₽','1 234,56 ₽','1 234,56 ₽'
 ]]);
 assert.match(html,/Накладные — стоимость документов, а не подтверждённая выплата/);
 
