@@ -16,47 +16,49 @@ function renderConstrSummary(){
 
   const rows = projects.map(p => {
     const fin = getConstructionFinancials(p);
-    const f = getProjectFee(p);
     const st = findStatus(p.status_id);
-    return {p, ...fin, f, st};
+    const invoicesTotal = Math.round((fin.matTotal + fin.workTotal + fin.otherTotal)*100)/100;
+    return {p, ...fin, invoicesTotal, st};
   });
 
   const totExpenses = rows.reduce((s,r)=>s+r.cashOutgoing,0);
   const totReceived = rows.reduce((s,r)=>s+r.received,0);
-  const totDirectPaid = rows.reduce((s,r)=>s+r.directPaid,0);
   const totLeft = rows.reduce((s,r)=>s+r.balance,0);
-  const totFeePaid = rows.reduce((s,r)=>s+r.f.paid,0);
+  const totInvoices = rows.reduce((s,r)=>s+r.invoicesTotal,0);
+  const totUnpaid = rows.reduce((s,r)=>s+r.unpaidInvoices,0);
+  const money = value => (Number(value)||0).toLocaleString('ru-RU',{maximumFractionDigits:2})+' ₽';
 
-  const rowsHtml = rows.map(({p, received, cashOutgoing, directPaid, balance, isOverspent, f, st}) => `
+  const rowsHtml = rows.map(({p, received, cashOutgoing, directPaid, balance, isOverspent, invoicesTotal, unpaidInvoices, st}) => `
     <tr data-key-activate tabindex="0" onclick="openObjectView('${p.id}')" style="cursor:pointer;" class="constr-sum-row">
       <td>
         <div class="entity-name" title="${escapeHtml(p.name)}" style="font-weight:600; font-size:13px; color:var(--text);">${escapeHtml(p.name)}</div>
         ${st ? `<div style="font-size:10px; color:var(--text-dim); margin-top:2px;">${escapeHtml(st.name)}</div>` : ''}
       </td>
-      <td style="color:${isOverspent ? 'var(--red)' : 'var(--text)'}; font-weight:${isOverspent ? '700' : '400'};" title="По денежному журналу объекта; прямые оплаты заказчика сюда не входят">${isOverspent ? '⚠ ' : ''}${fmtMoney(balance)}${directPaid > 0 ? ' 🤝' : ''}</td>
-      <td style="color:var(--red);">${fmtMoney(cashOutgoing)}</td>
-      <td style="color:var(--green);">${fmtMoney(received)}</td>
-      <td style="color:var(--blue);">${f.feePercent ? f.feePercent+'%' : '—'}</td>
-      <td style="color:var(--text-dim);">${f.paid > 0 ? fmtMoney(f.paid) : '—'}</td>
+      <td style="color:${isOverspent ? 'var(--red)' : 'var(--text)'}; font-weight:${isOverspent ? '700' : '400'};" title="По денежному журналу объекта; прямые оплаты заказчика сюда не входят">${isOverspent ? '⚠ ' : ''}${money(balance)}${directPaid > 0 ? ' 🤝' : ''}</td>
+      <td style="color:var(--red);">${money(cashOutgoing)}</td>
+      <td style="color:var(--green);">${money(received)}</td>
+      <td style="color:var(--text);" title="Стоимость накладных; наличие документа не подтверждает оплату">${money(invoicesTotal)}</td>
+      <td style="color:${unpaidInvoices>0?'var(--gold)':'var(--text-dim)'};" title="Остаток накладных без подтверждённой оплаты">${money(unpaidInvoices)}</td>
     </tr>
   `).join('');
 
   el.innerHTML = `
     <div style="overflow-x:auto; -webkit-overflow-scrolling:touch;">
     <table class="constr-sum-table">
-      <thead><tr><th>Объект</th><th>Деньги по журналу</th><th>Выплачено</th><th>Получено</th><th>% исполнителя</th><th>Выплачен</th></tr></thead>
+      <thead><tr><th>Объект</th><th>Деньги по журналу</th><th>Выплачено</th><th>Получено</th><th>Накладные</th><th>Не оплачено</th></tr></thead>
       <tbody>${rowsHtml}</tbody>
       <tfoot>
         <tr>
           <td style="font-weight:700; color:var(--text);">Итого</td>
-          <td style="font-weight:700; color:${totLeft < 0 ? 'var(--red)' : 'var(--gold)'};">${fmtMoney(totLeft)}</td>
-          <td style="font-weight:700; color:var(--red);">${fmtMoney(totExpenses)}</td>
-          <td style="font-weight:700; color:var(--green);">${fmtMoney(totReceived)}</td>
-          <td></td>
-          <td style="color:var(--text-dim); font-weight:700;">${totFeePaid > 0 ? fmtMoney(totFeePaid) : '—'}</td>
+          <td style="font-weight:700; color:${totLeft < 0 ? 'var(--red)' : 'var(--gold)'};">${money(totLeft)}</td>
+          <td style="font-weight:700; color:var(--red);">${money(totExpenses)}</td>
+          <td style="font-weight:700; color:var(--green);">${money(totReceived)}</td>
+          <td style="color:var(--text); font-weight:700;">${money(totInvoices)}</td>
+          <td style="color:var(--gold); font-weight:700;">${money(totUnpaid)}</td>
         </tr>
       </tfoot>
     </table></div>
+    <div class="note" style="padding:10px 14px;">Накладные — стоимость документов, а не подтверждённая выплата. «Не оплачено» — остаток накладных без оплаты. Деньги по журналу = получено − выплачено.</div>
   `;
 }
 
