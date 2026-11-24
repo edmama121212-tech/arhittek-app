@@ -177,7 +177,7 @@ async function loadAllData(){
     const ownerRead=read=>isOwner()?read():Promise.resolve({data:[],error:null,count:0});
     const documentRead=read=>canUseDocuments()?read():Promise.resolve({data:[],error:null,count:0});
     const stageRead=beginStageRead();
-    const [proj, emp, cat, st, dept, led, photos, invs, tzForms, tzRefs, company, kpForms, stages, members, kpCat, tsPay, compExp, compInc, counts, statusHistory, journal, salaryHistory] = await Promise.all([
+    const [proj, emp, cat, st, dept, led, photos, invs, tzForms, tzRefs, company, kpForms, stages, members, kpCat, tsPay, compExp, compInc, counts, statusHistory, journal, salaryHistory, catalogRates] = await Promise.all([
       fetchAllRows(()=>sb.from('projects').select('*',{count:'exact'}).order('created_at', {ascending:true})),
       loadEmployeesSafe(),
       fetchAllRows(()=>sb.from('categories').select('*',{count:'exact'}).is('deleted_at', null).order('sort_order')),
@@ -200,6 +200,7 @@ async function loadAllData(){
       ownerRead(()=>fetchAllRows(()=>sb.from('audit_log').select('id,entity_id,changes,created_at',{count:'exact'}).eq('entity_type','project').order('created_at',{ascending:false}))),
       isOwner()?sb.rpc('get_financial_journal'):Promise.resolve({data:null,error:null}),
       isOwner()?loadSalaryHistorySafe():Promise.resolve({data:null,error:null}),
+      sb.from('catalog_pricing').select('rate_under_100,rate_100_to_400,rate_over_400').eq('id',1).maybeSingle(),
     ]);
 
     if(accessActor.employeeId!==session?.employeeId||accessActor.token!==session?.token||!hasVerifiedAccess())return;
@@ -279,6 +280,9 @@ async function loadAllData(){
     state.tzForms = tzForms.data || [];
     state.tzReferences = tzRefs.data || [];
     state.companyInfo = canUseDocuments()?(company.data||null):null;
+    state.catalogPricing = catalogRates.error ? null : (catalogRates.data||null);
+    if(state.catalogPricing)CatalogFloors.setRates(state.catalogPricing);
+    if(catalogRates.error)console.warn('Не удалось загрузить ставки каталога');
     state.financialDataReady=true;state.financialDataError=null;state.financialLoadedAt=new Date().toISOString();
 
     // Показываем live-статус если realtime канал активен
