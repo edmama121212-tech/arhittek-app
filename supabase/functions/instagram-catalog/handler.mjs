@@ -69,7 +69,7 @@ export function createHandler(env,{fetch:send=fetch,now=()=>Date.now()}={}){
           try{
             r=await send('https://'+host+'/'+env.META_GRAPH_VERSION+'/'+env.META_IG_ACCOUNT_ID+'/messages',{
               method:'POST',signal:AbortSignal.timeout(15000),headers:{Authorization:'Bearer '+env.META_ACCESS_TOKEN,'Content-Type':'application/json'},
-              body:JSON.stringify({recipient:{comment_id:commentId},message:{text:'Здравствуйте! 🏡\n\nКаталог готовых проектов частных домов ARHITTEK: '+catalog+'\n\nСсылка действительна 48 часов. В каталоге доступны фасады, планировки и цены. Выберите понравившийся проект и нажмите «Получить проект», чтобы написать нам в WhatsApp.'}}),
+              body:JSON.stringify({recipient:{comment_id:commentId},message:{attachment:{type:'template',payload:{template_type:'button',text:'Здравствуйте! 🏡\\n\\nСпасибо за интерес к ARHITTEK. Мы подготовили для вас каталог частных домов с фасадами, планировками и ценами.\\n\\nДоступ по ссылке — 48 часов.',buttons:[{type:'web_url',title:'Открыть каталог',url:catalog}]}}}}),
             });
           }catch(_){await finish('uncertain',null,'Network response lost; reconcile before resend');return response('Delivery requires reconciliation',503);}
           const data=await r.json().catch(()=>null);
