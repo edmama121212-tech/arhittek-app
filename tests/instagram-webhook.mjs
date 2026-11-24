@@ -35,6 +35,7 @@ function service({claim = {claimed: true, lease: '11111111-1111-4111-8111-111111
     calls.push({path, data});
     if (path.endsWith('/rpc/claim_instagram_catalog_reply')) return Response.json(claim);
     if (path.endsWith('/rpc/finish_instagram_catalog_reply')) return Response.json(true);
+    if (path.endsWith('/rpc/record_instagram_catalog_comment')) return Response.json(true);
     if (path.endsWith('/rest/v1/share_links')) return new Response(null, {status: 201});
     if (path.endsWith('/messages')) {
       if (loseResponse) throw new Error('mock connection lost');
@@ -106,7 +107,7 @@ test('valid signed comment creates a 48h link and one private reply, not a PDF',
   assert.equal(res.status, 200);
   assert.equal(await res.text(), 'EVENT_RECEIVED');
   assert.deepEqual(mock.calls.map(x => x.path.split('/').at(-1)),
-    ['claim_instagram_catalog_reply', 'share_links', 'messages', 'finish_instagram_catalog_reply']);
+    ['claim_instagram_catalog_reply', 'share_links', 'messages', 'finish_instagram_catalog_reply', 'record_instagram_catalog_comment']);
   const link = mock.calls[1].data;
   assert.equal(Date.parse(link.expires_at) - Date.parse(link.created_at), 48 * 60 * 60 * 1000);
   assert.match(link.token, /^[a-f0-9]{32}$/);
@@ -130,6 +131,8 @@ test('valid signed comment creates a 48h link and one private reply, not a PDF',
   assert.equal(linkUrl.searchParams.get('t'), link.token);
   assert.equal(mock.calls[3].data.p_state, 'sent');
   assert.equal(mock.calls[3].data.p_message, 'mock-message');
+  assert.equal(mock.calls[4].data.p_text, 'Хочу проект');
+  assert.equal(mock.calls[4].data.p_comment, '17900000000012345');
 });
 
 test('duplicate, irrelevant, own, unrelated account and stale comments send nothing', async () => {
