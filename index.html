@@ -873,8 +873,19 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
       <div class='section-label' id='catalogPriceSection' style='display:none;'><span class='lbl-text'>Цена готовых проектов (каталог)</span><span class='section-label-line'></span></div>
       <div class='card' id='catalogPriceCard' style='display:none;'>
         <div class='note'>Цена готового проекта = общая площадь дома × ставка за м².</div>
-        <table style="width:100%;margin:12px 0;border-collapse:collapse;"><tr><th style="text-align:left">Общая площадь</th><th style="text-align:right">Ставка</th></tr><tr><td>Менее 100 м²</td><td style="text-align:right">150 ₽/м²</td></tr><tr><td>От 100 до 400 м² включительно</td><td style="text-align:right">100 ₽/м²</td></tr><tr><td>Свыше 400 м²</td><td style="text-align:right">80 ₽/м²</td></tr></table>
-        <div class='note'>Ставка применяется ко всей площади, включая цоколь, если он учтён в общей площади. Цена округляется до рубля. Индивидуальную цену можно указать в редакторе карточки.</div>
+        <table style="width:100%;margin:12px 0;border-collapse:collapse;">
+          <thead><tr><th scope="col" style="text-align:left;padding:8px 0">Общая площадь</th><th scope="col" style="text-align:right;padding:8px 0">Ставка, ₽/м²</th></tr></thead>
+          <tbody>
+            <tr><td style="padding:8px 0">Менее 100 м²</td><td style="text-align:right;padding:6px 0"><input id="catalogRateSmall" aria-label="Ставка для домов менее 100 м²" type="number" min="1" max="100000" step="1" inputmode="numeric" value="150" style="width:110px;max-width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;text-align:right;"></td></tr>
+            <tr><td style="padding:8px 0">От 100 до 400 м² включительно</td><td style="text-align:right;padding:6px 0"><input id="catalogRateMedium" aria-label="Ставка для домов от 100 до 400 м²" type="number" min="1" max="100000" step="1" inputmode="numeric" value="100" style="width:110px;max-width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;text-align:right;"></td></tr>
+            <tr><td style="padding:8px 0">Свыше 400 м²</td><td style="text-align:right;padding:6px 0"><input id="catalogRateLarge" aria-label="Ставка для домов свыше 400 м²" type="number" min="1" max="100000" step="1" inputmode="numeric" value="80" style="width:110px;max-width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;text-align:right;"></td></tr>
+          </tbody>
+        </table>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:12px 0">
+          <button type="button" class="btn btn-primary" id="catalogRateSave">Сохранить ставки</button>
+          <span id="catalogPriceSaveStatus" role="status" style="font-size:12px;color:var(--text-secondary)">Изменения вступят в силу после сохранения.</span>
+        </div>
+        <div class='note'>Ставка применяется ко всей площади, включая цоколь, если он учтён в общей площади. Цена округляется до рубля. При сохранении автоматически пересчитываются карточки со стандартной ценой; индивидуальные цены сохраняются.</div>
       </div>
 
     </div>
@@ -2294,6 +2305,7 @@ let state = {
   tzForms: [],
   tzReferences: [],
   companyInfo: null,
+  catalogPricing: null,
   kpForms: [],
   kpCatalog: [],
   timesheetPayments: [],
@@ -3532,7 +3544,7 @@ async function loadAllData(){
     const ownerRead=read=>isOwner()?read():Promise.resolve({data:[],error:null,count:0});
     const documentRead=read=>canUseDocuments()?read():Promise.resolve({data:[],error:null,count:0});
     const stageRead=beginStageRead();
-    const [proj, emp, cat, st, dept, led, photos, invs, tzForms, tzRefs, company, kpForms, stages, members, kpCat, tsPay, compExp, compInc, counts, statusHistory, journal, salaryHistory] = await Promise.all([
+    const [proj, emp, cat, st, dept, led, photos, invs, tzForms, tzRefs, company, kpForms, stages, members, kpCat, tsPay, compExp, compInc, counts, statusHistory, journal, salaryHistory, catalogRates] = await Promise.all([
       fetchAllRows(()=>sb.from('projects').select('*',{count:'exact'}).order('created_at', {ascending:true})),
       loadEmployeesSafe(),
       fetchAllRows(()=>sb.from('categories').select('*',{count:'exact'}).is('deleted_at', null).order('sort_order')),
@@ -3555,6 +3567,7 @@ async function loadAllData(){
       ownerRead(()=>fetchAllRows(()=>sb.from('audit_log').select('id,entity_id,changes,created_at',{count:'exact'}).eq('entity_type','project').order('created_at',{ascending:false}))),
       isOwner()?sb.rpc('get_financial_journal'):Promise.resolve({data:null,error:null}),
       isOwner()?loadSalaryHistorySafe():Promise.resolve({data:null,error:null}),
+      sb.from('catalog_pricing').select('rate_under_100,rate_100_to_400,rate_over_400').eq('id',1).maybeSingle(),
     ]);
 
     if(accessActor.employeeId!==session?.employeeId||accessActor.token!==session?.token||!hasVerifiedAccess())return;
@@ -3634,6 +3647,9 @@ async function loadAllData(){
     state.tzForms = tzForms.data || [];
     state.tzReferences = tzRefs.data || [];
     state.companyInfo = canUseDocuments()?(company.data||null):null;
+    state.catalogPricing = catalogRates.error ? null : (catalogRates.data||null);
+    if(state.catalogPricing)CatalogFloors.setRates(state.catalogPricing);
+    if(catalogRates.error)console.warn('Не удалось загрузить ставки каталога');
     state.financialDataReady=true;state.financialDataError=null;state.financialLoadedAt=new Date().toISOString();
 
     // Показываем live-статус если realtime канал активен
@@ -10097,12 +10113,67 @@ function openCompanyView(){
 // Настройка «Ставка за м²» для каталога готовых проектов — видна только
 // редакторам каталога (canEditCards), как и сама вкладка «Каталог».
 function renderCatalogPriceSettings(){
-  const section = document.getElementById('catalogPriceSection');
-  const card = document.getElementById('catalogPriceCard');
-  if(!section || !card) return;
-  if(!canEditCards()){ section.style.display = 'none'; card.style.display = 'none'; return; }
-  section.style.display = '';
-  card.style.display = '';
+  const section=document.getElementById('catalogPriceSection');
+  const card=document.getElementById('catalogPriceCard');
+  if(!section||!card)return;
+  if(!canEditCards()){section.style.display='none';card.style.display='none';return;}
+  section.style.display='';card.style.display='';
+  const pricing=state.catalogPricing||CatalogFloors.getRates();
+  const fields=[
+    ['catalogRateSmall','rate_under_100'],
+    ['catalogRateMedium','rate_100_to_400'],
+    ['catalogRateLarge','rate_over_400']
+  ];
+  for(const [id,key] of fields){
+    const field=document.getElementById(id);
+    if(field&&Number.isInteger(Number(pricing[key])))field.value=String(pricing[key]);
+  }
+}
+async function saveCatalogPriceSettings(){
+  if(!canEditCards()){showToast('Недостаточно прав для изменения ставок');return;}
+  const fields=[
+    ['catalogRateSmall','rate_under_100'],
+    ['catalogRateMedium','rate_100_to_400'],
+    ['catalogRateLarge','rate_over_400']
+  ];
+  const proposed={};
+  for(const [id,key] of fields){
+    const raw=document.getElementById(id)?.value.trim()||'';
+    const n=Number(raw);
+    if(!/^\d+$/.test(raw)||!Number.isInteger(n)||n<1||n>100000){
+      showToast('Введите целые ставки от 1 до 100 000 ₽/м²');
+      document.getElementById(id)?.focus();
+      return;
+    }
+    proposed[key]=n;
+  }
+  const button=document.getElementById('catalogRateSave');
+  const status=document.getElementById('catalogPriceSaveStatus');
+  const actor=session?.token;
+  if(button)button.disabled=true;
+  if(status)status.textContent='Сохраняем и пересчитываем цены…';
+  try{
+    const {data,error}=await sb.rpc('save_catalog_pricing_rates',{
+      p_under_100:proposed.rate_under_100,
+      p_100_to_400:proposed.rate_100_to_400,
+      p_over_400:proposed.rate_over_400
+    });
+    if(error)throw error;
+    if(actor!==session?.token||!canEditCards())return;
+    if(!data||typeof data.updated_cards!=='number')throw new Error('Сервер не подтвердил сохранение');
+    state.catalogPricing=proposed;
+    CatalogFloors.setRates(proposed);
+    const count=data.updated_cards;
+    if(status)status.textContent='Сохранено. Автоматически пересчитано карточек: '+count+'.';
+    await loadCards();
+    showToast('Ставки сохранены. Цены обновлены: '+count+'.');
+  }catch(error){
+    if(actor!==session?.token)return;
+    if(status)status.textContent='Не удалось сохранить. Изменения не применены.';
+    showToast('Не удалось сохранить ставки. Проверьте соединение.');
+  }finally{
+    if(button&&actor===session?.token)button.disabled=false;
+  }
 }
 
 async function saveCompanyInfo(){
@@ -11023,6 +11094,7 @@ document.getElementById('companySaveBtn').addEventListener('click', saveCompanyI
     if(typeof renderNotifSettings === 'function') renderNotifSettings();
     renderCatalogPriceSettings();
   });
+  document.getElementById('catalogRateSave').addEventListener('click', saveCatalogPriceSettings);
   document.getElementById('settingsBack').addEventListener('click', ()=>{
     document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
     document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));

@@ -32,12 +32,67 @@ function openCompanyView(){
 // Настройка «Ставка за м²» для каталога готовых проектов — видна только
 // редакторам каталога (canEditCards), как и сама вкладка «Каталог».
 function renderCatalogPriceSettings(){
-  const section = document.getElementById('catalogPriceSection');
-  const card = document.getElementById('catalogPriceCard');
-  if(!section || !card) return;
-  if(!canEditCards()){ section.style.display = 'none'; card.style.display = 'none'; return; }
-  section.style.display = '';
-  card.style.display = '';
+  const section=document.getElementById('catalogPriceSection');
+  const card=document.getElementById('catalogPriceCard');
+  if(!section||!card)return;
+  if(!canEditCards()){section.style.display='none';card.style.display='none';return;}
+  section.style.display='';card.style.display='';
+  const pricing=state.catalogPricing||CatalogFloors.getRates();
+  const fields=[
+    ['catalogRateSmall','rate_under_100'],
+    ['catalogRateMedium','rate_100_to_400'],
+    ['catalogRateLarge','rate_over_400']
+  ];
+  for(const [id,key] of fields){
+    const field=document.getElementById(id);
+    if(field&&Number.isInteger(Number(pricing[key])))field.value=String(pricing[key]);
+  }
+}
+async function saveCatalogPriceSettings(){
+  if(!canEditCards()){showToast('Недостаточно прав для изменения ставок');return;}
+  const fields=[
+    ['catalogRateSmall','rate_under_100'],
+    ['catalogRateMedium','rate_100_to_400'],
+    ['catalogRateLarge','rate_over_400']
+  ];
+  const proposed={};
+  for(const [id,key] of fields){
+    const raw=document.getElementById(id)?.value.trim()||'';
+    const n=Number(raw);
+    if(!/^\d+$/.test(raw)||!Number.isInteger(n)||n<1||n>100000){
+      showToast('Введите целые ставки от 1 до 100 000 ₽/м²');
+      document.getElementById(id)?.focus();
+      return;
+    }
+    proposed[key]=n;
+  }
+  const button=document.getElementById('catalogRateSave');
+  const status=document.getElementById('catalogPriceSaveStatus');
+  const actor=session?.token;
+  if(button)button.disabled=true;
+  if(status)status.textContent='Сохраняем и пересчитываем цены…';
+  try{
+    const {data,error}=await sb.rpc('save_catalog_pricing_rates',{
+      p_under_100:proposed.rate_under_100,
+      p_100_to_400:proposed.rate_100_to_400,
+      p_over_400:proposed.rate_over_400
+    });
+    if(error)throw error;
+    if(actor!==session?.token||!canEditCards())return;
+    if(!data||typeof data.updated_cards!=='number')throw new Error('Сервер не подтвердил сохранение');
+    state.catalogPricing=proposed;
+    CatalogFloors.setRates(proposed);
+    const count=data.updated_cards;
+    if(status)status.textContent='Сохранено. Автоматически пересчитано карточек: '+count+'.';
+    await loadCards();
+    showToast('Ставки сохранены. Цены обновлены: '+count+'.');
+  }catch(error){
+    if(actor!==session?.token)return;
+    if(status)status.textContent='Не удалось сохранить. Изменения не применены.';
+    showToast('Не удалось сохранить ставки. Проверьте соединение.');
+  }finally{
+    if(button&&actor===session?.token)button.disabled=false;
+  }
 }
 
 async function saveCompanyInfo(){

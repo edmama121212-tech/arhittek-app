@@ -80,8 +80,19 @@
       <div class='section-label' id='catalogPriceSection' style='display:none;'><span class='lbl-text'>Цена готовых проектов (каталог)</span><span class='section-label-line'></span></div>
       <div class='card' id='catalogPriceCard' style='display:none;'>
         <div class='note'>Цена готового проекта = общая площадь дома × ставка за м².</div>
-        <table style="width:100%;margin:12px 0;border-collapse:collapse;"><tr><th style="text-align:left">Общая площадь</th><th style="text-align:right">Ставка</th></tr><tr><td>Менее 100 м²</td><td style="text-align:right">150 ₽/м²</td></tr><tr><td>От 100 до 400 м² включительно</td><td style="text-align:right">100 ₽/м²</td></tr><tr><td>Свыше 400 м²</td><td style="text-align:right">80 ₽/м²</td></tr></table>
-        <div class='note'>Ставка применяется ко всей площади, включая цоколь, если он учтён в общей площади. Цена округляется до рубля. Индивидуальную цену можно указать в редакторе карточки.</div>
+        <table style="width:100%;margin:12px 0;border-collapse:collapse;">
+          <thead><tr><th scope="col" style="text-align:left;padding:8px 0">Общая площадь</th><th scope="col" style="text-align:right;padding:8px 0">Ставка, ₽/м²</th></tr></thead>
+          <tbody>
+            <tr><td style="padding:8px 0">Менее 100 м²</td><td style="text-align:right;padding:6px 0"><input id="catalogRateSmall" aria-label="Ставка для домов менее 100 м²" type="number" min="1" max="100000" step="1" inputmode="numeric" value="150" style="width:110px;max-width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;text-align:right;"></td></tr>
+            <tr><td style="padding:8px 0">От 100 до 400 м² включительно</td><td style="text-align:right;padding:6px 0"><input id="catalogRateMedium" aria-label="Ставка для домов от 100 до 400 м²" type="number" min="1" max="100000" step="1" inputmode="numeric" value="100" style="width:110px;max-width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;text-align:right;"></td></tr>
+            <tr><td style="padding:8px 0">Свыше 400 м²</td><td style="text-align:right;padding:6px 0"><input id="catalogRateLarge" aria-label="Ставка для домов свыше 400 м²" type="number" min="1" max="100000" step="1" inputmode="numeric" value="80" style="width:110px;max-width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;text-align:right;"></td></tr>
+          </tbody>
+        </table>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:12px 0">
+          <button type="button" class="btn btn-primary" id="catalogRateSave">Сохранить ставки</button>
+          <span id="catalogPriceSaveStatus" role="status" style="font-size:12px;color:var(--text-secondary)">Изменения вступят в силу после сохранения.</span>
+        </div>
+        <div class='note'>Ставка применяется ко всей площади, включая цоколь, если он учтён в общей площади. Цена округляется до рубля. При сохранении автоматически пересчитываются карточки со стандартной ценой; индивидуальные цены сохраняются.</div>
       </div>
 
     </div>

@@ -19,6 +19,7 @@ let state = {
   tzForms: [],
   tzReferences: [],
   companyInfo: null,
+  catalogPricing: null,
   kpForms: [],
   kpCatalog: [],
   timesheetPayments: [],

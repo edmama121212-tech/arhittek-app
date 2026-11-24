@@ -172,6 +172,12 @@ async function init(){
     }
     linkMeta = payload.link;
     allCards = payload.cards;
+    // Public tariff numbers contain no private data and are read only after
+    // the 48-hour link has passed server-side validation.
+    const {data:catalogRates,error:catalogRateError}=await sb.from('catalog_pricing')
+      .select('rate_under_100,rate_100_to_400,rate_over_400')
+      .eq('id',1).maybeSingle();
+    if(!catalogRateError&&catalogRates)CatalogFloors.setRates(catalogRates);
 
     if((linkMeta.floors_filter && linkMeta.floors_filter !== 'all') || linkMeta.project_id){
       floorFilter = linkMeta.floors_filter || 'all';
