@@ -1,6 +1,7 @@
 // ARHITTEK Facebook Page private replies. Disabled until explicit Page-token configuration.
 // Independent from Instagram; no account transfer, cross-posting, or ownership changes.
 import {hasProjectKeyword} from './keywords.mjs';
+import {handleMessengerEntry} from './messenger.mjs';
 const response=(text,status=200)=>new Response(text,{status,headers:{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'}});
 async function validSignature(secret,bytes,signature){
   if(!secret||!/^sha256=[a-f0-9]{64}$/i.test(signature||''))return false;
@@ -22,7 +23,7 @@ export function createHandler(env,{send=fetch,now=()=>Date.now()}={}){
     if(!result.ok)throw new Error('Private outbox unavailable');
     return result.json();
   }
-  async function catalog(commentId){
+  async function catalog(commentId,medium='comment'){
     const created=now();
     const code=crypto.randomUUID().replace(/-/g,'');
     const item={label:'Facebook Arhitter.plans · '+commentId,token:code,floors_filter:'all',
@@ -38,7 +39,7 @@ export function createHandler(env,{send=fetch,now=()=>Date.now()}={}){
     const link=new URL('https://edmama121212-tech.github.io/arhittek-app/catalog.html');
     link.searchParams.set('t',code);
     link.searchParams.set('utm_source','facebook');
-    link.searchParams.set('utm_medium','comment');
+    link.searchParams.set('utm_medium',medium);
     return link.toString();
   }
   return async req=>{
@@ -64,6 +65,10 @@ export function createHandler(env,{send=fetch,now=()=>Date.now()}={}){
     try{
       for(const entry of body.entry||[]){
         if(String(entry.id)!==pageId)continue;
+        const messengerResult=await handleMessengerEntry(entry,{
+          pageId,token,version,send,rpc,catalog,now,response
+        });
+        if(messengerResult)return messengerResult;
         for(const change of entry.changes||[]){
           const v=change.value;
           const commentId=String(v?.comment_id||'');
