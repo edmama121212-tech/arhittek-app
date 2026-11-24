@@ -361,9 +361,17 @@ window.renderFeed = function(){
 
 function contactUrl(number,title){
   const instagram=new URLSearchParams(location.search).get('utm_source')==='instagram';
-  const project=[number?'№'+number:'',title].filter(Boolean).join(' ');
+  const projectNumber=String(number||'').trim().replace(/^(?:проект\s*)?№\s*/iu,'');
+  let projectTitle=String(title||'').trim();
+  // Catalog titles may already start with "Проект №13525 —"; do not repeat the number.
+  if(projectNumber){
+    const escapedNumber=projectNumber.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    const leadingNumber=new RegExp('^\\s*(?:проект\\s*)?№?\\s*'+escapedNumber+'(?:\\s*[-–—:]\\s*|\\s+|$)','iu');
+    projectTitle=projectTitle.replace(leadingNumber,'').trim();
+  }
+  const projectLabel='проект'+(projectNumber?' №'+projectNumber:'')+(projectTitle?' — '+projectTitle:'');
   const text='Здравствуйте! '+(instagram?'Я из Instagram. ':'')+
-    (project?'Меня заинтересовал проект '+project+' из каталога ARHITTEK.':'Пишу из каталога ARHITTEK.');
+    (number||title?'Меня заинтересовал '+projectLabel+' из каталога ARHITTEK.':'Пишу из каталога ARHITTEK.');
   return 'https://wa.me/79226593872?text='+encodeURIComponent(text);
 }
 function wa(button){window.open(contactUrl(button.dataset.number,button.dataset.title),'_blank','noopener');}
