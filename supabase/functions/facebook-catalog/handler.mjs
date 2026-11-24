@@ -90,7 +90,7 @@ export function createHandler(env,{send=fetch,now=()=>Date.now()}={}){
           catch(_){await finish('pending',null,'Catalog unavailable');return response('Catalog unavailable',503);}
           // Meta Page Messages supports one private reply to a Facebook comment
           // by passing recipient.comment_id (distinct from Instagram comment IDs).
-          const greeting='Здравствуйте! 🏡\\n\\nСпасибо за интерес к ARHITTEK. Мы подготовили каталог частных домов с фасадами, планировками и ценами.\\n\\nСсылка действует 48 часов.';
+          const greeting='Здравствуйте! 🏡\n\nСпасибо за интерес к ARHITTEK. Мы подготовили каталог частных домов с фасадами, планировками и ценами.\n\nСсылка действует 48 часов.';
           let sent;
           try{
             sent=await send('https://'+host+'/'+version+'/'+pageId+'/messages',{
