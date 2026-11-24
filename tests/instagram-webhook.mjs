@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {createHmac} from 'node:crypto';
 import {test} from 'node:test';
-import {createHandler, hasProjectKeyword, validSignature} from '../supabase/functions/instagram-catalog/handler.mjs';
+import {createHandler, hasProjectKeyword, INSTAGRAM_CATALOG_KEYWORDS, validSignature} from '../supabase/functions/instagram-catalog/handler.mjs';
 
 const fixedTime = Date.parse('2026-11-22T18:00:00.000Z');
 const secret = 'local-test-secret-not-real';
@@ -45,11 +45,36 @@ function service({claim = {claimed: true, lease: '11111111-1111-4111-8111-111111
   return {calls, fetch};
 }
 
-test('keyword filtering accepts intended comments, rejects irrelevant text', () => {
-  for (const text of ['проект', 'Хочу проект', 'цену', 'PROJECT', '🏡', '+'])
-    assert.equal(hasProjectKeyword(text), true, text);
-  for (const text of ['', 'Красивый фасад!', 'Спасибо', 'прожекторы'])
-    assert.equal(hasProjectKeyword(text), false, text);
+test('keyword list equals the exact owner-approved 27 entries', () => {
+  const approved = [
+    'проект', 'хочу проект', 'проэкт', 'дом', 'цена', 'стоимость', 'сколько',
+    'почём', 'прайс', 'план', 'планировка', 'размеры', 'площадь', 'метраж',
+    'купить', 'покупка', 'заказать', 'хочу', 'каталог', 'скинь', 'пришли',
+    'отправь', 'price', 'project', 'house', 'plan', '+',
+  ];
+  assert.deepEqual([...INSTAGRAM_CATALOG_KEYWORDS], approved);
+});
+
+test('every approved keyword triggers as an exact word or phrase, case-insensitive', () => {
+  for (const word of INSTAGRAM_CATALOG_KEYWORDS) {
+    assert.equal(hasProjectKeyword(word), true, word);
+    assert.equal(hasProjectKeyword('  ' + word + '  '), true, 'trim ' + word);
+    if (word !== '+') assert.equal(hasProjectKeyword('Здравствуйте, ' + word.toUpperCase() + '!'), true, word);
+  }
+  assert.equal(hasProjectKeyword('Хочу ПРОЕКТ, пожалуйста'), true);
+  assert.equal(hasProjectKeyword('Цена?'), true);
+});
+
+test('non-approved synonyms, emoji, substrings and extra pluses do not trigger', () => {
+  for (const message of [
+    '', 'Красивый фасад!', 'Спасибо', 'прожекторы', 'коттедж', 'вилла', 'особняк',
+    'смета', 'бюджет', 'строительство', 'построить', 'чертёж', 'габариты',
+    'ссылка', 'инфо', 'подробно', 'WhatsApp', 'ватсап', 'директ', 'личка',
+    'телефон', 'контакты', 'cost', '🏡', '🏠', '++', '+++',
+    'проектирование', 'домик', 'ценник', 'планы', 'цены', 'проекты',
+    'планировки', 'размер', 'покупаю', 'заказываю', 'удом', 'myhouse',
+    'projector', 'pricey', 'планшет', 'хотел', 'почем',
+  ]) assert.equal(hasProjectKeyword(message), false, message);
 });
 
 test('Meta webhook GET challenge verifies exact token, never echoes invalid challenge', async () => {
