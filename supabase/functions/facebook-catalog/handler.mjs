@@ -83,18 +83,25 @@ export function createHandler(env,{send=fetch,now=()=>Date.now()}={}){
             });
           let link;try{link=await catalog(commentId);}
           catch(_){await finish('pending',null,'Catalog unavailable');return response('Catalog unavailable',503);}
-          // The official Facebook Page private_replies edge accepts a plain text message.
-          const friendly='Здравствуйте! 🏡\n\nСпасибо за интерес к ARHITTEK. Здесь готовые проекты частных домов с фасадами, планировками и ценами:\n'+link+'\n\nСсылка действует 48 часов.';
+          // Meta Page Messages supports one private reply to a Facebook comment
+          // by passing recipient.comment_id (distinct from Instagram comment IDs).
+          const greeting='Здравствуйте! 🏡\\n\\nСпасибо за интерес к ARHITTEK. Мы подготовили каталог частных домов с фасадами, планировками и ценами.\\n\\nСсылка действует 48 часов.';
           let sent;
           try{
-            sent=await send('https://'+host+'/'+version+'/'+commentId+'/private_replies',{
+            sent=await send('https://'+host+'/'+version+'/'+pageId+'/messages',{
               method:'POST',redirect:'error',signal:AbortSignal.timeout(15000),
-              headers:{Authorization:'Bearer '+token,'Content-Type':'application/x-www-form-urlencoded'},
-              body:new URLSearchParams({message:friendly}).toString()
+              headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+              body:JSON.stringify({
+                recipient:{comment_id:commentId},
+                message:{attachment:{type:'template',payload:{
+                  template_type:'button',text:greeting,
+                  buttons:[{type:'web_url',title:'Открыть каталог',url:link}]
+                }}}
+              })
             });
           }catch(_){await finish('uncertain',null,'Ambiguous network response');return response('Reconciliation required',503);}
           const data=await sent.json().catch(()=>null);
-          if(sent.ok&&data?.id){await finish('sent',String(data.id));continue;}
+          if(sent.ok&&data?.message_id){await finish('sent',String(data.message_id));continue;}
           const pending=sent.status===429;
           await finish(pending?'pending':sent.status>=500||sent.ok?'uncertain':'failed',
             null,'Meta status '+sent.status+' code '+String(data?.error?.code||'unknown'));
