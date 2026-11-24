@@ -17,7 +17,8 @@
     "test:finance:workspace": "node tests/finance-workspace.cjs && node tests/finance-zero-start.cjs && node tests/finance-workspace-ui.cjs && node tests/finance-spending-limits.cjs && node tests/finance-calendar-reschedule.cjs --cash-floor && node tests/finance-calendar-reschedule.cjs --recurring && node tests/finance-calendar-reschedule.cjs --home-actions",
     "test:family-tree": "node tests/family-tree-access.cjs",
     "test:instagram": "node --test tests/instagram-webhook.mjs tests/instagram-live-smoke.mjs tests/instagram-recipient-export.mjs && node tests/instagram-recipient-sheets.cjs",
-    "check:instagram:live": "node scripts/instagram-live-smoke.mjs"
+    "check:instagram:live": "node scripts/instagram-live-smoke.mjs",
+    "test:facebook": "node --test tests/facebook-catalog-webhook.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.10",
