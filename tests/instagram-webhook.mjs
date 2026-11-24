@@ -108,7 +108,7 @@ test('valid signed comment creates a 48h link and one private reply, not a PDF',
   assert.equal(res.status, 200);
   assert.equal(await res.text(), 'EVENT_RECEIVED');
   assert.deepEqual(mock.calls.map(x => x.path.split('/').at(-1)),
-    ['claim_instagram_catalog_reply', 'share_links', 'messages', 'finish_instagram_catalog_reply', 'record_instagram_catalog_comment']);
+    ['claim_instagram_catalog_reply', 'share_links', 'messages', 'finish_instagram_catalog_reply', 'record_instagram_catalog_identity']);
   const link = mock.calls[1].data;
   assert.equal(Date.parse(link.expires_at) - Date.parse(link.created_at), 48 * 60 * 60 * 1000);
   assert.match(link.token, /^[a-f0-9]{32}$/);
