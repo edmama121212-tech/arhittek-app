@@ -31,7 +31,7 @@ export function createHandler(env,{send=fetch,now=()=>Date.now()}={}){
     const r=await send(env.SUPABASE_URL+'/rest/v1/share_links',{
       method:'POST',redirect:'error',signal:AbortSignal.timeout(8000),
       headers:{'Content-Type':'application/json',apikey:env.SUPABASE_SERVICE_ROLE_KEY,
-       Authorization:'Bearer '+env.SUPABASE_SERVICE_ROLE_KEY',Prefer:'return=minimal'},
+       Authorization:'Bearer '+env.SUPABASE_SERVICE_ROLE_KEY,Prefer:'return=minimal'},
       body:JSON.stringify(item)
     });
     if(!r.ok)throw new Error('Catalog link unavailable');
