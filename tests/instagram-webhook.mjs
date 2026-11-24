@@ -91,6 +91,8 @@ test('valid signed comment creates a 48h link and one private reply, not a PDF',
   const template = reply.message.attachment.payload;
   assert.equal(template.template_type, 'button');
   assert.match(template.text, /48 часов/);
+  assert.ok(template.text.includes('\n\n'), 'the greeting must render real paragraph breaks');
+  assert.ok(!template.text.includes('\\n'), 'do not show raw slash-n characters to users');
   assert.match(template.text, /ARHITTEK/);
   assert.doesNotMatch(template.text, /https?:\/\//);
   assert.doesNotMatch(template.text, /\.pdf\b/i);
