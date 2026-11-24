@@ -117,9 +117,31 @@ export function createHandler(env,{fetch:send=fetch,now=()=>Date.now()}={}){
              // Store the customer's actual comment only after confirmed delivery.
              // The private table is not exposed to the public catalog; do not log the text.
              if(recorded){
-               try{await rpc('record_instagram_catalog_comment',{
-                 p_comment:commentId,p_lease:job.lease,p_text:String(v.text||'').slice(0,500)
-               });}catch(_){/* Delivery was confirmed; never resend solely because logging failed. */}
+               try{
+                 let username=String(v.from?.username||'').replace(/^@/,'').trim();
+                 let commentText=String(v.text||'').slice(0,500);
+                 // Fallback to the official comment API if the webhook omitted username or text.
+                 // This is a read-only authenticated request, never logged or shared publicly.
+                 if(!username||!commentText){
+                   try{
+                     const detail=await send('https://'+host+'/'+env.META_GRAPH_VERSION+'/'+commentId+'?fields=username%2Ctext',{
+                       method:'GET',redirect:'error',signal:AbortSignal.timeout(3000),
+                       headers:{Authorization:'Bearer '+env.META_ACCESS_TOKEN}
+                     });
+                     if(detail.ok){
+                       const actual=await detail.json();
+                       if(String(actual?.id||commentId)===commentId){
+                         if(!username)username=String(actual.username||'').replace(/^@/,'').trim();
+                         if(!commentText)commentText=String(actual.text||'').slice(0,500);
+                       }
+                     }
+                   }catch(_){/* optional enrichment; never repeat the Direct */}
+                 }
+                 await rpc('record_instagram_catalog_identity',{
+                   p_comment:commentId,p_lease:job.lease,
+                   p_text:commentText,p_username:username
+                 });
+               }catch(_){/* Delivery confirmed; never resend due to optional logging. */}
              }
              continue;
            }

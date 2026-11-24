@@ -16,9 +16,9 @@ const env = {
   SUPABASE_URL: 'https://example.supabase.co',
   SUPABASE_SERVICE_ROLE_KEY: 'local-test-key',
 };
-const event = ({text = 'Хочу проект', comment = '17900000000012345', seconds = fixedTime / 1000, id = account, author = '123456', flags = {}} = {}) => ({
+const event = ({text = 'Хочу проект', comment = '17900000000012345', seconds = fixedTime / 1000, id = account, author = '123456', username = 'client_for_test', flags = {}} = {}) => ({
   object: 'instagram',
-  entry: [{id, time: seconds, changes: [{field: 'comments', value: {id: comment, from: {id: author}, text, ...flags}}]}],
+  entry: [{id, time: seconds, changes: [{field: 'comments', value: {id: comment, from: {id: author, username}, text, ...flags}}]}],
 });
 function signedRequest(data, badSignature = false) {
   const raw = typeof data === 'string' ? data : JSON.stringify(data);
@@ -35,7 +35,8 @@ function service({claim = {claimed: true, lease: '11111111-1111-4111-8111-111111
     calls.push({path, data});
     if (path.endsWith('/rpc/claim_instagram_catalog_reply')) return Response.json(claim);
     if (path.endsWith('/rpc/finish_instagram_catalog_reply')) return Response.json(true);
-    if (path.endsWith('/rpc/record_instagram_catalog_comment')) return Response.json(true);
+    if (path.endsWith('/rpc/record_instagram_catalog_identity')) return Response.json(true);
+    if (path.includes('?fields=username%2Ctext')) return Response.json({id:'17900000000012345',username:'looked_up_client',text:'Проект'});
     if (path.endsWith('/rest/v1/share_links')) return new Response(null, {status: 201});
     if (path.endsWith('/messages')) {
       if (loseResponse) throw new Error('mock connection lost');
@@ -107,7 +108,7 @@ test('valid signed comment creates a 48h link and one private reply, not a PDF',
   assert.equal(res.status, 200);
   assert.equal(await res.text(), 'EVENT_RECEIVED');
   assert.deepEqual(mock.calls.map(x => x.path.split('/').at(-1)),
-    ['claim_instagram_catalog_reply', 'share_links', 'messages', 'finish_instagram_catalog_reply', 'record_instagram_catalog_comment']);
+    ['claim_instagram_catalog_reply', 'share_links', 'messages', 'finish_instagram_catalog_reply', 'record_instagram_catalog_identity']);
   const link = mock.calls[1].data;
   assert.equal(Date.parse(link.expires_at) - Date.parse(link.created_at), 48 * 60 * 60 * 1000);
   assert.match(link.token, /^[a-f0-9]{32}$/);
@@ -132,7 +133,21 @@ test('valid signed comment creates a 48h link and one private reply, not a PDF',
   assert.equal(mock.calls[3].data.p_state, 'sent');
   assert.equal(mock.calls[3].data.p_message, 'mock-message');
   assert.equal(mock.calls[4].data.p_text, 'Хочу проект');
+  assert.equal(mock.calls[4].data.p_username, 'client_for_test');
   assert.equal(mock.calls[4].data.p_comment, '17900000000012345');
+});
+
+test('missing webhook username is fetched from Meta comment details after successful send', async () => {
+  const mock=service();
+  const res=await createHandler(env,{fetch:mock.fetch,now:()=>fixedTime})(
+    signedRequest(event({username:''}))
+  );
+  assert.equal(res.status,200);
+  const lookup=mock.calls.find(c=>c.path.includes('?fields=username%2Ctext'));
+  assert(lookup,'expected read-only Graph lookup for missing username');
+  const identity=mock.calls.find(c=>c.path.endsWith('/rpc/record_instagram_catalog_identity'));
+  assert.equal(identity.data.p_username,'looked_up_client');
+  assert.equal(identity.data.p_text,'Хочу проект');
 });
 
 test('duplicate, irrelevant, own, unrelated account and stale comments send nothing', async () => {
