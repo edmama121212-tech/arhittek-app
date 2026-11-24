@@ -69,6 +69,8 @@ test('one approved comment issues a 48h link and single Messenger button',async(
   const sent=mock.calls[2].data;
   assert.equal(sent.recipient.comment_id,comment);
   assert.equal(sent.message.attachment.payload.template_type,'button');
+  assert.equal(sent.message.attachment.payload.text.includes('\n'),true);
+  assert.equal(sent.message.attachment.payload.text.includes('\\n'),false);
   const button=sent.message.attachment.payload.buttons[0];
   assert.equal(button.title,'Открыть каталог');
   assert.equal(new URL(button.url).searchParams.get('t'),link.token);
