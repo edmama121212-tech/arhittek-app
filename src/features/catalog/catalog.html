@@ -371,13 +371,7 @@ function contactUrl(number,title){
   let projectTitle=String(title||'').trim();
   // Catalog titles may already start with "Проект №13525 —"; do not repeat the number.
   if(projectNumber){
-    const escapedNumber=projectNumber.replace(/[.*+?^${}()|[\]\\]/g,'\\function contactUrl(number,title){
-  const instagram=new URLSearchParams(location.search).get('utm_source')==='instagram';
-  const project=[number?'№'+number:'',title].filter(Boolean).join(' ');
-  const text='Здравствуйте! '+(instagram?'Я из Instagram. ':'')+
-    (project?'Меня заинтересовал проект '+project+' из каталога ARHITTEK.':'Пишу из каталога ARHITTEK.');
-  return 'https://wa.me/79226593872?text='+encodeURIComponent(text);
-}');
+    const escapedNumber=projectNumber.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
     const leadingNumber=new RegExp('^\\s*(?:проект\\s*)?№?\\s*'+escapedNumber+'(?:\\s*[-–—:]\\s*|\\s+|$)','iu');
     projectTitle=projectTitle.replace(leadingNumber,'').trim();
   }
