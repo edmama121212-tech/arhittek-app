@@ -112,7 +112,17 @@ export function createHandler(env,{fetch:send=fetch,now=()=>Date.now()}={}){
             });
           }catch(_){await finish('uncertain',null,'Network response lost; reconcile before resend');return response('Delivery requires reconciliation',503);}
           const data=await r.json().catch(()=>null);
-          if(r.ok&&data?.message_id){await finish('sent',String(data.message_id));continue;}
+          if(r.ok&&data?.message_id){
+             const recorded=await finish('sent',String(data.message_id));
+             // Store the customer's actual comment only after confirmed delivery.
+             // The private table is not exposed to the public catalog; do not log the text.
+             if(recorded){
+               try{await rpc('record_instagram_catalog_comment',{
+                 p_comment:commentId,p_lease:job.lease,p_text:String(v.text||'').slice(0,500)
+               });}catch(_){/* Delivery was confirmed; never resend solely because logging failed. */}
+             }
+             continue;
+           }
           // A documented rejection is safe to retry; ambiguous 5xx responses
           // and malformed successes require reconciliation to avoid duplicates.
           const retry=r.status===429;
