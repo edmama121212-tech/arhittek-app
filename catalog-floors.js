@@ -46,7 +46,20 @@
     return {patch,complete:!missing.length&&sum>0,missing};
   }
   // Whole-house tariff, not progressive bands. Exactly 100 and 400 are middle tier.
-  function rate(value){const area=areaNumber(value);return area===null?null:area<100?150:area>400?80:100;}
+  // Shared, validated rates: owner edits them in settings; public catalog reads the same public rates.
+  const defaultRates=Object.freeze({rate_under_100:150,rate_100_to_400:100,rate_over_400:80});
+  let pricingRates={...defaultRates};
+  function setRates(values){
+    const keys=['rate_under_100','rate_100_to_400','rate_over_400'];
+    if(!values||keys.some(key=>!Number.isInteger(Number(values[key]))||Number(values[key])<1||Number(values[key])>100000))return false;
+    pricingRates=Object.fromEntries(keys.map(key=>[key,Number(values[key])]));
+    return true;
+  }
+  function getRates(){return {...pricingRates};}
+  function rate(value){
+    const area=areaNumber(value);
+    return area===null?null:area<100?pricingRates.rate_under_100:area>400?pricingRates.rate_over_400:pricingRates.rate_100_to_400;
+  }
   function autoPrice(value){const area=areaNumber(value),unit=rate(value);return area===null?null:Math.round(Math.round(area*100)*unit/100);}
   function price(card){
     const saved=areaNumber(String(card.price??'').replace(/руб\.?|₽/giu,''));
@@ -82,5 +95,5 @@
   function previewPanels(){
     return definitions.map(f=>`<div id="prev-${f.key}" class="catalog-floor-preview" style="display:none"><div class="plan-wrap"><div class="plan-label">${f.title}<span id="prev-a${f.suffix}-badge">— м²</span></div><div class="plan-img-container"><img id="prev-plan${f.suffix}-img" class="plan-img" alt="${f.title}: план" style="display:none"/><span id="prev-plan${f.suffix}-ph" class="catalog-plan-empty">Загрузите план</span></div></div><div class="explication"><div class="expl-header"><span class="expl-header-title">Экспликация</span><span id="prev-total${f.suffix}" class="expl-header-total">— м²</span></div><div id="prev-expl${f.suffix}-rows"></div></div><div style="height:12px"></div></div>`).join('');
   }
-  root.CatalogFloors = Object.freeze({definitions,tags,enabled,active,slots,label,rate,autoPrice,price,priceText,rows,normalizeRooms,calculateAreas,defaultTitle,areaNumber,tabs,panels,editor,previewTabs,previewPanels});
+  root.CatalogFloors = Object.freeze({definitions,tags,enabled,active,slots,label,rate,setRates,getRates,autoPrice,price,priceText,rows,normalizeRooms,calculateAreas,defaultTitle,areaNumber,tabs,panels,editor,previewTabs,previewPanels});
 })(typeof window!=='undefined'?window:globalThis);
