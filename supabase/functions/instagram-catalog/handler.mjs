@@ -1,4 +1,43 @@
-export const hasProjectKeyword=text=>/^\s*(?:\+{1,5}|🏠|🏡)\s*$/u.test(String(text||''))||/(?:^|[^\p{L}\p{N}_])(?:проект\p{L}*|проэкт\p{L}*|дом\p{L}*|коттедж\p{L}*|вилл\p{L}*|особняк\p{L}*|цен\p{L}*|стоимост\p{L}*|скольк\p{L}*|поч[её]м|прайс\p{L}*|смет\p{L}*|бюджет\p{L}*|куп\p{L}*|покуп\p{L}*|заказ\p{L}*|хочу|хотел\p{L}*|каталог\p{L}*|план\p{L}*|черт[её]ж\p{L}*|размер\p{L}*|габарит\p{L}*|площад\p{L}*|метраж\p{L}*|квадратур\p{L}*|строит\p{L}*|построит\p{L}*|ссыл\p{L}*|скинь\p{L}*|пришл\p{L}*|отправ\p{L}*|подроб\p{L}*|инфо\p{L}*|контакт\p{L}*|телефон\p{L}*|ва[тц]сап\p{L}*|ватсап\p{L}*|whatsapp|direct|директ\p{L}*|личк\p{L}*|price|project|house|plan|cost)(?=$|[^\p{L}\p{N}_])/iu.test(String(text||'').normalize('NFKC'));
+// Approved by ARHITTEK owner 2026-11-24. Match only these literal words/phrases,
+// not their stems, unrelated synonyms, emojis, or any other previously recognized keywords.
+export const INSTAGRAM_CATALOG_KEYWORDS = Object.freeze([
+  "проект",
+  "хочу проект",
+  "проэкт",
+  "дом",
+  "цена",
+  "стоимость",
+  "сколько",
+  "почём",
+  "прайс",
+  "план",
+  "планировка",
+  "размеры",
+  "площадь",
+  "метраж",
+  "купить",
+  "покупка",
+  "заказать",
+  "хочу",
+  "каталог",
+  "скинь",
+  "пришли",
+  "отправь",
+  "price",
+  "project",
+  "house",
+  "plan",
+  "+"
+]);
+const instagramKeywordMatcher = new RegExp(
+  '(?:^|[^\\p{L}\\p{N}_])(?:' +
+  INSTAGRAM_CATALOG_KEYWORDS.filter(word => word !== '+').sort((a,b) => b.length-a.length).join('|') +
+  ')(?=$|[^\\p{L}\\p{N}_])', 'iu'
+);
+export const hasProjectKeyword = text => {
+  const normalized = String(text ?? '').normalize('NFKC');
+  return /^\s*\+\s*$/u.test(normalized) || instagramKeywordMatcher.test(normalized);
+};
 const response=(text,status=200)=>new Response(text,{status,headers:{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'}});
 export async function validSignature(secret,raw,signature){
   if(!secret||!/^sha256=[a-f0-9]{64}$/i.test(signature||''))return false;
