@@ -329,12 +329,13 @@ function renderObjTabContent(){
           <input type="checkbox" id="inv-paid-client-obj" style="width:auto;">
           <label style="margin:0;" for="inv-paid-client-obj">🤝 Оплачено заказчиком напрямую (минуя компанию)</label>
         </div>
-        <label>Фото накладной (необязательно)</label>
+        <label>Документы и фотографии (необязательно)</label>
+        <label for="inv-photo-obj" class="photo-upload-label" style="display:block;text-align:center;padding:24px;margin-bottom:8px;border:1px dashed var(--blue);border-radius:8px;" ondragover="event.preventDefault();event.stopPropagation();this.style.background='rgba(40,88,161,.12)'" ondragleave="this.style.background=''" ondrop="this.style.background='';invoiceDocumentDrop(event,'inv-photo-obj')">Перетащите документ сюда или нажмите для выбора<br>PDF, JPG, JPEG, PNG</label>
         <div style="display:flex; gap:8px; margin-bottom:6px;">
-          <label class="photo-upload-label" tabindex="0" role="button" data-key-activate style="flex:1; margin:0;" for="inv-photo-obj">🖼 Из галереи</label>
+          <label class="photo-upload-label" tabindex="0" role="button" data-key-activate style="flex:1; margin:0;" for="inv-photo-obj">📁 Выбрать файл</label>
           <label class="photo-upload-label" tabindex="0" role="button" data-key-activate style="flex:1; margin:0;" for="inv-camera-obj">📷 Сделать фото</label>
         </div>
-        <input type="file" id="inv-photo-obj" accept="image/*" style="display:none;" onchange="onInvoicePhotoPicked(this,'inv-photo-status-obj')">
+        <input type="file" id="inv-photo-obj" accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png" style="display:none;" onchange="onInvoicePhotoPicked(this,'inv-photo-status-obj')">
         <input type="file" id="inv-camera-obj" accept="image/*" capture="environment" style="display:none;" onchange="handleInvoicePhotoCapture(this,'inv-photo-obj','inv-photo-status-obj')">
         <div id="inv-photo-status-obj" style="font-size:11px; color:var(--text-dim); margin-bottom:8px;"></div>
         <button class="btn btn-primary" onclick="addInvoiceFromView()">Добавить запись</button>
@@ -350,7 +351,7 @@ function renderObjTabContent(){
       <div class="photo-grid">
         ${photos.length ? photos.map(ph=>`
           <div class="photo-thumb">
-            <img src="${escapeHtml(ph.photo_url)}" alt="" loading="lazy">
+            ${isInvoicePdf(ph.photo_url)?'<div style="padding:16px;text-align:center">📄 PDF</div>':`<img src="${escapeHtml(ph.photo_url)}" alt="" loading="lazy">`}
             ${ph.amount ? `<div class="photo-amt">${fmtMoney(ph.amount)}</div>` : ''}
             ${ph.invoice_id?`<button type="button" class="btn btn-secondary" style="padding:6px;font-size:11px" data-photo-invoice="${escapeHtml(ph.invoice_id)}">${escapeHtml(ph.sourceLabel)}</button>`:''}
           </div>`).join('') : '<div class="empty-state" style="grid-column:1/-1; padding:14px;">Фото пока нет</div>'}
