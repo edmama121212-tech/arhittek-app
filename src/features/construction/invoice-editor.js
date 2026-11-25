@@ -4,6 +4,7 @@
 let invSheetCurrentId = null;
 let invSheetNewPhotoBlob = null;
 let invoiceFormGeneration = 0;
+let invoiceAttachmentGeneration=0;
 const invoiceSheetSavesInFlight = new Set();
 
 function openInvoiceSheet(invId){
@@ -24,16 +25,9 @@ function openInvoiceSheet(invId){
   document.getElementById('invSheet-paid-client').checked = !!inv.paid_by_client;
   document.getElementById('invSheet-photo-name').textContent = '';
 
-  // Фото
-  const photoWrap = document.getElementById('invSheet-photo-wrap');
-  const photoImg  = document.getElementById('invSheet-photo-img');
-  if(inv.photo_url){
-    photoImg.src = inv.photo_url;
-    photoWrap.style.display = '';
-  } else {
-    photoWrap.style.display = 'none';
-    photoImg.src = '';
-  }
+  document.getElementById('invSheet-photo-input').value='';
+  document.getElementById('invSheet-camera-input').value='';
+  restoreInvoiceAttachment();
 
   const overlay = document.getElementById('invoiceSheetOverlay');
   overlay.querySelector('button[onclick="closeInvoiceSheet()"]').classList.add('sheet-close');
@@ -47,28 +41,20 @@ function closeInvoiceSheet(){
   invSheetNewPhotoBlob = null;
 }
 
-async function onInvSheetPhotoChange(input){
-  const file = input.files[0];
-  if(!file) return;
-  const invoiceId=invSheetCurrentId,generation=invoiceFormGeneration;
-  try{
-    const blob = await compressImage(file);
-    if(invSheetCurrentId!==invoiceId||invoiceFormGeneration!==generation)return;
-    invSheetNewPhotoBlob = blob;
-    const kb = Math.round(invSheetNewPhotoBlob.size / 1024);
-    document.getElementById('invSheet-photo-name').textContent = `${file.name.slice(0,22)} · ${kb} КБ`;
-    // Показываем превью
-    const reader = new FileReader();
-    reader.onload = e => {
-      if(invSheetCurrentId!==invoiceId||invoiceFormGeneration!==generation)return;
-      const img = document.getElementById('invSheet-photo-img');
-      img.src = e.target.result;
-      document.getElementById('invSheet-photo-wrap').style.display = '';
-    };
-    reader.readAsDataURL(invSheetNewPhotoBlob);
-  }catch(e){ showToast('Ошибка обработки фото'); }
+function restoreInvoiceAttachment(){
+  const url=state.invoices.find(i=>i.id===invSheetCurrentId)?.photo_url||'';
+  const wrap=document.getElementById('invSheet-photo-wrap'),img=document.getElementById('invSheet-photo-img'),link=document.getElementById('invSheet-pdf-link');
+  wrap.style.display=url?'':'none';
+  img.style.display=url&&!isInvoicePdf(url)?'':'none';img.src=url&&!isInvoicePdf(url)?url:'';
+  link.style.display=url&&isInvoicePdf(url)?'':'none';link.href=url&&isInvoicePdf(url)?url:'';
 }
-
+async function onInvSheetPhotoChange(input){
+  const file=input.files[0];if(!file)return;
+  if(!validInvoiceDocument(file)){input.value='';showToast('Выберите PDF, JPG или PNG до 20 МБ');return;}
+  invoiceAttachmentGeneration++;
+  invSheetNewPhotoBlob=file;
+  invoiceAttachmentStatus(input,'invSheet-photo-name');
+}
 async function saveInvoiceSheet(){
   if(!invSheetCurrentId) return;
   const invoiceId=invSheetCurrentId,generation=invoiceFormGeneration;
@@ -105,7 +91,7 @@ async function saveInvoiceSheet(){
     let photo_url = inv.photo_url || '';
     if(photoBlob){
       const fileName = `${inv.project_id}/${Date.now()}_edit.jpg`;
-      photo_url = await compressAndUpload(photoBlob, 'construction-documents', fileName,()=>canAccessConstructionProject(inv.project_id,actor));
+      photo_url = await uploadInvoiceDocument(photoBlob, fileName,()=>canAccessConstructionProject(inv.project_id,actor));
     }
 
     if(!canAccessConstructionProject(inv.project_id,actor))throw new Error('Сеанс или доступ к объекту изменился');
