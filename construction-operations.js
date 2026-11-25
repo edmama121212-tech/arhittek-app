@@ -36,6 +36,7 @@
       item_type:value('type'),description:value('desc').trim(),amount:Math.round(rawAmount*100)/100,
       photo_url:'',paid_by_client:!!document.getElementById('inv-paid-client-'+suffix)?.checked};
     const file=document.getElementById('inv-photo-'+suffix)?.files?.[0];
+    if(file&&!validInvoiceDocument(file)){showToast('Выберите PDF, JPG или PNG до 20 МБ');return;}
     const key=keyFor(projectId);
     let draft=readPending(key);
     if(draft&&!payload.number&&!payload.description&&!value('amount'))payload={...draft.payload};
@@ -57,7 +58,7 @@
           fileName:file?.name||'',fileSize:file?.size||0,fileModified:file?.lastModified||0};
         remember(key,draft);
         if(file&&!draft.payload.photo_url){
-          draft.payload.photo_url=await compressAndUpload(file,'construction-documents',projectId+'/'+draft.id+'.jpg',()=>canAccessConstructionProject(projectId,actor));
+          draft.payload.photo_url=await uploadInvoiceDocument(file,projectId+'/'+draft.id+'.jpg',()=>canAccessConstructionProject(projectId,actor));
           remember(key,draft);
         }
         if(!canAccessConstructionProject(projectId,actor))throw new Error('Сеанс или доступ к объекту изменился');
