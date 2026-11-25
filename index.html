@@ -1909,6 +1909,7 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
 
     <!-- Фото накладной -->
     <div id="invSheet-photo-wrap" style="margin-bottom:14px;display:none;">
+      <a id="invSheet-pdf-link" target="_blank" rel="noopener" style="display:none;">📄 Открыть PDF</a>
       <img id="invSheet-photo-img" src="" alt="фото накладной"
            style="width:100%;max-height:260px;object-fit:contain;border-radius:10px;border:1px solid var(--line-strong);cursor:pointer;"
            onclick="window.open(this.src,'_blank')">
@@ -1958,12 +1959,13 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
     </div>
 
     <div class="field">
-      <label>Заменить фото</label>
+      <label>Документы и фотографии</label>
+      <label for="invSheet-photo-input" class="photo-upload-label" style="display:block;text-align:center;padding:24px;margin-bottom:8px;border:1px dashed var(--blue);border-radius:8px;" ondragover="event.preventDefault();event.stopPropagation();this.style.background='rgba(40,88,161,.12)'" ondragleave="this.style.background=''" ondrop="this.style.background='';invoiceDocumentDrop(event,'invSheet-photo-input')">Перетащите документ сюда или нажмите для выбора<br>PDF, JPG, JPEG, PNG</label>
       <div style="display:flex;gap:8px;margin-bottom:6px;">
-        <label class="photo-upload-label" style="flex:1;margin:0;" for="invSheet-photo-input">🖼 Из галереи</label>
+        <label class="photo-upload-label" style="flex:1;margin:0;" for="invSheet-photo-input">📁 Выбрать файл</label>
         <label class="photo-upload-label" style="flex:1;margin:0;" for="invSheet-camera-input">📷 Сделать фото</label>
       </div>
-      <input type="file" id="invSheet-photo-input" accept="image/*" style="display:none;" onchange="onInvSheetPhotoChange(this)">
+      <input type="file" id="invSheet-photo-input" accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png" style="display:none;" onchange="onInvSheetPhotoChange(this)">
       <input type="file" id="invSheet-camera-input" accept="image/*" capture="environment" style="display:none;" onchange="onInvSheetPhotoChange(this)">
       <span id="invSheet-photo-name" style="font-size:11px;color:var(--text-dim);"></span>
     </div>
@@ -8143,12 +8145,13 @@ function renderObjTabContent(){
           <input type="checkbox" id="inv-paid-client-obj" style="width:auto;">
           <label style="margin:0;" for="inv-paid-client-obj">🤝 Оплачено заказчиком напрямую (минуя компанию)</label>
         </div>
-        <label>Фото накладной (необязательно)</label>
+        <label>Документы и фотографии (необязательно)</label>
+        <label for="inv-photo-obj" class="photo-upload-label" style="display:block;text-align:center;padding:24px;margin-bottom:8px;border:1px dashed var(--blue);border-radius:8px;" ondragover="event.preventDefault();event.stopPropagation();this.style.background='rgba(40,88,161,.12)'" ondragleave="this.style.background=''" ondrop="this.style.background='';invoiceDocumentDrop(event,'inv-photo-obj')">Перетащите документ сюда или нажмите для выбора<br>PDF, JPG, JPEG, PNG</label>
         <div style="display:flex; gap:8px; margin-bottom:6px;">
-          <label class="photo-upload-label" tabindex="0" role="button" data-key-activate style="flex:1; margin:0;" for="inv-photo-obj">🖼 Из галереи</label>
+          <label class="photo-upload-label" tabindex="0" role="button" data-key-activate style="flex:1; margin:0;" for="inv-photo-obj">📁 Выбрать файл</label>
           <label class="photo-upload-label" tabindex="0" role="button" data-key-activate style="flex:1; margin:0;" for="inv-camera-obj">📷 Сделать фото</label>
         </div>
-        <input type="file" id="inv-photo-obj" accept="image/*" style="display:none;" onchange="onInvoicePhotoPicked(this,'inv-photo-status-obj')">
+        <input type="file" id="inv-photo-obj" accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png" style="display:none;" onchange="onInvoicePhotoPicked(this,'inv-photo-status-obj')">
         <input type="file" id="inv-camera-obj" accept="image/*" capture="environment" style="display:none;" onchange="handleInvoicePhotoCapture(this,'inv-photo-obj','inv-photo-status-obj')">
         <div id="inv-photo-status-obj" style="font-size:11px; color:var(--text-dim); margin-bottom:8px;"></div>
         <button class="btn btn-primary" onclick="addInvoiceFromView()">Добавить запись</button>
@@ -8164,7 +8167,7 @@ function renderObjTabContent(){
       <div class="photo-grid">
         ${photos.length ? photos.map(ph=>`
           <div class="photo-thumb">
-            <img src="${escapeHtml(ph.photo_url)}" alt="" loading="lazy">
+            ${isInvoicePdf(ph.photo_url)?'<div style="padding:16px;text-align:center">📄 PDF</div>':`<img src="${escapeHtml(ph.photo_url)}" alt="" loading="lazy">`}
             ${ph.amount ? `<div class="photo-amt">${fmtMoney(ph.amount)}</div>` : ''}
             ${ph.invoice_id?`<button type="button" class="btn btn-secondary" style="padding:6px;font-size:11px" data-photo-invoice="${escapeHtml(ph.invoice_id)}">${escapeHtml(ph.sourceLabel)}</button>`:''}
           </div>`).join('') : '<div class="empty-state" style="grid-column:1/-1; padding:14px;">Фото пока нет</div>'}
@@ -8242,23 +8245,47 @@ function buildObjectAuditHtml(projectId){
   return html;
 }
 
-// Фото накладной выбрано из галереи — просто показываем имя файла
-function onInvoicePhotoPicked(input, statusId){
-  const file = input.files[0];
-  const span = document.getElementById(statusId);
-  if(span) span.textContent = file ? '✓ '+file.name : '';
+// Shared attachment handling for invoice creation and editing.
+function isInvoicePdf(url){return /\.pdf(?:[?#]|$)/i.test(String(url||''));}
+function validInvoiceDocument(file){
+  if(!file||!file.size||file.size>20*1024*1024)return false;
+  const type=String(file.type||'').toLowerCase();
+  return /\.(pdf|jpe?g|png)$/i.test(file.name)&&(!type||['application/pdf','image/jpeg','image/png'].includes(type))&&(!type||(isInvoicePdf(file.name)===(type==='application/pdf')));
 }
-
-// Фото сделано камерой — переносим файл в основной input (тот, который читает addInvoice при сохранении)
-function handleInvoicePhotoCapture(captureInput, targetInputId, statusId){
-  const file = captureInput.files[0];
-  if(!file) return;
-  const dt = new DataTransfer();
-  dt.items.add(file);
-  const target = document.getElementById(targetInputId);
-  if(target) target.files = dt.files;
-  const span = document.getElementById(statusId);
-  if(span) span.textContent = '✓ '+file.name;
+function invoiceDocumentDrop(event,id){
+  event.preventDefault();event.stopPropagation();
+  const input=document.getElementById(id),files=event.dataTransfer?.files;
+  if(!input||!files||files.length!==1||!validInvoiceDocument(files[0])){showToast('Выберите один PDF, JPG или PNG до 20 МБ');return;}
+  const dt=new DataTransfer();dt.items.add(files[0]);input.files=dt.files;input.dispatchEvent(new Event('change',{bubbles:true}));
+}
+function invoiceAttachmentStatus(input,statusId){
+  const file=input.files[0],span=document.getElementById(statusId);
+  if(!span)return;
+  span.replaceChildren();
+  if(!file)return;
+  const name=document.createElement('span');name.textContent='✓ '+file.name+' · ';span.append(name);
+  const preview=document.createElement('button');preview.type='button';preview.textContent='Просмотр';preview.onclick=()=>{const url=URL.createObjectURL(file);window.open(url,'_blank','noopener');setTimeout(()=>URL.revokeObjectURL(url),60000);};span.append(preview);
+  const remove=document.createElement('button');remove.type='button';remove.textContent='Убрать';remove.onclick=()=>{input.value='';span.replaceChildren();if(statusId==='invSheet-photo-name'){invSheetNewPhotoBlob=null;invoiceAttachmentGeneration++;restoreInvoiceAttachment();}};span.append(remove);
+}
+function onInvoicePhotoPicked(input,statusId){
+  if(input.files[0]&&!validInvoiceDocument(input.files[0])){input.value='';showToast('Выберите PDF, JPG или PNG до 20 МБ');}
+  invoiceAttachmentStatus(input,statusId);
+}
+function handleInvoicePhotoCapture(captureInput,targetInputId,statusId){
+  const file=captureInput.files[0],target=document.getElementById(targetInputId);
+  if(!file||!target)return;
+  if(!validInvoiceDocument(file)){showToast('Недопустимый файл');return;}
+  const dt=new DataTransfer();dt.items.add(file);target.files=dt.files;onInvoicePhotoPicked(target,statusId);
+}
+async function uploadInvoiceDocument(file,path,canUpload){
+  if(file.type!=='application/pdf'&&!isInvoicePdf(file.name))return compressAndUpload(file,'construction-documents',path,canUpload);
+  if(!canUpload())throw new Error('Сеанс или доступ к объекту изменился');
+  if(await file.slice(0,5).text()!=='%PDF-')throw new Error('Некорректный PDF');
+  if(!canUpload())throw new Error('Сеанс или доступ к объекту изменился');
+  const bucket=sb.storage.from('construction-documents'),pdfPath=path.replace(/\.jpg$/i,'.pdf');
+  const {error}=await bucket.upload(pdfPath,file,{contentType:'application/pdf',upsert:true});
+  if(error)throw error;
+  return bucket.getPublicUrl(pdfPath).data.publicUrl;
 }
 
 async function addInvoiceFromView(){
@@ -8278,6 +8305,7 @@ async function addInvoice(projectId){
 let invSheetCurrentId = null;
 let invSheetNewPhotoBlob = null;
 let invoiceFormGeneration = 0;
+let invoiceAttachmentGeneration=0;
 const invoiceSheetSavesInFlight = new Set();
 
 function openInvoiceSheet(invId){
@@ -8298,16 +8326,9 @@ function openInvoiceSheet(invId){
   document.getElementById('invSheet-paid-client').checked = !!inv.paid_by_client;
   document.getElementById('invSheet-photo-name').textContent = '';
 
-  // Фото
-  const photoWrap = document.getElementById('invSheet-photo-wrap');
-  const photoImg  = document.getElementById('invSheet-photo-img');
-  if(inv.photo_url){
-    photoImg.src = inv.photo_url;
-    photoWrap.style.display = '';
-  } else {
-    photoWrap.style.display = 'none';
-    photoImg.src = '';
-  }
+  document.getElementById('invSheet-photo-input').value='';
+  document.getElementById('invSheet-camera-input').value='';
+  restoreInvoiceAttachment();
 
   const overlay = document.getElementById('invoiceSheetOverlay');
   overlay.querySelector('button[onclick="closeInvoiceSheet()"]').classList.add('sheet-close');
@@ -8321,28 +8342,20 @@ function closeInvoiceSheet(){
   invSheetNewPhotoBlob = null;
 }
 
-async function onInvSheetPhotoChange(input){
-  const file = input.files[0];
-  if(!file) return;
-  const invoiceId=invSheetCurrentId,generation=invoiceFormGeneration;
-  try{
-    const blob = await compressImage(file);
-    if(invSheetCurrentId!==invoiceId||invoiceFormGeneration!==generation)return;
-    invSheetNewPhotoBlob = blob;
-    const kb = Math.round(invSheetNewPhotoBlob.size / 1024);
-    document.getElementById('invSheet-photo-name').textContent = `${file.name.slice(0,22)} · ${kb} КБ`;
-    // Показываем превью
-    const reader = new FileReader();
-    reader.onload = e => {
-      if(invSheetCurrentId!==invoiceId||invoiceFormGeneration!==generation)return;
-      const img = document.getElementById('invSheet-photo-img');
-      img.src = e.target.result;
-      document.getElementById('invSheet-photo-wrap').style.display = '';
-    };
-    reader.readAsDataURL(invSheetNewPhotoBlob);
-  }catch(e){ showToast('Ошибка обработки фото'); }
+function restoreInvoiceAttachment(){
+  const url=state.invoices.find(i=>i.id===invSheetCurrentId)?.photo_url||'';
+  const wrap=document.getElementById('invSheet-photo-wrap'),img=document.getElementById('invSheet-photo-img'),link=document.getElementById('invSheet-pdf-link');
+  wrap.style.display=url?'':'none';
+  img.style.display=url&&!isInvoicePdf(url)?'':'none';img.src=url&&!isInvoicePdf(url)?url:'';
+  link.style.display=url&&isInvoicePdf(url)?'':'none';link.href=url&&isInvoicePdf(url)?url:'';
 }
-
+async function onInvSheetPhotoChange(input){
+  const file=input.files[0];if(!file)return;
+  if(!validInvoiceDocument(file)){input.value='';showToast('Выберите PDF, JPG или PNG до 20 МБ');return;}
+  invoiceAttachmentGeneration++;
+  invSheetNewPhotoBlob=file;
+  invoiceAttachmentStatus(input,'invSheet-photo-name');
+}
 async function saveInvoiceSheet(){
   if(!invSheetCurrentId) return;
   const invoiceId=invSheetCurrentId,generation=invoiceFormGeneration;
@@ -8379,7 +8392,7 @@ async function saveInvoiceSheet(){
     let photo_url = inv.photo_url || '';
     if(photoBlob){
       const fileName = `${inv.project_id}/${Date.now()}_edit.jpg`;
-      photo_url = await compressAndUpload(photoBlob, 'construction-documents', fileName,()=>canAccessConstructionProject(inv.project_id,actor));
+      photo_url = await uploadInvoiceDocument(photoBlob, fileName,()=>canAccessConstructionProject(inv.project_id,actor));
     }
 
     if(!canAccessConstructionProject(inv.project_id,actor))throw new Error('Сеанс или доступ к объекту изменился');
