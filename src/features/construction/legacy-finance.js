@@ -25,9 +25,9 @@ function getConstructionReceived(projectId, ledgerOverride=null){
     .reduce((s,e) => s + Number(e.amount||0), 0);
 }
 
-function getConstructionExpenses(p, ledgerOverride=null){
+function getConstructionExpenses(p, ledgerOverride=null, invoices=state.invoices||[]){
   const today=financeToday();
-  const projInvoices = (state.invoices||[]).filter(inv=>inv.project_id===p.id && !inv.deleted_at && (!inv.invoice_date||inv.invoice_date<=today));
+  const projInvoices = invoices.filter(inv=>inv.project_id===p.id && !inv.deleted_at && (!inv.invoice_date||inv.invoice_date<=today));
   const matTotal = projInvoices
     .filter(i=>['Материал','Инструмент','Расходник','Доставка'].includes(i.item_type))
     .reduce((s,i)=>s+Number(i.amount||0),0);

@@ -82,6 +82,7 @@
           openInvoiceSheet(row.id);
           const edited={number:payload.number,date:payload.invoice_date,type:payload.item_type,amount:payload.amount,category:payload.category,desc:payload.description};
           Object.entries(edited).forEach(([field,value])=>{const input=document.getElementById('invSheet-'+field);if(input)input.value=value||'';});
+          updateInvoiceDateHint();
           const paid=document.getElementById('invSheet-paid-client');if(paid)paid.checked=payload.paid_by_client;
         }
       }

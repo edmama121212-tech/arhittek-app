@@ -6,6 +6,11 @@ let invSheetNewPhotoBlob = null;
 let invoiceFormGeneration = 0;
 const invoiceSheetSavesInFlight = new Set();
 
+function updateInvoiceDateHint(){
+  document.getElementById('invSheet-date-hint').hidden=document.getElementById('invSheet-date').value<=financeToday();
+}
+document.getElementById('invSheet-date').addEventListener('input',updateInvoiceDateHint);
+
 function openInvoiceSheet(invId){
   const inv = state.invoices.find(i=>i.id===invId);
   if(!inv){ showToast('Накладная не найдена'); return; }
@@ -17,6 +22,7 @@ function openInvoiceSheet(invId){
   // Заполняем поля
   document.getElementById('invSheet-number').value   = inv.number || '';
   document.getElementById('invSheet-date').value     = inv.invoice_date || '';
+  updateInvoiceDateHint();
   document.getElementById('invSheet-type').value     = inv.item_type || 'Материал';
   document.getElementById('invSheet-amount').value   = inv.amount || '';
   document.getElementById('invSheet-category').value = inv.category || '';
@@ -69,6 +75,16 @@ async function onInvSheetPhotoChange(input){
   }catch(e){ showToast('Ошибка обработки фото'); }
 }
 
+async function refreshInvoiceExpenseTotal(projectId,actor){
+  const result=await fetchAllRows(()=>sb.from('invoices').select('*',{count:'exact'}).eq('project_id',projectId));
+  if(result.error)throw result.error;
+  const project=state.projects.find(row=>row.id===projectId);
+  if(!project||!canAccessConstructionProject(projectId,actor))throw new Error('Сеанс или доступ к объекту изменился');
+  const total=getConstructionExpenses(project,null,result.data).expenses;
+  const update=await sb.from('projects').update({expenses:Math.round(total*100)/100}).eq('id',projectId);
+  if(update.error)throw update.error;
+}
+
 async function saveInvoiceSheet(){
   if(!invSheetCurrentId) return;
   const invoiceId=invSheetCurrentId,generation=invoiceFormGeneration;
@@ -118,12 +134,7 @@ async function saveInvoiceSheet(){
 
     // Read the complete server total: another invoice may have changed while
     // this photo was uploading. Never copy the amount into the next open row.
-    const totals=await fetchAllRows(()=>sb.from('invoices').select('id,amount',{count:'exact'}).eq('project_id',inv.project_id).order('id'));
-    if(totals.error)throw totals.error;
-    const newTotal=(totals.data||[]).reduce((sum,row)=>sum+Number(row.amount||0),0)+getConstructionExpenses(state.projects.find(p=>p.id===inv.project_id)).manualTotal;
-    if(!canAccessConstructionProject(inv.project_id,actor))throw new Error('Сеанс или доступ к объекту изменился');
-    const update=await sb.from('projects').update({expenses: newTotal}).eq('id', inv.project_id);
-    if(update.error)throw update.error;
+    await refreshInvoiceExpenseTotal(inv.project_id,actor);
 
     if(!canAccessConstructionProject(inv.project_id,actor))throw new Error('Сеанс или доступ к объекту изменился');
     await logAudit('project', inv.project_id, (state.projects.find(p=>p.id===inv.project_id)||{}).name||'', 'update', {invoice_edited:{old:`${inv.number}—${fmtMoney(inv.amount)}`, new:`${number}—${fmtMoney(amount)}`}});
@@ -162,11 +173,7 @@ async function deleteInvoiceSheet(){
     if(error) throw error;
     persisted=true;
 
-    // Пересчитываем p.expenses
-    const projInvs = state.invoices.filter(i=>i.project_id===inv.project_id && i.id!==invoiceId);
-    const newTotal  = projInvs.reduce((s,i)=>s+Number(i.amount||0),0)+getConstructionExpenses(state.projects.find(p=>p.id===inv.project_id)).manualTotal;
-    if(!canAccessConstructionProject(inv.project_id,actor))throw new Error('Сеанс или доступ к объекту изменился');
-    await sb.from('projects').update({expenses: newTotal}).eq('id', inv.project_id);
+    await refreshInvoiceExpenseTotal(inv.project_id,actor);
 
     if(invSheetCurrentId===invoiceId&&invoiceFormGeneration===generation)closeInvoiceSheet();
     await loadAll();
