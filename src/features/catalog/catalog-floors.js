@@ -65,7 +65,16 @@
     const saved=areaNumber(String(card.price??'').replace(/руб\.?|₽/giu,''));
     return saved!==null?saved:autoPrice(card.total_area);
   }
-  const priceText=card=>{const value=price(card);return value===null?'Цена по запросу':value.toLocaleString('ru-RU')+' ₽';};
+  function formatCatalogPrice(amount){
+    const step = amount >= 1000 ? 1000 : 1;
+    const rounded = Math.max(1, Math.round(amount / step) * step);
+    return rounded.toLocaleString('ru-RU') + ' ₽';
+  }
+  function priceText(card, {rounded = false} = {}){
+    const value = price(card);
+    if (value === null) return 'Цена по запросу';
+    return rounded ? formatCatalogPrice(value) : value.toLocaleString('ru-RU') + ' ₽';
+  }
   function individualPriceText(value, tariff){
     const area = areaNumber(value);
     const unit = areaNumber(tariff);
@@ -73,12 +82,22 @@
     // Area in hundredths of a square metre, rate in kopecks per square metre.
     const product = Math.round(area * 100) * Math.round(unit * 100);
     if (!Number.isSafeInteger(product)) return '';
-    const amount = Math.round(product / 100) / 100;
-    return amount.toLocaleString('ru-RU', {maximumFractionDigits: 2}) + ' ₽';
+    return formatCatalogPrice(product / 10000);
   }
-  function individualPriceHTML(area, tariff){
-    const value = individualPriceText(area, tariff);
-    return value ? `<div class="individual-price" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;margin:0 0 12px;color:#56677a;font-size:12px;line-height:1.45">Индивидуальный проект той же площади <s style="font-size:15px;font-weight:600;white-space:nowrap">${value}</s></div>` : '';
+  function pricesHTML(card, tariff){
+    const comparison = individualPriceText(card.total_area, tariff);
+    const labelStyle = 'color:#56677a;font-size:11px;line-height:1.25;margin-bottom:4px';
+    const amountStyle = 'display:block;font-weight:700;line-height:1.1;letter-spacing:-.035em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere';
+    return `<div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px 12px;margin-bottom:12px">
+      <div style="flex:1 1 110px;min-width:0">
+        <div style="${labelStyle}">Готовый проект</div>
+        <div class="price" style="${amountStyle};font-size:24px;color:#177245">${priceText(card, {rounded:true})}</div>
+      </div>
+      ${comparison ? `<div style="flex:1 1 110px;min-width:0;text-align:right">
+        <div style="${labelStyle}">Индивидуальный проект той же площади</div>
+        <s style="${amountStyle};font-size:27px;color:#b4232e">${comparison}</s>
+      </div>` : ''}
+    </div>`;
   }
   const defaultTitle=card=>(Number(card.floors)===1?'Одноэтажный':Number(card.floors)===3?'Трёхэтажный':'Двухэтажный')+' дом';
   function tabs(card,suffix='',handler='showTab'){
@@ -109,5 +128,5 @@
   function previewPanels(){
     return definitions.map(f=>`<div id="prev-${f.key}" class="catalog-floor-preview" style="display:none"><div class="plan-wrap"><div class="plan-label">${f.title}<span id="prev-a${f.suffix}-badge">— м²</span></div><div class="plan-img-container"><img id="prev-plan${f.suffix}-img" class="plan-img" alt="${f.title}: план" style="display:none"/><span id="prev-plan${f.suffix}-ph" class="catalog-plan-empty">Загрузите план</span></div></div><div class="explication"><div class="expl-header"><span class="expl-header-title">Экспликация</span><span id="prev-total${f.suffix}" class="expl-header-total">— м²</span></div><div id="prev-expl${f.suffix}-rows"></div></div><div style="height:12px"></div></div>`).join('');
   }
-  root.CatalogFloors = Object.freeze({definitions,tags,enabled,active,slots,label,rate,setRates,getRates,autoPrice,price,priceText,individualPriceText,individualPriceHTML,rows,normalizeRooms,calculateAreas,defaultTitle,areaNumber,tabs,panels,editor,previewTabs,previewPanels});
+  root.CatalogFloors = Object.freeze({definitions,tags,enabled,active,slots,label,rate,setRates,getRates,autoPrice,price,priceText,individualPriceText,pricesHTML,rows,normalizeRooms,calculateAreas,defaultTitle,areaNumber,tabs,panels,editor,previewTabs,previewPanels});
 })(typeof window!=='undefined'?window:globalThis);
