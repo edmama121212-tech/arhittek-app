@@ -8,7 +8,7 @@ const root=path.resolve(__dirname,'..');
 const build=crypto.createHash('sha256').update(fs.readFileSync(path.join(root,'index.html'))).digest('hex').slice(0,16);
 async function run(){
  const mode=process.argv[2];
- assert.ok(['conflict','correction'].includes(mode));
+ assert.ok(['conflict','correction','amount'].includes(mode));
  const conflict=mode==='conflict';
  const browser=await chromium.launch({executablePath:process.env.BROWSER_EXECUTABLE||undefined,args:['--no-sandbox']});
  try{
@@ -34,10 +34,11 @@ async function run(){
    const box=await field.boundingBox();assert.ok(box.width>0&&box.x>=0&&box.x+box.width<=391);
    const t=performance.now();await action(field);await frames();stats[key]=Math.round(performance.now()-t);
   }
-  if(!conflict){
+  if(mode==='correction'){
    await change('number',f=>f.fill('АКТ-24'));await change('type',f=>f.selectOption('Работа'));
    await change('category',f=>f.fill('Монтаж'));await change('paid-client',f=>f.check());
   }
+  if(mode==='amount')await change('amount',f=>f.fill('219.48'));
   if(conflict)await change('desc',f=>f.fill('Монтаж перегородки'));
   if(conflict)await p.evaluate(()=>{__db.invoices[0].amount=225;__db.projects[0].expenses=225;});
   const t=performance.now();await sheet.getByRole('button',{name:/Сохранить/}).click();
@@ -50,6 +51,14 @@ async function run(){
    if(conflict){
     assert.equal(actual.row.amount,225);assert.equal(actual.total,225);assert.equal(actual.row.description,'Черновик');
     assert.match(actual.msg,/изменена|обновите/i);assert.equal(await sheet.locator('#invSheet-desc').inputValue(),'Монтаж перегородки');
+   }else if(mode==='amount'){
+    assert.equal(actual.row.amount,219.48);
+    assert.equal(actual.total,219.48);
+    const lines=p.locator('#objSummary .fee-row');
+    for(const text of ['Накладные на материалы','Оплата накладных не подтверждена']){
+     assert.match(await lines.filter({hasText:text}).first().innerText(),/219,48/);
+    }
+    assert.match(await lines.filter({hasText:'Выплачено из денег объекта'}).innerText(),/0 ₽/);
    }else{
     assert.deepEqual([actual.row.number,actual.row.item_type,actual.row.category,actual.row.description,actual.row.paid_by_client,actual.total],['АКТ-24','Работа','Монтаж','Черновик',true,125]);
     await p.locator('#objTabs').getByRole('button',{name:/Работы/}).click();
