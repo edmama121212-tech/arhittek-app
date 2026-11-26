@@ -107,8 +107,6 @@
 
   /* PRICE */
   .price-block{margin:0 12px;padding:12px 0;border-top:1px solid var(--border);}
-  .price-label{font-size:10px;color:var(--text-label);margin-bottom:2px;}
-  .price{font-size:26px;font-weight:700;color:var(--text-primary);line-height:1;margin-bottom:10px;}
   .btn-row{display:flex;gap:7px;}
   .btn-primary{flex:1;background:var(--blue);color:#fff;border:none;border-radius:11px;padding:13px 6px;font-size:13px;font-weight:700;cursor:pointer;}
   .btn-secondary{flex:1;background:#F2F2F2;color:var(--text-primary);border:1.5px solid var(--border);border-radius:11px;padding:12px 6px;font-size:13px;font-weight:500;cursor:pointer;}
@@ -240,8 +238,7 @@ async function refreshCatalogPrices(){
       const card = prices.get(el.dataset.id);
       if(!card) return;
       el.querySelector('.stat-area').textContent = card.total_area || '—';
-      el.querySelector('.price').textContent = CatalogFloors.priceText(card);
-      el.querySelector('.individual-comparison').innerHTML = CatalogFloors.individualPriceHTML(card.total_area, individualDesignRate);
+      el.querySelector('.catalog-prices').innerHTML = CatalogFloors.pricesHTML(card, individualDesignRate);
     });
   } catch(error){
     // A temporarily unavailable refresh is retried on the next interval.
@@ -333,9 +330,7 @@ function buildCardHTML(card, idx){
     </div>
   </div>
   <div class="price-block">
-    <div class="price-label">Стоимость готового проекта</div>
-    <div class="price">${escapeHtml(CatalogFloors.priceText(card))}</div>
-    <div class="individual-comparison">${CatalogFloors.individualPriceHTML(card.total_area, individualDesignRate)}</div>
+    <div class="catalog-prices">${CatalogFloors.pricesHTML(card, individualDesignRate)}</div>
     <div class="btn-row">
       <button class="btn-primary" data-number="${escapeHtml(String(card.project_number||''))}" data-title="${escapeHtml(card.title)}" onclick="wa(this)">Получить проект</button>
       <button class="btn-secondary" data-number="${escapeHtml(String(card.project_number||''))}" data-title="${escapeHtml(card.title)}" onclick="wa(this)">Консультация</button>
