@@ -124,7 +124,7 @@ function renderTzList(projectId){
     const answers = f.answers || {};
     const filledCount = Object.keys(answers).filter(k=>answers[k] && answers[k]!=='').length;
     const hasData = filledCount > 0;
-    const statusLabel = hasData ? `Заполняется (${filledCount} полей)` : 'Пусто — ссылка отправлена';
+    const statusLabel = hasData ? `Заполняется (${filledCount} полей)` : 'Ссылка создана · ответов пока нет';
     const statusColor = hasData ? 'var(--green)' : 'var(--gold)';
     const url = tzFormUrl(f.token);
     const lastSaved = f.submitted_at || f.created_at;
@@ -174,7 +174,7 @@ async function createTzForm(){
     const {data, error} = await sb.from('tz_forms').insert({
       project_id: editingProjectId,
       token,
-      status: 'Отправлено',
+      status: 'Ссылка создана',
       answers: landscapeTzSeed(p),
     }).select().single();
     if(error) throw error;
@@ -473,12 +473,12 @@ function renderKpServices(){
     const item = kpServiceItem(s);
     const effectiveRate = (s.customRate !== null && s.customRate !== undefined) ? s.customRate : item.rate;
     const selectedIndex=flat.findIndex(it=>it.name===item.name && it.unit===item.unit && Number(it.rate)===Number(item.rate) && (it.desc||'')===(item.desc||'') && (!item.id || it.id===item.id));
-    let optionsHtml = selectedIndex<0 ? `<option value="snapshot" selected>Согласовано: ${escapeHtml(item.name)} (${fmt(item.rate)} ₽/${escapeHtml(item.unit)})</option>` : '';
+    let optionsHtml = selectedIndex<0 ? `<option value="snapshot" selected>Согласовано: ${escapeHtml(item.name)} (${kpNumber(item.rate)} ₽/${escapeHtml(item.unit)})</option>` : '';
     let flatIdx = 0;
     groups.forEach(g=>{
       optionsHtml += `<optgroup label="${escapeHtml(g.group)}">`;
       g.items.forEach(it=>{
-        optionsHtml += `<option value="${flatIdx}" ${flatIdx===selectedIndex?'selected':''}>${escapeHtml(it.name)} (${fmt(it.rate)} ₽/${it.unit})</option>`;
+        optionsHtml += `<option value="${flatIdx}" ${flatIdx===selectedIndex?'selected':''}>${escapeHtml(it.name)} (${kpNumber(it.rate)} ₽/${it.unit})</option>`;
         flatIdx++;
       });
       optionsHtml += `</optgroup>`;

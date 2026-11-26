@@ -72,9 +72,12 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
  await fresh();
  await check('A late catalogue image upload never overwrites another opened card',async()=>{
   openCardEditor('card-a');document.getElementById('ce-title').value='Edited first house';
+  ceImages[0]='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
   const original=uploadCardImages;let release;let first=true;
   uploadCardImages=async images=>{if(first){first=false;await new Promise(r=>release=r);return ['https://example.invalid/first-house.jpg'];}return [];};
-  const pending=saveCard();while(!release)await new Promise(r=>setTimeout(r,0));
+  const pending=saveCard();
+  for(let i=0;!release&&i<100;i++)await new Promise(r=>setTimeout(r,5));
+  if(!release)throw new Error('The edited image never reached uploadCardImages');
   closeCardEditor();openCardEditor('card-b');document.getElementById('ce-title').value='Unsaved second-house draft';
   release();await pending;uploadCardImages=original;
   return [__db.project_cards.find(c=>c.id==='card-b').title,__db.project_cards.find(c=>c.id==='card-b').images,__db.project_cards.find(c=>c.id==='card-a').title,document.getElementById('cardEditorOverlay').style.display,document.getElementById('ce-title').value];

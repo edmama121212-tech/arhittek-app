@@ -6,16 +6,19 @@ const rolesWithDocuments=new Set(['ведущий архитектор','вед�
 window.updateEmployeeAccessSummary=function(){
   const select=document.getElementById('ef-role'),summary=document.getElementById('ef-role-access');
   if(!select||!summary)return;
-  const owner=!!(editingEmployeeId&&(state.employees||[]).find(e=>e.id===editingEmployeeId)?.is_admin);
+  const owner=isOwner()&&editingEmployeeId===session.employeeId;
   const lead=rolesWithDocuments.has(select.value.trim().toLowerCase());
-  summary.textContent=owner?'Мансур: все проекты и все разделы. Должность не ограничивает владельца.':
-    lead?'Создание и просмотр своих проектов. В «Ещё» доступны КП и Договор. Финансы и табель закрыты.':
-    'Только свои проекты. Раздел «Ещё», финансы и табель закрыты.';
+  const projects=document.getElementById('ef-see-projects').checked;
+  const construction=document.getElementById('ef-see-construction').checked;
+  const sections=[projects?'свои проекты':'',construction?'свои объекты стройки':''].filter(Boolean);
+  const access=sections.length?'Доступны '+sections.join(' и ')+'.':'Проектный и строительный разделы выключены.';
+  summary.textContent=owner?'Владелец видит все проекты и все разделы.':
+    access+(lead?' В «Ещё» доступны КП и Договор.':' Раздел «Ещё» закрыт.')+' Финансы и табель закрыты.';
   const active=document.getElementById('ef-active'),del=document.getElementById('ef-delete');
   if(active)active.disabled=owner;
   if(del&&owner)del.style.display='none';
 };
-document.getElementById('ef-role')?.addEventListener('change',window.updateEmployeeAccessSummary);
+for(const id of ['ef-role','ef-see-projects','ef-see-construction'])document.getElementById(id)?.addEventListener('change',window.updateEmployeeAccessSummary);
 const buttonViews={settingsBtn:'view-settings',exportXlsxBtn:'view-finance',openTimesheetBtn:'view-timesheet',
   premiumOpenPayroll:'view-timesheet',openKpBtn:'view-kp',openContractsBtn:'view-contracts',
   openCompanyBtn:'view-company',openPriceListBtn:'view-company',openFamilyTreeBtn:'view-family-tree'};

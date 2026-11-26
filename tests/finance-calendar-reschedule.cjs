@@ -21,9 +21,32 @@ const quote = value => '"' + String(value).replaceAll('"', '""') + '"';
 const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 
 (async () => {
+  const cardTiming = process.argv.includes('--card-timing');
+  const recordReversal = process.argv.includes('--record-reversal');
+  const paymentPayee = process.argv.includes('--payment-payee');
+  const paymentClose = process.argv.includes('--payment-close');
+  const cardTest = paymentClose?'./helpers/payment-close-ui.cjs':paymentPayee?'./helpers/payment-payee-ui.cjs':'./helpers/card-payment-ui.cjs';
+  const cardPayment = paymentClose || paymentPayee || process.argv.includes('--card-payment') || process.argv.includes('--merged-receipt');
+  const receiptDate = process.argv.includes('--receipt-date');
+  const feeTeamReversal = process.argv.includes('--fee-team-reversal');
+  const journalReverse = feeTeamReversal || process.argv.includes('--journal-reverse');
+  const projectSchedule = process.argv.includes('--project-schedule');
+  const releasePlan = process.argv.includes('--release-plan');
+  const salaryRule = process.argv.includes('--salary-rule');
+  const storageCreate = process.argv.includes('--storage-create');
+  const reserveAdjust = process.argv.includes('--reserve-adjust');
+  const walletTransfer = process.argv.includes('--wallet-transfer');
+  const incomePlan = process.argv.includes('--income-plan');
+  const expensePlan = process.argv.includes('--expense-plan');
+  const cancelPlan = process.argv.includes('--cancel-plan');
+  const paymentLinks = process.argv.includes('--payment-links');
+  const unlinkPayments = process.argv.includes('--unlink-payments');
+  const stopRule = process.argv.includes('--stop-rule');
+  const createRule = process.argv.includes('--create-rule');
   const recurring = process.argv.includes('--recurring');
   const homeActions = process.argv.includes('--home-actions');
   const cashFloor = process.argv.includes('--cash-floor');
+  const dedicated = recordReversal || cardTiming || journalReverse || cardPayment || receiptDate || salaryRule || releasePlan || storageCreate || incomePlan || projectSchedule || reserveAdjust || expensePlan || walletTransfer || cancelPlan || paymentLinks || unlinkPayments || stopRule || createRule || recurring || homeActions || cashFloor;
   const db = new PGlite();
   await db.waitReady;
   const browser = await chromium.launch({executablePath:process.env.BROWSER_EXECUTABLE || undefined, args:['--no-sandbox']});
@@ -32,10 +55,32 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
     await db.query("insert into public.employees(id,name,role,is_admin) values($1,'Мансур','Генеральный директор',true)", [uuid(1)]);
     await db.query("insert into public.employee_sessions(employee_id,token,expires_at) values($1,$2,now()+interval '1 day')", [uuid(1), token]);
     for (const file of ['supabase/install-owner-access.sql', 'supabase/financial-journal.sql',
-      ...fs.readdirSync(path.join(root, 'supabase/migrations')).filter(name => /^20261030|^20261031|^20261101|employee_salary_history\.sql$|finance_payment_integrity\.sql$|recurring_replacement\.sql$|finance_spending_limits\.sql$/.test(name)).sort().map(name => 'supabase/migrations/' + name)]) {
+      ...fs.readdirSync(path.join(root, 'supabase/migrations')).filter(name => /^20261030|^20261031|^20261101|employee_salary_history\.sql$|(?:finance_(?:payment_integrity|link_details)|project_schedule_balance)\.sql$|recurring_(?:replacement|stop)\.sql$|(?:finance_spending_limits|storage_names|salary_rule_direction)\.sql$/.test(name)).sort().map(name => 'supabase/migrations/' + name)]) {
       await db.exec(read(file));
     }
-    if(homeActions){
+    if(!recordReversal)await db.exec(read('supabase/migrations/20261120100000_record_reversal.sql'));
+    if(feeTeamReversal)await require('./helpers/fee-team-reversal-ui.cjs').seed(db,uuid);
+    if(cardTiming){
+      await db.exec(read('supabase/receipt-timing.sql'));
+      await require('./helpers/card-timing-ui.cjs').prepare(db,uuid,root);
+    }
+    if(cardPayment){
+      await db.exec(read('supabase/receipt-timing.sql'));
+      await db.exec(read('supabase/migrations/20261120090000_project_card_payment.sql'));
+      await require(cardTest).prepare(db,uuid);
+    }
+    if(receiptDate){
+      await db.exec(read('supabase/receipt-timing.sql'));
+      await require('./helpers/receipt-date-ui.cjs').prepare(db,uuid);
+    }
+    if(projectSchedule){
+      for(let i=0;i<12;i++)await db.query('insert into public.projects(id,name,price,advance,balance) values($1,$2,1200,200,1000)',[uuid(4200+i),'Учебный дом '+(i===4?3:i)]);
+    }
+    if(releasePlan){
+      await db.query("insert into public.projects(id,name,price,balance) values($1,'Учебный павильон',10000,10000),($2,'Учебный сад',20000,20000)",[uuid(8901),uuid(8902)]);
+    }
+    if(salaryRule)await require('./helpers/salary-rule-ui.cjs').seed(db,uuid);
+    if(homeActions || incomePlan){
       await db.query("insert into public.projects(id,name,price,balance) values($1,'Тестовый павильон',10000,10000)",[uuid(701)]);
     }
     await db.exec('set role anon');
@@ -61,15 +106,16 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
     ];
     const plan = (label, direction, due_date, amount) => ({label, direction, due_date, amount, funding:'reserve', certainty:'confirmed',reason:'Изолированное обязательство'});
     const idFor = i => i === 7 ? 'rule:'+uuid(27)+':'+month.slice(0,7) : uuid(20+i);
-    for (const [i,[,label,direction,from]] of (recurring || homeActions || cashFloor ? [] : cases).entries()) {
+    for (const [i,[,label,direction,from]] of (dedicated ? [] : cases).entries()) {
       if(i===7) await command('rule',{label,direction,amount:1007,due_day:10,start_month:month,certainty:'confirmed',reason:'Тестовое регулярное обязательство'},uuid(27));
       else await command('plan',plan(label,direction,from,1000+i),uuid(20+i));
     }
-    if(!recurring && !homeActions && !cashFloor) await command('plan',plan(cases[6][1],'expense',day,2000),uuid(50));
-    if(!recurring && !homeActions && !cashFloor) await command('pay',{key:idFor(5),amount:407.75,wallet_id:wallet,date:day,reason:'Часть суммы уже оплачена'},uuid(51));
+    if(!dedicated) await command('plan',plan(cases[6][1],'expense',day,2000),uuid(50));
+    if(!dedicated) await command('pay',{key:idFor(5),amount:407.75,wallet_id:wallet,date:day,reason:'Часть суммы уже оплачена'},uuid(51));
 
-    const ctx = await browser.newContext({locale:'ru-RU',viewport:{width:390,height:844},serviceWorkers:'block',reducedMotion:'reduce'});
-    await ctx.addInitScript({path:path.join(__dirname,'mock.js')});
+    const ctx = await browser.newContext({hasTouch:walletTransfer||createRule||stopRule||paymentLinks||unlinkPayments||cancelPlan,locale:'ru-RU',viewport:{width:390,height:844},serviceWorkers:'block',reducedMotion:'reduce'});
+    if(paymentClose)await ctx.addInitScript({content:'const nativeConfirm=window.confirm;\n'+read('tests/mock.js')+'\nwindow.confirm=nativeConfirm;'});
+    else await ctx.addInitScript({path:path.join(__dirname,'mock.js')});
     const servedHashes = {};
     await ctx.route('**/*',route=>{
       const url = new URL(route.request().url());
@@ -111,6 +157,91 @@ const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnim
     const csv = [['Элемент','Сборка SHA256 index/finance-workspace','Дата UTC','Браузер','Задача','Данные','Шаги','Результат и связи','Открытие до 2 кадров, мс','Завершение до 2 кадров, мс','Визуальная проверка','Удобство','Статус']];
     if(qa) fs.mkdirSync(qa,{recursive:true});
     await page.locator('.nav-btn[data-view="view-finance"]').click();
+    if(cardTiming){
+      await require('./helpers/card-timing-ui.cjs').run({page,fw,db,uuid,day,shift,snap,build,browser,expectedTile,twoFrames});
+      assert.deepEqual(errors,[]);
+      return;
+    }
+    if(cardPayment){
+      await require(cardTest).run({page,db,uuid,day,shift,snap,build,browser,expectedTile,twoFrames});
+      assert.deepEqual(errors,[]);
+      return;
+    }
+    if(receiptDate){
+      await require('./helpers/receipt-date-ui.cjs').run({page,fw,db,command,snap,wallet,uuid,day,shift,build,browser,expectedTile,twoFrames});
+      assert.deepEqual(errors,[]);
+      return;
+    }
+    if(projectSchedule){
+      await require('./helpers/project-schedule-ui.cjs')({page,fw,db,command,snap,wallet,uuid,day,shift,build,browser,expectedTile,twoFrames});
+      assert.deepEqual(errors,[]);
+      return;
+    }
+    if(releasePlan){
+      await require('./helpers/release-plan-ui.cjs')({page,fw,db,command,snap,day,shift,wallet,uuid,build,browser,expectedTile,twoFrames});
+      assert.deepEqual(errors,[]);
+      return;
+    }
+    if(salaryRule){
+      await require('./helpers/salary-rule-ui.cjs').run({page,fw,db,command,snap,wallet,uuid,day,shift,build,browser,expectedTile,twoFrames});
+      assert.deepEqual(errors,[]);
+      return;
+    }
+    if(recordReversal){
+      await require('./helpers/record-reversal-ui.cjs')({page,fw,db,command,snap,day,wallet,uuid,shift,build,browser,expectedTile,twoFrames,root,read});
+      assert.deepEqual(errors,[]);return;
+    }
+    if(journalReverse){
+      const reverseCases=feeTeamReversal?require('./helpers/fee-team-reversal-ui.cjs').run:require('./helpers/journal-reverse-ui.cjs');
+      await reverseCases({page,fw,db,command,snap,day,wallet,uuid,build,browser,expectedTile,twoFrames});
+      assert.deepEqual(errors,[]);
+      return;
+    }
+    if(storageCreate){
+      await require('./helpers/storage-create-ui.cjs')({page,fw,command,snap,wallet,uuid,build,browser,expectedTile,twoFrames});
+      assert.deepEqual(errors,[]);
+      return;
+    }
+    if(reserveAdjust){
+      await require('./helpers/reserve-adjust-ui.cjs')({page,fw,command,snap,wallet,uuid,build,browser,expectedTile,twoFrames});
+      assert.deepEqual(errors,[]);
+      return;
+    }
+    if(walletTransfer){
+      await require('./helpers/wallet-transfer-ui.cjs')({page,fw,command,snap,day,wallet,uuid,build,browser,expectedTile,twoFrames});
+      assert.deepEqual(errors,[]);
+      return;
+    }
+    if(incomePlan){
+      await require('./helpers/income-plan-ui.cjs')({page,fw,db,day,snap,shift,uuid,build,browser,expectedTile,twoFrames});
+      assert.deepEqual(errors,[]);
+      return;
+    }
+    if(expensePlan){
+      await require('./helpers/expense-plan-ui.cjs')({page,fw,snap,day,shift,build,browser,expectedTile,twoFrames});
+      assert.deepEqual(errors,[]);
+      return;
+    }
+    if(cancelPlan){
+      await require('./helpers/cancel-plan-ui.cjs')({page,fw,db,command,snap,day,wallet,uuid,shift,build,browser,expectedTile,twoFrames,errors});
+      assert.deepEqual(errors,[]);
+      return;
+    }
+    if(paymentLinks || unlinkPayments){
+      const test = paymentLinks ? './helpers/link-payment-ui.cjs' : './helpers/unlink-payment-ui.cjs';
+      await require(test)({page,fw,db,command,snap,day,wallet,uuid,shift,build,browser,expectedTile,twoFrames,errors});
+      assert.deepEqual(errors,[]);
+      return;
+    }
+    if(stopRule){
+      await require('./helpers/stop-rule-ui.cjs')({page,fw,db,command,snap,day,wallet,uuid,shift,build,browser,expectedTile,twoFrames});
+      assert.deepEqual(errors,[]);
+      return;
+    }
+    if(createRule){
+      await require('./helpers/create-rule-ui.cjs')({page,fw,snap,day,shift,build,browser,expectedTile,twoFrames,errors});
+      return;
+    }
     if(cashFloor){
       await require('./helpers/cash-floor-ui.cjs')({page,fw,db,command,snap,day,wallet,uuid,build,browser,expectedTile,twoFrames,errors});
       return;

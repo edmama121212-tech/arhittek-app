@@ -21,8 +21,9 @@
         <input type="text" id="invSheet-number" placeholder="напр. БИ 14.04.26">
       </div>
       <div class="field">
-        <label>Дата накладной</label>
-        <input type="date" id="invSheet-date">
+        <label for="invSheet-date">Дата накладной</label>
+        <input type="date" id="invSheet-date" aria-describedby="invSheet-date-hint">
+        <small id="invSheet-date-hint" hidden>До этой даты накладная не входит в расходы объекта.</small>
       </div>
     </div>
 
@@ -72,7 +73,7 @@
 
     <div style="display:flex;gap:8px;margin-top:6px;">
       <button class="btn btn-primary" style="flex:1;" onclick="saveInvoiceSheet()">💾 Сохранить</button>
-      <button class="btn" style="flex:0 0 auto;background:rgba(224,82,82,0.15);color:var(--red);border:1px solid rgba(224,82,82,0.35);" onclick="deleteInvoiceSheet()">🗑 Удалить</button>
+      <button class="btn" style="width:auto;flex:0 0 auto;background:rgba(224,82,82,0.15);color:var(--red);border:1px solid rgba(224,82,82,0.35);" onclick="deleteInvoiceSheet()">🗑 Удалить</button>
     </div>
   </div>
 </div>

@@ -55,7 +55,7 @@ function renderObjectSummary(p){
     ? `<div style="background:rgba(232,163,61,0.12); border:1px solid rgba(232,163,61,0.3); border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:12px; color:var(--gold);">⚠ Приход от заказчика не зарегистрирован — добавьте поступление для корректного расчёта остатка.</div>`
     : '';
   const overspentWarning = isOverspent
-    ? `<div style="background:rgba(224,82,82,0.12); border:1px solid rgba(224,82,82,0.3); border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:12px; color:var(--red);">Перерасход по журналу — ${fmtMoney(cashOverspend)}. Проверьте финансирование объекта.</div>`
+    ? `<div style="background:rgba(224,82,82,0.12); border:1px solid rgba(224,82,82,0.3); border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:12px; color:var(--red);">Перерасход по журналу — ${constructionMoney(cashOverspend)}. Проверьте финансирование объекта.</div>`
     : '';
 
   document.getElementById('objSummary').innerHTML = `
@@ -63,16 +63,16 @@ function renderObjectSummary(p){
     <div class="note">Остаток рассчитан по денежному журналу объекта. Неоплаченные накладные и начисления показаны отдельно; фактическое наличие денег требует сверки.</div>
     ${undatedCashRows?'<div class="note" style="color:var(--red)">Есть денежные записи без даты: '+undatedCashRows+'. Историю нужно уточнить.</div>':''}
     <div class="fee-card">
-      <div class="fee-row"><div class="fl">Получено компанией от заказчика</div><div class="fv" style="color:var(--green)">${fmtMoney(received)}</div></div>
-      <div class="fee-row"><div class="fl">Выплачено из денег объекта</div><div class="fv" style="color:var(--red)">${fmtMoney(cashOutgoing)}</div></div>
-      <div class="fee-row total"><div class="fl">Деньги объекта по журналу</div><div class="fv" style="color:${isOverspent?'var(--red)':'var(--gold)'}">${fmtMoney(cashRemaining)}</div></div>
-      ${directPaid > 0 ? `<div class="fee-row"><div class="fl">Заказчик оплатил поставщикам напрямую</div><div class="fv">${fmtMoney(directPaid)}</div></div>` : ''}
-      <div class="fee-row"><div class="fl">Накладные на материалы</div><div class="fv">${fmtMoney(matTotal)}</div></div>
-      <div class="fee-row"><div class="fl">Накладные на работы</div><div class="fv">${fmtMoney(workTotal)}</div></div>
-      ${otherTotal>0?`<div class="fee-row"><div class="fl">Прочие накладные</div><div class="fv">${fmtMoney(otherTotal)}</div></div>`:''}
-      ${manualTotal>0?`<div class="fee-row"><div class="fl">Расходы без накладной</div><div class="fv">${fmtMoney(manualTotal)}</div></div>`:''}
-      <div class="fee-row"><div class="fl">Оплата накладных не подтверждена</div><div class="fv">${fmtMoney(unpaidInvoices)}</div></div>
-      ${rolePayouts>0?`<div class="fee-row"><div class="fl">Начисления за объёмы работ</div><div class="fv">${fmtMoney(rolePayouts)}</div></div>`:''}
+      <div class="fee-row"><div class="fl">Получено компанией от заказчика</div><div class="fv" style="color:var(--green)">${constructionMoney(received)}</div></div>
+      <div class="fee-row"><div class="fl">Выплачено из денег объекта</div><div class="fv" style="color:var(--red)">${constructionMoney(cashOutgoing)}</div></div>
+      <div class="fee-row total"><div class="fl">Деньги объекта по журналу</div><div class="fv" style="color:${isOverspent?'var(--red)':'var(--gold)'}">${constructionMoney(cashRemaining)}</div></div>
+      ${directPaid > 0 ? `<div class="fee-row"><div class="fl">Заказчик оплатил поставщикам напрямую</div><div class="fv">${constructionMoney(directPaid)}</div></div>` : ''}
+      <div class="fee-row"><div class="fl">Накладные на материалы</div><div class="fv">${constructionMoney(matTotal)}</div></div>
+      <div class="fee-row"><div class="fl">Накладные на работы</div><div class="fv">${constructionMoney(workTotal)}</div></div>
+      ${otherTotal>0?`<div class="fee-row"><div class="fl">Прочие накладные</div><div class="fv">${constructionMoney(otherTotal)}</div></div>`:''}
+      ${manualTotal>0?`<div class="fee-row"><div class="fl">Расходы без накладной</div><div class="fv">${constructionMoney(manualTotal)}</div></div>`:''}
+      <div class="fee-row"><div class="fl">Оплата накладных не подтверждена</div><div class="fv">${constructionMoney(unpaidInvoices)}</div></div>
+      ${rolePayouts>0?`<div class="fee-row"><div class="fl">Начисления за объёмы работ</div><div class="fv">${constructionMoney(rolePayouts)}</div></div>`:''}
     </div>
     ${constructionCompanyFeePlanHtml(p,fin)}
     <div id="objIncomeHistoryBlock"></div>
@@ -113,7 +113,7 @@ function renderObjectIncomeHistory(projectId){
         const emp = e.received_by ? findEmployee(e.received_by) : null;
         return `<div class="list-item">
           <div>
-            <div class="li-name" style="color:var(--green);">+ ${fmtMoney(e.amount)}</div>
+            <div class="li-name" style="color:var(--green);">+ ${constructionMoney(e.amount)}</div>
             <div class="li-meta">${fmtDate(e.entry_date)}${emp?' · принял: '+escapeHtml(emp.name):''}${e.description?' · '+escapeHtml(e.description):''}</div>
           </div>
           <div class="li-actions">
@@ -126,7 +126,7 @@ function renderObjectIncomeHistory(projectId){
   container.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;">
       <div class="section-label" style="margin:0;flex:1;">
-        <span class="lbl-text">История поступлений${entries.length ? ' · получено '+fmtMoney(received) : ''}</span>
+        <span class="lbl-text">История поступлений${entries.length ? ' · получено '+constructionMoney(received) : ''}</span>
         <span class="section-label-line"></span>
       </div>
     </div>
@@ -147,7 +147,7 @@ function makeInvoiceRow(inv){
         ${inv.paid_by_client ? `<span class="inv-type-badge" style="background:rgba(232,163,61,0.15);color:var(--gold);" title="Заказчик оплатил напрямую, минуя компанию">🤝 Оплачено заказчиком</span>` : ''}
       </div>
       <div class="inv-right">
-        <div class="inv-amount ${typeCls}">${fmtMoney(inv.amount)}</div>
+        <div class="inv-amount ${typeCls}">${constructionMoney(inv.amount)}</div>
         ${inv.invoice_date ? `<div class="inv-date">${fmtDate(inv.invoice_date)}</div>` : ''}
         ${inv.photo_url ? `<span style="font-size:14px;" title="Есть фото">📎</span>` : ''}
       </div>
@@ -189,7 +189,7 @@ function renderObjInvoiceList(kind){
   listEl.innerHTML =
     `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 2px 8px;font-size:11px;color:var(--text-dim);">
        <span>${filtered.length} ${q?'найдено':'записей'}</span>
-       <span style="font-weight:700;color:var(--text);">Итого: ${fmtMoney(total)}</span>
+       <span style="font-weight:700;color:var(--text);">Итого: ${constructionMoney(total)}</span>
      </div>` +
     filtered.map(makeInvoiceRow).join('');
 }
@@ -237,7 +237,7 @@ function buildInvoiceGroupsHtml(invoices){
             <span class="inv-type-badge inv-type-${inv.item_type==='Работа'?'work':inv.item_type==='Доставка'?'del':'mat'}">${escapeHtml(inv.item_type)}</span>
           </div>
           <div class="inv-right">
-            <div class="inv-amount ${inv.item_type==='Работа'?'work':inv.item_type==='Доставка'?'del':'mat'}">${fmtMoney(inv.amount)}</div>
+            <div class="inv-amount ${inv.item_type==='Работа'?'work':inv.item_type==='Доставка'?'del':'mat'}">${constructionMoney(inv.amount)}</div>
             ${inv.invoice_date ? `<div class="inv-date">${fmtDate(inv.invoice_date)}</div>` : ''}
             ${inv.photo_url ? `<span style="font-size:14px;" title="Есть фото">📎</span>` : ''}
           </div>
@@ -260,7 +260,7 @@ function buildInvoiceGroupsHtml(invoices){
         })(this)">
           <div class="inv-cat-name">${escapeHtml(catName)}</div>
           <div style="display:flex;align-items:center;gap:6px">
-            <div class="inv-cat-total">${fmtMoney(catTotal)}</div>
+            <div class="inv-cat-total">${constructionMoney(catTotal)}</div>
             ${hasMore?`<span style="font-size:10px;color:var(--text-muted)">${sorted.length} шт.</span>`:''}
             <span class="cat-toggle" style="font-size:10px;color:var(--text-muted)">▼</span>
           </div>
@@ -353,7 +353,7 @@ function renderObjTabContent(){
         ${photos.length ? photos.map(ph=>`
           <div class="photo-thumb">
             ${isInvoicePdf(ph.photo_url)?'<div style="padding:16px;text-align:center">📄 PDF</div>':`<img src="${escapeHtml(ph.photo_url)}" alt="" loading="lazy">`}
-            ${ph.amount ? `<div class="photo-amt">${fmtMoney(ph.amount)}</div>` : ''}
+            ${ph.amount ? `<div class="photo-amt">${constructionMoney(ph.amount)}</div>` : ''}
             ${ph.invoice_id?`<button type="button" class="btn btn-secondary" style="padding:6px;font-size:11px" data-photo-invoice="${escapeHtml(ph.invoice_id)}">${escapeHtml(ph.sourceLabel)}</button>`:''}
           </div>`).join('') : '<div class="empty-state" style="grid-column:1/-1; padding:14px;">Фото пока нет</div>'}
       </div>

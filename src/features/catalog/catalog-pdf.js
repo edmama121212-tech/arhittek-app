@@ -319,6 +319,11 @@
     if(file.type!=='application/pdf'&&!/\.pdf$/i.test(file.name||'')){showToast('Перетащите PDF-файл архитектурного альбома');return;}
     if(!canEditCards()){showToast('Нет доступа к импорту каталога');return;}
     if(active){showToast('Дождитесь завершения текущего импорта');return;}
+    const editor=document.getElementById('cardEditorOverlay');
+    if(editor?.dataset.dirty==='1' && getComputedStyle(editor).display!=='none'){
+      showToast('Сначала сохраните карточку или закройте её перед загрузкой другого альбома');
+      return;
+    }
     openCardEditor(null);const generation=cardEditorGeneration,actor=session?.token;
     const job={cancelled:false,saving:false,onProgress:status,shouldStop:()=>generation!==cardEditorGeneration||!canEditCards()||session?.token!==actor};active=job;
     const panel=document.getElementById('cardEditorOverlay');job.controls=[...panel.querySelectorAll('input,textarea,select,button')].filter(el=>el.id!=='ce-pdf-cancel'&&!String(el.getAttribute('onclick')).includes('closeCardEditor')).map(el=>[el,el.disabled]);
@@ -362,7 +367,6 @@
       const files=Array.from(event.dataTransfer.files||[]),items=Array.from(event.dataTransfer.items||[]);
       if(items.some(item=>item.webkitGetAsEntry?.()?.isDirectory)){showToast('Перетащите PDF-файл, а не папку');return;}
       if(files.length!==1){showToast('Загружайте по одному PDF-альбому');return;}
-      if(target===block&&document.getElementById('cardEditorOverlay').dataset.dirty==='1'){showToast('Сначала сохраните карточку или закройте её перед загрузкой другого альбома');return;}
       void startFile(files[0]);
     });
   }

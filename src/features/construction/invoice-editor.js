@@ -2,10 +2,23 @@
 // ОВЕРЛЕЙ НАКЛАДНОЙ — просмотр / редактирование / удаление
 // ============================================================
 let invSheetCurrentId = null;
+let openedInvoice = null;
 let invSheetNewPhotoBlob = null;
 let invoiceFormGeneration = 0;
 let invSheetRemoveAttachment = false;
 const invoiceSheetSavesInFlight = new Set();
+
+function syncInvoiceActions(){
+  const busy=invoiceSheetSavesInFlight.has(invSheetCurrentId);
+  for(const button of document.querySelectorAll('#invoiceSheetOverlay button[onclick="saveInvoiceSheet()"], #invoiceSheetOverlay button[onclick="deleteInvoiceSheet()"]')){
+    button.disabled=busy;
+  }
+}
+
+function updateInvoiceDateHint(){
+  document.getElementById('invSheet-date-hint').hidden=document.getElementById('invSheet-date').value<=financeToday();
+}
+document.getElementById('invSheet-date').addEventListener('input',updateInvoiceDateHint);
 
 function openInvoiceSheet(invId){
   const inv = state.invoices.find(i=>i.id===invId);
@@ -13,12 +26,14 @@ function openInvoiceSheet(invId){
   if(!canAccessConstructionProject(inv.project_id)){showToast('Нет доступа к этому объекту');return;}
   invoiceFormGeneration++;
   invSheetCurrentId = invId;
+  openedInvoice = {...inv};
   invSheetNewPhotoBlob = null;
   invSheetRemoveAttachment = false;
 
   // Заполняем поля
   document.getElementById('invSheet-number').value   = inv.number || '';
   document.getElementById('invSheet-date').value     = inv.invoice_date || '';
+  updateInvoiceDateHint();
   document.getElementById('invSheet-type').value     = inv.item_type || 'Материал';
   document.getElementById('invSheet-amount').value   = inv.amount || '';
   document.getElementById('invSheet-category').value = inv.category || '';
@@ -32,13 +47,14 @@ function openInvoiceSheet(invId){
 
   const overlay = document.getElementById('invoiceSheetOverlay');
   overlay.querySelector('button[onclick="closeInvoiceSheet()"]').classList.add('sheet-close');
-  overlay.querySelector('button[onclick="saveInvoiceSheet()"]').disabled=invoiceSheetSavesInFlight.has(invId);
+  syncInvoiceActions();
   overlay.style.display = 'flex';
 }
 
 function closeInvoiceSheet(){
   document.getElementById('invoiceSheetOverlay').style.display = 'none';
   invSheetCurrentId = null;
+  openedInvoice = null;
   invSheetNewPhotoBlob = null;
   invSheetRemoveAttachment = false;
 }
@@ -79,6 +95,25 @@ function onInvSheetPhotoChange(input){
   invSheetNewPhotoBlob=input.files[0] || null;
   restoreInvoiceAttachment();
 }
+
+async function refreshInvoiceExpenseTotal(projectId,actor){
+  const result=await fetchAllRows(()=>sb.from('invoices').select('*',{count:'exact'}).eq('project_id',projectId));
+  if(result.error)throw result.error;
+  const project=state.projects.find(row=>row.id===projectId);
+  if(!project||!canAccessConstructionProject(projectId,actor))throw new Error('Сеанс или доступ к объекту изменился');
+  const total=getConstructionExpenses(project,null,result.data).expenses;
+  const update=await sb.from('projects').update({expenses:Math.round(total*100)/100}).eq('id',projectId);
+  if(update.error)throw update.error;
+}
+
+function matchOpenedInvoice(query,invoice){
+  query=query.eq('id',invoice.id).eq('project_id',invoice.project_id);
+  for(const key of ['amount','invoice_date','number','item_type','description','category','photo_url','paid_by_client','updated_at']){
+    if(Object.hasOwn(invoice,key))query=invoice[key]==null?query.is(key,null):query.eq(key,invoice[key]);
+  }
+  return query;
+}
+
 async function saveInvoiceSheet(){
   if(!invSheetCurrentId) return;
   const invoiceId=invSheetCurrentId,generation=invoiceFormGeneration;
@@ -87,7 +122,7 @@ async function saveInvoiceSheet(){
   if(!currentInvoice) return;
   if(!canAccessConstructionProject(currentInvoice.project_id)){showToast('Нет доступа к этому объекту');return;}
   const actor={employeeId:session.employeeId,token:session.token,isAdmin:!!session.isAdmin};
-  const inv={...currentInvoice},photoBlob=invSheetNewPhotoBlob,removeAttachment=invSheetRemoveAttachment;
+  const inv=openedInvoice,photoBlob=invSheetNewPhotoBlob,removeAttachment=invSheetRemoveAttachment;
 
   const number       = document.getElementById('invSheet-number').value.trim();
   const invoice_date = document.getElementById('invSheet-date').value || null;
@@ -108,8 +143,7 @@ async function saveInvoiceSheet(){
   if(!invoice_date){ showToast('Укажите дату накладной'); return; }
 
   invoiceSheetSavesInFlight.add(invoiceId);
-  const saveButton=document.querySelector('#invoiceSheetOverlay button[onclick="saveInvoiceSheet()"]');
-  saveButton.disabled=true;
+  syncInvoiceActions();
   let persisted=false;
   showToast('Сохранение…');
   try{
@@ -121,19 +155,22 @@ async function saveInvoiceSheet(){
     }
 
     if(!canAccessConstructionProject(inv.project_id,actor))throw new Error('Сеанс или доступ к объекту изменился');
-    const {data,error} = await sb.from('invoices').update(changes).eq('id', invoiceId).select('id').maybeSingle();
+    const {data,error} = await matchOpenedInvoice(sb.from('invoices').update(changes),inv).select('id').maybeSingle();
     if(error) throw error;
-    if(!data)throw new Error('Накладная не найдена. Обновите список перед повтором');
+    if(!data){
+      await loadAll();
+      if(currentObjectId===inv.project_id){
+        const current=state.projects.find(project=>project.id===inv.project_id);
+        if(current){renderObjectSummary(current);renderObjTabContent();}
+      }
+      showToast('Накладная изменена или удалена. Скопируйте нужные правки и откройте документ заново.');
+      return;
+    }
     persisted=true;
 
     // Read the complete server total: another invoice may have changed while
     // this photo was uploading. Never copy the amount into the next open row.
-    const totals=await fetchAllRows(()=>sb.from('invoices').select('id,amount',{count:'exact'}).eq('project_id',inv.project_id).order('id'));
-    if(totals.error)throw totals.error;
-    const newTotal=(totals.data||[]).reduce((sum,row)=>sum+Number(row.amount||0),0)+getConstructionExpenses(state.projects.find(p=>p.id===inv.project_id)).manualTotal;
-    if(!canAccessConstructionProject(inv.project_id,actor))throw new Error('Сеанс или доступ к объекту изменился');
-    const update=await sb.from('projects').update({expenses: newTotal}).eq('id', inv.project_id);
-    if(update.error)throw update.error;
+    await refreshInvoiceExpenseTotal(inv.project_id,actor);
 
     if(!canAccessConstructionProject(inv.project_id,actor))throw new Error('Сеанс или доступ к объекту изменился');
     await logAudit('project', inv.project_id, (state.projects.find(p=>p.id===inv.project_id)||{}).name||'', 'update', {invoice_edited:{old:`${inv.number}—${fmtMoney(inv.amount)}`, new:`${number}—${fmtMoney(amount)}`}});
@@ -150,39 +187,49 @@ async function saveInvoiceSheet(){
     showToast(persisted?'Накладная сохранена. Не удалось обновить итог проекта — повторите обновление':'Ошибка сохранения накладной');
   }finally{
     invoiceSheetSavesInFlight.delete(invoiceId);
-    saveButton.disabled=invoiceSheetSavesInFlight.has(invSheetCurrentId);
+    syncInvoiceActions();
   }
 }
 
 async function deleteInvoiceSheet(){
-  if(!invSheetCurrentId) return;
-  const invoiceId=invSheetCurrentId,generation=invoiceFormGeneration;
-  const inv = state.invoices.find(i=>i.id===invoiceId);
-  if(!inv) return;
+  const inv=openedInvoice;
+  if(!inv||invoiceSheetSavesInFlight.has(inv.id))return;
+  const invoiceId=inv.id,generation=invoiceFormGeneration;
   if(!canAccessConstructionProject(inv.project_id)){showToast('Нет доступа к этому объекту');return;}
   const actor={employeeId:session.employeeId,token:session.token,isAdmin:!!session.isAdmin};
-  if(!confirm('Удалить эту накладную? Это необратимо.')) return;
   if(typeof ARHITTEKCash!=='undefined'&&ARHITTEKCash.invoicePaymentState(state,inv).rows.length){
     showToast('У накладной есть связанные оплаты. Сначала отмените их в истории.');return;
   }
+  if(!confirm('Удалить накладную '+(inv.number||'без номера')+' на '+constructionMoney(inv.amount)+'? Это необратимо.'))return;
+  invoiceSheetSavesInFlight.add(invoiceId);
+  syncInvoiceActions();
   let persisted=false;
   try{
     if(!canAccessConstructionProject(inv.project_id,actor))throw new Error('Сеанс или доступ к объекту изменился');
-    const {error} = await sb.from('invoices').delete().eq('id', invoiceId);
-    if(error) throw error;
+    const {data,error}=await matchOpenedInvoice(sb.from('invoices').delete(),inv).select('id').maybeSingle();
+    if(error)throw error;
+    if(!data){
+      if(invSheetCurrentId===invoiceId&&invoiceFormGeneration===generation)closeInvoiceSheet();
+      await loadAll();
+      if(currentObjectId===inv.project_id){
+        const current=state.projects.find(p=>p.id===inv.project_id);
+        if(current){renderObjectSummary(current);renderObjTabContent();}
+      }
+      showToast('Накладная изменена или уже удалена. Проверьте актуальный список.');
+      return;
+    }
     persisted=true;
 
-    // Пересчитываем p.expenses
-    const projInvs = state.invoices.filter(i=>i.project_id===inv.project_id && i.id!==invoiceId);
-    const newTotal  = projInvs.reduce((s,i)=>s+Number(i.amount||0),0)+getConstructionExpenses(state.projects.find(p=>p.id===inv.project_id)).manualTotal;
-    if(!canAccessConstructionProject(inv.project_id,actor))throw new Error('Сеанс или доступ к объекту изменился');
-    await sb.from('projects').update({expenses: newTotal}).eq('id', inv.project_id);
+    await refreshInvoiceExpenseTotal(inv.project_id,actor);
 
     if(invSheetCurrentId===invoiceId&&invoiceFormGeneration===generation)closeInvoiceSheet();
     await loadAll();
     if(currentObjectId === inv.project_id){ const p=state.projects.find(x=>x.id===inv.project_id); if(p) renderObjectSummary(p); renderObjTabContent(); }
     showToast('Накладная удалена');
-  }catch(e){ console.error(e); showToast(persisted?'Накладная удалена. Не удалось обновить итоги — обновите объект':'Ошибка удаления'); }
+  }catch(e){ console.error(e); showToast(persisted?'Накладная удалена. Не удалось обновить итоги — обновите объект':'Ошибка удаления'); }finally{
+    invoiceSheetSavesInFlight.delete(invoiceId);
+    syncInvoiceActions();
+  }
 }
 
 

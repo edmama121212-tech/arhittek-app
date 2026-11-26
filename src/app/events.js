@@ -12,16 +12,15 @@ document.addEventListener('keydown', event=>{
 // ============================================================
 document.getElementById('addProjectFab').addEventListener('click', ()=>{
   const activeView = document.querySelector('.view.active');
-  // FAB работает только для Проектный и Стройка
-  if(activeView && activeView.id === 'view-cards') return;
+  if(!['view-projects','view-construction'].includes(activeView?.id)) return;
   openProjectSheet(null);
-  // If opened from Стройка — pre-select construction category
-  if(activeView && activeView.id === 'view-construction'){
-    const constrCat = state.categories.find(c=>{
-      const nm = (c.name||'').toLowerCase();
-      return nm.includes('строительств') || nm.includes('ремонт') || nm.includes('монтаж');
-    });
-    if(constrCat) document.getElementById('pf-category').value = constrCat.id;
+  if(activeView.id === 'view-construction'){
+    const category = state.categories.find(c=>isConstructionCategory(c.id));
+    if(category){
+      const select = document.getElementById('pf-category');
+      select.value = category.id;
+      select.dispatchEvent(new Event('change',{bubbles:true}));
+    }
   }
 });
 
@@ -30,9 +29,10 @@ document.getElementById('pf-stage-add').addEventListener('click', ()=>{
 });
 
 document.getElementById('pf-open-as-object').addEventListener('click', ()=>{
-  if(editingProjectId){
+  const projectId = editingProjectId;
+  if(projectId){
     closeProjectSheet();
-    openObjectView(editingProjectId);
+    openObjectView(projectId);
   }
 });
 
@@ -111,7 +111,7 @@ setupSearchBox('projectSearch', v=>projectSearchQuery=v, renderProjects);
 // ledgerSearch listener removed
 setupSearchBox('employeeSearch', v=>employeeSearchQuery=v, renderEmployees);
 setupSearchBox('historySearch', v=>historySearchQuery=v, renderHistory);
-setupSearchBox('constrSearch', v=>{ constrSearchQuery=v; renderConstruction(); });
+setupSearchBox('constrSearch', v=>constrSearchQuery=v, renderConstruction);
 
 document.getElementById('exportXlsxBtn').addEventListener('click', exportToXlsx);
 

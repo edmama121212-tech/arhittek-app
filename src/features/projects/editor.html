@@ -61,7 +61,7 @@
     <div class="field-row" id="pf-phone-field">
       <div class="field">
         <label>Телефон</label>
-        <input type="text" id="pf-phone" placeholder="7 900 000-00-00">
+        <input type="tel" id="pf-phone" placeholder="7 900 000-00-00">
       </div>
       <div class="field">
         <label>Адрес / объект</label>
@@ -79,20 +79,20 @@
     <div class="accent-title">Цена и оплата</div>
     <div class="field-row3">
       <div class="field">
-        <label>Цена, ₽</label>
-        <input type="number" id="pf-price" placeholder="0">
+        <label for="pf-price">Цена, ₽</label>
+        <input type="number" id="pf-price" min="0" step="0.01" placeholder="0">
       </div>
       <div class="field">
-        <label>Получено, ₽</label>
+        <label for="pf-advance">Получено, ₽</label>
         <input type="number" id="pf-advance" placeholder="0" readonly title="Изменяется только через «Принять платёж»">
       </div>
       <div class="field">
-        <label>Остаток, ₽</label>
-        <input type="number" id="pf-balance" placeholder="0" readonly title="Рассчитывается автоматически">
+        <label for="pf-balance">Долг клиента, ₽</label>
+        <input type="number" id="pf-balance" placeholder="0" readonly title="Рассчитывается автоматически: Цена − Получено">
         <small id="pf-cash-overspend" style="color:var(--red)" hidden></small>
       </div>
     </div>
-    <div class="hint" style="margin:-6px 0 0;">«Получено» и «Остаток» обновляются автоматически после платежей (кнопка «Принять платёж» ниже).</div>
+    <div id="pf-payment-help" class="hint" style="margin:-6px 0 0;">Долг клиента — цена договора за вычетом полученной оплаты.</div>
     </div>
 
     <div class="accent-block ab-gold" id="pf-compensation-block">
@@ -249,7 +249,7 @@
     <button class="btn btn-secondary" id="pf-create-kp" style="display:none;">Создать КП для этого проекта</button>
 
     <div class="section-label" style="margin:18px 0 10px;"><span class="lbl-text">История изменений</span><span class="section-label-line"></span></div>
-    <button class="btn btn-secondary" id="pf-history-toggle" type="button" style="margin-bottom:8px;">📋 Показать историю изменений</button>
+    <button class="btn btn-secondary" id="pf-history-toggle" type="button" aria-expanded="false" aria-controls="pf-history-list" style="margin-bottom:8px;">Показать историю изменений</button>
     <div id="pf-history-list" class="card" style="margin-bottom:8px; display:none;"></div>
 
     <button class="btn btn-primary" id="pf-save">Сохранить</button>

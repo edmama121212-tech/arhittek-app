@@ -113,8 +113,11 @@ module.exports = async function run({page,fw,command,snap,day,wallet,uuid,shift,
     const card=fw.locator('[data-fw="reschedule"][data-id="'+due.key+'"]').locator('xpath=ancestor::article');
     assert.equal(await card.locator('h3').innerText(),label);
     assert.equal(Number((await card.locator('.fw-row b').innerText()).replace(/[^\d,]/g,'').replace(',','.')),expected);
-    await card.scrollIntoViewIfNeeded();
-    assert.ok(await card.evaluate(e=>e.scrollWidth<=e.clientWidth+1));
+    const fitsCalendar=await card.evaluate(element=>{
+      element.scrollIntoView({block:'nearest',behavior:'instant'});
+      return element.clientWidth>0 && element.scrollWidth<=element.clientWidth+1;
+    });
+    assert.ok(fitsCalendar);
     if(out)await card.screenshot({path:path.join(out,'calendar-'+(i+1)+'.png')});
     await home();
     assert.equal(await expectedTile('Сейф'),cash);assert.equal(await expectedTile('Ожидаем до конца месяца'),income);
