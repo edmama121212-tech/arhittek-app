@@ -1494,8 +1494,9 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
           </div>
 
           <div style="margin:0 12px;padding:12px 0;border-top:1px solid #D0D0D0;">
-            <div style="font-size:10px;color:#BBB;margin-bottom:3px;">Стоимость проекта</div>
+            <div style="font-size:10px;color:#BBB;margin-bottom:3px;">Стоимость готового проекта</div>
             <div id="prev-price" style="font-size:26px;font-weight:700;color:#1A1A1A;margin-bottom:10px;">— ₽</div>
+            <div id="prev-individual-comparison"></div>
             <div style="display:flex;gap:7px;">
               <button style="flex:1;background:#3D8FE0;color:#fff;border:none;border-radius:11px;padding:13px 6px;font-size:13px;font-weight:700;">Получить проект</button>
               <button style="flex:1;background:#F2F2F2;color:#1A1A1A;border:1.5px solid #D0D0D0;border-radius:11px;padding:12px 6px;font-size:13px;font-weight:500;">Консультация</button>
@@ -1712,7 +1713,8 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
       </div>
       <div class="field">
         <label>Остаток, ₽</label>
-        <input type="number" id="pf-balance" placeholder="0" readonly title="Рассчитывается автоматически: Цена − Получено">
+        <input type="number" id="pf-balance" placeholder="0" readonly title="Рассчитывается автоматически">
+        <small id="pf-cash-overspend" style="color:var(--red)" hidden></small>
       </div>
     </div>
     <div class="hint" style="margin:-6px 0 0;">«Получено» и «Остаток» обновляются автоматически после платежей (кнопка «Принять платёж» ниже).</div>
@@ -1909,10 +1911,11 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
 
     <!-- Фото накладной -->
     <div id="invSheet-photo-wrap" style="margin-bottom:14px;display:none;">
-      <a id="invSheet-pdf-link" target="_blank" rel="noopener" style="display:none;">📄 Открыть PDF</a>
+      <button type="button" id="invSheet-pdf-link" onclick="openInvoicePdf()" style="display:none;">Открыть PDF</button>
       <img id="invSheet-photo-img" src="" alt="фото накладной"
            style="width:100%;max-height:260px;object-fit:contain;border-radius:10px;border:1px solid var(--line-strong);cursor:pointer;"
-           onclick="window.open(this.src,'_blank')">
+           onclick="window.open(this.src,'_blank','noopener')">
+      <button type="button" onclick="removeSavedInvoiceAttachment()">Убрать вложение</button>
     </div>
 
     <div class="field-row">
@@ -1939,7 +1942,7 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
       </div>
       <div class="field">
         <label>Сумма, ₽</label>
-        <input type="number" id="invSheet-amount" placeholder="0">
+        <input type="number" id="invSheet-amount" min="0.01" step="0.01" placeholder="0">
       </div>
     </div>
 
@@ -1960,13 +1963,13 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
 
     <div class="field">
       <label>Документы и фотографии</label>
-      <label for="invSheet-photo-input" class="photo-upload-label" style="display:block;text-align:center;padding:24px;margin-bottom:8px;border:1px dashed var(--blue);border-radius:8px;" ondragover="event.preventDefault();event.stopPropagation();this.style.background='rgba(40,88,161,.12)'" ondragleave="this.style.background=''" ondrop="this.style.background='';invoiceDocumentDrop(event,'invSheet-photo-input')">Перетащите документ сюда или нажмите для выбора<br>PDF, JPG, JPEG, PNG</label>
+      <label for="invSheet-photo-input" class="photo-upload-label" style="display:block;text-align:center;padding:24px;margin-bottom:8px;border:1px dashed var(--blue);border-radius:8px;" ondragover="event.preventDefault();event.stopPropagation();this.style.background='rgba(40,88,161,.12)'" ondragleave="this.style.background=''" ondrop="this.style.background='';invoiceDocumentDrop(event,'invSheet-photo-input')">Перетащите документ сюда или нажмите для выбора<br>PDF, JPG, JPEG, PNG · до 25 МБ</label>
       <div style="display:flex;gap:8px;margin-bottom:6px;">
         <label class="photo-upload-label" style="flex:1;margin:0;" for="invSheet-photo-input">📁 Выбрать файл</label>
         <label class="photo-upload-label" style="flex:1;margin:0;" for="invSheet-camera-input">📷 Сделать фото</label>
       </div>
       <input type="file" id="invSheet-photo-input" accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png" style="display:none;" onchange="onInvSheetPhotoChange(this)">
-      <input type="file" id="invSheet-camera-input" accept="image/*" capture="environment" style="display:none;" onchange="onInvSheetPhotoChange(this)">
+      <input type="file" id="invSheet-camera-input" accept="image/*" capture="environment" style="display:none;" onchange="handleInvoicePhotoCapture(this,'invSheet-photo-input')">
       <span id="invSheet-photo-name" style="font-size:11px;color:var(--text-dim);"></span>
     </div>
 
@@ -2373,7 +2376,7 @@ let openConstructionId = null;
 // ============================================================
 function fmt(n){
   n = Number(n) || 0;
-  return Math.round(n).toLocaleString('ru-RU');
+  return n.toLocaleString('ru-RU',{maximumFractionDigits:2});
 }
 function fmtMoney(n){ return fmt(n) + ' ₽'; }
 
@@ -3569,7 +3572,7 @@ async function loadAllData(){
       ownerRead(()=>fetchAllRows(()=>sb.from('audit_log').select('id,entity_id,changes,created_at',{count:'exact'}).eq('entity_type','project').order('created_at',{ascending:false}))),
       isOwner()?sb.rpc('get_financial_journal'):Promise.resolve({data:null,error:null}),
       isOwner()?loadSalaryHistorySafe():Promise.resolve({data:null,error:null}),
-      sb.from('catalog_pricing').select('rate_under_100,rate_100_to_400,rate_over_400').eq('id',1).maybeSingle(),
+      sb.from('catalog_pricing').select('rate_under_100,rate_100_to_400,rate_over_400,individual_tariff_id').eq('id',1).maybeSingle(),
     ]);
 
     if(accessActor.employeeId!==session?.employeeId||accessActor.token!==session?.token||!hasVerifiedAccess())return;
@@ -3785,18 +3788,21 @@ function renderConstrSummary(){
 
   const totExpenses = rows.reduce((s,r)=>s+r.cashOutgoing,0);
   const totReceived = rows.reduce((s,r)=>s+r.received,0);
-  const totLeft = rows.reduce((s,r)=>s+r.balance,0);
+  const totLeft = rows.reduce((s,r)=>s+r.cashRemaining,0);
+  const totOverspend = rows.reduce((s,r)=>s+r.cashOverspend,0);
   const totInvoices = rows.reduce((s,r)=>s+r.invoicesTotal,0);
   const totUnpaid = rows.reduce((s,r)=>s+r.unpaidInvoices,0);
   const money = value => (Number(value)||0).toLocaleString('ru-RU',{maximumFractionDigits:2})+' ₽';
 
-  const rowsHtml = rows.map(({p, received, cashOutgoing, directPaid, balance, isOverspent, invoicesTotal, unpaidInvoices, st}) => `
+  const overspendNote = amount => amount > 0 ? '<div style="color:var(--red);font-size:11px">Перерасход: '+money(amount)+'</div>' : '';
+
+  const rowsHtml = rows.map(({p, received, cashOutgoing, directPaid, cashRemaining, cashOverspend, isOverspent, invoicesTotal, unpaidInvoices, st}) => `
     <tr data-key-activate tabindex="0" onclick="openObjectView('${p.id}')" style="cursor:pointer;" class="constr-sum-row">
       <td>
         <div class="entity-name" title="${escapeHtml(p.name)}" style="font-weight:600; font-size:13px; color:var(--text);">${escapeHtml(p.name)}</div>
         ${st ? `<div style="font-size:10px; color:var(--text-dim); margin-top:2px;">${escapeHtml(st.name)}</div>` : ''}
       </td>
-      <td style="color:${isOverspent ? 'var(--red)' : 'var(--text)'}; font-weight:${isOverspent ? '700' : '400'};" title="По денежному журналу объекта; прямые оплаты заказчика сюда не входят">${isOverspent ? '⚠ ' : ''}${money(balance)}${directPaid > 0 ? ' 🤝' : ''}</td>
+      <td style="color:${isOverspent ? 'var(--red)' : 'var(--text)'}; font-weight:${isOverspent ? '700' : '400'};" title="По денежному журналу объекта; прямые оплаты заказчика сюда не входят">${money(cashRemaining)}${directPaid > 0 ? ' 🤝' : ''}${overspendNote(cashOverspend)}</td>
       <td style="color:var(--red);">${money(cashOutgoing)}</td>
       <td style="color:var(--green);">${money(received)}</td>
       <td style="color:var(--text);" title="Стоимость накладных; наличие документа не подтверждает оплату">${money(invoicesTotal)}</td>
@@ -3812,7 +3818,7 @@ function renderConstrSummary(){
       <tfoot>
         <tr>
           <td style="font-weight:700; color:var(--text);">Итого</td>
-          <td style="font-weight:700; color:${totLeft < 0 ? 'var(--red)' : 'var(--gold)'};">${money(totLeft)}</td>
+          <td style="font-weight:700; color:var(--gold);">${money(totLeft)}${overspendNote(totOverspend)}</td>
           <td style="font-weight:700; color:var(--red);">${money(totExpenses)}</td>
           <td style="font-weight:700; color:var(--green);">${money(totReceived)}</td>
           <td style="color:var(--text); font-weight:700;">${money(totInvoices)}</td>
@@ -3820,7 +3826,7 @@ function renderConstrSummary(){
         </tr>
       </tfoot>
     </table></div>
-    <div class="note" style="padding:10px 14px;">Накладные — стоимость документов, а не подтверждённая выплата. «Не оплачено» — остаток накладных без оплаты. Деньги по журналу = получено − выплачено.</div>
+    <div class="note" style="padding:10px 14px;">Накладные — стоимость документов, а не подтверждённая выплата. «Не оплачено» — остаток накладных без оплаты. Если выплаты превышают поступления по объекту, разница показана как перерасход.</div>
   `;
 }
 
@@ -4166,8 +4172,8 @@ function auditFinancialIntegrity(){
     if(Number(p.advance||0) > Number(p.price||0) && !isConstructionProject(p)) issues.push(`Проект «${p.name}»: аванс больше цены`);
     if(isConstructionProject(p)){
       const f=getConstructionFinancials(p);
-      if(Math.abs(Number(p.expenses||0)-Number(f.directCosts||0))>0.01) issues.push(`Проект «${p.name}»: сохранённые расходы не совпадают с прямыми расходами`);
-    } else if(Math.abs(Number(p.expenses||0)-Number(direct||0))>0.01 && (state.ledger||[]).some(e=>e.project_id===p.id && e.type==='project_expense' && !e.deleted_at)){
+      if(Math.round(Number(p.expenses||0)*100)!==Math.round(Number(f.directCosts||0)*100)) issues.push(`Проект «${p.name}»: сохранённые расходы не совпадают с прямыми расходами`);
+    } else if(Math.round(Number(p.expenses||0)*100)!==Math.round(Number(direct||0)*100) && (state.ledger||[]).some(e=>e.project_id===p.id && e.type==='project_expense' && !e.deleted_at)){
       issues.push(`Проект «${p.name}»: projects.expenses не совпадает с журналом расходов`);
     }
   });
@@ -4430,7 +4436,9 @@ function renderPL(){
       .filter(p => !isConstructionProject(p) && Number(p.balance) > 0)
       .reduce((s,p) => s + (Number(p.balance)||0), 0);
 
-    const constrBudgetLeft = constrProjects.reduce((s,p) => s + getConstructionFinancials(p).balance, 0);
+    const constructionFinances = constrProjects.map(p=>getConstructionFinancials(p));
+    const constrBudgetLeft = constructionFinances.reduce((sum,f)=>sum+f.cashRemaining,0);
+    const constrOverspend = constructionFinances.reduce((sum,f)=>sum+f.cashOverspend,0);
 
     el.innerHTML = `
                                                   <div class="card" style="margin-bottom:10px;">
@@ -4488,6 +4496,7 @@ function renderPL(){
           <div class="fl">Остатки бюджетов (текущие)</div>
                   <div class="fv" style="color:var(--gold);">${fmtMoney(constrBudgetLeft)}</div>
 </div>
+        ${constrOverspend ? `<div class="fee-row"><div class="fl">Перерасход по объектам</div><div class="fv" style="color:var(--red);">${fmtMoney(constrOverspend)}</div></div>` : ''}
         <div class="fee-row total" style="border-top:1px solid var(--line-strong); margin-top:4px; padding-top:8px;">
                 <div class="fl">Прибыль стройки (приход − расход)</div>
                         <div class="fv" style="color:${constrProfitColor};">${constrProfitSign}${fmtMoney(constrProfit)}</div>
@@ -4507,10 +4516,6 @@ function renderPL(){
             <div class="fl" style="color:var(--text-dim);">Долг клиентов · Проектный</div>
             <div class="fv" style="color:var(--gold);">${fmtMoney(state.projects.filter(p=>!constrIds.has(p.id)).reduce((s,p)=>s+Math.max(0,Number(p.balance)||0),0))}</div>
           </div>
-          ${constrProjects.length > 0 ? `<div class="fee-row">
-            <div class="fl" style="color:var(--text-dim);">Долг клиентов · Строительный</div>
-            <div class="fv" style="color:var(--gold);">${fmtMoney(Math.max(0, constrProjects.reduce((s,p)=>s+getConstructionFinancials(p).balance,0)))}</div>
-          </div>` : ''}
           <div class="fee-row total" style="border-top:1px solid var(--line); margin-top:4px; padding-top:6px;">
             <div class="fl" style="color:var(--text-dim); font-weight:700;">Итого долг клиентов</div>
             <div class="fv" style="color:var(--gold); font-weight:700;">${fmtMoney(totalDebt)}</div>
@@ -4924,7 +4929,8 @@ function recalcLiveFeeSummary(){
 document.getElementById('pf-price').addEventListener('input', ()=>{
   const price = parseFloat(document.getElementById('pf-price').value) || 0;
   const advance = parseFloat(document.getElementById('pf-advance').value) || 0;
-  document.getElementById('pf-balance').value = Math.max(0, price - advance);
+  const p = state.projects.find(project=>project.id===editingProjectId);
+  if(!isConstructionProject(p))document.getElementById('pf-balance').value = Math.max(0, Math.round((price-advance)*100)/100);
   recalcLiveFeeSummary();
 });
 ['pf-expenses','pf-feepercent','pf-feebase','pf-feepaid','pf-co-employee','pf-co-feepercent','pf-co-feepaid'].forEach(id=>{
@@ -4989,6 +4995,8 @@ function openProjectSheet(id){
   const title = document.getElementById('projectSheetTitle');
   const deleteBtn = document.getElementById('pf-delete');
 
+  const overspend = document.getElementById('pf-cash-overspend');
+  overspend.hidden = true;
   if(id){
     const p = state.projects.find(x=>x.id===id);
     if(!p) return;
@@ -5050,7 +5058,11 @@ function openProjectSheet(id){
     if(isConstr){
       const financials=getConstructionFinancials(p);
       document.getElementById('pf-advance').value=financials.received;
-      document.getElementById('pf-balance').value=financials.balance;
+      document.getElementById('pf-balance').value=financials.cashRemaining;
+      if(financials.isOverspent){
+        overspend.textContent='Перерасход: '+fmtMoney(financials.cashOverspend);
+        overspend.hidden=false;
+      }
     }
     // Для строительных объектов расходы считаются из накладных (вкладка «Стройка»),
     // а не из этого списка — прячем блок, чтобы не путал устаревшим/нерелевантным числом.
@@ -7642,30 +7654,25 @@ function isConstructionProject(p){
   return (state.invoices||[]).some(inv=>inv.project_id===p.id&&!inv.deleted_at);
 }
 
+function sumConstructionMoney(rows, amount = row => row.amount){
+  return rows.reduce((kopeks,row)=>kopeks+Math.round(Number(amount(row)||0)*100),0)/100;
+}
+
 function getConstructionReceived(projectId, ledgerOverride=null){
   const ledger = ledgerOverride || state.ledger || [];
-  return ledger
-    .filter(e => e.project_id === projectId && CONSTRUCTION_INCOME_TYPES.includes(e.type) && !e.deleted_at)
-    .reduce((s,e) => s + Number(e.amount||0), 0);
+  return sumConstructionMoney(ledger.filter(e => e.project_id === projectId && CONSTRUCTION_INCOME_TYPES.includes(e.type) && !e.deleted_at));
 }
 
 function getConstructionExpenses(p, ledgerOverride=null){
   const today=financeToday();
   const projInvoices = (state.invoices||[]).filter(inv=>inv.project_id===p.id && !inv.deleted_at && (!inv.invoice_date||inv.invoice_date<=today));
-  const matTotal = projInvoices
-    .filter(i=>['Материал','Инструмент','Расходник','Доставка'].includes(i.item_type))
-    .reduce((s,i)=>s+Number(i.amount||0),0);
-  const workTotal = projInvoices
-    .filter(i=>i.item_type==='Работа')
-    .reduce((s,i)=>s+Number(i.amount||0),0);
-  const otherTotal = projInvoices
-    .filter(i=>!['Материал','Инструмент','Расходник','Доставка','Работа'].includes(i.item_type))
-    .reduce((s,i)=>s+Number(i.amount||0),0);
-  const directPaid = projInvoices.filter(i=>i.paid_by_client).reduce((sum,i)=>sum+Number(i.amount||0),0);
-  const manualTotal = (ledgerOverride||state.ledger||[])
-    .filter(e=>e.project_id===p.id && !e.deleted_at && (!e.entry_date||e.entry_date<=today) && (['expense','project_expense'].includes(e.type)||(e.type==='payment'&&!e.payee_employee_id)) && !['client_refund','cash_handover','company_fee_expense'].includes(e.purpose) && e.funding_source!=='company_fee' && !isInvoiceLinkedExpense(e))
-    .reduce((s,e)=>s+Number(e.amount||0),0);
-  return {matTotal, workTotal, otherTotal, manualTotal, directPaid, expenses: matTotal + workTotal + otherTotal + manualTotal};
+  const matTotal = sumConstructionMoney(projInvoices.filter(i=>['Материал','Инструмент','Расходник','Доставка'].includes(i.item_type)));
+  const workTotal = sumConstructionMoney(projInvoices.filter(i=>i.item_type==='Работа'));
+  const otherTotal = sumConstructionMoney(projInvoices.filter(i=>!['Материал','Инструмент','Расходник','Доставка','Работа'].includes(i.item_type)));
+  const directPaid = sumConstructionMoney(projInvoices.filter(i=>i.paid_by_client));
+  const manualTotal = sumConstructionMoney((ledgerOverride||state.ledger||[])
+    .filter(e=>e.project_id===p.id && !e.deleted_at && (!e.entry_date||e.entry_date<=today) && (['expense','project_expense'].includes(e.type)||(e.type==='payment'&&!e.payee_employee_id)) && !['client_refund','cash_handover','company_fee_expense'].includes(e.purpose) && e.funding_source!=='company_fee' && !isInvoiceLinkedExpense(e)));
+  return {matTotal, workTotal, otherTotal, manualTotal, directPaid, expenses: Math.round((matTotal + workTotal + otherTotal + manualTotal)*100)/100};
 }
 
 function constructionAmount(value){
@@ -7689,19 +7696,18 @@ function getConstructionFinancials(p, ledgerOverride=null){
   const {matTotal, workTotal, otherTotal, manualTotal, directPaid, expenses: directCosts} = getConstructionExpenses(p,ledgerOverride);
   const today=financeToday(),ledger = (ledgerOverride || state.ledger || []).filter(e=>!e.deleted_at&&(!e.entry_date||e.entry_date<=today));
   const received = getConstructionReceived(p.id, ledger);
-  const rolePayouts = ledger
-    .filter(e=>e.project_id===p.id && e.type==='role_payout' && !e.deleted_at)
-    .reduce((s,e)=>s+Number(e.amount||0),0);
+  const rolePayouts = sumConstructionMoney(ledger
+    .filter(e=>e.project_id===p.id && e.type==='role_payout' && !e.deleted_at));
   // Документ и начисление описывают стоимость/обязательство, а не выплату.
   // Прямая оплата клиента не проходит через кассу компании.
-  const totalCosts = directCosts + rolePayouts;
+  const totalCosts = Math.round((directCosts + rolePayouts)*100)/100;
   const outgoingTypes=['expense','project_expense','payment','withdrawal','fee_payment','salary_payment','client_refund'];
   const paidRows=ledger.filter(e=>e.project_id===p.id&&outgoingTypes.includes(e.type)&&
     !(e.type==='project_expense'&&(e.description==='Ранее внесённые расходы'||String(e.description||'').startsWith('[cash:historical-expense]'))));
-  const cashOutgoing=Math.round(paidRows.reduce((s,e)=>s+Number(e.amount||0),0)*100)/100;
+  const cashOutgoing=sumConstructionMoney(paidRows);
   const balance = Math.round((received-cashOutgoing)*100)/100;
   const projectInvoices=(state.invoices||[]).filter(i=>i.project_id===p.id&&!i.deleted_at&&!i.paid_by_client&&(!i.invoice_date||i.invoice_date<=today));
-  const unpaidInvoices=Math.round(projectInvoices.reduce((sum,i)=>sum+(window.ARHITTEKCash?.invoicePaymentState({ledger},i,today).remaining??Number(i.amount||0)),0)*100)/100;
+  const unpaidInvoices=sumConstructionMoney(projectInvoices,i=>window.ARHITTEKCash?.invoicePaymentState({ledger},i,today).remaining??i.amount);
   const undatedCashRows=ledger.filter(e=>e.project_id===p.id&&!e.entry_date&&(CONSTRUCTION_INCOME_TYPES.includes(e.type)||outgoingTypes.includes(e.type))).length;
   const pct = received > 0 ? Math.max(0,Math.min(100,Math.round(cashOutgoing/received*100))) : cashOutgoing>0?100:0;
   const markup=constructionCompanyMarkup(p,directCosts);
@@ -7713,7 +7719,9 @@ function getConstructionFinancials(p, ledgerOverride=null){
   const documentaryPct=countedAgainstAdvance===null?null:received>0?Math.max(0,Math.min(100,Math.round(countedAgainstAdvance/received*100))):countedAgainstAdvance>0?100:0;
   return {received, directPaid, matTotal, workTotal, otherTotal, manualTotal, rolePayouts,
     directCosts, expenses: totalCosts, cashOutgoing, unpaidInvoices, undatedCashRows,
-    balance, pct, isOverspent: balance < 0,...markup,costFromAdvance,calculatedAdvanceBalance,documentaryPct,
+    balance, cashRemaining:Math.max(0,balance), cashOverspend:Math.max(0,-balance), pct, isOverspent: balance < 0,...markup,costFromAdvance,calculatedAdvanceBalance,documentaryPct,
+    advanceRemaining:calculatedAdvanceBalance===null?null:Math.max(0,calculatedAdvanceBalance),
+    advanceShortfall:calculatedAdvanceBalance===null?null:Math.max(0,-calculatedAdvanceBalance),
     isCalculatedDeficit:calculatedAdvanceBalance!==null&&calculatedAdvanceBalance<0};
 }
 
@@ -7783,7 +7791,7 @@ function renderConstruction(){
   list.innerHTML = projects.map(p=>{
     const st = findStatus(p.status_id);
     const fin = getConstructionFinancials(p);
-    const {received, directPaid, matTotal, workTotal, otherTotal, manualTotal, expenses, cashOutgoing, unpaidInvoices, balance, pct, isOverspent} = fin;
+    const {received, directPaid, matTotal, workTotal, otherTotal, manualTotal, expenses, cashOutgoing, unpaidInvoices, cashRemaining, cashOverspend, pct, isOverspent} = fin;
 
     if(!showFinance){
       return `<div data-key-activate tabindex="0" role="button" class="obj-card" onclick="openObjectView('${p.id}')">
@@ -7797,7 +7805,7 @@ function renderConstruction(){
     return `<div data-key-activate tabindex="0" role="button" class="obj-card" onclick="openObjectView('${p.id}')">
       <div class="obj-head"><div><div class="obj-title">${escapeHtml(p.name)}</div><div class="obj-sub">${escapeHtml(p.address||'')}</div></div><div style="display:flex; align-items:center; gap:6px;">${st ? `<span class="status-chip" data-status="${escapeHtml(st.name)}">${escapeHtml(st.name)}</span>` : ''}<div class="obj-chevron">›</div></div></div>
       <div class="obj-bar" style="margin-bottom:4px;"><i style="width:${pct}%; background:${pct>90?'var(--red)':pct>70?'var(--gold)':'var(--blue)'};"></i></div>
-      <div class="obj-bar-lbl"><span>Выплачено ${pct}% от полученного</span><span style="color:${isOverspent?'var(--red)':''}">${isOverspent ? '⚠ Недостаток: '+fmtMoney(Math.abs(balance)) : 'Деньги: '+fmtMoney(balance)}</span></div>
+      <div class="obj-bar-lbl"><span>Выплачено ${pct}% от полученного</span><span style="color:${isOverspent?'var(--red)':''}">Деньги: ${fmtMoney(cashRemaining)}${isOverspent ? ' · Перерасход: '+fmtMoney(cashOverspend) : ''}</span></div>
       <div style="margin-top:12px;">
         <div class="fee-row" style="padding:5px 0;"><div class="fl">💰 Приход от заказчика</div><div class="fv" style="color:var(--green);">${fmtMoney(received)}</div></div>
         <div class="fee-row" style="padding:5px 0;"><div class="fl">📦 Накладные на материалы</div><div class="fv">${fmtMoney(matTotal)}</div></div>
@@ -7865,13 +7873,13 @@ function renderObjectSummary(p){
 
   if(state.financialDataReady===false){el.innerHTML='<div class="note">Финансовые данные не подтверждены. Обновите приложение.</div>';return;}
   const fin=getConstructionFinancials(p);
-  const {received, directPaid, matTotal, workTotal, otherTotal, manualTotal, expenses, cashOutgoing, unpaidInvoices, rolePayouts, undatedCashRows, balance, isOverspent} = fin;
+  const {received, directPaid, matTotal, workTotal, otherTotal, manualTotal, expenses, cashOutgoing, unpaidInvoices, rolePayouts, undatedCashRows, cashRemaining, cashOverspend, isOverspent} = fin;
 
   const noBudgetWarning = received === 0 && cashOutgoing > 0
     ? `<div style="background:rgba(232,163,61,0.12); border:1px solid rgba(232,163,61,0.3); border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:12px; color:var(--gold);">⚠ Приход от заказчика не зарегистрирован — добавьте поступление для корректного расчёта остатка.</div>`
     : '';
   const overspentWarning = isOverspent
-    ? `<div style="background:rgba(224,82,82,0.12); border:1px solid rgba(224,82,82,0.3); border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:12px; color:var(--red);">Выплаты превышают полученные деньги на ${fmtMoney(Math.abs(balance))}. Проверьте финансирование объекта.</div>`
+    ? `<div style="background:rgba(224,82,82,0.12); border:1px solid rgba(224,82,82,0.3); border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:12px; color:var(--red);">Перерасход по журналу — ${fmtMoney(cashOverspend)}. Проверьте финансирование объекта.</div>`
     : '';
 
   document.getElementById('objSummary').innerHTML = `
@@ -7881,7 +7889,7 @@ function renderObjectSummary(p){
     <div class="fee-card">
       <div class="fee-row"><div class="fl">Получено компанией от заказчика</div><div class="fv" style="color:var(--green)">${fmtMoney(received)}</div></div>
       <div class="fee-row"><div class="fl">Выплачено из денег объекта</div><div class="fv" style="color:var(--red)">${fmtMoney(cashOutgoing)}</div></div>
-      <div class="fee-row total"><div class="fl">Деньги объекта по журналу</div><div class="fv" style="color:${isOverspent?'var(--red)':'var(--gold)'}">${fmtMoney(balance)}</div></div>
+      <div class="fee-row total"><div class="fl">Деньги объекта по журналу</div><div class="fv" style="color:${isOverspent?'var(--red)':'var(--gold)'}">${fmtMoney(cashRemaining)}</div></div>
       ${directPaid > 0 ? `<div class="fee-row"><div class="fl">Заказчик оплатил поставщикам напрямую</div><div class="fv">${fmtMoney(directPaid)}</div></div>` : ''}
       <div class="fee-row"><div class="fl">Накладные на материалы</div><div class="fv">${fmtMoney(matTotal)}</div></div>
       <div class="fee-row"><div class="fl">Накладные на работы</div><div class="fv">${fmtMoney(workTotal)}</div></div>
@@ -7906,7 +7914,8 @@ function constructionCompanyFeePlanHtml(p,fin=null){
     '<div class="fee-row"><div class="fl">Расчётная наценка компании</div><div class="fv">'+constructionMoney(f.companyMarkupAmount)+'</div></div>'+
     '<div class="fee-row total"><div class="fl">Расходы с наценкой</div><div class="fv">'+constructionMoney(f.totalWithMarkup)+'</div></div>'+
     '<div class="fee-row"><div class="fl">Гонорар компании, записанный ранее</div><div class="fv">'+constructionMoney(f.companyMarkupRecordedPaid)+'</div></div>'+
-    '<div class="fee-row"><div class="fl">Расчётный остаток аванса после расходов и наценки</div><div class="fv" style="color:'+(f.isCalculatedDeficit?'var(--red)':'var(--text)')+'">'+constructionMoney(f.calculatedAdvanceBalance)+'</div></div>'+
+    '<div class="fee-row"><div class="fl">Расчётный остаток аванса после расходов и наценки</div><div class="fv" style="color:var(--text)">'+constructionMoney(f.advanceRemaining)+'</div></div>'+
+    (f.isCalculatedDeficit?'<div class="fee-row"><div class="fl">Не хватает аванса по расчёту</div><div class="fv" style="color:var(--red)">'+constructionMoney(f.advanceShortfall)+'</div></div>':'')+
     '<p class="note">Прямые оплаты заказчика учтены в расходах и наценке, но не вычитаются повторно из переданного нам аванса. Оплата накладных подтверждается отдельно. Этот расчёт не изменяет деньги по журналу и свободный резерв.</p>'+legacyNote+'</div>';
 }
 
@@ -8140,19 +8149,19 @@ function renderObjTabContent(){
           <option value="Расходник">Расходник</option>
         </select>
         <label for="inv-amount-obj">Сумма, ₽</label>
-        <input type="number" id="inv-amount-obj" placeholder="0">
+        <input type="number" id="inv-amount-obj" min="0.01" step="0.01" placeholder="0">
         <div style="display:flex;align-items:center;gap:8px;margin:6px 0;">
           <input type="checkbox" id="inv-paid-client-obj" style="width:auto;">
           <label style="margin:0;" for="inv-paid-client-obj">🤝 Оплачено заказчиком напрямую (минуя компанию)</label>
         </div>
         <label>Документы и фотографии (необязательно)</label>
-        <label for="inv-photo-obj" class="photo-upload-label" style="display:block;text-align:center;padding:24px;margin-bottom:8px;border:1px dashed var(--blue);border-radius:8px;" ondragover="event.preventDefault();event.stopPropagation();this.style.background='rgba(40,88,161,.12)'" ondragleave="this.style.background=''" ondrop="this.style.background='';invoiceDocumentDrop(event,'inv-photo-obj')">Перетащите документ сюда или нажмите для выбора<br>PDF, JPG, JPEG, PNG</label>
+        <label for="inv-photo-obj" class="photo-upload-label" style="display:block;text-align:center;padding:24px;margin-bottom:8px;border:1px dashed var(--blue);border-radius:8px;" ondragover="event.preventDefault();event.stopPropagation();this.style.background='rgba(40,88,161,.12)'" ondragleave="this.style.background=''" ondrop="this.style.background='';invoiceDocumentDrop(event,'inv-photo-obj')">Перетащите документ сюда или нажмите для выбора<br>PDF, JPG, JPEG, PNG · до 25 МБ</label>
         <div style="display:flex; gap:8px; margin-bottom:6px;">
           <label class="photo-upload-label" tabindex="0" role="button" data-key-activate style="flex:1; margin:0;" for="inv-photo-obj">📁 Выбрать файл</label>
           <label class="photo-upload-label" tabindex="0" role="button" data-key-activate style="flex:1; margin:0;" for="inv-camera-obj">📷 Сделать фото</label>
         </div>
         <input type="file" id="inv-photo-obj" accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png" style="display:none;" onchange="onInvoicePhotoPicked(this,'inv-photo-status-obj')">
-        <input type="file" id="inv-camera-obj" accept="image/*" capture="environment" style="display:none;" onchange="handleInvoicePhotoCapture(this,'inv-photo-obj','inv-photo-status-obj')">
+        <input type="file" id="inv-camera-obj" accept="image/*" capture="environment" style="display:none;" onchange="handleInvoicePhotoCapture(this,'inv-photo-obj')">
         <div id="inv-photo-status-obj" style="font-size:11px; color:var(--text-dim); margin-bottom:8px;"></div>
         <button class="btn btn-primary" onclick="addInvoiceFromView()">Добавить запись</button>
       </div>
@@ -8207,7 +8216,7 @@ function buildObjectAuditHtml(projectId){
   const invoiceTotal = matTotal + workTotal + otherTotal;
   const expectedExpenses = p?getProjectExpenses(p):invoiceTotal;
   const storedExpenses = Number(p?.expenses) || 0;
-  const mismatch = Math.abs(expectedExpenses - storedExpenses) > 1;
+  const mismatch = Math.round(expectedExpenses*100) !== Math.round(storedExpenses*100);
 
   let html = `<div class="card">
     <div class="fee-row"><div class="fl">Всего накладных</div><div class="fv">${invs.length}</div></div>
@@ -8245,47 +8254,99 @@ function buildObjectAuditHtml(projectId){
   return html;
 }
 
-// Shared attachment handling for invoice creation and editing.
-function isInvoicePdf(url){return /\.pdf(?:[?#]|$)/i.test(String(url||''));}
+const INVOICE_DOCUMENT_LIMIT = 25 * 1024 * 1024;
+const invoiceDocumentMessage = 'Выберите один PDF, JPG, JPEG или PNG до 25 МБ';
+
+function isInvoicePdf(url){
+  return /\.pdf(?:[?#]|$)/i.test(String(url || ''));
+}
+function invoiceDocumentType(name){
+  if(isInvoicePdf(name))return 'application/pdf';
+  if(/\.jpe?g$/i.test(name))return 'image/jpeg';
+  if(/\.png$/i.test(name))return 'image/png';
+  return '';
+}
 function validInvoiceDocument(file){
-  if(!file||!file.size||file.size>20*1024*1024)return false;
-  const type=String(file.type||'').toLowerCase();
-  return /\.(pdf|jpe?g|png)$/i.test(file.name)&&(!type||['application/pdf','image/jpeg','image/png'].includes(type))&&(!type||(isInvoicePdf(file.name)===(type==='application/pdf')));
+  if(!file || !file.size || file.size > INVOICE_DOCUMENT_LIMIT)return false;
+  const type=invoiceDocumentType(file.name);
+  return !!type && (!file.type || file.type.toLowerCase() === type);
+}
+function selectInvoiceDocument(input,file){
+  const transfer=new DataTransfer();
+  transfer.items.add(file);
+  input.files=transfer.files;
+  input.dispatchEvent(new Event('change',{bubbles:true}));
 }
 function invoiceDocumentDrop(event,id){
-  event.preventDefault();event.stopPropagation();
-  const input=document.getElementById(id),files=event.dataTransfer?.files;
-  if(!input||!files||files.length!==1||!validInvoiceDocument(files[0])){showToast('Выберите один PDF, JPG или PNG до 20 МБ');return;}
-  const dt=new DataTransfer();dt.items.add(files[0]);input.files=dt.files;input.dispatchEvent(new Event('change',{bubbles:true}));
+  event.preventDefault();
+  event.stopPropagation();
+  const input=document.getElementById(id), files=event.dataTransfer?.files;
+  if(!input || files?.length !== 1 || !validInvoiceDocument(files[0])){
+    showToast(invoiceDocumentMessage);
+    return;
+  }
+  selectInvoiceDocument(input,files[0]);
 }
 function invoiceAttachmentStatus(input,statusId){
-  const file=input.files[0],span=document.getElementById(statusId);
-  if(!span)return;
-  span.replaceChildren();
+  const file=input.files[0], status=document.getElementById(statusId);
+  if(!status)return;
+  status.replaceChildren();
   if(!file)return;
-  const name=document.createElement('span');name.textContent='✓ '+file.name+' · ';span.append(name);
-  const preview=document.createElement('button');preview.type='button';preview.textContent='Просмотр';preview.onclick=()=>{const url=URL.createObjectURL(file);window.open(url,'_blank','noopener');setTimeout(()=>URL.revokeObjectURL(url),60000);};span.append(preview);
-  const remove=document.createElement('button');remove.type='button';remove.textContent='Убрать';remove.onclick=()=>{input.value='';span.replaceChildren();if(statusId==='invSheet-photo-name'){invSheetNewPhotoBlob=null;invoiceAttachmentGeneration++;restoreInvoiceAttachment();}};span.append(remove);
+  status.append(document.createTextNode(file.name+' · '));
+  const preview=document.createElement('button');
+  preview.type='button';
+  preview.textContent='Просмотр';
+  preview.onclick=()=>{
+    const typedFile=file.type ? file : file.slice(0,file.size,invoiceDocumentType(file.name));
+    const url=URL.createObjectURL(typedFile);
+    window.open(url,'_blank','noopener');
+    setTimeout(()=>URL.revokeObjectURL(url),60000);
+  };
+  const remove=document.createElement('button');
+  remove.type='button';
+  remove.textContent='Убрать';
+  remove.onclick=()=>{
+    input.dataset.discardAttachment='1';
+    input.value='';
+    input.dispatchEvent(new Event('change',{bubbles:true}));
+  };
+  status.append(preview,remove);
 }
 function onInvoicePhotoPicked(input,statusId){
-  if(input.files[0]&&!validInvoiceDocument(input.files[0])){input.value='';showToast('Выберите PDF, JPG или PNG до 20 МБ');}
+  if(input.files[0] && !validInvoiceDocument(input.files[0])){
+    input.value='';
+    showToast(invoiceDocumentMessage);
+  }
+  if(input.files[0])delete input.dataset.discardAttachment;
   invoiceAttachmentStatus(input,statusId);
 }
-function handleInvoicePhotoCapture(captureInput,targetInputId,statusId){
-  const file=captureInput.files[0],target=document.getElementById(targetInputId);
-  if(!file||!target)return;
-  if(!validInvoiceDocument(file)){showToast('Недопустимый файл');return;}
-  const dt=new DataTransfer();dt.items.add(file);target.files=dt.files;onInvoicePhotoPicked(target,statusId);
+function handleInvoicePhotoCapture(camera,targetId){
+  const input=document.getElementById(targetId);
+  if(!input || !camera.files.length)return;
+  if(!validInvoiceDocument(camera.files[0])){
+    showToast(invoiceDocumentMessage);
+  }else{
+    selectInvoiceDocument(input,camera.files[0]);
+  }
+  camera.value='';
 }
 async function uploadInvoiceDocument(file,path,canUpload){
-  if(file.type!=='application/pdf'&&!isInvoicePdf(file.name))return compressAndUpload(file,'construction-documents',path,canUpload);
+  if(!validInvoiceDocument(file))throw new Error(invoiceDocumentMessage);
   if(!canUpload())throw new Error('Сеанс или доступ к объекту изменился');
-  if(await file.slice(0,5).text()!=='%PDF-')throw new Error('Некорректный PDF');
+  let body=file, type=invoiceDocumentType(file.name);
+  if(type === 'application/pdf'){
+    if(await file.slice(0,5).text() !== '%PDF-')throw new Error('Некорректный PDF');
+  }else{
+    body=await compressImage(file);
+    type=body.type || type;
+  }
   if(!canUpload())throw new Error('Сеанс или доступ к объекту изменился');
-  const bucket=sb.storage.from('construction-documents'),pdfPath=path.replace(/\.jpg$/i,'.pdf');
-  const {error}=await bucket.upload(pdfPath,file,{contentType:'application/pdf',upsert:true});
+  const ext={'application/pdf':'pdf','image/png':'png','image/jpeg':'jpg'}[type];
+  const objectPath=path.replace(/\.jpg$/i,'.'+ext);
+  const bucket=sb.storage.from('construction-documents');
+  const {error}=await bucket.upload(objectPath,body,{contentType:type,upsert:true});
   if(error)throw error;
-  return bucket.getPublicUrl(pdfPath).data.publicUrl;
+  return bucket.getPublicUrl(objectPath).data.publicUrl;
 }
 
 async function addInvoiceFromView(){
@@ -8305,7 +8366,7 @@ async function addInvoice(projectId){
 let invSheetCurrentId = null;
 let invSheetNewPhotoBlob = null;
 let invoiceFormGeneration = 0;
-let invoiceAttachmentGeneration=0;
+let invSheetRemoveAttachment = false;
 const invoiceSheetSavesInFlight = new Set();
 
 function openInvoiceSheet(invId){
@@ -8315,6 +8376,7 @@ function openInvoiceSheet(invId){
   invoiceFormGeneration++;
   invSheetCurrentId = invId;
   invSheetNewPhotoBlob = null;
+  invSheetRemoveAttachment = false;
 
   // Заполняем поля
   document.getElementById('invSheet-number').value   = inv.number || '';
@@ -8340,21 +8402,44 @@ function closeInvoiceSheet(){
   document.getElementById('invoiceSheetOverlay').style.display = 'none';
   invSheetCurrentId = null;
   invSheetNewPhotoBlob = null;
+  invSheetRemoveAttachment = false;
 }
 
 function restoreInvoiceAttachment(){
-  const url=state.invoices.find(i=>i.id===invSheetCurrentId)?.photo_url||'';
-  const wrap=document.getElementById('invSheet-photo-wrap'),img=document.getElementById('invSheet-photo-img'),link=document.getElementById('invSheet-pdf-link');
-  wrap.style.display=url?'':'none';
-  img.style.display=url&&!isInvoicePdf(url)?'':'none';img.src=url&&!isInvoicePdf(url)?url:'';
-  link.style.display=url&&isInvoicePdf(url)?'':'none';link.href=url&&isInvoicePdf(url)?url:'';
+  const url=state.invoices.find(i=>i.id===invSheetCurrentId)?.photo_url || '';
+  const wrap=document.getElementById('invSheet-photo-wrap');
+  const img=document.getElementById('invSheet-photo-img');
+  const pdf=document.getElementById('invSheet-pdf-link');
+  wrap.style.display=url && !invSheetRemoveAttachment && !invSheetNewPhotoBlob ? '' : 'none';
+  img.style.display=url && !isInvoicePdf(url) ? '' : 'none';
+  if(url && !isInvoicePdf(url))img.src=url;
+  else img.removeAttribute('src');
+  pdf.style.display=url && isInvoicePdf(url) ? '' : 'none';
 }
-async function onInvSheetPhotoChange(input){
-  const file=input.files[0];if(!file)return;
-  if(!validInvoiceDocument(file)){input.value='';showToast('Выберите PDF, JPG или PNG до 20 МБ');return;}
-  invoiceAttachmentGeneration++;
-  invSheetNewPhotoBlob=file;
-  invoiceAttachmentStatus(input,'invSheet-photo-name');
+async function openInvoicePdf(){
+  const invoice=state.invoices.find(i=>i.id===invSheetCurrentId);
+  if(!invoice?.photo_url || !canAccessConstructionProject(invoice.project_id))return;
+  const tab=window.open('','_blank');
+  if(!tab){showToast('Разрешите открыть документ в новой вкладке');return;}
+  tab.opener=null;
+  try{
+    const url=await ARHITTEKConstructionOperations.imageUrl(invoice.photo_url);
+    if(!canAccessConstructionProject(invoice.project_id))throw new Error();
+    tab.location.replace(url);
+  }catch(_){
+    tab.close();
+    showToast('Не удалось открыть документ');
+  }
+}
+function removeSavedInvoiceAttachment(){
+  invSheetRemoveAttachment=true;
+  document.getElementById('invoiceSheetOverlay').dataset.dirty='1';
+  restoreInvoiceAttachment();
+}
+function onInvSheetPhotoChange(input){
+  onInvoicePhotoPicked(input,'invSheet-photo-name');
+  invSheetNewPhotoBlob=input.files[0] || null;
+  restoreInvoiceAttachment();
 }
 async function saveInvoiceSheet(){
   if(!invSheetCurrentId) return;
@@ -8364,7 +8449,7 @@ async function saveInvoiceSheet(){
   if(!currentInvoice) return;
   if(!canAccessConstructionProject(currentInvoice.project_id)){showToast('Нет доступа к этому объекту');return;}
   const actor={employeeId:session.employeeId,token:session.token,isAdmin:!!session.isAdmin};
-  const inv={...currentInvoice},photoBlob=invSheetNewPhotoBlob;
+  const inv={...currentInvoice},photoBlob=invSheetNewPhotoBlob,removeAttachment=invSheetRemoveAttachment;
 
   const number       = document.getElementById('invSheet-number').value.trim();
   const invoice_date = document.getElementById('invSheet-date').value || null;
@@ -8378,7 +8463,8 @@ async function saveInvoiceSheet(){
   }
 
   if(!Number.isFinite(amount) || amount <= 0){ showToast('Укажите сумму'); return; }
-  if(typeof ARHITTEKCash!=='undefined' && amount+0.009<ARHITTEKCash.invoicePaymentState(state,inv).paid){
+  if(!Number.isSafeInteger(Math.round(amount*100))||amount!==Math.round(amount*100)/100){showToast('Введите сумму с точностью до копейки');return;}
+  if(typeof ARHITTEKCash!=='undefined' && Math.round(amount*100)<Math.round(ARHITTEKCash.invoicePaymentState(state,inv).paid*100)){
     showToast('Сумма меньше уже записанной оплаты. Сначала исправьте оплату в истории.');return;
   }
   if(!invoice_date){ showToast('Укажите дату накладной'); return; }
@@ -8389,16 +8475,15 @@ async function saveInvoiceSheet(){
   let persisted=false;
   showToast('Сохранение…');
   try{
-    let photo_url = inv.photo_url || '';
+    const changes={number,invoice_date,item_type,amount,category,description,paid_by_client};
+    if(removeAttachment)changes.photo_url='';
     if(photoBlob){
-      const fileName = `${inv.project_id}/${Date.now()}_edit.jpg`;
-      photo_url = await uploadInvoiceDocument(photoBlob, fileName,()=>canAccessConstructionProject(inv.project_id,actor));
+      const fileName = `${inv.project_id}/${crypto.randomUUID()}_edit.jpg`;
+      changes.photo_url = await uploadInvoiceDocument(photoBlob, fileName,()=>canAccessConstructionProject(inv.project_id,actor));
     }
 
     if(!canAccessConstructionProject(inv.project_id,actor))throw new Error('Сеанс или доступ к объекту изменился');
-    const {data,error} = await sb.from('invoices').update({
-      number, invoice_date, item_type, amount, category, description, photo_url, paid_by_client
-    }).eq('id', invoiceId).select('id').maybeSingle();
+    const {data,error} = await sb.from('invoices').update(changes).eq('id', invoiceId).select('id').maybeSingle();
     if(error) throw error;
     if(!data)throw new Error('Накладная не найдена. Обновите список перед повтором');
     persisted=true;
@@ -8502,7 +8587,7 @@ async function exportConstrPdf(projectId){
   const price = Number(p.price)||0;
   const constrFin = getConstructionFinancials(p);
   const expenses = constrFin.expenses;
-  const balance = constrFin.balance;
+  const balance = constrFin.cashRemaining;
   const received = constrFin.received;
 
   doc.setFont('Roboto','normal'); doc.setFontSize(9);
@@ -8510,6 +8595,7 @@ async function exportConstrPdf(projectId){
     ['Приход от заказчика:', `${fmt(received)} руб.`],
     ['Выплачено из денег объекта:', `${fmt(constrFin.cashOutgoing)} руб.`],
     ['Деньги объекта по журналу:', `${fmt(balance)} руб.`],
+    ...(constrFin.isOverspent?[['Перерасход по журналу:', `${fmt(constrFin.cashOverspend)} руб.`]]:[]),
     ['Заказчик оплатил напрямую:', `${fmt(constrFin.directPaid)} руб.`],
     ['Стоимость документов и начислений:', `${fmt(expenses)} руб.`],
     ['Оплата накладных не подтверждена:', `${fmt(constrFin.unpaidInvoices)} руб.`],
@@ -8517,7 +8603,8 @@ async function exportConstrPdf(projectId){
     ['Расчётная наценка ARHITTEK'+(constrFin.companyMarkupRate===null?'':` ${constructionAmount(constrFin.companyMarkupRate)}%`)+':', constrFin.companyMarkupAmount===null?'Ставка не указана':`${constructionAmount(constrFin.companyMarkupAmount)} руб.`],
     ['Расходы с наценкой:', constrFin.totalWithMarkup===null?'Не определены':`${constructionAmount(constrFin.totalWithMarkup)} руб.`],
     ['Гонорар компании, записанный ранее:', `${constructionAmount(constrFin.companyMarkupRecordedPaid)} руб.`],
-    ['Расчётный остаток аванса:', constrFin.calculatedAdvanceBalance===null?'Не определён':`${constructionAmount(constrFin.calculatedAdvanceBalance)} руб.`],
+    ['Расчётный остаток аванса:', constrFin.advanceRemaining===null?'Не определён':`${constructionAmount(constrFin.advanceRemaining)} руб.`],
+    ...(constrFin.isCalculatedDeficit?[['Не хватает аванса по расчёту:', `${constructionAmount(constrFin.advanceShortfall)} руб.`]]:[]),
   ];
   summaryRows.forEach(([lbl,val])=>{
     doc.setFont('Roboto','bold');
@@ -8969,6 +9056,7 @@ function buildExportRows(){
     const emp = findEmployee(p.employee_id);
     const dept = cat ? findDepartment(cat.department_id) : null;
     const f = getProjectFee(p);
+    const site = isConstructionProject(p) ? getConstructionFinancials(p) : null;
     return {
       'Название': p.name,
       'ФИО клиента': p.client_name||'',
@@ -8982,8 +9070,9 @@ function buildExportRows(){
       'Адрес': p.address||'',
       'Телефон': p.phone||'',
       'Цена': p.price||0,
-      'Аванс': isConstructionProject(p)?getConstructionFinancials(p).received:p.advance||0,
-      'Остаток': isConstructionProject(p)?getConstructionFinancials(p).balance:p.balance||0,
+      'Аванс': site?site.received:p.advance||0,
+      'Остаток': site?site.cashRemaining:p.balance||0,
+      'Перерасход по объекту': site?site.cashOverspend:'',
       'Расходы': getProjectExpenses(p),
       'Прибыль': f.profit,
       '% гонорара': f.feePercent,
@@ -10174,7 +10263,7 @@ async function saveCatalogPriceSettings(){
     if(error)throw error;
     if(actor!==session?.token||!canEditCards())return;
     if(!data||typeof data.updated_cards!=='number')throw new Error('Сервер не подтвердил сохранение');
-    state.catalogPricing=proposed;
+    state.catalogPricing={...state.catalogPricing,...proposed};
     CatalogFloors.setRates(proposed);
     const count=data.updated_cards;
     if(status)status.textContent='Сохранено. Автоматически пересчитано карточек: '+count+'.';
@@ -11922,6 +12011,11 @@ function markCardEditorDirty(){
   const overlay=document.getElementById('cardEditorOverlay');
   if(overlay&&overlay.style.display!=='none')overlay.dataset.dirty='1';
 }
+function catalogIndividualDesignRate(){
+  const id = state.catalogPricing?.individual_tariff_id;
+  const tariff = id && state.kpCatalog?.find(item => item.id === id);
+  return tariff && !tariff.deleted_at && ['м²','м2','m²','m2'].includes(tariff.unit) ? tariff.rate : null;
+}
 function cePreview(){
   initCardFloorEditor();
   const v=id=>document.getElementById(id)?.value||'';
@@ -11938,6 +12032,8 @@ function cePreview(){
   set('prev-num',num?'№ '+num:'№ —');
   set('prev-area',v('ce-area')||'—');set('prev-beds',v('ce-beds')||'—');set('prev-footprint',v('ce-footprint')||'—');
   set('prev-floors-stat',ceFloorsSelected);set('prev-price',(v('ce-price')||'—')+' ₽');
+  const comparison = document.getElementById('prev-individual-comparison');
+  if(comparison) comparison.innerHTML = CatalogFloors.individualPriceHTML(v('ce-area'), catalogIndividualDesignRate());
   const systemTags=['Классический','Современный','Цокольный этаж','Мансарда','Плоская кровля'];
   const tags=v('ce-tags').split(',').map(t=>t.trim()).filter(t=>t&&!systemTags.includes(t));
   if(ceStyleSelected==='classic')tags.push('Классический');
@@ -12469,8 +12565,9 @@ ${CatalogFloors.panels(card)}
   </div>
 </div>
 <div class="price-block">
-  <div class="price-label">Стоимость проекта</div>
+  <div class="price-label">Стоимость готового проекта</div>
   <div class="price">${escapeHtml(CatalogFloors.priceText(card))}</div>
+  ${CatalogFloors.individualPriceHTML(card.total_area, catalogIndividualDesignRate())}
   <div class="btn-row">
     <button class="btn-primary" onclick="window.open('https://wa.me/79226593872','_blank')">Получить проект</button>
     <button class="btn-secondary" onclick="window.open('https://wa.me/79226593872','_blank')">Консультация</button>

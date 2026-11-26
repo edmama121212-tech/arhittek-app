@@ -4,7 +4,7 @@
 let invSheetCurrentId = null;
 let invSheetNewPhotoBlob = null;
 let invoiceFormGeneration = 0;
-let invoiceAttachmentGeneration=0;
+let invSheetRemoveAttachment = false;
 const invoiceSheetSavesInFlight = new Set();
 
 function openInvoiceSheet(invId){
@@ -14,6 +14,7 @@ function openInvoiceSheet(invId){
   invoiceFormGeneration++;
   invSheetCurrentId = invId;
   invSheetNewPhotoBlob = null;
+  invSheetRemoveAttachment = false;
 
   // Заполняем поля
   document.getElementById('invSheet-number').value   = inv.number || '';
@@ -39,21 +40,44 @@ function closeInvoiceSheet(){
   document.getElementById('invoiceSheetOverlay').style.display = 'none';
   invSheetCurrentId = null;
   invSheetNewPhotoBlob = null;
+  invSheetRemoveAttachment = false;
 }
 
 function restoreInvoiceAttachment(){
-  const url=state.invoices.find(i=>i.id===invSheetCurrentId)?.photo_url||'';
-  const wrap=document.getElementById('invSheet-photo-wrap'),img=document.getElementById('invSheet-photo-img'),link=document.getElementById('invSheet-pdf-link');
-  wrap.style.display=url?'':'none';
-  img.style.display=url&&!isInvoicePdf(url)?'':'none';img.src=url&&!isInvoicePdf(url)?url:'';
-  link.style.display=url&&isInvoicePdf(url)?'':'none';link.href=url&&isInvoicePdf(url)?url:'';
+  const url=state.invoices.find(i=>i.id===invSheetCurrentId)?.photo_url || '';
+  const wrap=document.getElementById('invSheet-photo-wrap');
+  const img=document.getElementById('invSheet-photo-img');
+  const pdf=document.getElementById('invSheet-pdf-link');
+  wrap.style.display=url && !invSheetRemoveAttachment && !invSheetNewPhotoBlob ? '' : 'none';
+  img.style.display=url && !isInvoicePdf(url) ? '' : 'none';
+  if(url && !isInvoicePdf(url))img.src=url;
+  else img.removeAttribute('src');
+  pdf.style.display=url && isInvoicePdf(url) ? '' : 'none';
 }
-async function onInvSheetPhotoChange(input){
-  const file=input.files[0];if(!file)return;
-  if(!validInvoiceDocument(file)){input.value='';showToast('Выберите PDF, JPG или PNG до 20 МБ');return;}
-  invoiceAttachmentGeneration++;
-  invSheetNewPhotoBlob=file;
-  invoiceAttachmentStatus(input,'invSheet-photo-name');
+async function openInvoicePdf(){
+  const invoice=state.invoices.find(i=>i.id===invSheetCurrentId);
+  if(!invoice?.photo_url || !canAccessConstructionProject(invoice.project_id))return;
+  const tab=window.open('','_blank');
+  if(!tab){showToast('Разрешите открыть документ в новой вкладке');return;}
+  tab.opener=null;
+  try{
+    const url=await ARHITTEKConstructionOperations.imageUrl(invoice.photo_url);
+    if(!canAccessConstructionProject(invoice.project_id))throw new Error();
+    tab.location.replace(url);
+  }catch(_){
+    tab.close();
+    showToast('Не удалось открыть документ');
+  }
+}
+function removeSavedInvoiceAttachment(){
+  invSheetRemoveAttachment=true;
+  document.getElementById('invoiceSheetOverlay').dataset.dirty='1';
+  restoreInvoiceAttachment();
+}
+function onInvSheetPhotoChange(input){
+  onInvoicePhotoPicked(input,'invSheet-photo-name');
+  invSheetNewPhotoBlob=input.files[0] || null;
+  restoreInvoiceAttachment();
 }
 async function saveInvoiceSheet(){
   if(!invSheetCurrentId) return;
@@ -63,7 +87,7 @@ async function saveInvoiceSheet(){
   if(!currentInvoice) return;
   if(!canAccessConstructionProject(currentInvoice.project_id)){showToast('Нет доступа к этому объекту');return;}
   const actor={employeeId:session.employeeId,token:session.token,isAdmin:!!session.isAdmin};
-  const inv={...currentInvoice},photoBlob=invSheetNewPhotoBlob;
+  const inv={...currentInvoice},photoBlob=invSheetNewPhotoBlob,removeAttachment=invSheetRemoveAttachment;
 
   const number       = document.getElementById('invSheet-number').value.trim();
   const invoice_date = document.getElementById('invSheet-date').value || null;
@@ -77,7 +101,8 @@ async function saveInvoiceSheet(){
   }
 
   if(!Number.isFinite(amount) || amount <= 0){ showToast('Укажите сумму'); return; }
-  if(typeof ARHITTEKCash!=='undefined' && amount+0.009<ARHITTEKCash.invoicePaymentState(state,inv).paid){
+  if(!Number.isSafeInteger(Math.round(amount*100))||amount!==Math.round(amount*100)/100){showToast('Введите сумму с точностью до копейки');return;}
+  if(typeof ARHITTEKCash!=='undefined' && Math.round(amount*100)<Math.round(ARHITTEKCash.invoicePaymentState(state,inv).paid*100)){
     showToast('Сумма меньше уже записанной оплаты. Сначала исправьте оплату в истории.');return;
   }
   if(!invoice_date){ showToast('Укажите дату накладной'); return; }
@@ -88,16 +113,15 @@ async function saveInvoiceSheet(){
   let persisted=false;
   showToast('Сохранение…');
   try{
-    let photo_url = inv.photo_url || '';
+    const changes={number,invoice_date,item_type,amount,category,description,paid_by_client};
+    if(removeAttachment)changes.photo_url='';
     if(photoBlob){
-      const fileName = `${inv.project_id}/${Date.now()}_edit.jpg`;
-      photo_url = await uploadInvoiceDocument(photoBlob, fileName,()=>canAccessConstructionProject(inv.project_id,actor));
+      const fileName = `${inv.project_id}/${crypto.randomUUID()}_edit.jpg`;
+      changes.photo_url = await uploadInvoiceDocument(photoBlob, fileName,()=>canAccessConstructionProject(inv.project_id,actor));
     }
 
     if(!canAccessConstructionProject(inv.project_id,actor))throw new Error('Сеанс или доступ к объекту изменился');
-    const {data,error} = await sb.from('invoices').update({
-      number, invoice_date, item_type, amount, category, description, photo_url, paid_by_client
-    }).eq('id', invoiceId).select('id').maybeSingle();
+    const {data,error} = await sb.from('invoices').update(changes).eq('id', invoiceId).select('id').maybeSingle();
     if(error) throw error;
     if(!data)throw new Error('Накладная не найдена. Обновите список перед повтором');
     persisted=true;
@@ -201,7 +225,7 @@ async function exportConstrPdf(projectId){
   const price = Number(p.price)||0;
   const constrFin = getConstructionFinancials(p);
   const expenses = constrFin.expenses;
-  const balance = constrFin.balance;
+  const balance = constrFin.cashRemaining;
   const received = constrFin.received;
 
   doc.setFont('Roboto','normal'); doc.setFontSize(9);
@@ -209,6 +233,7 @@ async function exportConstrPdf(projectId){
     ['Приход от заказчика:', `${fmt(received)} руб.`],
     ['Выплачено из денег объекта:', `${fmt(constrFin.cashOutgoing)} руб.`],
     ['Деньги объекта по журналу:', `${fmt(balance)} руб.`],
+    ...(constrFin.isOverspent?[['Перерасход по журналу:', `${fmt(constrFin.cashOverspend)} руб.`]]:[]),
     ['Заказчик оплатил напрямую:', `${fmt(constrFin.directPaid)} руб.`],
     ['Стоимость документов и начислений:', `${fmt(expenses)} руб.`],
     ['Оплата накладных не подтверждена:', `${fmt(constrFin.unpaidInvoices)} руб.`],
@@ -216,7 +241,8 @@ async function exportConstrPdf(projectId){
     ['Расчётная наценка ARHITTEK'+(constrFin.companyMarkupRate===null?'':` ${constructionAmount(constrFin.companyMarkupRate)}%`)+':', constrFin.companyMarkupAmount===null?'Ставка не указана':`${constructionAmount(constrFin.companyMarkupAmount)} руб.`],
     ['Расходы с наценкой:', constrFin.totalWithMarkup===null?'Не определены':`${constructionAmount(constrFin.totalWithMarkup)} руб.`],
     ['Гонорар компании, записанный ранее:', `${constructionAmount(constrFin.companyMarkupRecordedPaid)} руб.`],
-    ['Расчётный остаток аванса:', constrFin.calculatedAdvanceBalance===null?'Не определён':`${constructionAmount(constrFin.calculatedAdvanceBalance)} руб.`],
+    ['Расчётный остаток аванса:', constrFin.advanceRemaining===null?'Не определён':`${constructionAmount(constrFin.advanceRemaining)} руб.`],
+    ...(constrFin.isCalculatedDeficit?[['Не хватает аванса по расчёту:', `${constructionAmount(constrFin.advanceShortfall)} руб.`]]:[]),
   ];
   summaryRows.forEach(([lbl,val])=>{
     doc.setFont('Roboto','bold');

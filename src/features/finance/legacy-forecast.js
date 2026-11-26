@@ -36,7 +36,7 @@ const first=view.querySelector('.workspace-head')?.nextSibling || view.firstChil
 view.insertBefore(wrap, first);
 
 function num(v){const n=Number(v);return Number.isFinite(n)?n:0;}
-function money(v){try{return fmtMoney(Math.round(num(v)));}catch(e){return Math.round(num(v)).toLocaleString('ru-RU')+' ₽';}}
+function money(v){return fmtMoney(num(v));}
 function monthKey(d=new Date()){return d.toISOString().slice(0,7);}
 function inMonth(date,key){return !!date && String(date).slice(0,7)===key;}
 function monthBounds(key){

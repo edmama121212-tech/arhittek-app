@@ -66,6 +66,20 @@
     return saved!==null?saved:autoPrice(card.total_area);
   }
   const priceText=card=>{const value=price(card);return value===null?'Цена по запросу':value.toLocaleString('ru-RU')+' ₽';};
+  function individualPriceText(value, tariff){
+    const area = areaNumber(value);
+    const unit = areaNumber(tariff);
+    if (area === null || unit === null) return '';
+    // Area in hundredths of a square metre, rate in kopecks per square metre.
+    const product = Math.round(area * 100) * Math.round(unit * 100);
+    if (!Number.isSafeInteger(product)) return '';
+    const amount = Math.round(product / 100) / 100;
+    return amount.toLocaleString('ru-RU', {maximumFractionDigits: 2}) + ' ₽';
+  }
+  function individualPriceHTML(area, tariff){
+    const value = individualPriceText(area, tariff);
+    return value ? `<div class="individual-price" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;margin:0 0 12px;color:#56677a;font-size:12px;line-height:1.45">Индивидуальный проект той же площади <s style="font-size:15px;font-weight:600;white-space:nowrap">${value}</s></div>` : '';
+  }
   const defaultTitle=card=>(Number(card.floors)===1?'Одноэтажный':Number(card.floors)===3?'Трёхэтажный':'Двухэтажный')+' дом';
   function tabs(card,suffix='',handler='showTab'){
     return active(card).map(f=>`<div class="tab" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" onclick="${handler}('${f.key}${suffix}',this)">${f.label}</div>`).join('');
@@ -95,5 +109,5 @@
   function previewPanels(){
     return definitions.map(f=>`<div id="prev-${f.key}" class="catalog-floor-preview" style="display:none"><div class="plan-wrap"><div class="plan-label">${f.title}<span id="prev-a${f.suffix}-badge">— м²</span></div><div class="plan-img-container"><img id="prev-plan${f.suffix}-img" class="plan-img" alt="${f.title}: план" style="display:none"/><span id="prev-plan${f.suffix}-ph" class="catalog-plan-empty">Загрузите план</span></div></div><div class="explication"><div class="expl-header"><span class="expl-header-title">Экспликация</span><span id="prev-total${f.suffix}" class="expl-header-total">— м²</span></div><div id="prev-expl${f.suffix}-rows"></div></div><div style="height:12px"></div></div>`).join('');
   }
-  root.CatalogFloors = Object.freeze({definitions,tags,enabled,active,slots,label,rate,setRates,getRates,autoPrice,price,priceText,rows,normalizeRooms,calculateAreas,defaultTitle,areaNumber,tabs,panels,editor,previewTabs,previewPanels});
+  root.CatalogFloors = Object.freeze({definitions,tags,enabled,active,slots,label,rate,setRates,getRates,autoPrice,price,priceText,individualPriceText,individualPriceHTML,rows,normalizeRooms,calculateAreas,defaultTitle,areaNumber,tabs,panels,editor,previewTabs,previewPanels});
 })(typeof window!=='undefined'?window:globalThis);

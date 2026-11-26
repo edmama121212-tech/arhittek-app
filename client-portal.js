@@ -158,9 +158,9 @@
   function metric(label,value,note,featured = false) { const node = el('div','metric' + (featured ? ' featured' : '') + (value !== null && value < 0 ? ' negative' : '')), formatted = value === null ? '—' : rubles(value); node.append(el('div','metric-label',label),el('div','metric-value' + (formatted.length > 12 ? ' compact' : ''),formatted)); if (note) node.append(el('div','metric-note',note)); return node; }
   function renderMoney(s) {
     const b = s.pricing, feePercent = b.fee_rate_bps / 100, c = s.cash, section = $('money-content'), metrics = el('div','metrics');
-    metrics.append(metric('Остаток средств объекта',c.held_kopeks,c.classification_ok ? 'По журналу после затрат, гонорара и возвратов' : 'Станет известен после сверки платежей',true),metric('Вы передали компании',c.received_kopeks,'Переводы на ведение этого объекта'),metric('Оплачено на объект',c.company_spent_kopeks,c.classification_ok ? 'Затраты из переданных вами средств' : 'Распределение затрат требует сверки'),metric('Вы оплатили напрямую',c.direct_paid_kopeks,'Эти деньги не поступали компании'));
+    metrics.append(metric('Остаток средств объекта',c.held_kopeks===null?null:Math.max(0,c.held_kopeks),c.classification_ok ? 'По журналу после затрат, гонорара и возвратов' : 'Станет известен после сверки платежей',true),metric('Вы передали компании',c.received_kopeks,'Переводы на ведение этого объекта'),metric('Оплачено на объект',c.company_spent_kopeks,c.classification_ok ? 'Затраты из переданных вами средств' : 'Распределение затрат требует сверки'),metric('Вы оплатили напрямую',c.direct_paid_kopeks,'Эти деньги не поступали компании'));
     section.append(metrics);
-    if (c.held_kopeks !== null && c.held_kopeks < 0) section.append(el('p','warning','Оплаченные затраты, выделенный гонорар и возвраты превышают переданные компании средства. Остаток отрицательный.'));
+    if (c.held_kopeks !== null && c.held_kopeks < 0) section.append(el('p','warning','Перерасход по журналу — '+rubles(-c.held_kopeks)+'. Выплаты и выделенный гонорар превышают полученные средства.'));
     if (!c.classification_ok) section.append(el('p','warning','Часть платежей объекта требует сверки. Непроверенный остаток и распределение затрат пока не показаны; переводы и возвраты сохранены как отдельные факты.'));
     const panel = el('div','budget-panel'); panel.append(el('h3','panel-title','Расходы + ' + feePercent + '% услуг ARHITTEK'));
     if (b.cost_facts_complete) panel.append(row('Расходы по документам объекта',rubles(b.confirmed_cost_base_kopeks)));
@@ -173,10 +173,10 @@
     panel.append(row('Возвращено вам',rubles(c.refunded_kopeks)));
     if (c.classification_ok && c.accountable_outstanding_kopeks !== null && c.held_kopeks !== null && c.accountable_outstanding_kopeks > 0) {
       const withoutAdvance = c.held_kopeks - c.accountable_outstanding_kopeks;
-      panel.append(row('Непогашенный подотчёт',rubles(c.accountable_outstanding_kopeks)),row('Расчётный остаток без подотчёта',rubles(withoutAdvance)));
+      panel.append(row('Непогашенный подотчёт',rubles(c.accountable_outstanding_kopeks)),row('Расчётный остаток без подотчёта',rubles(Math.max(0,withoutAdvance))));
       if (withoutAdvance < 0) panel.append(el('p','warning','Без непогашенного подотчёта расчётная денежная часть объекта имеет дефицит ' + rubles(-withoutAdvance) + '. Требуется сверка финансирования.'));
     }
-    panel.append(el('p','money-note','Остаток = передано компании − оплаченные затраты из ваших средств − выделенный гонорар − возвраты вам. Прямые оплаты заказчика показаны отдельно. Подотчёт показан отдельно; его выдача не считается окончательным расходом. Накладные и начисления сами по себе деньги не списывают.'));
+    panel.append(el('p','money-note','Из переданных средств вычитаются оплаченные затраты, выделенный гонорар и возвраты. Прямые оплаты заказчика показаны отдельно. Подотчёт показан отдельно; его выдача не считается окончательным расходом. Накладные и начисления сами по себе деньги не списывают.'));
     section.append(panel);
   }
   function renderStages(s) {

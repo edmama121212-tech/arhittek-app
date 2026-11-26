@@ -166,6 +166,11 @@ function markCardEditorDirty(){
   const overlay=document.getElementById('cardEditorOverlay');
   if(overlay&&overlay.style.display!=='none')overlay.dataset.dirty='1';
 }
+function catalogIndividualDesignRate(){
+  const id = state.catalogPricing?.individual_tariff_id;
+  const tariff = id && state.kpCatalog?.find(item => item.id === id);
+  return tariff && !tariff.deleted_at && ['м²','м2','m²','m2'].includes(tariff.unit) ? tariff.rate : null;
+}
 function cePreview(){
   initCardFloorEditor();
   const v=id=>document.getElementById(id)?.value||'';
@@ -182,6 +187,8 @@ function cePreview(){
   set('prev-num',num?'№ '+num:'№ —');
   set('prev-area',v('ce-area')||'—');set('prev-beds',v('ce-beds')||'—');set('prev-footprint',v('ce-footprint')||'—');
   set('prev-floors-stat',ceFloorsSelected);set('prev-price',(v('ce-price')||'—')+' ₽');
+  const comparison = document.getElementById('prev-individual-comparison');
+  if(comparison) comparison.innerHTML = CatalogFloors.individualPriceHTML(v('ce-area'), catalogIndividualDesignRate());
   const systemTags=['Классический','Современный','Цокольный этаж','Мансарда','Плоская кровля'];
   const tags=v('ce-tags').split(',').map(t=>t.trim()).filter(t=>t&&!systemTags.includes(t));
   if(ceStyleSelected==='classic')tags.push('Классический');
@@ -713,8 +720,9 @@ ${CatalogFloors.panels(card)}
   </div>
 </div>
 <div class="price-block">
-  <div class="price-label">Стоимость проекта</div>
+  <div class="price-label">Стоимость готового проекта</div>
   <div class="price">${escapeHtml(CatalogFloors.priceText(card))}</div>
+  ${CatalogFloors.individualPriceHTML(card.total_area, catalogIndividualDesignRate())}
   <div class="btn-row">
     <button class="btn-primary" onclick="window.open('https://wa.me/79226593872','_blank')">Получить проект</button>
     <button class="btn-secondary" onclick="window.open('https://wa.me/79226593872','_blank')">Консультация</button>

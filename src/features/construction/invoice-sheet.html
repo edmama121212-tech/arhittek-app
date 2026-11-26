@@ -8,10 +8,11 @@
 
     <!-- Фото накладной -->
     <div id="invSheet-photo-wrap" style="margin-bottom:14px;display:none;">
-      <a id="invSheet-pdf-link" target="_blank" rel="noopener" style="display:none;">📄 Открыть PDF</a>
+      <button type="button" id="invSheet-pdf-link" onclick="openInvoicePdf()" style="display:none;">Открыть PDF</button>
       <img id="invSheet-photo-img" src="" alt="фото накладной"
            style="width:100%;max-height:260px;object-fit:contain;border-radius:10px;border:1px solid var(--line-strong);cursor:pointer;"
-           onclick="window.open(this.src,'_blank')">
+           onclick="window.open(this.src,'_blank','noopener')">
+      <button type="button" onclick="removeSavedInvoiceAttachment()">Убрать вложение</button>
     </div>
 
     <div class="field-row">
@@ -38,7 +39,7 @@
       </div>
       <div class="field">
         <label>Сумма, ₽</label>
-        <input type="number" id="invSheet-amount" placeholder="0">
+        <input type="number" id="invSheet-amount" min="0.01" step="0.01" placeholder="0">
       </div>
     </div>
 
@@ -59,13 +60,13 @@
 
     <div class="field">
       <label>Документы и фотографии</label>
-      <label for="invSheet-photo-input" class="photo-upload-label" style="display:block;text-align:center;padding:24px;margin-bottom:8px;border:1px dashed var(--blue);border-radius:8px;" ondragover="event.preventDefault();event.stopPropagation();this.style.background='rgba(40,88,161,.12)'" ondragleave="this.style.background=''" ondrop="this.style.background='';invoiceDocumentDrop(event,'invSheet-photo-input')">Перетащите документ сюда или нажмите для выбора<br>PDF, JPG, JPEG, PNG</label>
+      <label for="invSheet-photo-input" class="photo-upload-label" style="display:block;text-align:center;padding:24px;margin-bottom:8px;border:1px dashed var(--blue);border-radius:8px;" ondragover="event.preventDefault();event.stopPropagation();this.style.background='rgba(40,88,161,.12)'" ondragleave="this.style.background=''" ondrop="this.style.background='';invoiceDocumentDrop(event,'invSheet-photo-input')">Перетащите документ сюда или нажмите для выбора<br>PDF, JPG, JPEG, PNG · до 25 МБ</label>
       <div style="display:flex;gap:8px;margin-bottom:6px;">
         <label class="photo-upload-label" style="flex:1;margin:0;" for="invSheet-photo-input">📁 Выбрать файл</label>
         <label class="photo-upload-label" style="flex:1;margin:0;" for="invSheet-camera-input">📷 Сделать фото</label>
       </div>
       <input type="file" id="invSheet-photo-input" accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png" style="display:none;" onchange="onInvSheetPhotoChange(this)">
-      <input type="file" id="invSheet-camera-input" accept="image/*" capture="environment" style="display:none;" onchange="onInvSheetPhotoChange(this)">
+      <input type="file" id="invSheet-camera-input" accept="image/*" capture="environment" style="display:none;" onchange="handleInvoicePhotoCapture(this,'invSheet-photo-input')">
       <span id="invSheet-photo-name" style="font-size:11px;color:var(--text-dim);"></span>
     </div>
 

@@ -85,7 +85,8 @@ function recalcLiveFeeSummary(){
 document.getElementById('pf-price').addEventListener('input', ()=>{
   const price = parseFloat(document.getElementById('pf-price').value) || 0;
   const advance = parseFloat(document.getElementById('pf-advance').value) || 0;
-  document.getElementById('pf-balance').value = Math.max(0, price - advance);
+  const p = state.projects.find(project=>project.id===editingProjectId);
+  if(!isConstructionProject(p))document.getElementById('pf-balance').value = Math.max(0, Math.round((price-advance)*100)/100);
   recalcLiveFeeSummary();
 });
 ['pf-expenses','pf-feepercent','pf-feebase','pf-feepaid','pf-co-employee','pf-co-feepercent','pf-co-feepaid'].forEach(id=>{
@@ -150,6 +151,8 @@ function openProjectSheet(id){
   const title = document.getElementById('projectSheetTitle');
   const deleteBtn = document.getElementById('pf-delete');
 
+  const overspend = document.getElementById('pf-cash-overspend');
+  overspend.hidden = true;
   if(id){
     const p = state.projects.find(x=>x.id===id);
     if(!p) return;
@@ -211,7 +214,11 @@ function openProjectSheet(id){
     if(isConstr){
       const financials=getConstructionFinancials(p);
       document.getElementById('pf-advance').value=financials.received;
-      document.getElementById('pf-balance').value=financials.balance;
+      document.getElementById('pf-balance').value=financials.cashRemaining;
+      if(financials.isOverspent){
+        overspend.textContent='Перерасход: '+fmtMoney(financials.cashOverspend);
+        overspend.hidden=false;
+      }
     }
     // Для строительных объектов расходы считаются из накладных (вкладка «Стройка»),
     // а не из этого списка — прячем блок, чтобы не путал устаревшим/нерелевантным числом.

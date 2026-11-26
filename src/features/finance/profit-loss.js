@@ -98,7 +98,9 @@ function renderPL(){
       .filter(p => !isConstructionProject(p) && Number(p.balance) > 0)
       .reduce((s,p) => s + (Number(p.balance)||0), 0);
 
-    const constrBudgetLeft = constrProjects.reduce((s,p) => s + getConstructionFinancials(p).balance, 0);
+    const constructionFinances = constrProjects.map(p=>getConstructionFinancials(p));
+    const constrBudgetLeft = constructionFinances.reduce((sum,f)=>sum+f.cashRemaining,0);
+    const constrOverspend = constructionFinances.reduce((sum,f)=>sum+f.cashOverspend,0);
 
     el.innerHTML = `
                                                   <div class="card" style="margin-bottom:10px;">
@@ -156,6 +158,7 @@ function renderPL(){
           <div class="fl">Остатки бюджетов (текущие)</div>
                   <div class="fv" style="color:var(--gold);">${fmtMoney(constrBudgetLeft)}</div>
 </div>
+        ${constrOverspend ? `<div class="fee-row"><div class="fl">Перерасход по объектам</div><div class="fv" style="color:var(--red);">${fmtMoney(constrOverspend)}</div></div>` : ''}
         <div class="fee-row total" style="border-top:1px solid var(--line-strong); margin-top:4px; padding-top:8px;">
                 <div class="fl">Прибыль стройки (приход − расход)</div>
                         <div class="fv" style="color:${constrProfitColor};">${constrProfitSign}${fmtMoney(constrProfit)}</div>
@@ -175,10 +178,6 @@ function renderPL(){
             <div class="fl" style="color:var(--text-dim);">Долг клиентов · Проектный</div>
             <div class="fv" style="color:var(--gold);">${fmtMoney(state.projects.filter(p=>!constrIds.has(p.id)).reduce((s,p)=>s+Math.max(0,Number(p.balance)||0),0))}</div>
           </div>
-          ${constrProjects.length > 0 ? `<div class="fee-row">
-            <div class="fl" style="color:var(--text-dim);">Долг клиентов · Строительный</div>
-            <div class="fv" style="color:var(--gold);">${fmtMoney(Math.max(0, constrProjects.reduce((s,p)=>s+getConstructionFinancials(p).balance,0)))}</div>
-          </div>` : ''}
           <div class="fee-row total" style="border-top:1px solid var(--line); margin-top:4px; padding-top:6px;">
             <div class="fl" style="color:var(--text-dim); font-weight:700;">Итого долг клиентов</div>
             <div class="fv" style="color:var(--gold); font-weight:700;">${fmtMoney(totalDebt)}</div>

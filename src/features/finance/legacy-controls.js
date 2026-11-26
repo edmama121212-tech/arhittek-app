@@ -6,7 +6,7 @@ if(!view || window.__arhittekFinanceControlsV3) return;
 window.__arhittekFinanceControlsV3=true;
 const $=id=>document.getElementById(id);
 const num=v=>{const x=Number(v);return Number.isFinite(x)?x:0;};
-const money=v=>{try{return fmtMoney(Math.round(num(v)));}catch(e){return Math.round(num(v)).toLocaleString('ru-RU')+' ₽';}};
+const money=v=>fmtMoney(num(v));
 const esc=v=>{try{return escapeHtml(v);}catch(e){return String(v??'');}};
 const isAdmin=()=>!!window.session?.isAdmin || !!session?.isAdmin;
 let editingBonusId=null;
@@ -110,7 +110,7 @@ window.openReserveCorrection=function(){
   $('financeControlTitle').textContent='Корректировать резерв';
   $('financeControlBody').innerHTML=`
     <div class="finance-current-balance"><span>Сейчас в резерве</span><strong>${money(current)}</strong></div>
-    <div class="field"><label>Фактический остаток резерва, ₽</label><input id="finance-reserve-target" type="number" min="0" step="1000" value="${Math.round(current)}"></div>
+    <div class="field"><label>Фактический остаток резерва, ₽</label><input id="finance-reserve-target" type="number" min="0" step="0.01" value="${Math.max(0,Math.round(current*100)/100)}"></div>
     <div class="field"><label>Комментарий</label><input id="finance-reserve-comment" type="text" placeholder="например: сверка сейфа и банковских счетов"></div>
     <button type="button" class="btn btn-primary" id="finance-reserve-save">Сохранить фактический резерв</button>
   `;
@@ -119,10 +119,12 @@ window.openReserveCorrection=function(){
 };
 async function saveReserveCorrection(){
   const current=typeof getCompanyReserveBalance==='function'?getCompanyReserveBalance():190000;
-  const target=num($('finance-reserve-target')?.value);
+  const field=$('finance-reserve-target');
+  const target=field.valueAsNumber;
+  if(!Number.isFinite(target)||field.validity.stepMismatch){showToast('Укажите фактический остаток с точностью до копейки');return;}
   const comment=($('finance-reserve-comment')?.value||'').trim();
   if(target<0){showToast('Резерв не может быть отрицательным');return;}
-  const delta=Math.round(target-current);
+  const delta=(Math.round(target*100)-Math.round(current*100))/100;
   if(delta===0){closeFinanceControl();showToast('Резерв уже совпадает');return;}
   const today=financeToday();
   try{

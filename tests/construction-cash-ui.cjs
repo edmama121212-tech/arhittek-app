@@ -44,6 +44,28 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
   state.ledger.push({id:'pay-a',project_id:'build-a',type:'project_expense',amount:10000,entry_date:'2026-10-11',description:'[invoice-payment:bill-a]'});const f=getConstructionFinancials(state.projects[0]);return[f.cashOutgoing,f.balance,f.unpaidInvoices,f.directCosts];
  },[10000,90000,30000,40000]);
  await fresh();
+ await check('Paid invoices above the advance show the precise cash shortage separately',()=>{
+  const project=state.projects[0];project.fee_percent=0;
+  const items=[600.08,400].map((amount,i)=>({id:'sample-'+i,project_id:project.id,amount,item_type:'Материал',invoice_date:'2026-10-10'}));
+  state.invoices=items;
+  state.ledger=[{type:'advance',amount:1000,project_id:project.id,entry_date:'2026-10-10'}];
+  const unpaid=getConstructionFinancials(project);
+  state.ledger.push(...items.map(item=>({id:'pay-'+item.id,type:'project_expense',amount:item.amount,project_id:project.id,entry_date:'2026-10-10',description:'[invoice-payment:'+item.id+']'})));
+  const paid=getConstructionFinancials(project);openObjectView(project.id);
+  const detail=document.querySelector('#objSummary').textContent.replace(/\s+/g,' ');
+  const row=buildExportRows()['Проекты'][0];
+  return [unpaid.cashRemaining,unpaid.cashOverspend,unpaid.advanceShortfall,paid.cashRemaining,paid.cashOverspend,paid.unpaidInvoices,
+    detail.includes('Перерасход по журналу — 0,08 ₽'),detail.includes('Деньги объекта по журналу0 ₽'),detail.includes('Не хватает аванса по расчёту0,08 ₽'),row['Остаток'],row['Перерасход по объекту']];
+ },[1000,0,0.08,0,0.08,0,true,true,true,0,0.08]);
+ await fresh();
+ await check('A one-kopeck mismatch is caught and arithmetic noise is ignored',()=>{
+  const p=state.projects[0];state.ledger=[];state.invoices=[{project_id:p.id,item_type:'Материал',amount:0.1},{project_id:p.id,item_type:'Работа',amount:0.2}];
+  p.expenses=0.1+0.2;
+  const clean=!buildObjectAuditHtml(p.id).includes('(не совпадает)');
+  p.expenses=0.29;
+  return [clean,buildObjectAuditHtml(p.id).includes('(не совпадает)'),auditFinancialIntegrity().some(issue=>issue.includes('прямыми расходами'))];
+ },[true,true,true]);
+ await fresh();
  await check('An ordinary expense without an invoice reduces cash and direct project costs',()=>{
   state.ledger.push({id:'ordinary-cost',project_id:'build-a',type:'expense',amount:8000,entry_date:'2026-10-11'});const p=state.projects[0],f=getConstructionFinancials(p);return[f.balance,f.directCosts,getProjectExpenses(p)];
  },[92000,8000,8000]);

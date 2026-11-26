@@ -200,7 +200,7 @@ async function loadAllData(){
       ownerRead(()=>fetchAllRows(()=>sb.from('audit_log').select('id,entity_id,changes,created_at',{count:'exact'}).eq('entity_type','project').order('created_at',{ascending:false}))),
       isOwner()?sb.rpc('get_financial_journal'):Promise.resolve({data:null,error:null}),
       isOwner()?loadSalaryHistorySafe():Promise.resolve({data:null,error:null}),
-      sb.from('catalog_pricing').select('rate_under_100,rate_100_to_400,rate_over_400').eq('id',1).maybeSingle(),
+      sb.from('catalog_pricing').select('rate_under_100,rate_100_to_400,rate_over_400,individual_tariff_id').eq('id',1).maybeSingle(),
     ]);
 
     if(accessActor.employeeId!==session?.employeeId||accessActor.token!==session?.token||!hasVerifiedAccess())return;
