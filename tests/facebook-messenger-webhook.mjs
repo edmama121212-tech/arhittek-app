@@ -36,6 +36,7 @@ function mock({claim={claimed:true,lease:'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa'}
     calls.push({u,data});
     if(u.endsWith('/rpc/claim_facebook_message_catalog_reply'))return Response.json(claim);
     if(u.endsWith('/rpc/finish_facebook_message_catalog_reply'))return Response.json(true);
+    if(u.endsWith('/rpc/confirm_facebook_report_delivery'))return Response.json(true);
     if(u.endsWith('/rest/v1/share_links'))return new Response(null,{status:201});
     if(u.endsWith('/messages'))return Response.json(payload,{status});
     throw new Error('Unexpected request '+u);
@@ -45,7 +46,7 @@ test('incoming Messenger message sends a button and 48 hour catalog, confirms me
   const m=mock();const r=await createHandler(env,{send:m.fetch,now:()=>time})(req());
   assert.equal(r.status,200);
   assert.deepEqual(m.calls.map(c=>c.u.split('/').at(-1)),[
-    'claim_facebook_message_catalog_reply','share_links','messages','finish_facebook_message_catalog_reply'
+    'claim_facebook_message_catalog_reply','share_links','messages','confirm_facebook_report_delivery'
   ]);
   const link=m.calls[1].data;
   assert.equal(Date.parse(link.expires_at)-Date.parse(link.created_at),48*3600000);
@@ -59,8 +60,9 @@ test('incoming Messenger message sends a button and 48 hour catalog, confirms me
   assert.equal(url.searchParams.get('utm_source'),'facebook');
   assert.equal(url.searchParams.get('utm_medium'),'message');
   assert.equal(url.searchParams.get('t'),link.token);
-  assert.equal(m.calls[3].data.p_state,'sent');
-  assert.equal(m.calls[3].data.p_sent_mid,'m_sent');
+  assert.equal(m.calls[3].data.p_channel,'messenger');
+  assert.equal(m.calls[3].data.p_expires_at,link.expires_at);
+  assert.equal(m.calls[3].data.p_message,'m_sent');
 });
 test('already sent recipient does not receive another catalog',async()=>{
   const m=mock({claim:{claimed:false,state:'sent'}});
