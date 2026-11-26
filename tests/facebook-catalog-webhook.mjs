@@ -97,3 +97,15 @@ test('Meta refusal records failed without fabricating delivery',async()=>{
   assert.equal(r.status,200);
   assert.equal(m.calls.at(-1).data.p_state,'failed');
 });
+
+test('Facebook callback verifies an encrypted project verifier before the Page is connected',async()=>{
+  const verifier='a'.repeat(64);
+  const settings={...env,FACEBOOK_WEBHOOK_VERIFY_TOKEN:'',FACEBOOK_PAGE_ACCESS_TOKEN:''};
+  const handler=createHandler(settings,{send:async(url,options)=>{
+    assert.equal(new URL(url).pathname,'/rest/v1/rpc/match_facebook_catalog_verifier');
+    return Response.json(JSON.parse(options.body).p_candidate===verifier);
+  }});
+  const challenge='https://example.supabase.co/functions/v1/facebook-catalog?hub.mode=subscribe&hub.challenge=accepted&hub.verify_token=';
+  assert.equal(await(await handler(new Request(challenge+verifier))).text(),'accepted');
+  assert.equal((await handler(new Request(challenge+'b'.repeat(64)))).status,403);
+});

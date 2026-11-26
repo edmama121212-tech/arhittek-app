@@ -10,9 +10,10 @@ async function validSignature(secret,bytes,signature){
   return crypto.subtle.verify('HMAC',key,Uint8Array.from(hex.map(v=>parseInt(v,16))),bytes);
 }
 export function createHandler(env,{send=fetch,now=()=>Date.now()}={}){
-  const pageId=String(env.FACEBOOK_PAGE_ID||'');
+  const pageId=String(env.FACEBOOK_PAGE_ID||'1384422664746307');
   const host='graph.facebook.com';
-  const version=String(env.META_GRAPH_VERSION||'');
+  const version=String(env.META_GRAPH_VERSION||'v27.0');
+  const appSecret=env.FACEBOOK_APP_SECRET||env.META_APP_SECRET;
   const token=String(env.FACEBOOK_PAGE_ACCESS_TOKEN||'');
   async function rpc(method,args){
     const result=await send(env.SUPABASE_URL+'/rest/v1/rpc/'+method,{
@@ -45,19 +46,25 @@ export function createHandler(env,{send=fetch,now=()=>Date.now()}={}){
   return async req=>{
     const url=new URL(req.url);
     if(req.method==='GET'){
-      if(!env.FACEBOOK_WEBHOOK_VERIFY_TOKEN)return response('Facebook is not connected',503);
-      if(url.searchParams.get('hub.mode')==='subscribe'
-        &&url.searchParams.get('hub.verify_token')===env.FACEBOOK_WEBHOOK_VERIFY_TOKEN
-        &&url.searchParams.has('hub.challenge'))return response(url.searchParams.get('hub.challenge'));
-      return response('Forbidden',403);
+      const candidate=url.searchParams.get('hub.verify_token');
+      if(url.searchParams.get('hub.mode')!=='subscribe'||!candidate||!url.searchParams.has('hub.challenge'))
+        return response('Forbidden',403);
+      let matches=false;
+      if(env.FACEBOOK_WEBHOOK_VERIFY_TOKEN){
+        matches=candidate===env.FACEBOOK_WEBHOOK_VERIFY_TOKEN;
+      }else if(/^[a-f0-9]{64}$/.test(candidate)){
+        try{matches=await rpc('match_facebook_catalog_verifier',{p_candidate:candidate})===true;}
+        catch(_){return response('Verification service unavailable',503);}
+      }
+      return matches?response(url.searchParams.get('hub.challenge')):response('Forbidden',403);
     }
     if(req.method!=='POST')return response('Method not allowed',405);
-    if(!env.META_APP_SECRET||!env.SUPABASE_URL||!env.SUPABASE_SERVICE_ROLE_KEY
+    if(!appSecret||!env.SUPABASE_URL||!env.SUPABASE_SERVICE_ROLE_KEY
       ||!token||!/^[0-9]{1,50}$/.test(pageId)||!/^v\d+\.\d+$/.test(version))
       return response('Facebook is not connected',503);
     if(Number(req.headers.get('content-length')||0)>262144)return response('Payload too large',413);
     const raw=await req.arrayBuffer();if(raw.byteLength>262144)return response('Payload too large',413);
-    if(!await validSignature(env.META_APP_SECRET,raw,req.headers.get('x-hub-signature-256')))
+    if(!await validSignature(appSecret,raw,req.headers.get('x-hub-signature-256')))
       return response('Invalid signature',401);
     let body;try{body=JSON.parse(new TextDecoder().decode(raw));}
     catch(_){return response('Invalid JSON',400);}
