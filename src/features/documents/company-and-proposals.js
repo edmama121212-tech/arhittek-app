@@ -80,7 +80,7 @@ async function saveCatalogPriceSettings(){
     if(error)throw error;
     if(actor!==session?.token||!canEditCards())return;
     if(!data||typeof data.updated_cards!=='number')throw new Error('Сервер не подтвердил сохранение');
-    state.catalogPricing=proposed;
+    state.catalogPricing={...state.catalogPricing,...proposed};
     CatalogFloors.setRates(proposed);
     const count=data.updated_cards;
     if(status)status.textContent='Сохранено. Автоматически пересчитано карточек: '+count+'.';

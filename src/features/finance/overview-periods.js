@@ -62,8 +62,8 @@ function auditFinancialIntegrity(){
     if(Number(p.advance||0) > Number(p.price||0) && !isConstructionProject(p)) issues.push(`Проект «${p.name}»: аванс больше цены`);
     if(isConstructionProject(p)){
       const f=getConstructionFinancials(p);
-      if(Math.abs(Number(p.expenses||0)-Number(f.directCosts||0))>0.01) issues.push(`Проект «${p.name}»: сохранённые расходы не совпадают с прямыми расходами`);
-    } else if(Math.abs(Number(p.expenses||0)-Number(direct||0))>0.01 && (state.ledger||[]).some(e=>e.project_id===p.id && e.type==='project_expense' && !e.deleted_at)){
+      if(Math.round(Number(p.expenses||0)*100)!==Math.round(Number(f.directCosts||0)*100)) issues.push(`Проект «${p.name}»: сохранённые расходы не совпадают с прямыми расходами`);
+    } else if(Math.round(Number(p.expenses||0)*100)!==Math.round(Number(direct||0)*100) && (state.ledger||[]).some(e=>e.project_id===p.id && e.type==='project_expense' && !e.deleted_at)){
       issues.push(`Проект «${p.name}»: projects.expenses не совпадает с журналом расходов`);
     }
   });

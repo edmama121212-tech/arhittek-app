@@ -8,7 +8,7 @@ window.__arhittekFinanceVisualV2=true;
 
 const byId=id=>document.getElementById(id);
 const n=v=>{const x=Number(v);return Number.isFinite(x)?x:0;};
-const cash=v=>{try{return fmtMoney(Math.round(n(v)));}catch(e){return Math.round(n(v)).toLocaleString('ru-RU')+' ₽';}};
+const cash=v=>fmtMoney(n(v));
 const esc=v=>{try{return escapeHtml(v);}catch(e){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}};
 const inRange=(d,from,to)=>!!d && (!from||d>=from) && (!to||d<=to);
 

@@ -4,7 +4,7 @@
 if(window.__arhittekFinanceObligationsV4)return;
 window.__arhittekFinanceObligationsV4=true;
 const $=id=>document.getElementById(id), n=v=>Number.isFinite(Number(v))?Number(v):0;
-const cash=v=>{try{return fmtMoney(Math.round(n(v)));}catch(e){return Math.round(n(v)).toLocaleString('ru-RU')+' ₽';}};
+const cash=v=>fmtMoney(n(v));
 const esc=v=>{try{return escapeHtml(String(v??''));}catch(e){return String(v??'');}};
 const dateISO=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 const today=()=>dateISO(new Date()), isAdmin=()=>!!(window.session?.isAdmin||session?.isAdmin);

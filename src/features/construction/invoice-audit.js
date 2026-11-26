@@ -25,7 +25,7 @@ function buildObjectAuditHtml(projectId){
   const invoiceTotal = matTotal + workTotal + otherTotal;
   const expectedExpenses = p?getProjectExpenses(p):invoiceTotal;
   const storedExpenses = Number(p?.expenses) || 0;
-  const mismatch = Math.abs(expectedExpenses - storedExpenses) > 1;
+  const mismatch = Math.round(expectedExpenses*100) !== Math.round(storedExpenses*100);
 
   let html = `<div class="card">
     <div class="fee-row"><div class="fl">Всего накладных</div><div class="fv">${invs.length}</div></div>
@@ -63,23 +63,99 @@ function buildObjectAuditHtml(projectId){
   return html;
 }
 
-// Фото накладной выбрано из галереи — просто показываем имя файла
-function onInvoicePhotoPicked(input, statusId){
-  const file = input.files[0];
-  const span = document.getElementById(statusId);
-  if(span) span.textContent = file ? '✓ '+file.name : '';
-}
+const INVOICE_DOCUMENT_LIMIT = 25 * 1024 * 1024;
+const invoiceDocumentMessage = 'Выберите один PDF, JPG, JPEG или PNG до 25 МБ';
 
-// Фото сделано камерой — переносим файл в основной input (тот, который читает addInvoice при сохранении)
-function handleInvoicePhotoCapture(captureInput, targetInputId, statusId){
-  const file = captureInput.files[0];
-  if(!file) return;
-  const dt = new DataTransfer();
-  dt.items.add(file);
-  const target = document.getElementById(targetInputId);
-  if(target) target.files = dt.files;
-  const span = document.getElementById(statusId);
-  if(span) span.textContent = '✓ '+file.name;
+function isInvoicePdf(url){
+  return /\.pdf(?:[?#]|$)/i.test(String(url || ''));
+}
+function invoiceDocumentType(name){
+  if(isInvoicePdf(name))return 'application/pdf';
+  if(/\.jpe?g$/i.test(name))return 'image/jpeg';
+  if(/\.png$/i.test(name))return 'image/png';
+  return '';
+}
+function validInvoiceDocument(file){
+  if(!file || !file.size || file.size > INVOICE_DOCUMENT_LIMIT)return false;
+  const type=invoiceDocumentType(file.name);
+  return !!type && (!file.type || file.type.toLowerCase() === type);
+}
+function selectInvoiceDocument(input,file){
+  const transfer=new DataTransfer();
+  transfer.items.add(file);
+  input.files=transfer.files;
+  input.dispatchEvent(new Event('change',{bubbles:true}));
+}
+function invoiceDocumentDrop(event,id){
+  event.preventDefault();
+  event.stopPropagation();
+  const input=document.getElementById(id), files=event.dataTransfer?.files;
+  if(!input || files?.length !== 1 || !validInvoiceDocument(files[0])){
+    showToast(invoiceDocumentMessage);
+    return;
+  }
+  selectInvoiceDocument(input,files[0]);
+}
+function invoiceAttachmentStatus(input,statusId){
+  const file=input.files[0], status=document.getElementById(statusId);
+  if(!status)return;
+  status.replaceChildren();
+  if(!file)return;
+  status.append(document.createTextNode(file.name+' · '));
+  const preview=document.createElement('button');
+  preview.type='button';
+  preview.textContent='Просмотр';
+  preview.onclick=()=>{
+    const typedFile=file.type ? file : file.slice(0,file.size,invoiceDocumentType(file.name));
+    const url=URL.createObjectURL(typedFile);
+    window.open(url,'_blank','noopener');
+    setTimeout(()=>URL.revokeObjectURL(url),60000);
+  };
+  const remove=document.createElement('button');
+  remove.type='button';
+  remove.textContent='Убрать';
+  remove.onclick=()=>{
+    input.dataset.discardAttachment='1';
+    input.value='';
+    input.dispatchEvent(new Event('change',{bubbles:true}));
+  };
+  status.append(preview,remove);
+}
+function onInvoicePhotoPicked(input,statusId){
+  if(input.files[0] && !validInvoiceDocument(input.files[0])){
+    input.value='';
+    showToast(invoiceDocumentMessage);
+  }
+  if(input.files[0])delete input.dataset.discardAttachment;
+  invoiceAttachmentStatus(input,statusId);
+}
+function handleInvoicePhotoCapture(camera,targetId){
+  const input=document.getElementById(targetId);
+  if(!input || !camera.files.length)return;
+  if(!validInvoiceDocument(camera.files[0])){
+    showToast(invoiceDocumentMessage);
+  }else{
+    selectInvoiceDocument(input,camera.files[0]);
+  }
+  camera.value='';
+}
+async function uploadInvoiceDocument(file,path,canUpload){
+  if(!validInvoiceDocument(file))throw new Error(invoiceDocumentMessage);
+  if(!canUpload())throw new Error('Сеанс или доступ к объекту изменился');
+  let body=file, type=invoiceDocumentType(file.name);
+  if(type === 'application/pdf'){
+    if(await file.slice(0,5).text() !== '%PDF-')throw new Error('Некорректный PDF');
+  }else{
+    body=await compressImage(file);
+    type=body.type || type;
+  }
+  if(!canUpload())throw new Error('Сеанс или доступ к объекту изменился');
+  const ext={'application/pdf':'pdf','image/png':'png','image/jpeg':'jpg'}[type];
+  const objectPath=path.replace(/\.jpg$/i,'.'+ext);
+  const bucket=sb.storage.from('construction-documents');
+  const {error}=await bucket.upload(objectPath,body,{contentType:type,upsert:true});
+  if(error)throw error;
+  return bucket.getPublicUrl(objectPath).data.publicUrl;
 }
 
 async function addInvoiceFromView(){

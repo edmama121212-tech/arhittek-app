@@ -14,7 +14,10 @@ function render(records) {
   const scope = {
     document:{getElementById:id=>id==='constrSummaryBlock'?el:null},
     getConstrProjects:()=>records.map(({project})=>project),
-    getConstructionFinancials:p=>records.find(({project})=>project.id===p.id).financials,
+    getConstructionFinancials:p=>{
+      const f=records.find(({project})=>project.id===p.id).financials;
+      return {...f,cashRemaining:Math.max(0,f.balance),cashOverspend:Math.max(0,-f.balance)};
+    },
     getProjectFee:()=>{throw new Error('Construction summary must not use employee commission');},
     findStatus:()=>({name:'В процессе'}),
     isFrozen:()=>false,
@@ -70,5 +73,11 @@ assert.deepEqual(cells(paid,'tbody'),[[
 assert.deepEqual(cells(paid,'tfoot'),[[
   'Итого','7 000,15 ₽','5 000,1 ₽','12 000,25 ₽','3 700,25 ₽','100,05 ₽'
 ]]);
+const mixed=render([
+  {project:{id:'low',name:'Объект А'},financials:{...none,received:18,cashOutgoing:18.08,balance:-0.08,isOverspent:true}},
+  {project:{id:'positive',name:'Объект Б'},financials:{...none,received:12.34,balance:12.34}}
+]);
+assert.equal(cells(mixed,'tbody')[0][1],'0 ₽ Перерасход: 0,08 ₽');
+assert.equal(cells(mixed,'tfoot')[0][1],'12,34 ₽ Перерасход: 0,08 ₽');
 assert.match(render([]),/Нет строительных объектов/);
 console.log('Construction overview: invoice costs, unpaid amounts, cash and kopeks OK');
