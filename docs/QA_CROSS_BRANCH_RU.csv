@@ -1,22 +1,22 @@
 ﻿ID,Элемент,DOM ID или действие,PR 72,PR 95,Браузерное доказательство,Примечание
 UI-0001,••••••,loginPin,UI,—,PR 72,
 UI-0002,Войти,loginSubmitBtn,UI,—,PR 72,
-UI-0003,← Назад,loginBackBtn,—,—,Открыт,
+UI-0003,← Назад,loginBackBtn,—,UI,PR 95,
 UI-0004,Настройки,settingsBtn,—,UI,PR 95,
-UI-0005,✕,tzSheetClose,—,—,Открыт,
+UI-0005,✕,tzSheetClose,—,UI,PR 95,
 UI-0006,+,addProjectFab,UI,UI,Обе ветки,"В PR 95 открыта новая карточка, в PR 72 дополнительно проверены направление, отдел и условия стройки."
 UI-0007,Все,"setFilter('all',this)",UI,UI,Обе ветки,
 UI-0008,1-этажные,"setFilter('1',this)",UI,UI,Обе ветки,
 UI-0009,2-этажные,"setFilter('2',this)",UI,UI,Обе ветки,
 UI-0010,3+ этажа,"setFilter('3',this)",UI,UI,Обе ветки,
-UI-0011,WhatsApp,catalogContact,—,—,Открыт,
-UI-0012,Позвонить,tel:+79226593872,—,—,Открыт,
-UI-0013,arhittek.ru,https://arhittek.ru,—,—,Открыт,
+UI-0011,WhatsApp,catalogContact,—,UI,PR 95,
+UI-0012,Позвонить,tel:+79226593872,—,UI,PR 95,
+UI-0013,arhittek.ru,https://arhittek.ru,—,UI,PR 95,
 UI-0014,×,closeCardEditor(),UI,UI,Обе ветки,
-UI-0015,📄 Заполнить из PDF,document.getElementById('catalog-pdf-file').click(),—,—,Открыт,
-UI-0016,Отменить импорт,ce-pdf-cancel,—,—,Открыт,
-UI-0017,📷 Сканировать и вставить,CatalogScreenshot.open(),—,—,Открыт,
-UI-0018,✓ Перепроверить карточку,CatalogQuality.checkEditor(),—,—,Открыт,
+UI-0015,📄 Заполнить из PDF,document.getElementById('catalog-pdf-file').click(),—,UI,PR 95,
+UI-0016,Отменить импорт,ce-pdf-cancel,—,UI,PR 95,
+UI-0017,📷 Сканировать и вставить,CatalogScreenshot.open(),—,UI,PR 95,
+UI-0018,✓ Перепроверить карточку,CatalogQuality.checkEditor(),—,UI,PR 95,
 UI-0019,1 этаж,floors-btn-1,UI,UI,Обе ветки,
 UI-0020,2 этажа,floors-btn-2,UI,UI,Обе ветки,
 UI-0021,3 этажа,floors-btn-3,UI,UI,Обе ветки,
@@ -33,13 +33,13 @@ UI-0031,4,ce-beds,UI,UI,Обе ветки,
 UI-0032,3,ce-baths,UI,UI,Обе ветки,
 UI-0033,89 000,ce-price,UI,UI,Обе ветки,
 UI-0034,"🧱 Газоблок, 🏗️ Лент. фундамент",ce-tags,UI,UI,Обе ветки,
-UI-0035,input,"ceLoadImg(this,'ce-facade-preview',0,'ce-f1-name')",—,—,Открыт,
-UI-0036,input,"ceLoadImg(this,'ce-facade2-preview',1,'ce-f2-name')",—,—,Открыт,
+UI-0035,input,"ceLoadImg(this,'ce-facade-preview',0,'ce-f1-name')",—,UI,PR 95,
+UI-0036,input,"ceLoadImg(this,'ce-facade2-preview',1,'ce-f2-name')",—,UI,PR 95,
 UI-0037,✓ Сохранить проект,ce-save-btn,UI,UI,Обе ветки,
-UI-0038,Удалить проект,deleteCard(),Обработчик,Обработчик,Открыт,
-UI-0039,div,"cePrevTab('prev-facade',this)",—,—,Открыт,
-UI-0040,Получить проект,,—,—,Открыт,
-UI-0041,Консультация,,—,—,Открыт,
+UI-0038,Удалить проект,deleteCard(),Обработчик,UI,PR 95,
+UI-0039,div,"cePrevTab('prev-facade',this)",—,UI,PR 95,
+UI-0040,Получить проект,,—,Вне маршрута,Вне маршрута,Демонстрация в редакторе · Это визуальный образец кнопки в несохраняемом макете предпросмотра src/features/catalog/editor.html. Контактные действия фактического публичного каталога проверяются отдельно.
+UI-0041,Консультация,,—,Вне маршрута,Вне маршрута,Демонстрация в редакторе · Это визуальный образец кнопки в несохраняемом макете предпросмотра src/features/catalog/editor.html. Контактные действия фактического публичного каталога проверяются отдельно.
 UI-0042,×,document.getElementById('shareLinkOverlay').classList.remove('active'),—,UI,PR 95,
 UI-0043,"Клиент Ахмад, июль 2026",sl-name,—,UI,PR 95,
 UI-0044,sl-filter,sl-filter,Обработчик,UI,PR 95,
@@ -49,8 +49,8 @@ UI-0047,sl-url,sl-url,—,UI,PR 95,
 UI-0048,Копировать,copyShareUrl(),—,UI,PR 95,
 UI-0049,+ Добавить проект,openCardEditor(null),UI,UI,Обе ветки,
 UI-0050,+ Ссылка клиенту,createShareLink(),UI,—,PR 72,
-UI-0051,📄 Заполнить карточку из PDF,cards-pdf-button,—,—,Открыт,
-UI-0052,catalog-pdf-file,catalog-pdf-file,—,—,Открыт,
+UI-0051,📄 Заполнить карточку из PDF,cards-pdf-button,—,UI,PR 95,
+UI-0052,catalog-pdf-file,catalog-pdf-file,—,UI,PR 95,
 UI-0053,Поиск по номеру или названию,cards-search,UI,UI,Обе ветки,
 UI-0054,Все,"filterCards('all',this)",UI,—,PR 72,
 UI-0055,1 этаж,"filterCards('1',this)",UI,—,PR 72,
@@ -64,11 +64,11 @@ UI-0062,Все стили,"filterStyle('all',this)",UI,—,PR 72,
 UI-0063,Классический,"filterStyle('classic',this)",UI,—,PR 72,
 UI-0064,Современный,"filterStyle('modern',this)",UI,—,PR 72,
 UI-0065,Закрыть,closeCardViewer(),UI,—,PR 72,
-UI-0066,↓ Скачать PDF,cardViewerPdfBtn,Видимость,Видимость,Открыт,
+UI-0066,↓ Скачать PDF,cardViewerPdfBtn,Видимость,UI,PR 95,
 UI-0067,Редактировать,cardViewerEditBtn,UI,UI,Обе ветки,
-UI-0068,Предыдущий,cardViewerPrev,—,—,Открыт,
-UI-0069,Следующий,cardViewerNext,—,—,Открыт,
-UI-0070,ARHITTEK,,—,—,Открыт,
+UI-0068,Предыдущий,cardViewerPrev,—,UI,PR 95,
+UI-0069,Следующий,cardViewerNext,—,UI,PR 95,
+UI-0070,ARHITTEK,,—,Вне маршрута,Вне маршрута,"Оформление · Текст логотипа в шапке client-portal.html без адреса, назначения перехода и обработчика."
 UI-0071,Повторить проверку,state-retry,Видимость,UI,PR 95,
 UI-0072,Обновить,refresh-portal,UI,UI,Обе ветки,
 UI-0073,Закрыть доступ на этом устройстве,close-portal,UI,UI,Обе ветки,
@@ -76,8 +76,8 @@ UI-0074,Деньги,#project-money,—,UI,PR 95,
 UI-0075,Этапы,#project-stages,—,UI,PR 95,
 UI-0076,Работы,#project-works,—,UI,PR 95,
 UI-0077,Накладные,#project-documents,—,UI,PR 95,
-UI-0078,✕,closeInvoiceSheet(),—,—,Открыт,
-UI-0079,invSheet-photo-img,invSheet-photo-img,—,—,Открыт,
+UI-0078,✕,closeInvoiceSheet(),—,UI,PR 95,
+UI-0079,invSheet-photo-img,invSheet-photo-img,—,UI,PR 95,
 UI-0080,напр. БИ 14.04.26,invSheet-number,—,UI,PR 95,
 UI-0081,invSheet-date,invSheet-date,—,UI,PR 95,
 UI-0082,invSheet-type,invSheet-type,—,UI,PR 95,
@@ -85,8 +85,8 @@ UI-0083,0,invSheet-amount,Обработчик,UI,PR 95,
 UI-0084,например: Кирпич,invSheet-category,—,UI,PR 95,
 UI-0085,что куплено / какая работа,invSheet-desc,—,UI,PR 95,
 UI-0086,invSheet-paid-client,invSheet-paid-client,—,UI,PR 95,
-UI-0087,invSheet-photo-input,invSheet-photo-input,—,—,Открыт,
-UI-0088,invSheet-camera-input,invSheet-camera-input,—,—,Открыт,
+UI-0087,invSheet-photo-input,invSheet-photo-input,—,UI,PR 95,
+UI-0088,invSheet-camera-input,invSheet-camera-input,—,UI,PR 95,
 UI-0089,💾 Сохранить,saveInvoiceSheet(),Обработчик,UI,PR 95,
 UI-0090,🗑 Удалить,deleteInvoiceSheet(),—,UI,PR 95,
 UI-0091,Поиск по названию или адресу…,constrSearch,—,UI,PR 95,
@@ -95,7 +95,7 @@ UI-0093,←,objBack,—,UI,PR 95,
 UI-0094,📄 PDF,objPdfBtn,—,UI,PR 95,
 UI-0095,⚙ Редактировать,objEditBtn,UI,—,PR 72,
 UI-0096,←,contractsBack,—,UI,PR 95,
-UI-0097,ct-project,ct-project,—,—,Открыт,
+UI-0097,ct-project,ct-project,—,Вне маршрута,Вне маршрута,"Служебное поле · Скрытый select хранит ID проекта для договора, пользователь выбирает проект в #ct-project-picker. Подтверждения записаны в QA_CONTRACT_FIELDS_RUNS.csv и матрице UI-0098."
 UI-0098,— не выбран —,ct-project-picker,UI,UI,Обе ветки,
 UI-0099,Закрыть поиск проектов,ct-project-close,—,UI,PR 95,
 UI-0100,Начните вводить название…,ct-project-search,UI,UI,Обе ветки,
@@ -153,7 +153,7 @@ UI-0151,kp-advance-percent,kp-advance-percent,UI,UI,Обе ветки,
 UI-0152,Скачать PDF,kpExportPdf,Обработчик,UI,PR 95,
 UI-0153,Скачать Excel,kpExportXlsx,UI,Обработчик,PR 72,
 UI-0154,💾 Сохранить КП,kpSaveBtn,UI,UI,Обе ветки,
-UI-0155,✕,tariffSheetClose,—,—,Открыт,
+UI-0155,✕,tariffSheetClose,—,UI,PR 95,
 UI-0156,например: Архитектурное проектирование,tf-group,UI,—,PR 72,
 UI-0157,например: Архитектурное решение,tf-name,UI,—,PR 72,
 UI-0158,tf-unit,tf-unit,UI,—,PR 72,
@@ -162,22 +162,22 @@ UI-0160,"что входит в услугу, сроки...",tf-desc,UI,—,PR 7
 UI-0161,Сохранить,tf-save,UI,—,PR 72,
 UI-0162,Удалить,tf-delete,UI,—,PR 72,
 UI-0163,Отмена,tf-cancel,UI,—,PR 72,
-UI-0164,✕,companyExpenseSheetClose,—,—,Открыт,Прежняя форма компании. Активные маршруты финансов v2 открывают другие формы.
-UI-0165,cex-category,cex-category,—,—,Открыт,Прежняя форма компании. Активные маршруты финансов v2 открывают другие формы.
-UI-0166,0,cex-amount,Обработчик,Обработчик,Открыт,Прежняя форма компании. Активные маршруты финансов v2 открывают другие формы.
-UI-0167,cex-date,cex-date,—,—,Открыт,Прежняя форма компании. Активные маршруты финансов v2 открывают другие формы.
-UI-0168,например: аренда офиса за август,cex-desc,—,—,Открыт,Прежняя форма компании. Активные маршруты финансов v2 открывают другие формы.
-UI-0169,Сохранить,cex-save,Обработчик,Обработчик,Открыт,Прежняя форма компании. Активные маршруты финансов v2 открывают другие формы.
-UI-0170,Удалить,cex-delete,Обработчик,Обработчик,Открыт,Прежняя форма компании. Активные маршруты финансов v2 открывают другие формы.
-UI-0171,Отмена,cex-cancel,—,—,Открыт,Прежняя форма компании. Активные маршруты финансов v2 открывают другие формы.
-UI-0172,✕,companyIncomeSheetClose,—,—,Открыт,Прежняя форма компании. Активные маршруты финансов v2 открывают другие формы.
-UI-0173,cin-category,cin-category,—,—,Открыт,Прежняя форма компании. Активные маршруты финансов v2 открывают другие формы.
-UI-0174,0,cin-amount,Обработчик,Обработчик,Открыт,Прежняя форма компании. Активные маршруты финансов v2 открывают другие формы.
-UI-0175,cin-date,cin-date,—,—,Открыт,Прежняя форма компании. Активные маршруты финансов v2 открывают другие формы.
-UI-0176,например: аренда помещения №1 за август,cin-desc,—,—,Открыт,Прежняя форма компании. Активные маршруты финансов v2 открывают другие формы.
-UI-0177,Сохранить,cin-save,Обработчик,Обработчик,Открыт,Прежняя форма компании. Активные маршруты финансов v2 открывают другие формы.
-UI-0178,Удалить,cin-delete,Обработчик,Обработчик,Открыт,Прежняя форма компании. Активные маршруты финансов v2 открывают другие формы.
-UI-0179,Отмена,cin-cancel,—,—,Открыт,Прежняя форма компании. Активные маршруты финансов v2 открывают другие формы.
+UI-0164,✕,companyExpenseSheetClose,—,Вне маршрута,Вне маршрута,"Совместимость, вне финансов v2 · Старые формы companyIncomeSheetOverlay/companyExpenseSheetOverlay и кнопки прежнего экрана. В активной версии используются формы financeWorkspace. Связанные пути «Ещё» и карточка проекта проверены в QA_LEGACY_FINANCE_ROUTES_RU.md ветки #72. Обработчики сохранены для старой оболочки."
+UI-0165,cex-category,cex-category,—,Вне маршрута,Вне маршрута,"Совместимость, вне финансов v2 · Старые формы companyIncomeSheetOverlay/companyExpenseSheetOverlay и кнопки прежнего экрана. В активной версии используются формы financeWorkspace. Связанные пути «Ещё» и карточка проекта проверены в QA_LEGACY_FINANCE_ROUTES_RU.md ветки #72. Обработчики сохранены для старой оболочки."
+UI-0166,0,cex-amount,Обработчик,Вне маршрута,Вне маршрута,"Совместимость, вне финансов v2 · Старые формы companyIncomeSheetOverlay/companyExpenseSheetOverlay и кнопки прежнего экрана. В активной версии используются формы financeWorkspace. Связанные пути «Ещё» и карточка проекта проверены в QA_LEGACY_FINANCE_ROUTES_RU.md ветки #72. Обработчики сохранены для старой оболочки."
+UI-0167,cex-date,cex-date,—,Вне маршрута,Вне маршрута,"Совместимость, вне финансов v2 · Старые формы companyIncomeSheetOverlay/companyExpenseSheetOverlay и кнопки прежнего экрана. В активной версии используются формы financeWorkspace. Связанные пути «Ещё» и карточка проекта проверены в QA_LEGACY_FINANCE_ROUTES_RU.md ветки #72. Обработчики сохранены для старой оболочки."
+UI-0168,например: аренда офиса за август,cex-desc,—,Вне маршрута,Вне маршрута,"Совместимость, вне финансов v2 · Старые формы companyIncomeSheetOverlay/companyExpenseSheetOverlay и кнопки прежнего экрана. В активной версии используются формы financeWorkspace. Связанные пути «Ещё» и карточка проекта проверены в QA_LEGACY_FINANCE_ROUTES_RU.md ветки #72. Обработчики сохранены для старой оболочки."
+UI-0169,Сохранить,cex-save,Обработчик,Вне маршрута,Вне маршрута,"Совместимость, вне финансов v2 · Старые формы companyIncomeSheetOverlay/companyExpenseSheetOverlay и кнопки прежнего экрана. В активной версии используются формы financeWorkspace. Связанные пути «Ещё» и карточка проекта проверены в QA_LEGACY_FINANCE_ROUTES_RU.md ветки #72. Обработчики сохранены для старой оболочки."
+UI-0170,Удалить,cex-delete,Обработчик,Вне маршрута,Вне маршрута,"Совместимость, вне финансов v2 · Старые формы companyIncomeSheetOverlay/companyExpenseSheetOverlay и кнопки прежнего экрана. В активной версии используются формы financeWorkspace. Связанные пути «Ещё» и карточка проекта проверены в QA_LEGACY_FINANCE_ROUTES_RU.md ветки #72. Обработчики сохранены для старой оболочки."
+UI-0171,Отмена,cex-cancel,—,Вне маршрута,Вне маршрута,"Совместимость, вне финансов v2 · Старые формы companyIncomeSheetOverlay/companyExpenseSheetOverlay и кнопки прежнего экрана. В активной версии используются формы financeWorkspace. Связанные пути «Ещё» и карточка проекта проверены в QA_LEGACY_FINANCE_ROUTES_RU.md ветки #72. Обработчики сохранены для старой оболочки."
+UI-0172,✕,companyIncomeSheetClose,—,Вне маршрута,Вне маршрута,"Совместимость, вне финансов v2 · Старые формы companyIncomeSheetOverlay/companyExpenseSheetOverlay и кнопки прежнего экрана. В активной версии используются формы financeWorkspace. Связанные пути «Ещё» и карточка проекта проверены в QA_LEGACY_FINANCE_ROUTES_RU.md ветки #72. Обработчики сохранены для старой оболочки."
+UI-0173,cin-category,cin-category,—,Вне маршрута,Вне маршрута,"Совместимость, вне финансов v2 · Старые формы companyIncomeSheetOverlay/companyExpenseSheetOverlay и кнопки прежнего экрана. В активной версии используются формы financeWorkspace. Связанные пути «Ещё» и карточка проекта проверены в QA_LEGACY_FINANCE_ROUTES_RU.md ветки #72. Обработчики сохранены для старой оболочки."
+UI-0174,0,cin-amount,Обработчик,Вне маршрута,Вне маршрута,"Совместимость, вне финансов v2 · Старые формы companyIncomeSheetOverlay/companyExpenseSheetOverlay и кнопки прежнего экрана. В активной версии используются формы financeWorkspace. Связанные пути «Ещё» и карточка проекта проверены в QA_LEGACY_FINANCE_ROUTES_RU.md ветки #72. Обработчики сохранены для старой оболочки."
+UI-0175,cin-date,cin-date,—,Вне маршрута,Вне маршрута,"Совместимость, вне финансов v2 · Старые формы companyIncomeSheetOverlay/companyExpenseSheetOverlay и кнопки прежнего экрана. В активной версии используются формы financeWorkspace. Связанные пути «Ещё» и карточка проекта проверены в QA_LEGACY_FINANCE_ROUTES_RU.md ветки #72. Обработчики сохранены для старой оболочки."
+UI-0176,например: аренда помещения №1 за август,cin-desc,—,Вне маршрута,Вне маршрута,"Совместимость, вне финансов v2 · Старые формы companyIncomeSheetOverlay/companyExpenseSheetOverlay и кнопки прежнего экрана. В активной версии используются формы financeWorkspace. Связанные пути «Ещё» и карточка проекта проверены в QA_LEGACY_FINANCE_ROUTES_RU.md ветки #72. Обработчики сохранены для старой оболочки."
+UI-0177,Сохранить,cin-save,Обработчик,Вне маршрута,Вне маршрута,"Совместимость, вне финансов v2 · Старые формы companyIncomeSheetOverlay/companyExpenseSheetOverlay и кнопки прежнего экрана. В активной версии используются формы financeWorkspace. Связанные пути «Ещё» и карточка проекта проверены в QA_LEGACY_FINANCE_ROUTES_RU.md ветки #72. Обработчики сохранены для старой оболочки."
+UI-0178,Удалить,cin-delete,Обработчик,Вне маршрута,Вне маршрута,"Совместимость, вне финансов v2 · Старые формы companyIncomeSheetOverlay/companyExpenseSheetOverlay и кнопки прежнего экрана. В активной версии используются формы financeWorkspace. Связанные пути «Ещё» и карточка проекта проверены в QA_LEGACY_FINANCE_ROUTES_RU.md ветки #72. Обработчики сохранены для старой оболочки."
+UI-0179,Отмена,cin-cancel,—,Вне маршрута,Вне маршрута,"Совместимость, вне финансов v2 · Старые формы companyIncomeSheetOverlay/companyExpenseSheetOverlay и кнопки прежнего экрана. В активной версии используются формы financeWorkspace. Связанные пути «Ещё» и карточка проекта проверены в QA_LEGACY_FINANCE_ROUTES_RU.md ветки #72. Обработчики сохранены для старой оболочки."
 UI-0180,✕,paymentSheetClose,UI,—,PR 72,
 UI-0181,payment-payee,payment-payee,UI,—,PR 72,
 UI-0182,0,payment-amount,UI,Обработчик,PR 72,
@@ -185,8 +185,8 @@ UI-0183,payment-date,payment-date,UI,—,PR 72,
 UI-0184,payment-before-start,payment-before-start,UI,—,PR 72,
 UI-0185,например: наличными / переводом на карту / причина вывода средств...,payment-note,—,UI,PR 95,
 UI-0186,Сохранить платёж,payment-save,UI,Обработчик,PR 72,
-UI-0187,←,financeBack,—,—,Открыт,
-UI-0188,+ Добавить доход,openCompanyIncomeSheet(null),—,—,Открыт,
+UI-0187,←,financeBack,—,Вне маршрута,Вне маршрута,"Совместимость, вне финансов v2 · Старые формы companyIncomeSheetOverlay/companyExpenseSheetOverlay и кнопки прежнего экрана. В активной версии используются формы financeWorkspace. Связанные пути «Ещё» и карточка проекта проверены в QA_LEGACY_FINANCE_ROUTES_RU.md ветки #72. Обработчики сохранены для старой оболочки."
+UI-0188,+ Добавить доход,openCompanyIncomeSheet(null),—,Вне маршрута,Вне маршрута,"Совместимость, вне финансов v2 · Старые формы companyIncomeSheetOverlay/companyExpenseSheetOverlay и кнопки прежнего экрана. В активной версии используются формы financeWorkspace. Связанные пути «Ещё» и карточка проекта проверены в QA_LEGACY_FINANCE_ROUTES_RU.md ветки #72. Обработчики сохранены для старой оболочки."
 UI-0189,←,timesheetBack,—,UI,PR 95,
 UI-0190,ts-month,ts-month,Обработчик,UI,PR 95,
 UI-0191,✕,projectSheetClose,UI,UI,Обе ветки,
@@ -194,21 +194,21 @@ UI-0192,pf-category,pf-category,UI,UI,Обе ветки,
 UI-0193,pf-status,pf-status,UI,—,PR 72,"В реестрах различается подпись. PR 72 «Статус проекта», PR 95 «без подписи»."
 UI-0194,например: Дом Алхазурова — пристройка,pf-name,UI,UI,Обе ветки,
 UI-0195,Иванов Иван Иванович,pf-client-name,UI,—,PR 72,
-UI-0196,pf-payment,pf-payment,—,—,Открыт,
-UI-0197,pf-employee,pf-employee,—,—,Открыт,
-UI-0198,pf-co-employee,pf-co-employee,—,—,Открыт,
-UI-0199,pf-members-add,pf-members-add,—,—,Открыт,
+UI-0196,pf-payment,pf-payment,—,Вне маршрута,Вне маршрута,"Служебное поле · Статус оплаты вычисляется из поступлений, прежнее поле скрыто классом project-legacy-selects (workspace-enhancement.js)."
+UI-0197,pf-employee,pf-employee,—,Вне маршрута,Вне маршрута,"Служебное поле · Прежние селекты скрыты классом project-legacy-selects, синхронизируются с видимыми полями команды через project-allocations.js."
+UI-0198,pf-co-employee,pf-co-employee,—,Вне маршрута,Вне маршрута,"Служебное поле · Прежние селекты скрыты классом project-legacy-selects, синхронизируются с видимыми полями команды через project-allocations.js."
+UI-0199,pf-members-add,pf-members-add,—,UI,PR 95,
 UI-0200,7 900 000-00-00,pf-phone,UI,—,PR 72,
 UI-0201,"Грозный, ...",pf-address,UI,—,PR 72,
 UI-0202,0,pf-price,UI,Обработчик,PR 72,
 UI-0203,Изменяется только через «Принять платёж»,pf-advance,UI,—,PR 72,
 UI-0204,Рассчитывается автоматически: Цена − Получено,pf-balance,UI,—,PR 72,
-UI-0205,pf-compensation-method,pf-compensation-method,Обработчик,Обработчик,Открыт,
-UI-0206,например: 30,pf-feepercent,Обработчик,Обработчик,Открыт,
-UI-0207,например: 20,pf-co-feepercent,—,—,Открыт,
-UI-0208,pf-employee-fee,pf-employee-fee,Обработчик,Обработчик,Открыт,
-UI-0209,pf-co-employee-fee,pf-co-employee-fee,Обработчик,Обработчик,Открыт,
-UI-0210,например: 100,pf-area,Обработчик,Обработчик,Открыт,
+UI-0205,pf-compensation-method,pf-compensation-method,Обработчик,Вне маршрута,Вне маршрута,"Служебное поле · Значение метода записывает видимая группа выбора «Процент / За м²», исходный select в скрытом контейнере workspace-enhancement.js."
+UI-0206,например: 30,pf-feepercent,Обработчик,UI,PR 95,
+UI-0207,например: 20,pf-co-feepercent,—,UI,PR 95,
+UI-0208,pf-employee-fee,pf-employee-fee,Обработчик,UI,PR 95,
+UI-0209,pf-co-employee-fee,pf-co-employee-fee,Обработчик,UI,PR 95,
+UI-0210,например: 100,pf-area,Обработчик,UI,PR 95,
 UI-0211,pf-rp-role,pf-rp-role,—,UI,PR 95,
 UI-0212,pf-rp-employee,pf-rp-employee,Обработчик,UI,PR 95,
 UI-0213,400,pf-rp-rate,Обработчик,UI,PR 95,
@@ -220,23 +220,23 @@ UI-0218,pf-expense-date,pf-expense-date,UI,UI,Обе ветки,
 UI-0219,+ Расход,pf-expense-add-btn,UI,UI,Обе ветки,
 UI-0220,Отмена,pf-expense-cancel-edit,UI,—,PR 72,
 UI-0221,💰 Принять платёж,pf-add-payment,UI,—,PR 72,
-UI-0222,📋 История,"(function(){var el=document.getElementById('pf-payment-history');if(el){el.scrollIntoView({behavior:'smooth',block:'start'});}})()",—,—,Открыт,
+UI-0222,📋 История,"(function(){var el=document.getElementById('pf-payment-history');if(el){el.scrollIntoView({behavior:'smooth',block:'start'});}})()",—,UI,PR 95,
 UI-0223,pf-start,pf-start,—,UI,PR 95,
 UI-0224,напр. 30,pf-duration-days,—,UI,PR 95,
-UI-0225,pf-end,pf-end,—,—,Открыт,
+UI-0225,pf-end,pf-end,—,Вне маршрута,Вне маршрута,Служебное поле · Дата окончания вычисляется по дате начала и длительности и показана в pf-end-preview. Проверенный переход через високосный февраль — QA_FIELD_ACCEPTANCE_RUNS.csv.
 UI-0226,дополнительная информация...,pf-notes,—,UI,PR 95,
 UI-0227,например: Эскизный проект,pf-stage-name,Обработчик,UI,PR 95,
 UI-0228,+ Добавить,pf-stage-add,Обработчик,UI,PR 95,
-UI-0229,pf-stage-date,pf-stage-date,—,—,Открыт,
-UI-0230,pf-task-name,pf-task-name,—,—,Открыт,
-UI-0231,pf-task-priority,pf-task-priority,—,—,Открыт,
-UI-0232,pf-task-add-btn,pf-task-add-btn,—,—,Открыт,
-UI-0233,Создать ссылку на ТЗ для клиента,pf-tz-create,—,—,Открыт,
+UI-0229,pf-stage-date,pf-stage-date,—,Вне маршрута,Вне маршрута,Служебное поле · Поле срока скрыто напрямую в editor.html. Доступное добавление этапа по имени прошло через UI-0227 и UI-0228. Ручной ввод срока в этом месте не предусмотрен.
+UI-0230,pf-task-name,pf-task-name,—,Вне маршрута,Вне маршрута,Скрытый раздел задач · Блок задач целиком скрыт в editor.html. Управление через поля этого блока отсутствует в рабочей карточке.
+UI-0231,pf-task-priority,pf-task-priority,—,Вне маршрута,Вне маршрута,Скрытый раздел задач · Блок задач целиком скрыт в editor.html. Управление через поля этого блока отсутствует в рабочей карточке.
+UI-0232,pf-task-add-btn,pf-task-add-btn,—,Вне маршрута,Вне маршрута,Скрытый раздел задач · Блок задач целиком скрыт в editor.html. Управление через поля этого блока отсутствует в рабочей карточке.
+UI-0233,Создать ссылку на ТЗ для клиента,pf-tz-create,—,UI,PR 95,
 UI-0234,Создать КП для этого проекта,pf-create-kp,—,UI,PR 95,
 UI-0235,📋 Показать историю изменений,pf-history-toggle,UI,—,PR 72,"В реестрах различается подпись. PR 72 «Показать историю изменений», PR 95 «📋 Показать историю изменений»."
 UI-0236,Сохранить,pf-save,UI,UI,Обе ветки,
 UI-0237,"📦 Накладные, материалы, фото",pf-open-as-object,—,UI,PR 95,
-UI-0238,Удалить проект,pf-delete,—,—,Открыт,
+UI-0238,Удалить проект,pf-delete,—,UI,PR 95,
 UI-0239,Отмена,pf-cancel,UI,UI,Обе ветки,
 UI-0240,"Номер, название, адрес или телефон",projectSearch,UI,UI,Обе ветки,
 UI-0241,✕,projectSearchClear,UI,UI,Обе ветки,
@@ -272,27 +272,27 @@ UI-0270,Сохранить реквизиты,companySaveBtn,UI,—,PR 72,
 UI-0271,co-export-scope,co-export-scope,UI,—,PR 72,
 UI-0272,co-export-format,co-export-format,UI,—,PR 72,
 UI-0273,⬇ Скачать реквизиты,companyExportBtn,UI,—,PR 72,
-UI-0274,✕,empSheetClose,—,—,Открыт,
-UI-0275,например: Магомед (Гудермес),ef-name,—,—,Открыт,
+UI-0274,✕,empSheetClose,—,UI,PR 95,
+UI-0275,например: Магомед (Гудермес),ef-name,—,UI,PR 95,
 UI-0276,ef-role,ef-role,UI,—,PR 72,"В реестрах различается подпись. PR 72 «Должность», PR 95 «без подписи»."
 UI-0277,ef-active,ef-active,UI,—,PR 72,"В реестрах различается подпись. PR 72 «Статус сотрудника», PR 95 «без подписи»."
-UI-0278,оставить как есть,ef-pin,—,—,Открыт,
-UI-0279,"<button class=""btn btn-secondary"" type=""button"" style=""padding:10px 12px; font-s",const p=Math.floor(100000+Math.random()*900000).toString(); document.getElementById('ef-pin').value=p; showToast('Новый PIN: '+p+' — запишите!');,—,—,Открыт,
-UI-0280,ef-can-edit-cards,ef-can-edit-cards,Снят,—,Открыт,"В PR 72 снят. В PR 95 присутствует и показывается владельцу, результат роли открыт."
+UI-0278,оставить как есть,ef-pin,—,UI,PR 95,
+UI-0279,"<button class=""btn btn-secondary"" type=""button"" style=""padding:10px 12px; font-s",const p=Math.floor(100000+Math.random()*900000).toString(); document.getElementById('ef-pin').value=p; showToast('Новый PIN: '+p+' — запишите!');,—,UI,PR 95,
+UI-0280,ef-can-edit-cards,ef-can-edit-cards,Снят,Вне маршрута,Вне маршрута,Скрытая прежняя настройка · src/app/shell/head-close.html явно скрывает #ef-card-edit-field с !important. Проверено под владельцем; программное назначение display в employees.js не открывает флажок.
 UI-0281,ef-see-projects,ef-see-projects,UI,—,PR 72,
 UI-0282,ef-see-construction,ef-see-construction,UI,—,PR 72,
-UI-0283,ef-is-salaried,ef-is-salaried,—,—,Открыт,
-UI-0284,50000,ef-fixed-salary,Обработчик,Обработчик,Открыт,
-UI-0285,Сохранить,ef-save,Обработчик,Обработчик,Открыт,
-UI-0286,Удалить,ef-delete,—,—,Открыт,
-UI-0287,Отмена,ef-cancel,—,—,Открыт,
+UI-0283,ef-is-salaried,ef-is-salaried,—,UI,PR 95,
+UI-0284,50000,ef-fixed-salary,Обработчик,UI,PR 95,
+UI-0285,Сохранить,ef-save,Обработчик,UI,PR 95,
+UI-0286,Удалить,ef-delete,—,UI,PR 95,
+UI-0287,Отмена,ef-cancel,—,UI,PR 95,
 UI-0288,📋 КП,openKpBtn,—,UI,PR 95,
 UI-0289,📄 Договор,openContractsBtn,—,UI,PR 95,
 UI-0290,🏢 Реквизиты,openCompanyBtn,—,UI,PR 95,
-UI-0291,💳 Прайс для клиента,openPriceListBtn,—,—,Открыт,
-UI-0292,📊 Excel,exportXlsxBtn,—,—,Открыт,
+UI-0291,💳 Прайс для клиента,openPriceListBtn,—,UI,PR 95,
+UI-0292,📊 Excel,exportXlsxBtn,—,UI,PR 95,
 UI-0293,🗓 Табель заработка сотрудников,openTimesheetBtn,—,UI,PR 95,
-UI-0294,🌳 Родословное древо Жоба  Личный семейный архив,openFamilyTreeBtn,—,—,Открыт,
+UI-0294,🌳 Родословное древо Жоба  Личный семейный архив,openFamilyTreeBtn,—,UI,PR 95,
 UI-0295,historyToggle,historyToggle,—,UI,PR 95,
 UI-0296,Поиск в истории...,historySearch,—,UI,PR 95,
 UI-0297,✕,historySearchClear,—,UI,PR 95,
@@ -301,7 +301,7 @@ UI-0299,Поиск сотрудника...,employeeSearch,UI,—,PR 72,"В ре�
 UI-0300,✕,employeeSearchClear,—,UI,PR 95,
 UI-0301,+ Добавить сотрудника,addEmployeeBtn,UI,UI,Обе ветки,
 UI-0302,+ Добавить категорию,addCategoryBtn,—,UI,PR 95,
-UI-0303,+ Добавить тариф,addTariffBtn,—,—,Открыт,
+UI-0303,+ Добавить тариф,addTariffBtn,—,UI,PR 95,
 UI-0304,Обзор,data-view=view-overview,UI,UI,Обе ветки,
 UI-0305,Проектный,data-view=view-projects,UI,UI,Обе ветки,
 UI-0306,Стройка,data-view=view-construction,UI,UI,Обе ветки,

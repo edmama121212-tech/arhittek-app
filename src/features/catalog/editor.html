@@ -103,7 +103,7 @@
           </div>
 
           <div id="prev-tabs" style="display:flex;background:#F2F2F2;border-bottom:2px solid #D0D0D0;">
-            <div onclick="cePrevTab('prev-facade',this)" style="flex:1;padding:11px 8px;text-align:center;font-size:12px;font-weight:600;color:#3D8FE0;border-bottom:2px solid #3D8FE0;margin-bottom:-2px;cursor:pointer;">Фасад</div>
+            <div role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" onclick="cePrevTab('prev-facade',this)" style="flex:1;padding:11px 8px;text-align:center;font-size:12px;font-weight:600;color:#3D8FE0;border-bottom:2px solid #3D8FE0;margin-bottom:-2px;cursor:pointer;">Фасад</div>
 
           </div>
 

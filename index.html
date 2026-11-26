@@ -1463,7 +1463,7 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
           </div>
 
           <div id="prev-tabs" style="display:flex;background:#F2F2F2;border-bottom:2px solid #D0D0D0;">
-            <div onclick="cePrevTab('prev-facade',this)" style="flex:1;padding:11px 8px;text-align:center;font-size:12px;font-weight:600;color:#3D8FE0;border-bottom:2px solid #3D8FE0;margin-bottom:-2px;cursor:pointer;">Фасад</div>
+            <div role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" onclick="cePrevTab('prev-facade',this)" style="flex:1;padding:11px 8px;text-align:center;font-size:12px;font-weight:600;color:#3D8FE0;border-bottom:2px solid #3D8FE0;margin-bottom:-2px;cursor:pointer;">Фасад</div>
 
           </div>
 
@@ -9329,7 +9329,7 @@ function renderTzList(projectId){
     const answers = f.answers || {};
     const filledCount = Object.keys(answers).filter(k=>answers[k] && answers[k]!=='').length;
     const hasData = filledCount > 0;
-    const statusLabel = hasData ? `Заполняется (${filledCount} полей)` : 'Пусто — ссылка отправлена';
+    const statusLabel = hasData ? `Заполняется (${filledCount} полей)` : 'Ссылка создана · ответов пока нет';
     const statusColor = hasData ? 'var(--green)' : 'var(--gold)';
     const url = tzFormUrl(f.token);
     const lastSaved = f.submitted_at || f.created_at;
@@ -9379,7 +9379,7 @@ async function createTzForm(){
     const {data, error} = await sb.from('tz_forms').insert({
       project_id: editingProjectId,
       token,
-      status: 'Отправлено',
+      status: 'Ссылка создана',
       answers: landscapeTzSeed(p),
     }).select().single();
     if(error) throw error;

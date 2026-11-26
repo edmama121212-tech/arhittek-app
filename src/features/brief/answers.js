@@ -124,7 +124,7 @@ function renderTzList(projectId){
     const answers = f.answers || {};
     const filledCount = Object.keys(answers).filter(k=>answers[k] && answers[k]!=='').length;
     const hasData = filledCount > 0;
-    const statusLabel = hasData ? `Заполняется (${filledCount} полей)` : 'Пусто — ссылка отправлена';
+    const statusLabel = hasData ? `Заполняется (${filledCount} полей)` : 'Ссылка создана · ответов пока нет';
     const statusColor = hasData ? 'var(--green)' : 'var(--gold)';
     const url = tzFormUrl(f.token);
     const lastSaved = f.submitted_at || f.created_at;
@@ -174,7 +174,7 @@ async function createTzForm(){
     const {data, error} = await sb.from('tz_forms').insert({
       project_id: editingProjectId,
       token,
-      status: 'Отправлено',
+      status: 'Ссылка создана',
       answers: landscapeTzSeed(p),
     }).select().single();
     if(error) throw error;
