@@ -1542,11 +1542,11 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
     </div>
     <div style="margin-bottom:14px;">
       <label class="form-label">Название ссылки (для себя)</label>
-      <input class="form-input" id="sl-name" placeholder="Клиент Ахмад, июль 2026"/>
+      <input class="form-input" id="sl-name" oninput="clearShareLinkResult()" placeholder="Клиент Ахмад, июль 2026"/>
     </div>
     <div style="margin-bottom:14px;" id="sl-filter-row">
       <label class="form-label">Фильтр карточек</label>
-      <select class="form-input" id="sl-filter">
+      <select class="form-input" id="sl-filter" onchange="clearShareLinkResult()">
         <option value="all">Все карточки</option>
         <option value="1">Только 1-этажные</option>
         <option value="2">Только 2-этажные</option>
@@ -1556,7 +1556,7 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
     <div id="sl-single-note" style="display:none;margin-bottom:14px;font-size:12px;color:var(--text-dim);background:var(--blue-soft);border-radius:8px;padding:8px 10px;">Ссылка ведёт только на этот конкретный проект.</div>
     <div style="margin-bottom:16px;">
       <label class="form-label">Срок действия ссылки</label>
-      <select class="form-input" id="sl-expires">
+      <select class="form-input" id="sl-expires" onchange="clearShareLinkResult()">
         <option value="2">2 дня</option>
         <option value="3">3 дня</option>
         <option value="4">4 дня</option>
@@ -2117,7 +2117,7 @@ html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[dat
     <div class="field-row">
       <div class="field">
         <label>% гонорара по умолчанию</label>
-        <input type="number" id="cf-feepercent" placeholder="40">
+        <input type="number" id="cf-feepercent" min="0" max="100" step="any" placeholder="40">
       </div>
       <div class="field">
         <label>База расчёта</label>
@@ -7455,9 +7455,16 @@ async function saveCategory(){
   if(!session?.isAdmin){showToast("Требуются права администратора");return;}
   const name = document.getElementById('cf-name').value.trim();
   if(!name){ showToast('Введите название'); return; }
+  const percentField = document.getElementById('cf-feepercent');
+  const percent = percentField.value === '' ? 0 : percentField.valueAsNumber;
+  if(percentField.validity.badInput || !Number.isFinite(percent) || percent < 0 || percent > 100){
+    showToast('Укажите гонорар от 0 до 100%');
+    percentField.focus();
+    return;
+  }
   const payload = {
     name,
-    fee_percent: parseFloat(document.getElementById('cf-feepercent').value) || 0,
+    fee_percent: percent,
     fee_base: document.getElementById('cf-feebase').value || 'profit',
     department_id: document.getElementById('cf-department').value || null,
   };
@@ -11103,9 +11110,10 @@ document.getElementById('pf-stage-add').addEventListener('click', ()=>{
 });
 
 document.getElementById('pf-open-as-object').addEventListener('click', ()=>{
-  if(editingProjectId){
+  const projectId = editingProjectId;
+  if(projectId){
     closeProjectSheet();
-    openObjectView(editingProjectId);
+    openObjectView(projectId);
   }
 });
 
@@ -12432,10 +12440,17 @@ async function renderShareLinks(){
   }).join('');
 }
 
+let shareLinkFormVersion=0;
+function clearShareLinkResult(){
+  shareLinkFormVersion++;
+  document.getElementById('sl-url').value='';
+  document.getElementById('sl-result').style.display='none';
+}
+
 function createShareLink(){
   shareLinkProjectId = null;
   document.getElementById('sl-name').value = '';
-  document.getElementById('sl-result').style.display = 'none';
+  clearShareLinkResult();
   document.getElementById('sl-filter-row').style.display = '';
   document.getElementById('sl-single-note').style.display = 'none';
   document.getElementById('shareLinkOverlay').classList.add('active');
@@ -12448,7 +12463,7 @@ function createShareLinkForProject(cardId, cardTitle){
   if(!canEditCards()) return;
   shareLinkProjectId = cardId;
   document.getElementById('sl-name').value = cardTitle || 'Проект';
-  document.getElementById('sl-result').style.display = 'none';
+  clearShareLinkResult();
   document.getElementById('sl-filter-row').style.display = 'none';
   document.getElementById('sl-single-note').style.display = '';
   document.getElementById('shareLinkOverlay').classList.add('active');
@@ -12456,6 +12471,7 @@ function createShareLinkForProject(cardId, cardTitle){
 
 async function generateShareLink(){
   if(!canEditCards())return;
+  const version=++shareLinkFormVersion;
   const label = document.getElementById('sl-name').value.trim() || 'Ссылка';
   const filter = shareLinkProjectId ? 'all' : document.getElementById('sl-filter').value;
   const expiresValue = document.getElementById('sl-expires').value;
@@ -12478,8 +12494,10 @@ async function generateShareLink(){
 
     const base = location.origin + location.pathname.replace('index.html','');
     const url = base + 'catalog.html?t=' + token;
-    document.getElementById('sl-url').value = url;
-    document.getElementById('sl-result').style.display = 'block';
+    if(version===shareLinkFormVersion){
+      document.getElementById('sl-url').value = url;
+      document.getElementById('sl-result').style.display = 'block';
+    }
     await renderShareLinks();
   } catch(e){
     const details = [e.message, e.code, e.details, e.hint].filter(Boolean).join(' · ');

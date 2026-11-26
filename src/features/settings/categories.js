@@ -60,9 +60,16 @@ async function saveCategory(){
   if(!session?.isAdmin){showToast("Требуются права администратора");return;}
   const name = document.getElementById('cf-name').value.trim();
   if(!name){ showToast('Введите название'); return; }
+  const percentField = document.getElementById('cf-feepercent');
+  const percent = percentField.value === '' ? 0 : percentField.valueAsNumber;
+  if(percentField.validity.badInput || !Number.isFinite(percent) || percent < 0 || percent > 100){
+    showToast('Укажите гонорар от 0 до 100%');
+    percentField.focus();
+    return;
+  }
   const payload = {
     name,
-    fee_percent: parseFloat(document.getElementById('cf-feepercent').value) || 0,
+    fee_percent: percent,
     fee_base: document.getElementById('cf-feebase').value || 'profit',
     department_id: document.getElementById('cf-department').value || null,
   };

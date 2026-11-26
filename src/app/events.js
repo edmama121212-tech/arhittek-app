@@ -30,9 +30,10 @@ document.getElementById('pf-stage-add').addEventListener('click', ()=>{
 });
 
 document.getElementById('pf-open-as-object').addEventListener('click', ()=>{
-  if(editingProjectId){
+  const projectId = editingProjectId;
+  if(projectId){
     closeProjectSheet();
-    openObjectView(editingProjectId);
+    openObjectView(projectId);
   }
 });
 

@@ -536,10 +536,17 @@ async function renderShareLinks(){
   }).join('');
 }
 
+let shareLinkFormVersion=0;
+function clearShareLinkResult(){
+  shareLinkFormVersion++;
+  document.getElementById('sl-url').value='';
+  document.getElementById('sl-result').style.display='none';
+}
+
 function createShareLink(){
   shareLinkProjectId = null;
   document.getElementById('sl-name').value = '';
-  document.getElementById('sl-result').style.display = 'none';
+  clearShareLinkResult();
   document.getElementById('sl-filter-row').style.display = '';
   document.getElementById('sl-single-note').style.display = 'none';
   document.getElementById('shareLinkOverlay').classList.add('active');
@@ -552,7 +559,7 @@ function createShareLinkForProject(cardId, cardTitle){
   if(!canEditCards()) return;
   shareLinkProjectId = cardId;
   document.getElementById('sl-name').value = cardTitle || 'Проект';
-  document.getElementById('sl-result').style.display = 'none';
+  clearShareLinkResult();
   document.getElementById('sl-filter-row').style.display = 'none';
   document.getElementById('sl-single-note').style.display = '';
   document.getElementById('shareLinkOverlay').classList.add('active');
@@ -560,6 +567,7 @@ function createShareLinkForProject(cardId, cardTitle){
 
 async function generateShareLink(){
   if(!canEditCards())return;
+  const version=++shareLinkFormVersion;
   const label = document.getElementById('sl-name').value.trim() || 'Ссылка';
   const filter = shareLinkProjectId ? 'all' : document.getElementById('sl-filter').value;
   const expiresValue = document.getElementById('sl-expires').value;
@@ -582,8 +590,10 @@ async function generateShareLink(){
 
     const base = location.origin + location.pathname.replace('index.html','');
     const url = base + 'catalog.html?t=' + token;
-    document.getElementById('sl-url').value = url;
-    document.getElementById('sl-result').style.display = 'block';
+    if(version===shareLinkFormVersion){
+      document.getElementById('sl-url').value = url;
+      document.getElementById('sl-result').style.display = 'block';
+    }
     await renderShareLinks();
   } catch(e){
     const details = [e.message, e.code, e.details, e.hint].filter(Boolean).join(' · ');
