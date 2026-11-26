@@ -10,8 +10,9 @@ html:not([data-access="owner"]) #more-admin-sections,
 html:not([data-access="owner"]) #openFamilyTreeBtn,
 html:not([data-access="owner"]) #view-more button:not(#openKpBtn):not(#openContractsBtn),
 html[data-access="staff"] #view-more,html[data-access="staff"] #view-kp,
-html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[data-view="view-more"],
-#ef-card-edit-field {display:none!important}
+html[data-access="staff"] #view-contracts,html[data-access="staff"] .nav-btn[data-view="view-more"] {display:none!important}
+#noEmployeeSections p {margin-top:6px}
+body:has(#noEmployeeSections:not([hidden])) .bottom-nav {display:none!important}
 </style>
 </head>
 <body>

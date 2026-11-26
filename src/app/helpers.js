@@ -5,6 +5,7 @@ function fmt(n){
   n = Number(n) || 0;
   return n.toLocaleString('ru-RU',{maximumFractionDigits:2});
 }
+const rublesWithKopecks = new Intl.NumberFormat('ru-RU',{style:'currency',currency:'RUB',minimumFractionDigits:0,maximumFractionDigits:2});
 function fmtMoney(n){ return fmt(n) + ' ₽'; }
 
 function showToast(msg){
@@ -51,16 +52,18 @@ function getFinancialProjects(){
   const archived=(state.financialProjects||[]).filter(p=>p.deleted_at&&!ids.has(p.id));
   return [...live,...archived];
 }
+function projectDirectExpenseRows(projectId){
+  return (state.ledger||[]).filter(e=>e.project_id===projectId && !e.deleted_at &&
+    (['expense','project_expense'].includes(e.type)||(e.type==='payment'&&!e.payee_employee_id)) &&
+    !isInvoiceLinkedExpense(e));
+}
 function getProjectExpenses(p){
   if(!p) return 0;
   if(isConstructionProject(p))return getConstructionExpenses(p).expenses;
-  const manual = (state.ledger||[])
-    .filter(e => e.project_id===p.id && !e.deleted_at && (['expense','project_expense'].includes(e.type)||(e.type==='payment'&&!e.payee_employee_id)))
-    .filter(e => !isInvoiceLinkedExpense(e))
-    .reduce((sum,e)=>sum + Number(e.amount||0),0);
-
+  const entries=projectDirectExpenseRows(p.id);
+  if(entries.length)return entries.reduce((sum,e)=>sum+Math.round(Number(e.amount||0)*100),0)/100;
   // Старые проекты могли хранить расходы только в projects.expenses.
-  return manual > 0 ? manual : Math.max(0, Number(p.expenses)||0);
+  return Math.max(0,Number(p.expenses)||0);
 }
 function isInvoiceLinkedExpense(entry){
   const id=typeof ARHITTEKCash!=='undefined'?ARHITTEKCash.invoicePaymentId(entry):null;

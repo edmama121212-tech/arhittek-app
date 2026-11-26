@@ -154,6 +154,18 @@ function cancelScannedExplication(fieldId){
   if(statusEl) statusEl.innerHTML = '';
 }
 
+function editorCardTags(){
+  const styleTags={classic:'Классический',modern:'Современный'};
+  const featureTags={basement:'Цокольный этаж',mansard:'Мансарда',flat:'Плоская кровля'};
+  const systemTags=[...Object.values(styleTags),...Object.values(featureTags)];
+  const tags=CatalogFloors.tags({tags:document.getElementById('ce-tags').value}).filter(tag=>!systemTags.includes(tag));
+  for(const [key,tag] of Object.entries(styleTags)){
+    if(ceStyleSelected==='both'||ceStyleSelected===key)tags.push(tag);
+  }
+  for(const key of ceFeatureSelected)if(featureTags[key])tags.push(featureTags[key]);
+  return tags;
+}
+
 function initCardFloorEditor(){
   const container=document.getElementById('ce-floor-sections');
   if(!container||container.dataset.ready)return;
@@ -186,16 +198,10 @@ function cePreview(){
   set('prev-title',num?`Проект №${num}${title?' — '+title:''}`:'Проект №—');
   set('prev-num',num?'№ '+num:'№ —');
   set('prev-area',v('ce-area')||'—');set('prev-beds',v('ce-beds')||'—');set('prev-footprint',v('ce-footprint')||'—');
-  set('prev-floors-stat',ceFloorsSelected);
+  set('prev-floors-stat',ceFloorsSelected??'—');
   const prices = document.getElementById('prev-prices');
   if(prices) prices.innerHTML = CatalogFloors.pricesHTML({total_area:v('ce-area'),price:v('ce-price')}, catalogIndividualDesignRate());
-  const systemTags=['Классический','Современный','Цокольный этаж','Мансарда','Плоская кровля'];
-  const tags=v('ce-tags').split(',').map(t=>t.trim()).filter(t=>t&&!systemTags.includes(t));
-  if(ceStyleSelected==='classic')tags.push('Классический');
-  if(ceStyleSelected==='modern')tags.push('Современный');
-  if(ceFeatureSelected.includes('basement'))tags.push('Цокольный этаж');
-  if(ceFeatureSelected.includes('mansard'))tags.push('Мансарда');
-  if(ceFeatureSelected.includes('flat'))tags.push('Плоская кровля');
+  const tags=editorCardTags();
   document.getElementById('prev-tags').innerHTML=tags.map(t=>`<div class="tag" style="color:#2a72c0">${escapeHtml(t)}</div>`).join('');
   CatalogFloors.definitions.forEach(f=>{
     const visible=CatalogFloors.enabled(f,card);
@@ -290,16 +296,7 @@ async function saveCard(){
       beds: document.getElementById('ce-beds').value === '' ? null : parseInt(document.getElementById('ce-beds').value,10),
       baths: document.getElementById('ce-baths').value === '' ? null : parseInt(document.getElementById('ce-baths').value,10),
       price: document.getElementById('ce-price').value.trim(),
-      tags: (()=>{
-        const systemTags = ['Классический','Современный','Цокольный этаж','Мансарда','Плоская кровля'];
-        const userTags = document.getElementById('ce-tags').value.split(',').map(t=>t.trim()).filter(Boolean).filter(t=>!systemTags.includes(t));
-        if(ceStyleSelected==='classic') userTags.push('Классический');
-        if(ceStyleSelected==='modern') userTags.push('Современный');
-        if(ceFeatureSelected.includes('basement')) userTags.push('Цокольный этаж');
-        if(ceFeatureSelected.includes('mansard')) userTags.push('Мансарда');
-        if(ceFeatureSelected.includes('flat')) userTags.push('Плоская кровля');
-        return userTags;
-      })(),
+      tags: editorCardTags(),
       ...Object.fromEntries(CatalogFloors.definitions.flatMap(f=>[
         [f.area,document.getElementById('ce-area'+f.suffix).value.trim()],
         [f.rooms,parseExpl(document.getElementById('ce-expl'+f.suffix).value,document.getElementById('ce-area'+f.suffix).value)]
@@ -536,43 +533,47 @@ async function renderShareLinks(){
   }).join('');
 }
 
-let shareLinkFormVersion=0;
-function clearShareLinkResult(){
-  shareLinkFormVersion++;
+function openShareLinkForm(projectId, title){
+  if(!canEditCards())return;
+  shareLinkProjectId=projectId;
+  const form=document.getElementById('shareLinkOverlay');
+  const result=document.getElementById('sl-result'),submit=document.getElementById('sl-create');
+  const draft={pending:false};
+  form.shareDraft=draft;
+  document.getElementById('sl-name').value=title;
+  document.getElementById('sl-filter').value='all';
+  document.getElementById('sl-expires').value='14';
   document.getElementById('sl-url').value='';
-  document.getElementById('sl-result').style.display='none';
+  document.getElementById('sl-filter-row').style.display=projectId?'none':'';
+  document.getElementById('sl-single-note').style.display=projectId?'':'none';
+  result.style.display='none';
+  submit.disabled=false;
+  form.onchange=form.oninput=()=>{
+    result.style.display='none';
+    document.getElementById('sl-url').value='';
+    form.shareDraft={pending:false};
+    submit.disabled=false;
+  };
+  form.classList.add('active');
 }
-
 function createShareLink(){
-  shareLinkProjectId = null;
-  document.getElementById('sl-name').value = '';
-  clearShareLinkResult();
-  document.getElementById('sl-filter-row').style.display = '';
-  document.getElementById('sl-single-note').style.display = 'none';
-  document.getElementById('shareLinkOverlay').classList.add('active');
+  openShareLinkForm(null,'');
 }
-
-// Ссылка на один конкретный проект каталога — видна только тем, у кого есть
-// доступ к разделу «Каталог» (canEditCards): администратору и сотрудникам
-// с правом видеть готовые проекты.
 function createShareLinkForProject(cardId, cardTitle){
-  if(!canEditCards()) return;
-  shareLinkProjectId = cardId;
-  document.getElementById('sl-name').value = cardTitle || 'Проект';
-  clearShareLinkResult();
-  document.getElementById('sl-filter-row').style.display = 'none';
-  document.getElementById('sl-single-note').style.display = '';
-  document.getElementById('shareLinkOverlay').classList.add('active');
+  openShareLinkForm(cardId,cardTitle||'Проект');
 }
-
 async function generateShareLink(){
   if(!canEditCards())return;
-  const version=++shareLinkFormVersion;
   const label = document.getElementById('sl-name').value.trim() || 'Ссылка';
   const filter = shareLinkProjectId ? 'all' : document.getElementById('sl-filter').value;
   const expiresValue = document.getElementById('sl-expires').value;
   const expiresDays = Number(expiresValue);
   if(!['0','2','3','4','5','6','7','14','30','90'].includes(expiresValue)){showToast('Выберите срок действия ссылки');return;}
+  const form=document.getElementById('shareLinkOverlay'),submit=document.getElementById('sl-create');
+  const draft=form.shareDraft;
+  if(!draft||draft.pending||submit.disabled)return;
+  draft.pending=true;
+  submit.disabled=true;
   const token = (window.crypto && crypto.randomUUID)
     ? crypto.randomUUID().replace(/-/g,'')
     : Math.random().toString(36).slice(2) + Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -588,14 +589,16 @@ async function generateShareLink(){
     });
     if(error) throw error;
 
+    if(form.shareDraft!==draft){await renderShareLinks();return;}
     const base = location.origin + location.pathname.replace('index.html','');
     const url = base + 'catalog.html?t=' + token;
-    if(version===shareLinkFormVersion){
-      document.getElementById('sl-url').value = url;
-      document.getElementById('sl-result').style.display = 'block';
-    }
+    document.getElementById('sl-url').value = url;
+    document.getElementById('sl-result').style.display = 'block';
     await renderShareLinks();
   } catch(e){
+    if(form.shareDraft!==draft)return;
+    draft.pending=false;
+    submit.disabled=false;
     const details = [e.message, e.code, e.details, e.hint].filter(Boolean).join(' · ');
     showToast('Ошибка создания ссылки: ' + (details || 'неизвестная ошибка'));
     console.error('generateShareLink error:', e);
@@ -603,8 +606,14 @@ async function generateShareLink(){
 }
 
 function copyShareUrl(){
-  const url = document.getElementById('sl-url').value;
-  navigator.clipboard.writeText(url).then(()=>showToast('Ссылка скопирована!'));
+  const input=document.getElementById('sl-url');
+  const selectAddress=()=>{
+    input.focus();
+    input.select();
+    showToast('Адрес выделен. Скопируйте его вручную.');
+  };
+  if(!navigator.clipboard?.writeText){selectAddress();return;}
+  navigator.clipboard.writeText(input.value).then(()=>showToast('Ссылка скопирована!'),selectAddress);
 }
 
 async function deactivateLink(id){
@@ -714,7 +723,7 @@ ${CatalogFloors.panels(card)}
   <div class="stats">
     <div class="stat"><div class="stat-val">${escapeHtml(String(card.total_area||'—'))}</div><div class="stat-sub">м² общая</div></div>
     <div class="stat"><div class="stat-val">${escapeHtml(String(card.beds||'—'))}</div><div class="stat-sub">спальни</div></div>
-    <div class="stat"><div class="stat-val">${escapeHtml(String(card.floors||'—'))}</div><div class="stat-sub">этажа</div></div>
+    <div class="stat"><div class="stat-val">${CatalogFloors.count(card)??'—'}</div><div class="stat-sub">этажность</div></div>
     <div class="stat"><div class="stat-val" style="font-size:12px">${escapeHtml(card.footprint||'—')}</div><div class="stat-sub">габарит</div></div>
   </div>
   <div class="tags">${tags}</div>

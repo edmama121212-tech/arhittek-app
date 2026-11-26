@@ -34,6 +34,15 @@ const client={from:query,rpc:async(n,a={})=>{
    cards=cards.map(({pdf_import_meta,...row})=>row);
    return {data:{link:{id:link.id,project_id:link.project_id??null,floors_filter:link.floors_filter||'all',expires_at:link.expires_at||null},cards:clone(cards)},error:null};
  }
+ if(n==='record_project_card_payment'){
+  const {p_entry:entry,p_expected:expected,p_updates:updates}=a,project=__db.projects.find(p=>p.id===entry.project_id);
+  if(__fail?.table==='ledger_entries'||__fail?.table==='projects')return {data:null,error:__fail.error||{message:'Запись недоступна'}};
+  const entries=__db.ledger_entries||=[];
+  if(entries.some(e=>e.id===entry.id))return {data:entry.id,error:null};
+  if(!project||Object.keys(expected).some(k=>(project[k]??null)!==expected[k]))return {data:null,error:{code:'40001',message:'Данные проекта изменились'}};
+  entries.push({...clone(entry),received_by:window.session?.employeeId,created_at:new Date().toISOString()});
+  Object.assign(project,clone(updates));return {data:entry.id,error:null};
+ }
  if(n==='get_next_project_numbers'){
   if(__fail?.rpc===n)return {data:null,error:{message:'Number service offline'}};
   const year=Number(new Intl.DateTimeFormat('en',{year:'numeric',timeZone:'Europe/Moscow'}).format(new Date()));

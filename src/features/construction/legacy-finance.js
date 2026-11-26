@@ -14,6 +14,8 @@ function isConstructionProject(p){
     if(constrDept && cat.department_id === constrDept.id) return true;
     const nm = (cat.name||'').toLowerCase();
     if(nm.includes('строительств') || nm.includes('ремонт') || nm.includes('монтаж')) return true;
+    // An invoice alone identifies an old object only when its department is unknown.
+    if(state.departments.some(d=>d.id===cat.department_id && d.name==='Проектный отдел')) return false;
   }
   return (state.invoices||[]).some(inv=>inv.project_id===p.id&&!inv.deleted_at);
 }
@@ -169,16 +171,16 @@ function renderConstruction(){
     return `<div data-key-activate tabindex="0" role="button" class="obj-card" onclick="openObjectView('${p.id}')">
       <div class="obj-head"><div><div class="obj-title">${escapeHtml(p.name)}</div><div class="obj-sub">${escapeHtml(p.address||'')}</div></div><div style="display:flex; align-items:center; gap:6px;">${st ? `<span class="status-chip" data-status="${escapeHtml(st.name)}">${escapeHtml(st.name)}</span>` : ''}<div class="obj-chevron">›</div></div></div>
       <div class="obj-bar" style="margin-bottom:4px;"><i style="width:${pct}%; background:${pct>90?'var(--red)':pct>70?'var(--gold)':'var(--blue)'};"></i></div>
-      <div class="obj-bar-lbl"><span>Выплачено ${pct}% от полученного</span><span style="color:${isOverspent?'var(--red)':''}">Деньги: ${fmtMoney(cashRemaining)}${isOverspent ? ' · Перерасход: '+fmtMoney(cashOverspend) : ''}</span></div>
+      <div class="obj-bar-lbl"><span>Выплачено ${pct}% от полученного</span><span style="color:${isOverspent?'var(--red)':''}">Деньги: ${constructionMoney(cashRemaining)}${isOverspent ? ' · Перерасход: '+constructionMoney(cashOverspend) : ''}</span></div>
       <div style="margin-top:12px;">
-        <div class="fee-row" style="padding:5px 0;"><div class="fl">💰 Приход от заказчика</div><div class="fv" style="color:var(--green);">${fmtMoney(received)}</div></div>
-        <div class="fee-row" style="padding:5px 0;"><div class="fl">📦 Накладные на материалы</div><div class="fv">${fmtMoney(matTotal)}</div></div>
-        <div class="fee-row" style="padding:5px 0;"><div class="fl">🔨 Накладные на работы</div><div class="fv">${fmtMoney(workTotal)}</div></div>
-        ${otherTotal>0?`<div class="fee-row" style="padding:5px 0;"><div class="fl">Прочие накладные</div><div class="fv">${fmtMoney(otherTotal)}</div></div>`:''}
-        ${manualTotal>0?`<div class="fee-row" style="padding:5px 0;"><div class="fl">Расходы без накладной</div><div class="fv">${fmtMoney(manualTotal)}</div></div>`:''}
-        ${directPaid > 0 ? `<div class="fee-row" style="padding:5px 0;"><div class="fl">🤝 Оплачено заказчиком напрямую</div><div class="fv" style="color:var(--text-dim);">${fmtMoney(directPaid)}</div></div>` : ''}
-        <div class="fee-row" style="padding:5px 0; border-top:1px solid var(--line); margin-top:2px;"><div class="fl">Выплачено из денег объекта</div><div class="fv" style="color:var(--red);">${fmtMoney(cashOutgoing)}</div></div>
-        <div class="fee-row" style="padding:5px 0;"><div class="fl">Оплата накладных не подтверждена</div><div class="fv">${fmtMoney(unpaidInvoices)}</div></div>
+        <div class="fee-row" style="padding:5px 0;"><div class="fl">💰 Приход от заказчика</div><div class="fv" style="color:var(--green);">${constructionMoney(received)}</div></div>
+        <div class="fee-row" style="padding:5px 0;"><div class="fl">📦 Накладные на материалы</div><div class="fv">${constructionMoney(matTotal)}</div></div>
+        <div class="fee-row" style="padding:5px 0;"><div class="fl">🔨 Накладные на работы</div><div class="fv">${constructionMoney(workTotal)}</div></div>
+        ${otherTotal>0?`<div class="fee-row" style="padding:5px 0;"><div class="fl">Прочие накладные</div><div class="fv">${constructionMoney(otherTotal)}</div></div>`:''}
+        ${manualTotal>0?`<div class="fee-row" style="padding:5px 0;"><div class="fl">Расходы без накладной</div><div class="fv">${constructionMoney(manualTotal)}</div></div>`:''}
+        ${directPaid > 0 ? `<div class="fee-row" style="padding:5px 0;"><div class="fl">🤝 Оплачено заказчиком напрямую</div><div class="fv" style="color:var(--text-dim);">${constructionMoney(directPaid)}</div></div>` : ''}
+        <div class="fee-row" style="padding:5px 0; border-top:1px solid var(--line); margin-top:2px;"><div class="fl">Выплачено из денег объекта</div><div class="fv" style="color:var(--red);">${constructionMoney(cashOutgoing)}</div></div>
+        <div class="fee-row" style="padding:5px 0;"><div class="fl">Оплата накладных не подтверждена</div><div class="fv">${constructionMoney(unpaidInvoices)}</div></div>
         <div class="fee-row" style="padding:5px 0;"><div class="fl">Наценка ARHITTEK ${fin.companyMarkupRate===null?'не задана':constructionAmount(fin.companyMarkupRate)+'%'} по документам</div><div class="fv" style="color:var(--blue);">${constructionMoney(fin.companyMarkupAmount)}</div></div>
         <div class="fee-row" style="padding:5px 0;"><div class="fl">Расходы с наценкой</div><div class="fv">${constructionMoney(fin.totalWithMarkup)}</div></div>
       </div>

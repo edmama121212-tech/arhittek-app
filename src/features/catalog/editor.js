@@ -180,18 +180,19 @@ function renderCardsStats(){
   if(!cardsData.length){ el.innerHTML = ''; return; }
 
   const total = cardsData.length;
-  const byFloors = {1:0, 2:0, '3plus':0};
+  const byFloors = {1:0, 2:0, '3plus':0, unknown:0};
   let classic = 0, modern = 0;
   cardsData.forEach(c=>{
-    const f = Number(c.floors) || 1;
-    if(f >= 3) byFloors['3plus']++;
+    const f = CatalogFloors.count(c);
+    if(f===null)byFloors.unknown++;
+    else if(f >= 3) byFloors['3plus']++;
     else byFloors[f] = (byFloors[f]||0) + 1;
-    const tags = Array.isArray(c.tags) ? c.tags : (c.tags||'').split(',').map(t=>t.trim());
+    const tags = CatalogFloors.tags(c);
     if(tags.includes('Классический')) classic++;
     if(tags.includes('Современный')) modern++;
   });
 
-  const maxFloorCount = Math.max(byFloors[1], byFloors[2], byFloors['3plus'], 1);
+  const maxFloorCount = Math.max(byFloors[1], byFloors[2], byFloors['3plus'], byFloors.unknown, 1);
   const barPct = n => Math.max(n>0?6:0, Math.round((n/maxFloorCount)*100));
 
   el.innerHTML = `
@@ -201,6 +202,7 @@ function renderCardsStats(){
         <div class="cat-sb-row"><span class="cat-sb-label">1 этаж</span><div class="cat-sb-bars"><div class="cat-sb-seg" style="width:${barPct(byFloors[1])}%; opacity:${byFloors[1]?1:0.25};"></div></div><span class="cat-sb-val">${byFloors[1]}</span></div>
         <div class="cat-sb-row"><span class="cat-sb-label">2 этажа</span><div class="cat-sb-bars"><div class="cat-sb-seg" style="width:${barPct(byFloors[2])}%; opacity:${byFloors[2]?1:0.25};"></div></div><span class="cat-sb-val">${byFloors[2]}</span></div>
         <div class="cat-sb-row"><span class="cat-sb-label">3+ этажей</span><div class="cat-sb-bars"><div class="cat-sb-seg" style="width:${barPct(byFloors['3plus'])}%; opacity:${byFloors['3plus']?1:0.25};"></div></div><span class="cat-sb-val">${byFloors['3plus']}</span></div>
+        ${byFloors.unknown ? `<div class="cat-sb-row"><span class="cat-sb-label" style="width:auto">Не указана</span><div class="cat-sb-bars"><div class="cat-sb-seg" style="width:${barPct(byFloors.unknown)}%;"></div></div><span class="cat-sb-val">${byFloors.unknown}</span></div>` : ''}
       </div>
     </div>
     <div class="cat-stat-grid">
@@ -239,15 +241,14 @@ function renderCardsList(){
       || String(a.id).localeCompare(String(b.id));
   });
   if(currentCardFloorFilter !== 'all'){
-    const floorCount = Number(currentCardFloorFilter);
-    filtered = filtered.filter(card => floorCount === 3 ? Number(card.floors) >= 3 : Number(card.floors) === floorCount);
+    filtered = filtered.filter(card => CatalogFloors.matchesCount(card,currentCardFloorFilter));
   }
   if(currentFeatureFilter !== 'all'){
     const featureTagMap = {basement:'Цокольный этаж',mansard:'Мансарда',flat:'Плоская кровля'};
     const featureTag = featureTagMap[currentFeatureFilter];
     if(featureTag){
       filtered = filtered.filter(c => {
-        const tags = Array.isArray(c.tags) ? c.tags : (c.tags||'').split(',').map(t=>t.trim());
+        const tags = CatalogFloors.tags(c);
         return tags.includes(featureTag);
       });
     }
@@ -255,15 +256,16 @@ function renderCardsList(){
   if(currentCardStyleFilter !== 'all'){
     const styleKey = currentCardStyleFilter === 'classic' ? 'Классический' : 'Современный';
     filtered = filtered.filter(c => {
-      const tags = Array.isArray(c.tags) ? c.tags : (c.tags||'').split(',').map(t=>t.trim());
+      const tags = CatalogFloors.tags(c);
       return tags.includes(styleKey);
     });
   }
 
   const stats = document.getElementById('cards-stats');
-  if (stats) stats.hidden = terms.length > 0;
+  const hasFilters = terms.length > 0 || currentCardFloorFilter !== 'all' || currentFeatureFilter !== 'all' || currentCardStyleFilter !== 'all';
+  if (stats) stats.hidden = hasFilters;
   const count = document.getElementById('cards-search-count');
-  if (count) count.textContent = terms.length ? 'Найдено проектов: ' + filtered.length : '';
+  if (count) count.textContent = hasFilters ? 'Найдено проектов: ' + filtered.length : '';
 
   if(!filtered.length){
     container.innerHTML = `<div class="note" style="text-align:center;padding:40px 0;opacity:0.5;">
@@ -283,7 +285,7 @@ function renderCardsList(){
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:700;line-height:1.35;margin-bottom:3px;">${escapeHtml(catalogListTitle(card))}</div>
           <div style="font-size:11px;color:var(--text-dim);">
-            ${card.floors} эт. · ${card.total_area||'—'} м² · ${card.footprint||''}
+            ${escapeHtml(String(card.total_area||'—'))} м²${card.footprint?' · '+escapeHtml(String(card.footprint)):''}
           </div>
           <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
             <span style="font-size:10px;background:rgba(0,113,235,0.15);color:var(--blue);padding:2px 8px;border-radius:20px;font-weight:600;">${CatalogFloors.label(card)}</span>
@@ -357,24 +359,23 @@ function openCardEditor(id){
       setVal('ce-beds', card.beds??'');
       setVal('ce-baths', card.baths??'');
       setVal('ce-price', card.price||'');
+      const cardTags = CatalogFloors.tags(card);
       // Feature and style switches own their system labels, not the free-tag input.
       const systemTags=['Классический','Современный','Цокольный этаж','Мансарда','Плоская кровля'];
-      setVal('ce-tags', (card.tags||[]).filter(t=>!systemTags.includes(t)).join(', '));
+      setVal('ce-tags', cardTags.filter(t=>!systemTags.includes(t)).join(', '));
       CatalogFloors.definitions.forEach(f=>{
         setVal('ce-area'+f.suffix,card[f.area]||'');
         setVal('ce-expl'+f.suffix,CatalogFloors.normalizeRooms(card[f.rooms],{expectedArea:card[f.area]}).map(r=>`${r.name}: ${r.area}`).join('\n'));
       });
-      selectFloors(card.floors||2);
       // Load style and features from tags
-      const cardTags = Array.isArray(card.tags) ? card.tags : (card.tags||'').split(',').map(t=>t.trim());
-      if(cardTags.includes('Классический')) selectStyle('classic');
-      else if(cardTags.includes('Современный')) selectStyle('modern');
-      else { ceStyleSelected=''; ['classic','modern'].forEach(id=>{const btn=document.getElementById('style-btn-'+id);if(btn){btn.style.borderColor='#374151';btn.style.background='transparent';btn.style.color='#6b7280';}}); }
+      const classic=cardTags.includes('Классический'),modern=cardTags.includes('Современный');
+      selectStyle(classic&&modern?'both':classic?'classic':modern?'modern':'');
       ceFeatureSelected=[];
       ['basement','mansard','flat'].forEach(id=>{const btn=document.getElementById('feature-btn-'+id);if(btn){btn.style.borderColor='#374151';btn.style.background='transparent';btn.style.color='#6b7280';}});
       if(cardTags.includes('Цокольный этаж')){ceFeatureSelected.push('basement');const b=document.getElementById('feature-btn-basement');if(b){b.style.borderColor='#3b82f6';b.style.background='rgba(59,130,246,0.15)';b.style.color='#3b82f6';}}
       if(cardTags.includes('Мансарда')){ceFeatureSelected.push('mansard');const b=document.getElementById('feature-btn-mansard');if(b){b.style.borderColor='#3b82f6';b.style.background='rgba(59,130,246,0.15)';b.style.color='#3b82f6';}}
       if(cardTags.includes('Плоская кровля')){ceFeatureSelected.push('flat');const b=document.getElementById('feature-btn-flat');if(b){b.style.borderColor='#3b82f6';b.style.background='rgba(59,130,246,0.15)';b.style.color='#3b82f6';}}
+      selectFloors(card.floors);
       // Show stored images as previews
       if(card.images){
         const previews = ['ce-facade-preview','ce-facade2-preview','ce-plan1-preview','ce-plan2-preview','ce-plan3-preview','ce-planb-preview'];
@@ -425,7 +426,7 @@ function closeCardEditor(){
 function setVal(id, val){ const el=document.getElementById(id); if(el) el.value=val; }
 
 function selectFloors(n){
-  n = Math.max(1,Math.min(3,parseInt(n)||1));
+  n = CatalogFloors.count({floors:n});
   ceFloorsSelected = n;
   markCardEditorDirty();
   [1,2,3].forEach(i=>{
@@ -437,21 +438,25 @@ function selectFloors(n){
       btn.style.borderColor='#374151';btn.style.background='transparent';btn.style.color='#6b7280';
     }
   });
-  const fs = document.getElementById('prev-floors-stat'); if(fs) fs.textContent=n;
+  const hint=document.getElementById('ce-floor-hint');
+  if(hint)hint.textContent=n===null?'Этажность не указана.':n>3?'В карточке сохранено: '+CatalogFloors.label({floors:n})+'.':'Надземные этажи. Цоколь добавляется отдельно.';
   cePreview();
 }
 
-function selectStyle(s){
+function selectStyle(s,userEdit=false){
   ceStyleSelected = s || '';
   ['classic','modern'].forEach(id=>{
     const btn=document.getElementById('style-btn-'+id);
     if(!btn) return;
-    if(s===id){
+    const selected=s==='both'||s===id;
+    btn.setAttribute('aria-pressed',String(selected));
+    if(selected){
       btn.style.borderColor='#3b82f6';btn.style.background='rgba(59,130,246,0.15)';btn.style.color='#3b82f6';
     } else {
       btn.style.borderColor='#374151';btn.style.background='transparent';btn.style.color='#6b7280';
     }
   });
+  if(userEdit){markCardEditorDirty();cePreview();}
 }
 
 function toggleFeature(f, el){

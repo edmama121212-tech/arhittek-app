@@ -473,12 +473,12 @@ function renderKpServices(){
     const item = kpServiceItem(s);
     const effectiveRate = (s.customRate !== null && s.customRate !== undefined) ? s.customRate : item.rate;
     const selectedIndex=flat.findIndex(it=>it.name===item.name && it.unit===item.unit && Number(it.rate)===Number(item.rate) && (it.desc||'')===(item.desc||'') && (!item.id || it.id===item.id));
-    let optionsHtml = selectedIndex<0 ? `<option value="snapshot" selected>Согласовано: ${escapeHtml(item.name)} (${fmt(item.rate)} ₽/${escapeHtml(item.unit)})</option>` : '';
+    let optionsHtml = selectedIndex<0 ? `<option value="snapshot" selected>Согласовано: ${escapeHtml(item.name)} (${kpNumber(item.rate)} ₽/${escapeHtml(item.unit)})</option>` : '';
     let flatIdx = 0;
     groups.forEach(g=>{
       optionsHtml += `<optgroup label="${escapeHtml(g.group)}">`;
       g.items.forEach(it=>{
-        optionsHtml += `<option value="${flatIdx}" ${flatIdx===selectedIndex?'selected':''}>${escapeHtml(it.name)} (${fmt(it.rate)} ₽/${it.unit})</option>`;
+        optionsHtml += `<option value="${flatIdx}" ${flatIdx===selectedIndex?'selected':''}>${escapeHtml(it.name)} (${kpNumber(it.rate)} ₽/${it.unit})</option>`;
         flatIdx++;
       });
       optionsHtml += `</optgroup>`;
