@@ -70,7 +70,11 @@
     const rounded = Math.max(1, Math.round(amount / step) * step);
     return rounded.toLocaleString('ru-RU') + ' ₽';
   }
-  const priceText=card=>{const value=price(card);return value===null?'Цена по запросу':formatCatalogPrice(value);};
+  function priceText(card, {rounded = false} = {}){
+    const value = price(card);
+    if (value === null) return 'Цена по запросу';
+    return rounded ? formatCatalogPrice(value) : value.toLocaleString('ru-RU') + ' ₽';
+  }
   function individualPriceText(value, tariff){
     const area = areaNumber(value);
     const unit = areaNumber(tariff);
@@ -87,7 +91,7 @@
     return `<div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px 12px;margin-bottom:12px">
       <div style="flex:1 1 110px;min-width:0">
         <div style="${labelStyle}">Готовый проект</div>
-        <div class="price" style="${amountStyle};font-size:24px;color:#177245">${priceText(card)}</div>
+        <div class="price" style="${amountStyle};font-size:24px;color:#177245">${priceText(card, {rounded:true})}</div>
       </div>
       ${comparison ? `<div style="flex:1 1 110px;min-width:0;text-align:right">
         <div style="${labelStyle}">Индивидуальный проект той же площади</div>
