@@ -132,6 +132,32 @@ async function browsers() {
   if(options.wait!==false)await page.waitForFunction(()=>!document.getElementById('portal-content').hidden||!['Проверяем доступ','Обновляем данные'].includes(document.getElementById('state-title').textContent));
  }
  try {
+  if(process.argv.includes('--section-acceptance')){
+   let reads=0;
+   await open({snapshotHandler:route=>++reads===1?route.fulfill({status:503,body:''}):route.fulfill({contentType:'application/json',body:JSON.stringify(fixture())})});
+   const build=require('node:crypto').createHash('sha256').update(fs.readFileSync(path.join(root,'index.html'))).digest('hex').slice(0,16);
+   const sections=[
+    ['UI-0071','#state-retry','#project-name','Ремонт квартиры'],
+    ['UI-0074','a[href="#project-money"]','#project-money','220'],
+    ['UI-0075','a[href="#project-stages"]','#project-stages','Подготовка'],
+    ['UI-0076','a[href="#project-works"]','#project-works','Демонтаж покрытия'],
+    ['UI-0077','a[href="#project-documents"]','#project-documents','Смеси для подготовки']
+   ];
+   for(const [id,selector,target,term] of sections){
+    const control=page.locator(selector);await control.scrollIntoViewIfNeeded();
+    const box=await control.boundingBox();assert.ok(box.x>=0 && box.x+box.width<=391);
+    const started=performance.now();await control.click();
+    await page.waitForFunction(({target,term})=>document.querySelector(target).innerText.includes(term),{target,term});
+    if(id!=='UI-0071'){
+     assert.equal(new URL(page.url()).hash,target);
+     await page.waitForFunction(sel=>{const box=document.querySelector(sel).getBoundingClientRect();return box.top<innerHeight && box.bottom>0;},target);
+    }
+    assert.equal(reads,2);assert.deepEqual(errors,[]);
+    results.push({name:id,pass:true});
+    console.log(JSON.stringify({id,ms:Math.round(performance.now()-started),width:Math.round(box.width),time:new Date().toISOString(),browser:browser.version(),build}));
+   }
+   return;
+  }
   await check('Published default is fail-closed and makes no API request even with a token',async()=>{await open({enabled:false});assert.equal(calls.length,0);assert.equal(await page.locator('#state-title').textContent(),'Кабинет ещё не подключён');assert.equal(new URL(page.url()).hash,'');});
   await check('Missing token and query-string secrets cannot request project data',async()=>{await open({access:null});assert.equal(calls.length,0);await open({query:'?access='+TOKEN,access:null});assert.equal(calls.length,0);assert.equal(new URL(page.url()).search,'');});
   await check('Short or duplicate fragment secrets are rejected without a request',async()=>{await open({access:'short'});assert.equal(calls.length,0);await open({access:TOKEN+'&access='+TOKEN});assert.equal(calls.length,0);});
@@ -199,4 +225,4 @@ async function browsers() {
   await check('All browser scenarios complete without uncaught script errors',()=>assert.deepEqual(errors,[]));
  } finally {await browser.close();}
 }
-(async()=>{await units();if(process.env.PORTAL_UNITS_ONLY!=='1')await browsers();const failed=results.filter(result=>!result.pass);console.log(JSON.stringify({passed:results.length-failed.length,total:results.length,failed},null,2));if(failed.length)process.exitCode=1;})().catch(error=>{console.error(error);process.exitCode=1;});
+(async()=>{if(!process.argv.includes('--section-acceptance'))await units();if(process.env.PORTAL_UNITS_ONLY!=='1')await browsers();const failed=results.filter(result=>!result.pass);console.log(JSON.stringify({passed:results.length-failed.length,total:results.length,failed},null,2));if(failed.length)process.exitCode=1;})().catch(error=>{console.error(error);process.exitCode=1;});
