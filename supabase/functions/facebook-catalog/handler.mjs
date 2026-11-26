@@ -40,7 +40,7 @@ export function createHandler(env,{send=fetch,now=()=>Date.now()}={}){
     link.searchParams.set('t',code);
     link.searchParams.set('utm_source','facebook');
     link.searchParams.set('utm_medium',medium);
-    return link.toString();
+    return {url:link.toString(),expiresAt:item.expires_at};
   }
   return async req=>{
     const url=new URL(req.url);
@@ -100,13 +100,20 @@ export function createHandler(env,{send=fetch,now=()=>Date.now()}={}){
                 recipient:{comment_id:commentId},
                 message:{attachment:{type:'template',payload:{
                   template_type:'button',text:greeting,
-                  buttons:[{type:'web_url',title:'Открыть каталог',url:link}]
+                  buttons:[{type:'web_url',title:'Открыть каталог',url:link.url}]
                 }}}
               })
             });
           }catch(_){await finish('uncertain',null,'Ambiguous network response');return response('Reconciliation required',503);}
           const data=await sent.json().catch(()=>null);
-          if(sent.ok&&data?.message_id){await finish('sent',String(data.message_id));continue;}
+          if(sent.ok&&data?.message_id){
+            const confirmed=await rpc('confirm_facebook_report_delivery',{
+              p_page:pageId,p_channel:'comment',p_event:commentId,p_sender:String(v.from?.name||'').slice(0,100),
+              p_text:String(v.message||'').slice(0,500),p_lease:job.lease,p_message:String(data.message_id),p_expires_at:link.expiresAt
+            });
+            if(!confirmed)return response('Delivery reconciliation required',503);
+            continue;
+          }
           const pending=sent.status===429;
           await finish(pending?'pending':sent.status>=500||sent.ok?'uncertain':'failed',
             null,'Meta status '+sent.status+' code '+String(data?.error?.code||'unknown'));

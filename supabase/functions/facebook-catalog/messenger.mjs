@@ -35,13 +35,20 @@ export async function handleMessengerEntry(entry,{
           recipient:{id:sender},messaging_type:'RESPONSE',
           message:{attachment:{type:'template',payload:{
             template_type:'button',text:greeting,
-            buttons:[{type:'web_url',title:'Открыть каталог',url:link}]
+            buttons:[{type:'web_url',title:'Открыть каталог',url:link.url}]
           }}}
         })
       });
     }catch(_){await finish('uncertain',null,'Ambiguous network response');return response('Reconciliation required',503);}
     const data=await sent.json().catch(()=>null);
-    if(sent.ok&&data?.message_id){await finish('sent',String(data.message_id));continue;}
+    if(sent.ok&&data?.message_id){
+      const confirmed=await rpc('confirm_facebook_report_delivery',{
+        p_page:pageId,p_channel:'messenger',p_event:mid,p_sender:sender,p_text:String(incoming.text||'').slice(0,500),
+        p_lease:job.lease,p_message:String(data.message_id),p_expires_at:link.expiresAt
+      });
+      if(!confirmed)return response('Delivery reconciliation required',503);
+      continue;
+    }
     const pending=sent.status===429;
     await finish(pending?'pending':sent.status>=500||sent.ok?'uncertain':'failed',
       null,'Meta status '+sent.status+' code '+String(data?.error?.code||'unknown'));
