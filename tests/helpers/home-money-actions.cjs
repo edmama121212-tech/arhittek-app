@@ -61,8 +61,9 @@ module.exports = async function run({page,fw,db,command,snap,day,wallet,uuid,shi
       const cash=await expectedTile('Сейф');
       assert.equal(await fw.locator('.studio-money-grid + .fw-group').getByRole('button').count(),1);
       assert.ok(await fw.evaluate(e=>e.scrollWidth<=e.clientWidth+1));
-      assert.ok(await opener.evaluate(e=>e.getBoundingClientRect().height>=44));
       await opener.scrollIntoViewIfNeeded();
+      await twoFrames(page);
+      assert.ok(await opener.evaluate(e=>e.getBoundingClientRect().height>=44));
       if(out && i===0) await fw.screenshot({path:path.join(out,'mobile.png')});
       if(out && i===1) await fw.screenshot({path:path.join(out,'desktop.png')});
       const start=performance.now();

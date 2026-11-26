@@ -107,7 +107,12 @@ function coreTests(){
   for(const [key,p]of[['xlsx@','xlsx/dist/xlsx.full.min.js'],['jspdf@','jspdf/dist/jspdf.umd.min.js'],['jspdf-autotable@','jspdf-autotable/dist/jspdf.plugin.autotable.min.js']])if(u.href.includes(key))file=path.join(root,'node_modules',p);
   if(file&&legacy&&file.endsWith('index.html')){
    let html=fs.readFileSync(file,'utf8').replace('<script src="catalog-quality.js"></script>','').replace(/<button[^>]*onclick="CatalogQuality\.checkEditor\(\)"[^>]*>[^<]*<\/button>/g,'').replace(/<p id="ce-quality-status"[^>]*><\/p>/g,'');
-   const start=html.indexOf('    let qualityMeta=importMeta'),end=html.indexOf('    payload.images=await uploadCardImages',start);assert(start>0&&end>start);html=html.slice(0,start)+html.slice(end);
+   // The modern form wraps image uploads in a metadata-only guard. Reconstruct the
+   // whole legacy block so the simulated older page remains valid JavaScript.
+   const start=html.indexOf('    const metadataReview=metadataOnly?');
+   const end=html.indexOf('    if(cardEditorGeneration===generation){',start);
+   assert(start>0&&end>start);
+   html=html.slice(0,start)+'    payload.images=await uploadCardImages(images,cardId);\n    payload.thumbnails=await uploadCardImages(thumbs,cardId);\n'+html.slice(end);
    return route.fulfill({body:html,contentType:'text/html'});
   }
   if(file&&legacy&&file.endsWith('catalog-pdf.js')){
