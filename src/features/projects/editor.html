@@ -88,7 +88,8 @@
       </div>
       <div class="field">
         <label>Остаток, ₽</label>
-        <input type="number" id="pf-balance" placeholder="0" readonly title="Рассчитывается автоматически: Цена − Получено">
+        <input type="number" id="pf-balance" placeholder="0" readonly title="Рассчитывается автоматически">
+        <small id="pf-cash-overspend" style="color:var(--red)" hidden></small>
       </div>
     </div>
     <div class="hint" style="margin:-6px 0 0;">«Получено» и «Остаток» обновляются автоматически после платежей (кнопка «Принять платёж» ниже).</div>

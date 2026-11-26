@@ -36,6 +36,7 @@ const service=({claim={claimed:true,lease:'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa'
     calls.push({name,data,headers:opts.headers});
     if(name.endsWith('/rpc/claim_facebook_catalog_reply'))return Response.json(claim);
     if(name.endsWith('/rpc/finish_facebook_catalog_reply'))return Response.json(true);
+    if(name.endsWith('/rpc/confirm_facebook_report_delivery'))return Response.json(true);
     if(name.endsWith('/rest/v1/share_links'))return new Response(null,{status:201});
     if(name.endsWith('/messages'))return Response.json(payload,{status});
     throw new Error('Unexpected mock request '+name);
@@ -62,7 +63,7 @@ test('one approved comment issues a 48h link and single Messenger button',async(
   const mock=service();const handle=createHandler(env,{send:mock.fetch,now:()=>time});
   const r=await handle(req());assert.equal(r.status,200);
   assert.deepEqual(mock.calls.map(x=>x.name.split('/').at(-1)),[
-    'claim_facebook_catalog_reply','share_links','messages','finish_facebook_catalog_reply'
+    'claim_facebook_catalog_reply','share_links','messages','confirm_facebook_report_delivery'
   ]);
   const link=mock.calls[1].data;
   assert.equal(Date.parse(link.expires_at)-Date.parse(link.created_at),48*3600000);
@@ -76,7 +77,8 @@ test('one approved comment issues a 48h link and single Messenger button',async(
   assert.equal(new URL(button.url).searchParams.get('t'),link.token);
   assert.equal(new URL(button.url).searchParams.get('utm_source'),'facebook');
   assert.equal(sent.message.attachment.payload.text.includes('https://'),false);
-  assert.equal(mock.calls[3].data.p_state,'sent');
+  assert.equal(mock.calls[3].data.p_channel,'comment');
+  assert.equal(mock.calls[3].data.p_expires_at,link.expires_at);
   assert.equal(mock.calls[3].data.p_message,'mock-message');
   assert.equal(mock.calls[3].data.p_sender,'Test client');
 });

@@ -10,6 +10,7 @@ function buildExportRows(){
     const emp = findEmployee(p.employee_id);
     const dept = cat ? findDepartment(cat.department_id) : null;
     const f = getProjectFee(p);
+    const site = isConstructionProject(p) ? getConstructionFinancials(p) : null;
     return {
       'Название': p.name,
       'ФИО клиента': p.client_name||'',
@@ -23,8 +24,9 @@ function buildExportRows(){
       'Адрес': p.address||'',
       'Телефон': p.phone||'',
       'Цена': p.price||0,
-      'Аванс': isConstructionProject(p)?getConstructionFinancials(p).received:p.advance||0,
-      'Остаток': isConstructionProject(p)?getConstructionFinancials(p).balance:p.balance||0,
+      'Аванс': site?site.received:p.advance||0,
+      'Остаток': site?site.cashRemaining:p.balance||0,
+      'Перерасход по объекту': site?site.cashOverspend:'',
       'Расходы': getProjectExpenses(p),
       'Прибыль': f.profit,
       '% гонорара': f.feePercent,

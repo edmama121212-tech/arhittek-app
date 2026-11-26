@@ -111,7 +111,7 @@ setupSearchBox('projectSearch', v=>projectSearchQuery=v, renderProjects);
 // ledgerSearch listener removed
 setupSearchBox('employeeSearch', v=>employeeSearchQuery=v, renderEmployees);
 setupSearchBox('historySearch', v=>historySearchQuery=v, renderHistory);
-setupSearchBox('constrSearch', v=>{ constrSearchQuery=v; renderConstruction(); });
+setupSearchBox('constrSearch', v=>constrSearchQuery=v, renderConstruction);
 
 document.getElementById('exportXlsxBtn').addEventListener('click', exportToXlsx);
 

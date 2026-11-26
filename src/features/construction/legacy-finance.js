@@ -18,30 +18,25 @@ function isConstructionProject(p){
   return (state.invoices||[]).some(inv=>inv.project_id===p.id&&!inv.deleted_at);
 }
 
+function sumConstructionMoney(rows, amount = row => row.amount){
+  return rows.reduce((kopeks,row)=>kopeks+Math.round(Number(amount(row)||0)*100),0)/100;
+}
+
 function getConstructionReceived(projectId, ledgerOverride=null){
   const ledger = ledgerOverride || state.ledger || [];
-  return ledger
-    .filter(e => e.project_id === projectId && CONSTRUCTION_INCOME_TYPES.includes(e.type) && !e.deleted_at)
-    .reduce((s,e) => s + Number(e.amount||0), 0);
+  return sumConstructionMoney(ledger.filter(e => e.project_id === projectId && CONSTRUCTION_INCOME_TYPES.includes(e.type) && !e.deleted_at));
 }
 
 function getConstructionExpenses(p, ledgerOverride=null, invoices=state.invoices||[]){
   const today=financeToday();
   const projInvoices = invoices.filter(inv=>inv.project_id===p.id && !inv.deleted_at && (!inv.invoice_date||inv.invoice_date<=today));
-  const matTotal = projInvoices
-    .filter(i=>['Материал','Инструмент','Расходник','Доставка'].includes(i.item_type))
-    .reduce((s,i)=>s+Number(i.amount||0),0);
-  const workTotal = projInvoices
-    .filter(i=>i.item_type==='Работа')
-    .reduce((s,i)=>s+Number(i.amount||0),0);
-  const otherTotal = projInvoices
-    .filter(i=>!['Материал','Инструмент','Расходник','Доставка','Работа'].includes(i.item_type))
-    .reduce((s,i)=>s+Number(i.amount||0),0);
-  const directPaid = projInvoices.filter(i=>i.paid_by_client).reduce((sum,i)=>sum+Number(i.amount||0),0);
-  const manualTotal = (ledgerOverride||state.ledger||[])
-    .filter(e=>e.project_id===p.id && !e.deleted_at && (!e.entry_date||e.entry_date<=today) && (['expense','project_expense'].includes(e.type)||(e.type==='payment'&&!e.payee_employee_id)) && !['client_refund','cash_handover','company_fee_expense'].includes(e.purpose) && e.funding_source!=='company_fee' && !isInvoiceLinkedExpense(e))
-    .reduce((s,e)=>s+Number(e.amount||0),0);
-  return {matTotal, workTotal, otherTotal, manualTotal, directPaid, expenses: matTotal + workTotal + otherTotal + manualTotal};
+  const matTotal = sumConstructionMoney(projInvoices.filter(i=>['Материал','Инструмент','Расходник','Доставка'].includes(i.item_type)));
+  const workTotal = sumConstructionMoney(projInvoices.filter(i=>i.item_type==='Работа'));
+  const otherTotal = sumConstructionMoney(projInvoices.filter(i=>!['Материал','Инструмент','Расходник','Доставка','Работа'].includes(i.item_type)));
+  const directPaid = sumConstructionMoney(projInvoices.filter(i=>i.paid_by_client));
+  const manualTotal = sumConstructionMoney((ledgerOverride||state.ledger||[])
+    .filter(e=>e.project_id===p.id && !e.deleted_at && (!e.entry_date||e.entry_date<=today) && (['expense','project_expense'].includes(e.type)||(e.type==='payment'&&!e.payee_employee_id)) && !['client_refund','cash_handover','company_fee_expense'].includes(e.purpose) && e.funding_source!=='company_fee' && !isInvoiceLinkedExpense(e)));
+  return {matTotal, workTotal, otherTotal, manualTotal, directPaid, expenses: Math.round((matTotal + workTotal + otherTotal + manualTotal)*100)/100};
 }
 
 function constructionAmount(value){
@@ -65,19 +60,18 @@ function getConstructionFinancials(p, ledgerOverride=null){
   const {matTotal, workTotal, otherTotal, manualTotal, directPaid, expenses: directCosts} = getConstructionExpenses(p,ledgerOverride);
   const today=financeToday(),ledger = (ledgerOverride || state.ledger || []).filter(e=>!e.deleted_at&&(!e.entry_date||e.entry_date<=today));
   const received = getConstructionReceived(p.id, ledger);
-  const rolePayouts = ledger
-    .filter(e=>e.project_id===p.id && e.type==='role_payout' && !e.deleted_at)
-    .reduce((s,e)=>s+Number(e.amount||0),0);
+  const rolePayouts = sumConstructionMoney(ledger
+    .filter(e=>e.project_id===p.id && e.type==='role_payout' && !e.deleted_at));
   // Документ и начисление описывают стоимость/обязательство, а не выплату.
   // Прямая оплата клиента не проходит через кассу компании.
-  const totalCosts = directCosts + rolePayouts;
+  const totalCosts = Math.round((directCosts + rolePayouts)*100)/100;
   const outgoingTypes=['expense','project_expense','payment','withdrawal','fee_payment','salary_payment','client_refund'];
   const paidRows=ledger.filter(e=>e.project_id===p.id&&outgoingTypes.includes(e.type)&&
     !(e.type==='project_expense'&&(e.description==='Ранее внесённые расходы'||String(e.description||'').startsWith('[cash:historical-expense]'))));
-  const cashOutgoing=Math.round(paidRows.reduce((s,e)=>s+Number(e.amount||0),0)*100)/100;
+  const cashOutgoing=sumConstructionMoney(paidRows);
   const balance = Math.round((received-cashOutgoing)*100)/100;
   const projectInvoices=(state.invoices||[]).filter(i=>i.project_id===p.id&&!i.deleted_at&&!i.paid_by_client&&(!i.invoice_date||i.invoice_date<=today));
-  const unpaidInvoices=Math.round(projectInvoices.reduce((sum,i)=>sum+(window.ARHITTEKCash?.invoicePaymentState({ledger},i,today).remaining??Number(i.amount||0)),0)*100)/100;
+  const unpaidInvoices=sumConstructionMoney(projectInvoices,i=>window.ARHITTEKCash?.invoicePaymentState({ledger},i,today).remaining??i.amount);
   const undatedCashRows=ledger.filter(e=>e.project_id===p.id&&!e.entry_date&&(CONSTRUCTION_INCOME_TYPES.includes(e.type)||outgoingTypes.includes(e.type))).length;
   const pct = received > 0 ? Math.max(0,Math.min(100,Math.round(cashOutgoing/received*100))) : cashOutgoing>0?100:0;
   const markup=constructionCompanyMarkup(p,directCosts);
@@ -89,7 +83,9 @@ function getConstructionFinancials(p, ledgerOverride=null){
   const documentaryPct=countedAgainstAdvance===null?null:received>0?Math.max(0,Math.min(100,Math.round(countedAgainstAdvance/received*100))):countedAgainstAdvance>0?100:0;
   return {received, directPaid, matTotal, workTotal, otherTotal, manualTotal, rolePayouts,
     directCosts, expenses: totalCosts, cashOutgoing, unpaidInvoices, undatedCashRows,
-    balance, pct, isOverspent: balance < 0,...markup,costFromAdvance,calculatedAdvanceBalance,documentaryPct,
+    balance, cashRemaining:Math.max(0,balance), cashOverspend:Math.max(0,-balance), pct, isOverspent: balance < 0,...markup,costFromAdvance,calculatedAdvanceBalance,documentaryPct,
+    advanceRemaining:calculatedAdvanceBalance===null?null:Math.max(0,calculatedAdvanceBalance),
+    advanceShortfall:calculatedAdvanceBalance===null?null:Math.max(0,-calculatedAdvanceBalance),
     isCalculatedDeficit:calculatedAdvanceBalance!==null&&calculatedAdvanceBalance<0};
 }
 
@@ -159,7 +155,7 @@ function renderConstruction(){
   list.innerHTML = projects.map(p=>{
     const st = findStatus(p.status_id);
     const fin = getConstructionFinancials(p);
-    const {received, directPaid, matTotal, workTotal, otherTotal, manualTotal, expenses, cashOutgoing, unpaidInvoices, balance, pct, isOverspent} = fin;
+    const {received, directPaid, matTotal, workTotal, otherTotal, manualTotal, expenses, cashOutgoing, unpaidInvoices, cashRemaining, cashOverspend, pct, isOverspent} = fin;
 
     if(!showFinance){
       return `<div data-key-activate tabindex="0" role="button" class="obj-card" onclick="openObjectView('${p.id}')">
@@ -173,7 +169,7 @@ function renderConstruction(){
     return `<div data-key-activate tabindex="0" role="button" class="obj-card" onclick="openObjectView('${p.id}')">
       <div class="obj-head"><div><div class="obj-title">${escapeHtml(p.name)}</div><div class="obj-sub">${escapeHtml(p.address||'')}</div></div><div style="display:flex; align-items:center; gap:6px;">${st ? `<span class="status-chip" data-status="${escapeHtml(st.name)}">${escapeHtml(st.name)}</span>` : ''}<div class="obj-chevron">›</div></div></div>
       <div class="obj-bar" style="margin-bottom:4px;"><i style="width:${pct}%; background:${pct>90?'var(--red)':pct>70?'var(--gold)':'var(--blue)'};"></i></div>
-      <div class="obj-bar-lbl"><span>Выплачено ${pct}% от полученного</span><span style="color:${isOverspent?'var(--red)':''}">${isOverspent ? '⚠ Недостаток: '+fmtMoney(Math.abs(balance)) : 'Деньги: '+fmtMoney(balance)}</span></div>
+      <div class="obj-bar-lbl"><span>Выплачено ${pct}% от полученного</span><span style="color:${isOverspent?'var(--red)':''}">Деньги: ${fmtMoney(cashRemaining)}${isOverspent ? ' · Перерасход: '+fmtMoney(cashOverspend) : ''}</span></div>
       <div style="margin-top:12px;">
         <div class="fee-row" style="padding:5px 0;"><div class="fl">💰 Приход от заказчика</div><div class="fv" style="color:var(--green);">${fmtMoney(received)}</div></div>
         <div class="fee-row" style="padding:5px 0;"><div class="fl">📦 Накладные на материалы</div><div class="fv">${fmtMoney(matTotal)}</div></div>

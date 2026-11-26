@@ -3,7 +3,7 @@
 // ============================================================
 function fmt(n){
   n = Number(n) || 0;
-  return Math.round(n).toLocaleString('ru-RU');
+  return n.toLocaleString('ru-RU',{maximumFractionDigits:2});
 }
 function fmtMoney(n){ return fmt(n) + ' ₽'; }
 

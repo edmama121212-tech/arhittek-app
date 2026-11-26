@@ -82,9 +82,9 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
  },0);
  await fresh();
  await check('A staff change during photo upload stops the invoice edit before its write',async()=>{
-  __staff();openInvoiceSheet('own-invoice');document.getElementById('invSheet-desc').value='Never committed';invSheetNewPhotoBlob=new Blob(['image'],{type:'image/jpeg'});
-  const original=compressAndUpload;let release;compressAndUpload=async()=>{await new Promise(r=>release=r);return 'https://example.invalid/photo.jpg';};const pending=saveInvoiceSheet();
-  __other();release();await pending;compressAndUpload=original;
+  __staff();openInvoiceSheet('own-invoice');document.getElementById('invSheet-desc').value='Never committed';invSheetNewPhotoBlob=new File(['image'],'proof.jpg',{type:'image/jpeg'});
+  const original=uploadInvoiceDocument;let release;uploadInvoiceDocument=async()=>{await new Promise(r=>release=r);return 'https://example.invalid/photo.jpg';};const pending=saveInvoiceSheet();
+  __other();release();await pending;uploadInvoiceDocument=original;
   return [canAccessConstructionProject('own-build'),__writes.length,__db.invoices.find(i=>i.id==='own-invoice').description];
  },[true,0,'Own material']);
  await fresh();
@@ -94,6 +94,93 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
   const original=compressImage;let release;compressImage=async()=>{await new Promise(r=>release=r);return photo;};const pending=addInvoice('own-build');__setActor({employeeId:'foreman',name:'Прораб',isAdmin:false,token:'new-token'});release();await pending;compressImage=original;
   return [__uploads.length,__writes.length,__db.invoices.length];
  },[0,0,2]);
+ await fresh();
+ await check('Dropped PDF is previewed, saved intact, reopened privately and detached on save',async()=>{
+  __staff();openObjectView('own-build');switchObjTab('add');
+  const original='%PDF-1.5\nExample receipt\n%%EOF',privateFiles=new Map();
+  const prefix=SUPABASE_URL+'/storage/v1/object/public/construction-documents/';
+  let opened,signRequests=0;
+  sb.storage.from=()=>({
+   async upload(path,body,options){privateFiles.set(path,[await body.text(),options.contentType]);return {error:null};},
+   getPublicUrl(path){return {data:{publicUrl:prefix+path}};},
+   async createSignedUrl(path){signRequests++;return {data:{signedUrl:'https://signed.test/'+path},error:null};}
+  });
+  window.open=url=>{opened=url;return {opener:{},location:{replace(value){opened=value;}},close(){}};};
+  const transfer=new DataTransfer();transfer.items.add(new File([original],'Счёт.PDF',{type:'application/pdf'}));
+  const zone=document.querySelector('label[ondrop][for="inv-photo-obj"]');
+  zone.dispatchEvent(new DragEvent('drop',{dataTransfer:transfer,bubbles:true,cancelable:true}));
+  const status=document.getElementById('inv-photo-status-obj');
+  const listed=status.textContent.includes('Счёт.PDF');
+  status.querySelector('button').click();
+  const localPreview=opened?.startsWith('blob:');
+  document.getElementById('inv-desc-obj').value='Delivery with PDF';document.getElementById('inv-amount-obj').value='125';
+  await addInvoiceFromView();
+  const row=__db.invoices.find(i=>i.description==='Delivery with PDF'),path=row.photo_url.slice(prefix.length);
+  await loadAll();openInvoiceSheet(row.id);
+  const previewButton=document.getElementById('invSheet-pdf-link');
+  const visible=previewButton.style.display!=='none';
+  await openInvoicePdf();
+  const openedSigned=opened==='https://signed.test/'+path;
+  removeSavedInvoiceAttachment();closeInvoiceSheet();openInvoiceSheet(row.id);
+  const cancelPreserves=previewButton.style.display!=='none' && row.photo_url.endsWith('.pdf');
+  removeSavedInvoiceAttachment();await saveInvoiceSheet();await loadAll();openInvoiceSheet(row.id);
+  return [listed,localPreview,privateFiles.get(path),path.endsWith('.pdf'),visible,openedSigned,signRequests,cancelPreserves,
+   row.photo_url,document.getElementById('invSheet-photo-wrap').style.display,row.amount];
+ },[true,true,['%PDF-1.5\nExample receipt\n%%EOF','application/pdf'],true,true,true,1,true,'','none',125]);
+ await fresh();
+ await check('JPG, JPEG and PNG document uploads retain the matching bytes, MIME and extension',async()=>{
+  __staff();const output=[];
+  const canvas=document.createElement('canvas');canvas.width=4;canvas.height=3;
+  const prefix=SUPABASE_URL+'/storage/v1/object/public/construction-documents/';
+  sb.storage.from=()=>({
+   async upload(path,body,options){
+    const bytes=new Uint8Array(await body.arrayBuffer());
+    output.push([path.split('.').at(-1),options.contentType,Array.from(bytes.slice(0,2))]);return {error:null};
+   },getPublicUrl(path){return {data:{publicUrl:prefix+path}};}
+  });
+  for(const [name,type] of [['a.jpg','image/jpeg'],['b.JPEG','image/jpeg'],['c.png','image/png']]){
+   const blob=await new Promise(resolve=>canvas.toBlob(resolve,type));
+   const file=new File([blob],name,{type});
+   await uploadInvoiceDocument(file,'own-build/new.jpg',()=>true);
+  }
+  return output;
+ },[['jpg','image/jpeg',[255,216]],['jpg','image/jpeg',[255,216]],['png','image/png',[137,80]]]);
+ await fresh();
+ await check('The picker and camera can be cleared; unsupported or oversized drops keep the previous choice',()=>{
+  __staff();openObjectView('own-build');switchObjTab('add');
+  const input=document.getElementById('inv-photo-obj'),camera=document.getElementById('inv-camera-obj');
+  const zone=document.querySelector('label[ondrop][for="inv-photo-obj"]'),status=document.getElementById('inv-photo-status-obj');
+  const data=new DataTransfer();data.items.add(new File(['a'],'receipt.jpeg',{type:'image/jpeg'}));
+  camera.files=data.files;camera.dispatchEvent(new Event('change',{bubbles:true}));
+  const copied=input.files[0]?.name;
+  const bad=new DataTransfer();bad.items.add(new File(['x'],'unknown.doc'));zone.dispatchEvent(new DragEvent('drop',{dataTransfer:bad}));
+  const kept=input.files[0]?.name;
+  const multiple=new DataTransfer();multiple.items.add(new File(['p'],'p.pdf'));multiple.items.add(new File(['q'],'q.pdf'));
+  zone.dispatchEvent(new DragEvent('drop',{dataTransfer:multiple}));
+  const keptOne=input.files.length;
+  status.querySelectorAll('button')[1].click();
+  const max=25*1024*1024;
+  return [copied,kept,keptOne,camera.files.length,input.files.length,status.textContent,
+   validInvoiceDocument({name:'large.pdf',size:max,type:'application/pdf'}),
+   validInvoiceDocument({name:'large.pdf',size:max+1,type:'application/pdf'}),
+   validInvoiceDocument({name:'wrong.png',size:1,type:'image/jpeg'})];
+ },['receipt.jpeg','receipt.jpeg',1,0,0,'',true,false,false]);
+ await fresh();
+ await check('An uploaded document survives a failed invoice insert and a restored form',async()=>{
+  __staff();openObjectView('own-build');switchObjTab('add');
+  const file=new File(['%PDF-1.5\nretry'],'retry.pdf',{type:'application/pdf'});
+  const data=new DataTransfer();data.items.add(file);document.getElementById('inv-photo-obj').files=data.files;
+  document.getElementById('inv-desc-obj').value='Retry document';document.getElementById('inv-amount-obj').value='50';
+  const prefix=SUPABASE_URL+'/storage/v1/object/public/construction-documents/';
+  let uploads=0;
+  sb.storage.from=()=>({upload:async()=>{uploads++;return {error:null};},getPublicUrl:path=>({data:{publicUrl:prefix+path}})});
+  __fail={table:'invoices',op:'insert'};await addInvoiceFromView();__fail=null;
+  switchObjTab('materials');switchObjTab('add');
+  const restored=document.getElementById('inv-photo-status-obj').textContent.includes('retry.pdf');
+  await addInvoiceFromView();
+  const rows=__db.invoices.filter(i=>i.description==='Retry document');
+  return [restored,uploads,rows.length,rows[0]?.photo_url?.endsWith('.pdf')];
+ },[true,1,1,true]);
  await fresh();
  await check('Foreign object photos are denied before Storage or database access',async()=>{
   __staff();await uploadExpensePhoto('foreign-build',{files:[new File(['photo'],'photo.jpg',{type:'image/jpeg'})]});return [__uploads.length,__writes.length];

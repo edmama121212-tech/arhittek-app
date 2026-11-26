@@ -166,6 +166,11 @@ function markCardEditorDirty(){
   const overlay=document.getElementById('cardEditorOverlay');
   if(overlay&&overlay.style.display!=='none')overlay.dataset.dirty='1';
 }
+function catalogIndividualDesignRate(){
+  const id = state.catalogPricing?.individual_tariff_id;
+  const tariff = id && state.kpCatalog?.find(item => item.id === id);
+  return tariff && !tariff.deleted_at && ['м²','м2','m²','m2'].includes(tariff.unit) ? tariff.rate : null;
+}
 function cePreview(){
   initCardFloorEditor();
   const v=id=>document.getElementById(id)?.value||'';
@@ -181,7 +186,9 @@ function cePreview(){
   set('prev-title',num?`Проект №${num}${title?' — '+title:''}`:'Проект №—');
   set('prev-num',num?'№ '+num:'№ —');
   set('prev-area',v('ce-area')||'—');set('prev-beds',v('ce-beds')||'—');set('prev-footprint',v('ce-footprint')||'—');
-  set('prev-floors-stat',ceFloorsSelected);set('prev-price',(v('ce-price')||'—')+' ₽');
+  set('prev-floors-stat',ceFloorsSelected);
+  const prices = document.getElementById('prev-prices');
+  if(prices) prices.innerHTML = CatalogFloors.pricesHTML({total_area:v('ce-area'),price:v('ce-price')}, catalogIndividualDesignRate());
   const systemTags=['Классический','Современный','Цокольный этаж','Мансарда','Плоская кровля'];
   const tags=v('ce-tags').split(',').map(t=>t.trim()).filter(t=>t&&!systemTags.includes(t));
   if(ceStyleSelected==='classic')tags.push('Классический');
@@ -665,8 +672,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .include-icon{font-size:16px;flex-shrink:0;margin-top:1px;}
 .include-text{font-size:12px;color:var(--text-primary);line-height:1.35;}
 .price-block{margin:0 14px;padding:14px 0;border-top:1px solid var(--border);}
-.price-label{font-size:11px;color:var(--text-label);margin-bottom:3px;}
-.price{font-size:28px;font-weight:700;color:var(--text-primary);line-height:1;margin-bottom:12px;}
 .btn-row{display:flex;gap:8px;}
 .btn-primary{flex:1;background:var(--blue);color:#fff;border:none;border-radius:12px;padding:14px 8px;font-size:14px;font-weight:700;cursor:pointer;white-space:nowrap;}
 .btn-secondary{flex:1;background:#F2F2F2;color:var(--text-primary);border:1.5px solid var(--border);border-radius:12px;padding:13px 8px;font-size:14px;font-weight:500;cursor:pointer;white-space:nowrap;}
@@ -713,8 +718,7 @@ ${CatalogFloors.panels(card)}
   </div>
 </div>
 <div class="price-block">
-  <div class="price-label">Стоимость проекта</div>
-  <div class="price">${escapeHtml(CatalogFloors.priceText(card))}</div>
+  ${CatalogFloors.pricesHTML(card, catalogIndividualDesignRate())}
   <div class="btn-row">
     <button class="btn-primary" onclick="window.open('https://wa.me/79226593872','_blank')">Получить проект</button>
     <button class="btn-secondary" onclick="window.open('https://wa.me/79226593872','_blank')">Консультация</button>

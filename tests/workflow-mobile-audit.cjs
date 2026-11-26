@@ -84,11 +84,11 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
  },['Проект №B — Второй дом',[],'Проект №A — Edited first house','flex','Unsaved second-house draft']);
  await fresh();
  await check('A late invoice photo upload never updates another opened invoice',async()=>{
-  openInvoiceSheet('invoice-a');document.getElementById('invSheet-desc').value='Edited material A';invSheetNewPhotoBlob=new Blob(['test'],{type:'image/jpeg'});
-  const original=compressAndUpload;let release;
-  compressAndUpload=async()=>{await new Promise(r=>release=r);return 'https://example.invalid/invoice-a.jpg';};
+  openInvoiceSheet('invoice-a');document.getElementById('invSheet-desc').value='Edited material A';invSheetNewPhotoBlob=new File(['test'],'proof.jpg',{type:'image/jpeg'});
+  const original=uploadInvoiceDocument;let release;
+  uploadInvoiceDocument=async()=>{await new Promise(r=>release=r);return 'https://example.invalid/invoice-a.jpg';};
   const pending=saveInvoiceSheet();while(!release)await new Promise(r=>setTimeout(r,0));
-  closeInvoiceSheet();openInvoiceSheet('invoice-b');release();await pending;compressAndUpload=original;
+  closeInvoiceSheet();openInvoiceSheet('invoice-b');release();await pending;uploadInvoiceDocument=original;
   return [__db.invoices.find(i=>i.id==='invoice-b').description,__db.invoices.find(i=>i.id==='invoice-b').amount,__db.invoices.find(i=>i.id==='invoice-b').photo_url,__db.invoices.find(i=>i.id==='invoice-a').description,invSheetCurrentId,document.getElementById('invoiceSheetOverlay').style.display];
  },['Материал B',7000,'','Edited material A','invoice-b','flex']);
  await fresh();
@@ -130,11 +130,13 @@ const root=path.resolve(process.env.TEST_APP_ROOT||path.join(__dirname,'..'));
   return [__db.employees.find(e=>e.id==='architect').name,__db.employees.find(e=>e.id==='visual').name,editingEmployeeId,document.getElementById('ef-name').value,document.getElementById('empSheetOverlay').classList.contains('active'),document.getElementById('ef-save').disabled];
  },['Updated architect','Ислам','visual','Unsaved visualizer',true,false]);
  await fresh();
- await check('A late invoice photo preview cannot enter another invoice form',async()=>{
-  openInvoiceSheet('invoice-a');let release;const original=compressImage;
-  compressImage=async()=>{await new Promise(r=>release=r);return new Blob(['photo A'],{type:'image/jpeg'});};
-  const pending=onInvSheetPhotoChange({files:[new File(['A'],'A.jpg',{type:'image/jpeg'})]});
-  openInvoiceSheet('invoice-b');release();await pending;compressImage=original;
+ await check('Opening another invoice clears the selected attachment and its preview',async()=>{
+  openInvoiceSheet('invoice-a');
+  const input=document.getElementById('invSheet-photo-input'),transfer=new DataTransfer();
+  transfer.items.add(new File(['A'],'A.jpg',{type:'image/jpeg'}));
+  input.files=transfer.files;
+  input.dispatchEvent(new Event('change',{bubbles:true}));
+  openInvoiceSheet('invoice-b');
   return [invSheetCurrentId,invSheetNewPhotoBlob,document.getElementById('invSheet-photo-name').textContent];
  },['invoice-b',null,'']);
  await fresh();

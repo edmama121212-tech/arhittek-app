@@ -33,14 +33,17 @@
     const rawAmount=Number(value('amount'));
     let payload={project_id:projectId,number:value('num').trim(),invoice_date:value('date')||null,
       category:category==='__other__'?(document.getElementById('inv-cat-'+suffix+'-custom')?.value||'').trim():category.trim(),
-      item_type:value('type'),description:value('desc').trim(),amount:Math.round(rawAmount*100)/100,
+      item_type:value('type'),description:value('desc').trim(),amount:rawAmount,
       photo_url:'',paid_by_client:!!document.getElementById('inv-paid-client-'+suffix)?.checked};
-    const file=document.getElementById('inv-photo-'+suffix)?.files?.[0];
+    const attachment=document.getElementById('inv-photo-'+suffix);
+    const file=attachment?.files?.[0];
+    if(file&&!validInvoiceDocument(file)){showToast(invoiceDocumentMessage);return;}
     const key=keyFor(projectId);
     let draft=readPending(key);
     if(draft&&!payload.number&&!payload.description&&!value('amount'))payload={...draft.payload};
     if(!payload.description&&!payload.number){showToast('Введите описание или номер накладной');return;}
-    if(!Number.isFinite(rawAmount)||payload.amount<=0){showToast('Укажите положительную сумму');return;}
+    if(!Number.isFinite(payload.amount)||payload.amount<=0){showToast('Укажите положительную сумму');return;}
+    if(!Number.isSafeInteger(Math.round(payload.amount*100))||payload.amount!==Math.round(payload.amount*100)/100){showToast('Введите сумму с точностью до копейки');return;}
     if(!/^\d{4}-\d{2}-\d{2}$/.test(payload.invoice_date||'')||!Number.isFinite(Date.parse(payload.invoice_date+'T00:00:00Z'))||new Date(payload.invoice_date+'T00:00:00Z').toISOString().slice(0,10)!==payload.invoice_date){showToast('Укажите дату накладной');return;}
     let persisted=false;
     let restoredOriginal=false;
@@ -52,12 +55,14 @@
         if(!matches(row,draft.payload))throw new Error('Запись с этим номером изменилась. Проверьте накладную в истории.');
         restoredOriginal=!matches(row,{...payload,photo_url:row.photo_url});
       }else{
-        const sameFile=draft?.fileName===(file?.name||'')&&draft?.fileSize===(file?.size||0)&&draft?.fileModified===(file?.lastModified||0);
+        const retainPrevious=!file && draft?.fileName && attachment?.dataset.discardAttachment!=='1';
+        if(retainPrevious && !draft.payload.photo_url)throw new Error('Повторно выберите документ '+draft.fileName+' или уберите его из накладной');
+        const sameFile=retainPrevious || (file && draft?.fileName===file.name && draft.fileSize===file.size && draft.fileModified===file.lastModified);
         draft={version:1,id:draft?.id||crypto.randomUUID(),payload:{...payload,photo_url:sameFile?draft?.payload.photo_url||'':''},
-          fileName:file?.name||'',fileSize:file?.size||0,fileModified:file?.lastModified||0};
+          fileName:retainPrevious?draft.fileName:file?.name||'',fileSize:retainPrevious?draft.fileSize:file?.size||0,fileModified:retainPrevious?draft.fileModified:file?.lastModified||0};
         remember(key,draft);
         if(file&&!draft.payload.photo_url){
-          draft.payload.photo_url=await compressAndUpload(file,'construction-documents',projectId+'/'+draft.id+'.jpg',()=>canAccessConstructionProject(projectId,actor));
+          draft.payload.photo_url=await uploadInvoiceDocument(file,projectId+'/'+draft.id+'.jpg',()=>canAccessConstructionProject(projectId,actor));
           remember(key,draft);
         }
         if(!canAccessConstructionProject(projectId,actor))throw new Error('Сеанс или доступ к объекту изменился');
@@ -103,6 +108,14 @@
       if(input&&!input.dataset.invoiceDraftRestored){input.value=draft.payload[key]??'';input.dataset.invoiceDraftRestored='1';}
     }
     const paid=document.getElementById('inv-paid-client-'+suffix);if(paid)paid.checked=!!draft.payload.paid_by_client;
+    const attachment=document.getElementById('inv-photo-'+suffix);
+    const status=document.getElementById('inv-photo-status-'+suffix);
+    if(draft.fileName && status && attachment && !attachment.files.length && attachment.dataset.discardAttachment!=='1' && !status.childNodes.length){
+      const remove=document.createElement('button');
+      remove.type='button';remove.textContent='Убрать';
+      remove.onclick=()=>{attachment.dataset.discardAttachment='1';status.replaceChildren();};
+      status.append(document.createTextNode(draft.fileName+(draft.payload.photo_url?' · ':' · Выберите файл повторно · ')),remove);
+    }
     const anchor=document.getElementById('inv-num-'+suffix);
     if(anchor&&!document.getElementById('invoice-pending-notice')){
       const note=document.createElement('p');note.id='invoice-pending-notice';note.className='note';note.setAttribute('role','status');note.textContent='Предыдущая попытка сохранения не подтверждена. Нажмите «Добавить», чтобы проверить её; повторная накладная не создастся.';anchor.before(note);
